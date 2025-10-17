@@ -10,6 +10,8 @@ pub mod sanitizers;
 pub mod taint;
 pub mod enhanced_taint;
 pub mod flows;
+pub mod call_graph;
+pub mod interprocedural;
 
 pub use graph::*;
 pub use sources::*;
@@ -18,6 +20,8 @@ pub use sanitizers::*;
 pub use taint::*;
 pub use enhanced_taint::*;
 pub use flows::*;
+pub use call_graph::*;
+pub use interprocedural::*;
 
 use cr_core::{AstNode, Result};
 use std::collections::{HashMap, HashSet};
