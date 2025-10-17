@@ -28,11 +28,42 @@ class TestRunner:
             "errors": []
         }
         self.test_patterns = [
+            # Core test suites
             "simple",
             "advanced_patterns",
             "comparison",
             "e-rules",
-            "rules"
+            "rules",
+            # Additional test directories
+            "autofix",
+            "bash-sql",
+            "errors",
+            "eval",
+            "explanations",
+            "irrelevant_rules",
+            "java",
+            "jsonnet",
+            "metachecks",
+            "misc",
+            "naming",
+            "parsing",
+            "parsing_errors",
+            "parsing_missing",
+            "parsing_partial",
+            "parsing_patterns",
+            "parsing_todo",
+            "patterns",
+            "perf",
+            "precommit_dogfooding",
+            "rule_formats",
+            "rules_error_recovery",
+            "rules_v2",
+            "semgrep-core-e2e",
+            "syntax_v2",
+            "taint_maturity",
+            "tainting_rules",
+            "typing",
+            "windows"
         ]
 
     def discover_test_cases(self):
