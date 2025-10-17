@@ -51,7 +51,8 @@ rules:
     severity: INFO
     pattern-either:
       - patterns:
-          - pattern: def $FUNC($...PARAMS):
+          - pattern: |
+              def $FUNC($...PARAMS):
           - metavariable-comparison:
               metavariable: $FUNC
               comparison: re.match(r"test_.*", str($FUNC))

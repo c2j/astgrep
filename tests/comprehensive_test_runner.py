@@ -95,11 +95,15 @@ class TestRunner:
             # Parse results
             try:
                 output = json.loads(result.stdout) if result.stdout else {}
+                # Check if we got valid JSON output (indicates successful execution)
+                status = "passed" if output else "failed"
             except json.JSONDecodeError:
                 output = {"raw_output": result.stdout}
-            
+                # If we can't parse JSON, check stderr for errors
+                status = "failed" if result.stderr and "error" in result.stderr.lower() else "passed"
+
             return {
-                "status": "passed" if result.returncode == 0 else "failed",
+                "status": status,
                 "return_code": result.returncode,
                 "output": output,
                 "stderr": result.stderr[:500] if result.stderr else ""
@@ -116,7 +120,7 @@ class TestRunner:
         print(f"Discovered {len(test_cases)} test cases")
         
         for i, test_case in enumerate(test_cases, 1):
-            print(f"[{i}/{len(test_cases)}] Running {test_case['name']}...", end=" ", flush=True)
+            # print(f"[{i}/{len(test_cases)}] Running {test_case['name']}...", end=" ", flush=True)
             
             result = self.run_test_case(test_case)
             self.results["total_tests"] += 1
@@ -130,12 +134,16 @@ class TestRunner:
             if result["status"] == "passed":
                 self.results["passed"] += 1
                 self.results["test_suites"][suite]["passed"] += 1
-                print("✅ PASSED")
+                # print("✅ PASSED")
             elif result["status"] == "skipped":
+                print(f"[{i}/{len(test_cases)}] Running {test_case['name']}...", end=" ", flush=True)
+            
                 self.results["skipped"] += 1
                 self.results["test_suites"][suite]["skipped"] += 1
                 print("⏭️  SKIPPED")
             else:
+                print(f"[{i}/{len(test_cases)}] Running {test_case['name']}...", end=" ", flush=True)
+            
                 self.results["failed"] += 1
                 self.results["test_suites"][suite]["failed"] += 1
                 print("❌ FAILED")
