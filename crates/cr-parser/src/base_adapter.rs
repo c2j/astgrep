@@ -59,8 +59,23 @@ impl BaseAdapter {
             ),
             Language::C => (
                 "C Adapter",
-                "Adapter for parsing C source code", 
+                "Adapter for parsing C source code",
                 vec!["c".to_string(), "h".to_string()],
+            ),
+            Language::Ruby => (
+                "Ruby Adapter",
+                "Adapter for parsing Ruby source code",
+                vec!["rb".to_string(), "rbw".to_string()],
+            ),
+            Language::Kotlin => (
+                "Kotlin Adapter",
+                "Adapter for parsing Kotlin source code",
+                vec!["kt".to_string(), "kts".to_string()],
+            ),
+            Language::Swift => (
+                "Swift Adapter",
+                "Adapter for parsing Swift source code",
+                vec!["swift".to_string()],
             ),
         };
 
@@ -106,7 +121,7 @@ impl BaseAdapter {
 
         // Add basic parsing based on language patterns
         match self.language {
-            Language::Java | Language::CSharp | Language::C => {
+            Language::Java | Language::CSharp | Language::C | Language::Kotlin => {
                 self.parse_c_style_language(source, &mut root)?;
             }
             Language::JavaScript => {
@@ -123,6 +138,9 @@ impl BaseAdapter {
             }
             Language::Bash => {
                 self.parse_bash_style(source, &mut root)?;
+            }
+            Language::Ruby | Language::Swift => {
+                self.parse_c_style_language(source, &mut root)?;
             }
         }
 

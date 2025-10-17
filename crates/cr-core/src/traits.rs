@@ -32,6 +32,9 @@ pub trait LanguageParser: Send + Sync {
             Language::Php => &["php", "phtml", "php3", "php4", "php5"],
             Language::CSharp => &["cs", "csx"],
             Language::C => &["c", "h"],
+            Language::Ruby => &["rb", "rbw", "rake", "gemspec"],
+            Language::Kotlin => &["kt", "kts"],
+            Language::Swift => &["swift"],
         }
     }
 

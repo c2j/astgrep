@@ -231,6 +231,9 @@ pub mod utils {
             Language::Php => false, // TODO: Add PHP keywords
             Language::CSharp => false, // TODO: Add C# keywords
             Language::C => false, // TODO: Add C keywords
+            Language::Ruby => false, // TODO: Add Ruby keywords
+            Language::Kotlin => false, // TODO: Add Kotlin keywords
+            Language::Swift => false, // TODO: Add Swift keywords
         }
     }
 

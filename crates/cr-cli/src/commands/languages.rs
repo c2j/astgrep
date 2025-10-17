@@ -39,6 +39,9 @@ fn get_language_description(language: Language) -> &'static str {
         Language::Php => "PHP - server-side scripting language for web development",
         Language::CSharp => "C# - object-oriented programming language by Microsoft",
         Language::C => "C - low-level programming language",
+        Language::Ruby => "Ruby - dynamic, object-oriented programming language",
+        Language::Kotlin => "Kotlin - modern programming language for the JVM",
+        Language::Swift => "Swift - modern programming language for Apple platforms",
     }
 }
 

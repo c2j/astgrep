@@ -204,6 +204,9 @@ pub mod languages {
         Language::Bash,
         Language::CSharp,
         Language::C,
+        Language::Ruby,
+        Language::Kotlin,
+        Language::Swift,
     ];
 
     /// Default languages for analysis

@@ -168,6 +168,9 @@ fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool 
                 Language::Php => ext_str == "php",
                 Language::CSharp => ext_str == "cs",
                 Language::C => ext_str == "c" || ext_str == "h",
+                Language::Ruby => ext_str == "rb" || ext_str == "rbw",
+                Language::Kotlin => ext_str == "kt" || ext_str == "kts",
+                Language::Swift => ext_str == "swift",
             }
         })
     } else {
@@ -1880,6 +1883,9 @@ fn get_basic_security_patterns(language: Language) -> Vec<BasicPattern> {
         Language::Php => vec![],
         Language::CSharp => vec![],
         Language::C => vec![],
+        Language::Ruby => vec![],
+        Language::Kotlin => vec![],
+        Language::Swift => vec![],
     }
 }
 
@@ -1895,6 +1901,9 @@ fn determine_language(file_path: &PathBuf) -> Result<Language> {
             "php" | "phtml" | "php3" | "php4" | "php5" => Ok(Language::Php),
             "cs" | "csx" => Ok(Language::CSharp),
             "c" | "h" => Ok(Language::C),
+            "rb" | "rbw" => Ok(Language::Ruby),
+            "kt" | "kts" => Ok(Language::Kotlin),
+            "swift" => Ok(Language::Swift),
             _ => Err(anyhow::anyhow!("Unsupported file extension: {}", ext_str)),
         }
     } else {

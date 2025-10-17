@@ -112,6 +112,9 @@ fn show_language_info(lang_str: &str) -> Result<()> {
         Language::Php => println!("PHP support is basic"),
         Language::CSharp => println!("C# support is basic"),
         Language::C => println!("C support is basic"),
+        Language::Ruby => println!("Ruby support is basic"),
+        Language::Kotlin => println!("Kotlin support is basic"),
+        Language::Swift => println!("Swift support is basic"),
     }
 
     Ok(())
@@ -150,6 +153,18 @@ fn get_language_details(language: &Language) -> (Vec<&'static str>, &'static str
         Language::C => (
             vec![".c", ".h"],
             "Low-level programming language"
+        ),
+        Language::Ruby => (
+            vec![".rb"],
+            "Dynamic, object-oriented programming language"
+        ),
+        Language::Kotlin => (
+            vec![".kt"],
+            "Modern programming language for the JVM"
+        ),
+        Language::Swift => (
+            vec![".swift"],
+            "Modern programming language for Apple platforms"
         ),
     }
 }

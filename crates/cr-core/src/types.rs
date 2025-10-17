@@ -16,6 +16,9 @@ pub enum Language {
     Php,
     CSharp,
     C,
+    Ruby,
+    Kotlin,
+    Swift,
 }
 
 impl Language {
@@ -30,6 +33,9 @@ impl Language {
             Language::Php => &[".php", ".phtml", ".php3", ".php4", ".php5"],
             Language::CSharp => &[".cs", ".csx"],
             Language::C => &[".c", ".h"],
+            Language::Ruby => &[".rb", ".rbw", ".rake", ".gemspec"],
+            Language::Kotlin => &[".kt", ".kts"],
+            Language::Swift => &[".swift"],
         }
     }
 
@@ -44,6 +50,9 @@ impl Language {
             Language::Php => "php",
             Language::CSharp => "csharp",
             Language::C => "c",
+            Language::Ruby => "ruby",
+            Language::Kotlin => "kotlin",
+            Language::Swift => "swift",
         }
     }
 
@@ -58,6 +67,9 @@ impl Language {
             "php" => Some(Language::Php),
             "csharp" | "c#" | "cs" => Some(Language::CSharp),
             "c" => Some(Language::C),
+            "ruby" | "rb" => Some(Language::Ruby),
+            "kotlin" | "kt" => Some(Language::Kotlin),
+            "swift" => Some(Language::Swift),
             _ => None,
         }
     }
