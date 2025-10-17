@@ -78,7 +78,7 @@ class TestRunner:
             
             # Run CR-SemService
             cmd = [
-                "cargo", "run", "--release", "--",
+                "cargo", "run", "--release", "--bin", "cr-semservice", "--",
                 "analyze",
                 str(code_file),
                 "-r", str(rule_file)

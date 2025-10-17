@@ -83,14 +83,14 @@ class QuickValidator:
     def test_language_support(self):
         """Test language support"""
         print("\n🧪 Testing Language Support...")
-        
+
         languages = {
             "Python": "tests/simple/string_match.py",
             "JavaScript": "tests/simple/function_call.js",
             "Java": "tests/java/r1.java",
-            "Ruby": "tests/rules/jwt-hardcode.rb"
+            "Ruby": "tests/patterns/ruby/foo.rb"
         }
-        
+
         for lang, file_path in languages.items():
             file = self.project_root / file_path
             if file.exists():
@@ -106,17 +106,17 @@ class QuickValidator:
         try:
             rule_file = self.project_root / test["rule"]
             code_file = self.project_root / test["code"]
-            
+
             if not rule_file.exists() or not code_file.exists():
                 return {"name": test["name"], "passed": False, "reason": "Files not found"}
-            
+
             cmd = [
-                "cargo", "run", "--release", "--",
+                "cargo", "run", "--release", "--bin", "cr-semservice", "--",
                 "analyze",
                 str(code_file),
                 "-r", str(rule_file)
             ]
-            
+
             result = subprocess.run(
                 cmd,
                 cwd=str(self.project_root),
@@ -124,10 +124,25 @@ class QuickValidator:
                 timeout=10,
                 text=True
             )
-            
+
+            # Check if command succeeded and has matches
             passed = result.returncode == 0
+
+            # For tests with expected_matches, verify the count
+            if passed and "expected_matches" in test:
+                try:
+                    # Parse JSON output to count matches
+                    output = result.stdout
+                    if output.strip():
+                        data = json.loads(output)
+                        matches = data.get("matches", [])
+                        passed = len(matches) == test["expected_matches"]
+                except:
+                    # If JSON parsing fails, just check return code
+                    pass
+
             return {"name": test["name"], "passed": passed}
-        
+
         except Exception as e:
             return {"name": test["name"], "passed": False, "reason": str(e)}
 
