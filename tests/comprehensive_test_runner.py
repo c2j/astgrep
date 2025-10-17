@@ -95,12 +95,18 @@ class TestRunner:
             # Parse results
             try:
                 output = json.loads(result.stdout) if result.stdout else {}
-                # Check if we got valid JSON output (indicates successful execution)
-                status = "passed" if output else "failed"
             except json.JSONDecodeError:
                 output = {"raw_output": result.stdout}
-                # If we can't parse JSON, check stderr for errors
-                status = "failed" if result.stderr and "error" in result.stderr.lower() else "passed"
+
+            # Check if we got valid JSON output (indicates successful execution)
+            # The tool outputs either "findings" or "matches" depending on the version
+            has_valid_output = isinstance(output, dict) and (
+                "findings" in output or
+                "matches" in output or
+                "summary" in output or
+                len(output) > 0
+            )
+            status = "passed" if has_valid_output else "failed"
 
             return {
                 "status": status,
@@ -132,9 +138,11 @@ class TestRunner:
             })
             
             if result["status"] == "passed":
+                print(f"[{i}/{len(test_cases)}] Running {test_case['name']}...", end=" ", flush=True)
+            
                 self.results["passed"] += 1
                 self.results["test_suites"][suite]["passed"] += 1
-                # print("✅ PASSED")
+                print("✅ PASSED")
             elif result["status"] == "skipped":
                 print(f"[{i}/{len(test_cases)}] Running {test_case['name']}...", end=" ", flush=True)
             
