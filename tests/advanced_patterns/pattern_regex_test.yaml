@@ -107,7 +107,7 @@ rules:
       - javascript
     severity: ERROR
     patterns:
-      - pattern-regex: '".*[\'"].*(\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b).*[\'"].*"'
+      - pattern-regex: '".*[''"].*(\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b).*[''"].*"'
 
   - id: xss-patterns
     message: Potential XSS pattern

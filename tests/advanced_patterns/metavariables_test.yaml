@@ -49,11 +49,12 @@ rules:
     languages:
       - python
     severity: INFO
-    patterns:
-      - pattern: def $FUNC($...PARAMS):
-      - metavariable-comparison:
-          metavariable: $FUNC
-          comparison: re.match(r"test_.*", str($FUNC))
+    pattern-either:
+      - patterns:
+          - pattern: def $FUNC($...PARAMS):
+          - metavariable-comparison:
+              metavariable: $FUNC
+              comparison: re.match(r"test_.*", str($FUNC))
 
   - id: numeric-comparison
     message: Numeric value comparison
