@@ -14,6 +14,8 @@ pub mod call_graph;
 pub mod interprocedural;
 pub mod advanced_taint;
 pub mod symbol_table;
+pub mod constant_propagation;
+pub mod constant_analysis;
 
 pub use graph::*;
 pub use sources::*;
@@ -26,6 +28,8 @@ pub use call_graph::*;
 pub use interprocedural::*;
 pub use advanced_taint::*;
 pub use symbol_table::*;
+pub use constant_propagation::*;
+pub use constant_analysis::*;
 
 use cr_core::{AstNode, Result};
 use std::collections::{HashMap, HashSet};
