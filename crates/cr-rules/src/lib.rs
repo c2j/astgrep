@@ -8,6 +8,7 @@ pub mod engine;
 pub mod executor;
 pub mod integration;
 pub mod types;
+pub mod marketplace;
 
 pub use parser::*;
 pub use validator::*;
@@ -15,6 +16,7 @@ pub use engine::*;
 pub use executor::*;
 pub use integration::*;
 pub use types::*;
+pub use marketplace::*;
 
 use cr_core::{Finding, Language, Result};
 
