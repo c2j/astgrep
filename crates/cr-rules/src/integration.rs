@@ -32,6 +32,8 @@ impl RuleExecutionExample {
                 vec!["sql_execution".to_string(), "database_query".to_string()],
             ).with_sanitizers(vec!["sql_escape".to_string(), "prepared_statement".to_string()])),
             fix: Some("Use prepared statements instead of string concatenation".to_string()),
+            fix_regex: None,
+            paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
                 metadata.insert("category".to_string(), "security".to_string());
@@ -64,6 +66,8 @@ impl RuleExecutionExample {
                 vec!["html_output".to_string(), "dom_manipulation".to_string()],
             ).with_sanitizers(vec!["html_encode".to_string(), "sanitize_html".to_string()])),
             fix: Some("Encode HTML output to prevent XSS".to_string()),
+            fix_regex: None,
+            paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
                 metadata.insert("category".to_string(), "security".to_string());

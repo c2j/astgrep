@@ -84,6 +84,8 @@ impl RuleParser {
         let patterns = self.parse_patterns_or_pattern(rule_obj, index)?;
         let dataflow = self.parse_dataflow(rule_obj, index)?;
         let fix = self.get_optional_string_field(rule_obj, "fix");
+        let fix_regex = self.parse_fix_regex(rule_obj, index)?;
+        let paths = self.parse_paths(rule_obj, index)?;
         let metadata = self.parse_metadata(rule_obj, index)?;
         let enabled = self.get_optional_bool_field(rule_obj, "enabled").unwrap_or(true);
 
@@ -91,6 +93,8 @@ impl RuleParser {
         rule.patterns = patterns;
         rule.dataflow = dataflow;
         rule.fix = fix;
+        rule.fix_regex = fix_regex;
+        rule.paths = paths;
         rule.metadata = metadata;
         rule.enabled = enabled;
 
@@ -271,6 +275,22 @@ impl RuleParser {
                 either_patterns.into_iter().next().unwrap()
             } else {
                 Pattern::either(either_patterns)
+            }
+        } else if let Some(pattern_all_value) = pattern_obj.get(&Value::String("pattern-all".to_string())) {
+            // Handle pattern-all
+            let all_patterns = self.parse_pattern_all(pattern_all_value, rule_index)?;
+            if all_patterns.len() == 1 {
+                all_patterns.into_iter().next().unwrap()
+            } else {
+                Pattern::all(all_patterns)
+            }
+        } else if let Some(pattern_any_value) = pattern_obj.get(&Value::String("pattern-any".to_string())) {
+            // Handle pattern-any
+            let any_patterns = self.parse_pattern_any(pattern_any_value, rule_index)?;
+            if any_patterns.len() == 1 {
+                any_patterns.into_iter().next().unwrap()
+            } else {
+                Pattern::any(any_patterns)
             }
         } else {
             return Err(AnalysisError::parse_error(format!(
@@ -589,6 +609,102 @@ impl RuleParser {
             .ok_or_else(|| AnalysisError::parse_error(format!("Missing '{}' field", field)))?;
 
         let array = array_value
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error(format!("'{}' must be an array", field)))?;
+
+        let mut result = Vec::new();
+        for item in array {
+            let item_str = item
+                .as_str()
+                .ok_or_else(|| AnalysisError::parse_error(format!("'{}' items must be strings", field)))?;
+            result.push(item_str.to_string());
+        }
+
+        Ok(result)
+    }
+
+    /// Parse pattern-all
+    fn parse_pattern_all(&self, value: &Value, rule_index: usize) -> Result<Vec<Pattern>> {
+        let patterns_array = value
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error(format!(
+                "Rule {} pattern-all must be an array",
+                rule_index
+            )))?;
+
+        let mut patterns = Vec::new();
+        for (index, pattern_value) in patterns_array.iter().enumerate() {
+            patterns.push(self.parse_single_pattern(pattern_value, rule_index, index)?);
+        }
+
+        Ok(patterns)
+    }
+
+    /// Parse pattern-any
+    fn parse_pattern_any(&self, value: &Value, rule_index: usize) -> Result<Vec<Pattern>> {
+        let patterns_array = value
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error(format!(
+                "Rule {} pattern-any must be an array",
+                rule_index
+            )))?;
+
+        let mut patterns = Vec::new();
+        for (index, pattern_value) in patterns_array.iter().enumerate() {
+            patterns.push(self.parse_single_pattern(pattern_value, rule_index, index)?);
+        }
+
+        Ok(patterns)
+    }
+
+    /// Parse fix-regex field
+    fn parse_fix_regex(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Option<FixRegex>> {
+        let fix_regex_value = obj.get(&Value::String("fix-regex".to_string()));
+
+        if fix_regex_value.is_none() {
+            return Ok(None);
+        }
+
+        let fix_regex_obj = fix_regex_value
+            .unwrap()
+            .as_mapping()
+            .ok_or_else(|| AnalysisError::parse_error("'fix-regex' must be an object".to_string()))?;
+
+        let regex = self.get_string_field(fix_regex_obj, "regex", 0)?;
+        let replacement = self.get_string_field(fix_regex_obj, "replacement", 0)?;
+
+        Ok(Some(FixRegex { regex, replacement }))
+    }
+
+    /// Parse paths field
+    fn parse_paths(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Option<PathsFilter>> {
+        let paths_value = obj.get(&Value::String("paths".to_string()));
+
+        if paths_value.is_none() {
+            return Ok(None);
+        }
+
+        let paths_obj = paths_value
+            .unwrap()
+            .as_mapping()
+            .ok_or_else(|| AnalysisError::parse_error("'paths' must be an object".to_string()))?;
+
+        let includes = self.parse_optional_string_array(paths_obj, "include")?;
+        let excludes = self.parse_optional_string_array(paths_obj, "exclude")?;
+
+        Ok(Some(PathsFilter { includes, excludes }))
+    }
+
+    /// Parse optional string array
+    fn parse_optional_string_array(&self, obj: &serde_yaml::Mapping, field: &str) -> Result<Vec<String>> {
+        let array_value = obj.get(&Value::String(field.to_string()));
+
+        if array_value.is_none() {
+            return Ok(Vec::new());
+        }
+
+        let array = array_value
+            .unwrap()
             .as_sequence()
             .ok_or_else(|| AnalysisError::parse_error(format!("'{}' must be an array", field)))?;
 

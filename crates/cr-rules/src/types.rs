@@ -18,6 +18,8 @@ pub struct Rule {
     pub patterns: Vec<Pattern>,
     pub dataflow: Option<DataFlowSpec>,
     pub fix: Option<String>,
+    pub fix_regex: Option<FixRegex>,
+    pub paths: Option<PathsFilter>,
     pub metadata: HashMap<String, String>,
     pub enabled: bool,
 }
@@ -42,6 +44,8 @@ impl Rule {
             patterns: Vec::new(),
             dataflow: None,
             fix: None,
+            fix_regex: None,
+            paths: None,
             metadata: HashMap::new(),
             enabled: true,
         }
@@ -201,6 +205,26 @@ impl Pattern {
         }
     }
 
+    /// Create a pattern-all
+    pub fn all(patterns: Vec<Pattern>) -> Self {
+        Self {
+            pattern_type: PatternType::All(patterns),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        }
+    }
+
+    /// Create a pattern-any
+    pub fn any(patterns: Vec<Pattern>) -> Self {
+        Self {
+            pattern_type: PatternType::Any(patterns),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        }
+    }
+
     /// Get the pattern string for simple patterns
     pub fn get_pattern_string(&self) -> Option<&String> {
         match &self.pattern_type {
@@ -227,6 +251,20 @@ impl Pattern {
         self.focus = Some(focus_vars);
         self
     }
+}
+
+/// Fix regex specification (Semgrep compatible)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixRegex {
+    pub regex: String,
+    pub replacement: String,
+}
+
+/// Paths filter specification (Semgrep compatible)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathsFilter {
+    pub includes: Vec<String>,
+    pub excludes: Vec<String>,
 }
 
 /// Metavariable pattern specification
