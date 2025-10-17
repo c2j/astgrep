@@ -1,0 +1,6 @@
+rules:
+- id: detect-eval-calls
+  pattern: eval(...)
+  message: Dangerous eval() function call detected
+  severity: ERROR
+  languages: [python]

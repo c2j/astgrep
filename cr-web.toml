@@ -1,0 +1,47 @@
+bind_address = "127.0.0.1:8080"
+max_upload_size = 104857600
+max_concurrent_jobs = 10
+rules_directory = "rules"
+temp_directory = "/tmp/cr-semservice"
+enable_auth = false
+
+[request_timeout]
+secs = 300
+nanos = 0
+
+[job_cleanup_interval]
+secs = 3600
+nanos = 0
+
+[job_retention_duration]
+secs = 86400
+nanos = 0
+
+[rate_limit]
+enabled = true
+requests_per_minute = 60
+burst_size = 10
+
+[cors]
+allowed_origins = ["*"]
+allowed_methods = [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS",
+]
+allowed_headers = [
+    "Content-Type",
+    "Authorization",
+    "X-Request-ID",
+]
+
+[cors.max_age]
+secs = 3600
+nanos = 0
+
+[logging]
+level = "info"
+log_requests = true
+log_responses = false

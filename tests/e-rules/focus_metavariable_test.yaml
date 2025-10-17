@@ -1,0 +1,68 @@
+rules:
+  - id: focus-sensitive-param
+    name: Focus on sensitive parameter
+    description: Focuses only on sensitive parameters in function definitions
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern: |
+          def $FUNC(..., $PARAM, ...):
+            ...
+      - focus-metavariable: $PARAM
+      - metavariable-regex:
+          metavariable: $PARAM
+          regex: ".*(password|secret|key|token).*"
+
+  - id: focus-dangerous-arg
+    name: Focus on dangerous argument
+    description: Focuses on the dangerous argument in function calls
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: dangerous_function($SAFE_PARAM, $DANGEROUS_ARG, $OTHER_PARAM)
+      - focus-metavariable: $DANGEROUS_ARG
+      - metavariable-regex:
+          metavariable: $DANGEROUS_ARG
+          regex: ".*(eval|exec|system).*"
+
+  - id: focus-multiple-vars
+    name: Focus on multiple variables
+    description: Focuses on multiple metavariables simultaneously
+    severity: INFO
+    languages: [javascript]
+    patterns:
+      - pattern: |
+          function $FUNC($PARAM1, $PARAM2, $PARAM3) {
+            $BODY
+          }
+      - focus-metavariable: [$PARAM1, $PARAM3]
+      - metavariable-regex:
+          metavariable: $PARAM1
+          regex: ".*(user|auth).*"
+      - metavariable-regex:
+          metavariable: $PARAM3
+          regex: ".*(config|settings).*"
+
+  - id: focus-sql-query
+    name: Focus on SQL query parameter
+    description: Focuses on the query parameter in database operations
+    severity: CRITICAL
+    languages: [python]
+    patterns:
+      - pattern: cursor.execute($QUERY, $PARAMS)
+      - focus-metavariable: $QUERY
+      - metavariable-regex:
+          metavariable: $QUERY
+          regex: ".*\\+.*"  # String concatenation in SQL
+
+  - id: focus-url-endpoint
+    name: Focus on URL endpoint
+    description: Focuses on URL endpoints in HTTP requests
+    severity: WARNING
+    languages: [python, javascript]
+    patterns:
+      - pattern: requests.get($URL, $OPTIONS)
+      - focus-metavariable: $URL
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ".*http://.*"  # Insecure HTTP URLs

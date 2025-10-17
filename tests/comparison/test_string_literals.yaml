@@ -1,0 +1,6 @@
+rules:
+- id: detect-hello-world
+  pattern: '"hello world"'
+  message: Found hello world string
+  severity: INFO
+  languages: [python]

@@ -1,0 +1,6 @@
+rules:
+- id: detect-hello-world-java
+  pattern: '"hello world"'
+  message: Found hello world string in Java
+  severity: INFO
+  languages: [java]

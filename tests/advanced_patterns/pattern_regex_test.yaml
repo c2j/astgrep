@@ -1,0 +1,186 @@
+rules:
+  - id: api-keys-regex
+    message: Potential API key detected
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '"[a-zA-Z0-9_-]{32,}"'
+
+  - id: jwt-tokens-regex
+    message: JWT token detected
+    languages:
+      - python
+      - javascript
+    severity: WARNING
+    patterns:
+      - pattern-regex: '"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"'
+
+  - id: credit-card-numbers
+    message: Potential credit card number detected
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'
+
+  - id: email-addresses
+    message: Email address detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+
+  - id: ip-addresses
+    message: IP address detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b'
+
+  - id: phone-numbers
+    message: Phone number detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '\b\+?1?[-.\s]?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}\b'
+
+  - id: social-security-numbers
+    message: Potential SSN detected
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '\b\d{3}-\d{2}-\d{4}\b'
+
+  - id: aws-access-keys
+    message: AWS access key detected
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '"AKIA[0-9A-Z]{16}"'
+
+  - id: github-tokens
+    message: GitHub token detected
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '"ghp_[a-zA-Z0-9]{36}"'
+
+  - id: slack-tokens
+    message: Slack token detected
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '"xox[baprs]-[0-9a-zA-Z-]+"'
+
+  - id: password-patterns
+    message: Potential password in string
+    languages:
+      - python
+      - javascript
+    severity: WARNING
+    patterns:
+      - pattern-regex: '"[Pp]assword[^"]*"'
+      - pattern-regex: '"[Ss]ecret[^"]*"'
+      - pattern-regex: '"[Tt]oken[^"]*"'
+
+  - id: sql-injection-patterns
+    message: Potential SQL injection pattern
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '".*[\'"].*(\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b).*[\'"].*"'
+
+  - id: xss-patterns
+    message: Potential XSS pattern
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-regex: '".*<script[^>]*>.*</script>.*"'
+      - pattern-regex: '".*javascript:.*"'
+      - pattern-regex: '".*on\w+\s*=.*"'
+
+  - id: file-paths-sensitive
+    message: Sensitive file path detected
+    languages:
+      - python
+      - javascript
+    severity: WARNING
+    patterns:
+      - pattern-regex: '"/etc/passwd"'
+      - pattern-regex: '"/etc/shadow"'
+      - pattern-regex: '"C:\\\\Windows\\\\System32\\\\.*"'
+
+  - id: url-patterns
+    message: URL detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '"https?://[^\s/$.?#].[^\s]*"'
+
+  - id: base64-patterns
+    message: Base64 encoded data detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '"[A-Za-z0-9+/]{40,}={0,2}"'
+
+  - id: hex-patterns
+    message: Hexadecimal pattern detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '"[0-9a-fA-F]{32,}"'
+
+  - id: version-numbers
+    message: Version number detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '"\d+\.\d+\.\d+"'
+
+  - id: uuid-patterns
+    message: UUID detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"'
+
+  - id: case-insensitive-regex
+    message: Case insensitive pattern match
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-regex: '(?i)"[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]"'

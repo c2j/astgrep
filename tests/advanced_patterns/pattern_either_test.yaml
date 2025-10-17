@@ -1,0 +1,99 @@
+rules:
+  - id: dangerous-function-calls
+    message: Potentially dangerous function call detected
+    languages:
+      - python
+      - javascript
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: eval($CODE)
+          - pattern: exec($CMD)
+          - pattern: compile($CODE, $FILE, $MODE)
+          - pattern: __import__($MODULE)
+
+  - id: crypto-weak-algorithms
+    message: Weak cryptographic algorithm detected
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5($DATA)
+          - pattern: hashlib.sha1($DATA)
+          - pattern: Crypto.Hash.MD5.new($DATA)
+          - pattern: Crypto.Hash.SHA1.new($DATA)
+
+  - id: sql-injection-patterns
+    message: Potential SQL injection vulnerability
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: cursor.execute($QUERY + $VAR)
+          - pattern: cursor.execute($QUERY % $VAR)
+          - pattern: cursor.execute(f"$QUERY{$VAR}")
+          - pattern: db.query($QUERY + $VAR)
+          - pattern: connection.execute($QUERY + $VAR)
+
+  - id: file-operations-either
+    message: File operation detected
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern-either:
+          - pattern: open($FILE, $MODE)
+          - pattern: file($FILE, $MODE)
+          - pattern: codecs.open($FILE, $MODE)
+          - pattern: io.open($FILE, $MODE)
+
+  - id: network-requests-either
+    message: Network request detected
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern-either:
+          - pattern: requests.get($URL)
+          - pattern: requests.post($URL, $DATA)
+          - pattern: urllib.request.urlopen($URL)
+          - pattern: fetch($URL)
+          - pattern: axios.get($URL)
+          - pattern: $.get($URL)
+
+  - id: complex-either-nested
+    message: Complex nested either pattern
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: $OBJ.$METHOD($ARG)
+              - pattern-either:
+                  - pattern: eval($ARG)
+                  - pattern: exec($ARG)
+          - patterns:
+              - pattern: $FUNC($ARG1, $ARG2)
+              - pattern-either:
+                  - pattern: compile($ARG1, $ARG2, "exec")
+                  - pattern: __import__($ARG1)
+
+  - id: string-patterns-either
+    message: Suspicious string pattern detected
+    languages:
+      - python
+      - javascript
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: "$PASSWORD"
+          - pattern: "$SECRET"
+          - pattern: "$API_KEY"
+          - pattern: "$TOKEN"
+      - pattern-not:
+          - pattern: "$VAR = $VALUE"

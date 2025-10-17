@@ -1,0 +1,20 @@
+[package]
+name = "cr-parser"
+version = "0.1.0"
+edition = "2021"
+description = "Language parsers and adapters for CR-SemService"
+
+[dependencies]
+cr-core = { path = "../cr-core" }
+cr-ast = { path = "../cr-ast" }
+anyhow.workspace = true
+tree-sitter.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-java.workspace = true
+tree-sitter-bash.workspace = true
+# tree-sitter-sql.workspace = true
+regex = "1.0"
+
+[dev-dependencies]
+tempfile = "3.8"

@@ -1,0 +1,50 @@
+[package]
+name = "cr-gui"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chen Jianjun <chenjj.yz@gmail.com>"]
+description = "GUI playground for CR-SemService static code analysis tool"
+license = "MIT"
+
+[[bin]]
+name = "cr-gui"
+path = "src/main.rs"
+
+[dependencies]
+# Internal crates
+cr-core = { path = "../cr-core" }
+cr-ast = { path = "../cr-ast" }
+cr-matcher = { path = "../cr-matcher" }
+cr-parser = { path = "../cr-parser" }
+cr-dataflow = { path = "../cr-dataflow" }
+cr-rules = { path = "../cr-rules" }
+
+# GUI framework
+eframe = { workspace = true }
+egui = { workspace = true }
+egui_extras = { workspace = true }
+rfd = { workspace = true }
+
+# Syntax highlighting
+syntect = { workspace = true }
+
+# Core dependencies
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Async and concurrency
+tokio = { workspace = true }
+
+# Utilities
+regex = { workspace = true }
+once_cell = { workspace = true }
+
+# Additional dependencies for GUI
+webbrowser = { workspace = true }
+chrono = { workspace = true }
+sys-info = { workspace = true }

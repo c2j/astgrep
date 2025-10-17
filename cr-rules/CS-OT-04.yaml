@@ -1,0 +1,9 @@
+rules:
+  - id: CS-OT-04
+    message: "import时应指定具体的类名，避免使用*号，以提高编译速度、避免命名冲突"
+    languages: [java]
+    severity: INFO
+    
+    patterns:
+      # 检测 import * 语句
+      - pattern-regex: "^\\s*import\\s+[a-zA-Z_][a-zA-Z0-9_.]*\\.\\*\\s*;\\s*$"

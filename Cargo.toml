@@ -1,0 +1,117 @@
+[package]
+name = "cr-semservice"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chen Jianjun <chenjj.yz@gmail.com>"]
+description = "A multi-language static code analysis tool for security vulnerabilities and code quality"
+license = "MIT"
+repository = "https://github.com/c2j/cr-semservice"
+keywords = ["static-analysis", "security", "code-quality", "ast", "vulnerability"]
+categories = ["development-tools", "command-line-utilities"]
+
+[workspace]
+members = [
+    "crates/cr-ast",
+    "crates/cr-rules",
+    "crates/cr-parser",
+    "crates/cr-matcher",
+    "crates/cr-dataflow",
+    "crates/cr-cli",
+    "crates/cr-core",
+    "crates/cr-web",
+    "crates/cr-gui",
+    "crates/test-utils",
+]
+
+[dependencies]
+regex = "1.11.1"
+# Internal crates
+cr-core = { path = "crates/cr-core" }
+cr-ast = { path = "crates/cr-ast" }
+cr-matcher = { path = "crates/cr-matcher" }
+cr-parser = { path = "crates/cr-parser" }
+cr-dataflow = { path = "crates/cr-dataflow" }
+cr-rules = { path = "crates/cr-rules" }
+cr-cli = { path = "crates/cr-cli" }
+
+# External dependencies
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+
+
+
+[workspace.dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Async and concurrency
+tokio = { version = "1.0", features = ["full"] }
+rayon = "1.7"
+dashmap = "5.5"
+
+# CLI and configuration
+clap = { version = "4.4", features = ["derive", "env"] }
+config = "0.14"
+
+# Parsing and regex
+regex = "1.10"
+tree-sitter = "0.20"
+tree-sitter-highlight = "0.20"
+tree-sitter-python = "0.20"
+tree-sitter-javascript = "0.20"
+tree-sitter-java = "0.20"
+tree-sitter-bash = "0.20"
+# Use a simpler approach for SQL - we'll implement basic SQL parsing without tree-sitter for now
+# tree-sitter-sql = { package = "devgen-tree-sitter-sql", version = "0.21" }
+
+# Performance and caching
+lru = "0.12"
+once_cell = "1.19"
+
+# GUI dependencies
+eframe = { version = "0.24", features = ["default"] }
+egui = "0.24"
+egui_extras = { version = "0.24", features = ["default"] }
+rfd = "0.12"
+syntect = "5.1"
+webbrowser = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+sys-info = "0.9"
+
+# Testing
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Main dependencies are already defined above
+
+[[bin]]
+name = "cr-semservice"
+path = "src/main.rs"
+
+[[bin]]
+name = "validate-rule"
+path = "examples/validate_rule.rs"
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile = "3.8"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+debug = true
+opt-level = 0
+
+[profile.test]
+debug = true
+opt-level = 1

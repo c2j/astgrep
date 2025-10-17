@@ -1,0 +1,175 @@
+rules:
+  - id: eval-inside-function
+    message: eval() call inside function definition
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-inside: |
+          def $FUNC(...):
+              ...
+
+  - id: sql-injection-inside-route
+    message: SQL injection vulnerability in web route
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern: cursor.execute($QUERY + $VAR)
+      - pattern-inside: |
+          @app.route($PATH)
+          def $HANDLER(...):
+              ...
+
+  - id: dangerous-calls-inside-try
+    message: Dangerous function call inside try block
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: eval($CODE)
+          - pattern: exec($CMD)
+          - pattern: __import__($MODULE)
+      - pattern-inside: |
+          try:
+              ...
+
+  - id: file-write-inside-loop
+    message: File write operation inside loop
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: $FILE.write($DATA)
+      - pattern-inside: |
+          for $VAR in $ITERABLE:
+              ...
+
+  - id: network-request-inside-loop
+    message: Network request inside loop (potential performance issue)
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: requests.get($URL)
+          - pattern: requests.post($URL, $DATA)
+          - pattern: urllib.request.urlopen($URL)
+      - pattern-inside: |
+          for $VAR in $ITERABLE:
+              ...
+
+  - id: password-hardcoded-inside-class
+    message: Hardcoded password inside class definition
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: password = "$PASSWORD"
+          - pattern: secret = "$SECRET"
+          - pattern: api_key = "$API_KEY"
+      - pattern-inside: |
+          class $CLASS:
+              ...
+
+  - id: unsafe-deserialization-inside-handler
+    message: Unsafe deserialization in request handler
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads($DATA)
+          - pattern: pickle.load($FILE)
+          - pattern: yaml.load($DATA)
+      - pattern-inside: |
+          def handle_$REQUEST(...):
+              ...
+
+  - id: shell-command-inside-subprocess
+    message: Shell command execution inside subprocess
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern: subprocess.$METHOD($CMD, shell=True)
+      - pattern-inside: |
+          def $FUNC(...):
+              ...
+
+  - id: eval-inside-conditional
+    message: eval() call inside conditional statement
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-inside: |
+          if $CONDITION:
+              ...
+
+  - id: database-query-inside-transaction
+    message: Database query inside transaction
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: cursor.execute($QUERY)
+      - pattern-inside: |
+          with $DB.transaction():
+              ...
+
+  - id: nested-inside-patterns
+    message: Nested pattern-inside example
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-inside: |
+          def $FUNC(...):
+              ...
+      - pattern-inside: |
+          class $CLASS:
+              ...
+
+  - id: exception-handling-inside-function
+    message: Exception handling pattern
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: raise $EXCEPTION($MESSAGE)
+      - pattern-inside: |
+          def $FUNC(...):
+              ...
+      - pattern-inside: |
+          except $ERROR:
+              ...
+
+  - id: async-await-inside-function
+    message: Async/await pattern inside function
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: await $FUNC($...ARGS)
+      - pattern-inside: |
+          async def $ASYNC_FUNC(...):
+              ...
+
+  - id: context-manager-inside-function
+    message: Context manager usage inside function
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: |
+          with $CONTEXT as $VAR:
+              ...
+      - pattern-inside: |
+          def $FUNC(...):
+              ...

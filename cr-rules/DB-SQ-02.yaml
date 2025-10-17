@@ -1,0 +1,17 @@
+rules:
+  - id: DB-SQ-02
+    message: "UPDATE/DELETE 语句必须显式指定 WHERE 条件"
+    languages: [java, generic]   # generic 用于扫描 *.xml
+    severity: WARNING
+
+    patterns:
+      # 1) Java 代码里直接拼 SQL - UPDATE without WHERE
+      - patterns:
+          - pattern-regex: "(?i)UPDATE.*SET"
+          - pattern-not-regex: "(?i)WHERE"
+
+      # 2) Java 代码里直接拼 SQL - DELETE without WHERE
+      - patterns:
+          - pattern-regex: "(?i)DELETE.*FROM"
+          - pattern-not-regex: "(?i)WHERE"
+

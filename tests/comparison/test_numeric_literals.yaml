@@ -1,0 +1,6 @@
+rules:
+- id: detect-answer-to-everything
+  pattern: '42'
+  message: Found the answer to everything
+  severity: WARNING
+  languages: [python]

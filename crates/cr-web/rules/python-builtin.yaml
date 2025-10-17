@@ -1,0 +1,93 @@
+rules:
+  - id: python-print-usage
+    name: "Print Statement Usage"
+    description: "Detects print statements that should be replaced with proper logging"
+    severity: WARNING
+    confidence: HIGH
+    languages: [python]
+    patterns:
+      - "print($MSG)"
+    message: "Use logging instead of print statements"
+    fix: "Replace with logging.info(), logging.warning(), or logging.error()"
+    metadata:
+      category: "best-practice"
+
+  - id: python-sql-injection
+    name: "SQL Injection Risk"
+    description: "Detects potential SQL injection vulnerabilities"
+    severity: ERROR
+    confidence: HIGH
+    languages: [python]
+    patterns:
+      - "cursor.execute($QUERY + $VAR)"
+      - "cursor.execute(f\"SELECT * FROM {$TABLE}\")"
+      - "\"SELECT * FROM \" + $TABLE"
+    message: "Potential SQL injection vulnerability"
+    fix: "Use parameterized queries with ? placeholders"
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: python-hardcoded-password
+    name: "Hardcoded Password"
+    description: "Detects hardcoded passwords in Python code"
+    severity: CRITICAL
+    confidence: MEDIUM
+    languages: [python]
+    patterns:
+      - "password = \"$PWD\""
+      - "PASSWORD = \"$PWD\""
+      - "secret = \"$SECRET\""
+    message: "Hardcoded password or secret detected"
+    fix: "Use environment variables or secure configuration"
+    metadata:
+      cwe: "CWE-798"
+      owasp: "A07:2021"
+      category: "security"
+
+  - id: python-eval-usage
+    name: "Eval Usage"
+    description: "Detects usage of eval() which can be dangerous"
+    severity: ERROR
+    confidence: HIGH
+    languages: [python]
+    patterns:
+      - "eval($CODE)"
+      - "exec($CODE)"
+    message: "eval() and exec() can be dangerous"
+    fix: "Use safer alternatives like ast.literal_eval() for data"
+    metadata:
+      cwe: "CWE-95"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: python-bare-except
+    name: "Bare Except Clause"
+    description: "Detects bare except clauses that catch all exceptions"
+    severity: WARNING
+    confidence: HIGH
+    languages: [python]
+    patterns:
+      - |
+        try:
+          $BODY
+        except:
+          $HANDLER
+    message: "Bare except clause catches all exceptions"
+    fix: "Specify the exception type or use 'except Exception:'"
+    metadata:
+      category: "best-practice"
+
+  - id: python-assert-usage
+    name: "Assert Usage"
+    description: "Detects assert statements that can be disabled in production"
+    severity: INFO
+    confidence: MEDIUM
+    languages: [python]
+    patterns:
+      - "assert $CONDITION"
+    message: "Assert statements can be disabled with -O flag"
+    fix: "Use proper error handling for production code"
+    metadata:
+      category: "best-practice"

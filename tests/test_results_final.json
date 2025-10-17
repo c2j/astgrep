@@ -1,0 +1,751 @@
+{
+  "summary": {
+    "total_tests": 50,
+    "passed_tests": 5,
+    "failed_tests": 45,
+    "success_rate": 10.0,
+    "language_stats": {
+      "javascript": {
+        "total": 18,
+        "passed": 2,
+        "failed": 16
+      },
+      "python": {
+        "total": 16,
+        "passed": 2,
+        "failed": 14
+      },
+      "php": {
+        "total": 11,
+        "passed": 0,
+        "failed": 11
+      },
+      "java": {
+        "total": 5,
+        "passed": 1,
+        "failed": 4
+      }
+    }
+  },
+  "results": [
+    {
+      "test_name": "rules/settings",
+      "rule_file": "tests/rules/settings.yaml",
+      "code_file": "tests/rules/settings.js",
+      "language": "javascript",
+      "matches": true,
+      "differences": [],
+      "cr_findings_count": 1,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_best_fit_sink8",
+      "rule_file": "tests/rules/taint_best_fit_sink8.yaml",
+      "code_file": "tests/rules/taint_best_fit_sink8.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=3, Semgrep=1"
+      ],
+      "cr_findings_count": 3,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/pattern-x-3",
+      "rule_file": "tests/rules/pattern-x-3.yaml",
+      "code_file": "tests/rules/pattern-x-3.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=5, Semgrep=25",
+        "Finding 2: Line mismatch CR=5, Semgrep=3",
+        "Finding 3: Line mismatch CR=7, Semgrep=3",
+        "Finding 4: Line mismatch CR=10, Semgrep=3",
+        "Finding 5: Line mismatch CR=13, Semgrep=3"
+      ],
+      "cr_findings_count": 5,
+      "semgrep_findings_count": 25,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/sym_prop_no_merge2",
+      "rule_file": "tests/rules/sym_prop_no_merge2.yaml",
+      "code_file": "tests/rules/sym_prop_no_merge2.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=2"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 2,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/anonymous_metavar",
+      "rule_file": "tests/rules/anonymous_metavar.yaml",
+      "code_file": "tests/rules/anonymous_metavar.py",
+      "language": "python",
+      "matches": true,
+      "differences": [],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 0,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/misc_deep_metavar",
+      "rule_file": "tests/rules/misc_deep_metavar.yaml",
+      "code_file": "tests/rules/misc_deep_metavar.ts",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavar_pattern_generic",
+      "rule_file": "tests/rules/metavar_pattern_generic.yaml",
+      "code_file": "tests/rules/metavar_pattern_generic.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=3"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 3,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/as_metavariable",
+      "rule_file": "tests/rules/as_metavariable.yaml",
+      "code_file": "tests/rules/as_metavariable.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavariable_pattern_php",
+      "rule_file": "tests/rules/metavariable_pattern_php.yaml",
+      "code_file": "tests/rules/metavariable_pattern_php.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/sym_prop_class_attr",
+      "rule_file": "tests/rules/sym_prop_class_attr.yaml",
+      "code_file": "tests/rules/sym_prop_class_attr.java",
+      "language": "java",
+      "matches": false,
+      "differences": [
+        "Finding 1: Line mismatch CR=9, Semgrep=13",
+        "Finding 2: Line mismatch CR=23, Semgrep=28"
+      ],
+      "cr_findings_count": 2,
+      "semgrep_findings_count": 2,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavariable_pattern_either_unif",
+      "rule_file": "tests/rules/metavariable_pattern_either_unif.yaml",
+      "code_file": "tests/rules/metavariable_pattern_either_unif.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_labels1",
+      "rule_file": "tests/rules/taint_labels1.yaml",
+      "code_file": "tests/rules/taint_labels1.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=4, Semgrep=0"
+      ],
+      "cr_findings_count": 4,
+      "semgrep_findings_count": 0,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_lambda4",
+      "rule_file": "tests/rules/taint_lambda4.yaml",
+      "code_file": "tests/rules/taint_lambda4.ts",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=2"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 2,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/ts_decorated_static_property",
+      "rule_file": "tests/rules/ts_decorated_static_property.yaml",
+      "code_file": "tests/rules/ts_decorated_static_property.ts",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=27, Semgrep=4",
+        "Finding 1: Line mismatch CR=3, Semgrep=12",
+        "Finding 2: Line mismatch CR=3, Semgrep=17",
+        "Finding 3: Line mismatch CR=3, Semgrep=22",
+        "Finding 4: Line mismatch CR=7, Semgrep=27"
+      ],
+      "cr_findings_count": 27,
+      "semgrep_findings_count": 4,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/defer-persistent-binding",
+      "rule_file": "tests/rules/defer-persistent-binding.yaml",
+      "code_file": "tests/rules/defer-persistent-binding.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/sym_prop_exp",
+      "rule_file": "tests/rules/sym_prop_exp.yaml",
+      "code_file": "tests/rules/sym_prop_exp.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/eval_not_in",
+      "rule_file": "tests/rules/eval_not_in.yaml",
+      "code_file": "tests/rules/eval_not_in.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_best_fit_sink4",
+      "rule_file": "tests/rules/taint_best_fit_sink4.yaml",
+      "code_file": "tests/rules/taint_best_fit_sink4.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding 1: Line mismatch CR=19, Semgrep=26",
+        "Finding 2: Line mismatch CR=21, Semgrep=32"
+      ],
+      "cr_findings_count": 2,
+      "semgrep_findings_count": 2,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_field_sensitive5",
+      "rule_file": "tests/rules/taint_field_sensitive5.yaml",
+      "code_file": "tests/rules/taint_field_sensitive5.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=4, Semgrep=1",
+        "Finding 1: Line mismatch CR=3, Semgrep=13"
+      ],
+      "cr_findings_count": 4,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/propagator_labels",
+      "rule_file": "tests/rules/propagator_labels.yaml",
+      "code_file": "tests/rules/propagator_labels.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=11, Semgrep=8",
+        "Finding 1: Line mismatch CR=6, Semgrep=11",
+        "Finding 2: Line mismatch CR=7, Semgrep=25",
+        "Finding 3: Line mismatch CR=15, Semgrep=41",
+        "Finding 4: Line mismatch CR=21, Semgrep=43",
+        "Finding 5: Line mismatch CR=22, Semgrep=45",
+        "Finding 6: Line mismatch CR=35, Semgrep=47",
+        "Finding 7: Line mismatch CR=36, Semgrep=61",
+        "Finding 8: Line mismatch CR=38, Semgrep=63"
+      ],
+      "cr_findings_count": 11,
+      "semgrep_findings_count": 8,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/sym_prop_explosion",
+      "rule_file": "tests/rules/sym_prop_explosion.yaml",
+      "code_file": "tests/rules/sym_prop_explosion.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_assume_safe_booleans1",
+      "rule_file": "tests/rules/taint_assume_safe_booleans1.yaml",
+      "code_file": "tests/rules/taint_assume_safe_booleans1.java",
+      "language": "java",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=4, Semgrep=1",
+        "Finding 1: Line mismatch CR=6, Semgrep=18"
+      ],
+      "cr_findings_count": 4,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_assume_safe_funcs",
+      "rule_file": "tests/rules/taint_assume_safe_funcs.yaml",
+      "code_file": "tests/rules/taint_assume_safe_funcs.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=9, Semgrep=2",
+        "Finding 1: Line mismatch CR=3, Semgrep=16",
+        "Finding 2: Line mismatch CR=9, Semgrep=20"
+      ],
+      "cr_findings_count": 9,
+      "semgrep_findings_count": 2,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavar_regex_include",
+      "rule_file": "tests/rules/metavar_regex_include.yaml",
+      "code_file": "tests/rules/metavar_regex_include.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/option_ac_matching",
+      "rule_file": "tests/rules/option_ac_matching.yaml",
+      "code_file": "tests/rules/option_ac_matching.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=4"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 4,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/misc_php_new_taint",
+      "rule_file": "tests/rules/misc_php_new_taint.yaml",
+      "code_file": "tests/rules/misc_php_new_taint.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/ellipsis_metavar_template",
+      "rule_file": "tests/rules/ellipsis_metavar_template.yaml",
+      "code_file": "tests/rules/ellipsis_metavar_template.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/TEMPLATE",
+      "rule_file": "tests/rules/TEMPLATE.yaml",
+      "code_file": "tests/rules/TEMPLATE.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/attributes_match_multiple",
+      "rule_file": "tests/rules/attributes_match_multiple.yaml",
+      "code_file": "tests/rules/attributes_match_multiple.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/TODO_taint_messy_sink",
+      "rule_file": "tests/rules/TODO_taint_messy_sink.yaml",
+      "code_file": "tests/rules/TODO_taint_messy_sink.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/typed_metavar_not",
+      "rule_file": "tests/rules/typed_metavar_not.yaml",
+      "code_file": "tests/rules/typed_metavar_not.java",
+      "language": "java",
+      "matches": true,
+      "differences": [],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 0,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavar_pattern_regex4",
+      "rule_file": "tests/rules/metavar_pattern_regex4.yaml",
+      "code_file": "tests/rules/metavar_pattern_regex4.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavar_type_str_eq_php",
+      "rule_file": "tests/rules/metavar_type_str_eq_php.yaml",
+      "code_file": "tests/rules/metavar_type_str_eq_php.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=2"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 2,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/pattern-either-one-general",
+      "rule_file": "tests/rules/pattern-either-one-general.yaml",
+      "code_file": "tests/rules/pattern-either-one-general.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_assign_record1",
+      "rule_file": "tests/rules/taint_assign_record1.yaml",
+      "code_file": "tests/rules/taint_assign_record1.ts",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=2, Semgrep=1",
+        "Finding 1: Line mismatch CR=1, Semgrep=9"
+      ],
+      "cr_findings_count": 2,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/option_xml_attr_implicit_ellipsis",
+      "rule_file": "tests/rules/option_xml_attr_implicit_ellipsis.yaml",
+      "code_file": "tests/rules/option_xml_attr_implicit_ellipsis.js",
+      "language": "javascript",
+      "matches": true,
+      "differences": [],
+      "cr_findings_count": 1,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/anywhere_global",
+      "rule_file": "tests/rules/anywhere_global.yaml",
+      "code_file": "tests/rules/anywhere_global.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=2, Semgrep=0",
+        "Tool errors - CR: None, Semgrep: Semgrep failed (exit code 7): /usr/local/Cellar/semgrep/1.131.0/libexec/lib/python3.13/site-packages/opentelemetry/instrumentation/dependencies.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  from pkg_resources import (\n"
+      ],
+      "cr_findings_count": 2,
+      "semgrep_findings_count": 0,
+      "cr_error": null,
+      "semgrep_error": "Semgrep failed (exit code 7): /usr/local/Cellar/semgrep/1.131.0/libexec/lib/python3.13/site-packages/opentelemetry/instrumentation/dependencies.py:4: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.\n  from pkg_resources import (\n"
+    },
+    {
+      "test_name": "rules/persistent_metavariable_pattern",
+      "rule_file": "tests/rules/persistent_metavariable_pattern.yaml",
+      "code_file": "tests/rules/persistent_metavariable_pattern.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/labeled_propagators",
+      "rule_file": "tests/rules/labeled_propagators.yaml",
+      "code_file": "tests/rules/labeled_propagators.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=9, Semgrep=3",
+        "Finding 2: Line mismatch CR=2, Semgrep=5",
+        "Finding 3: Line mismatch CR=5, Semgrep=8"
+      ],
+      "cr_findings_count": 9,
+      "semgrep_findings_count": 3,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavariable_pattern_keep_env",
+      "rule_file": "tests/rules/metavariable_pattern_keep_env.yaml",
+      "code_file": "tests/rules/metavariable_pattern_keep_env.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavar_type_non_prim_php",
+      "rule_file": "tests/rules/metavar_type_non_prim_php.yaml",
+      "code_file": "tests/rules/metavar_type_non_prim_php.php",
+      "language": "php",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavariable_object_type",
+      "rule_file": "tests/rules/metavariable_object_type.yaml",
+      "code_file": "tests/rules/metavariable_object_type.ts",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_assign_cleans_shape",
+      "rule_file": "tests/rules/taint_assign_cleans_shape.yaml",
+      "code_file": "tests/rules/taint_assign_cleans_shape.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=3, Semgrep=0"
+      ],
+      "cr_findings_count": 3,
+      "semgrep_findings_count": 0,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/sym_prop_non_literal",
+      "rule_file": "tests/rules/sym_prop_non_literal.yaml",
+      "code_file": "tests/rules/sym_prop_non_literal.java",
+      "language": "java",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/metavar_pattern_generic_gibberish",
+      "rule_file": "tests/rules/metavar_pattern_generic_gibberish.yaml",
+      "code_file": "tests/rules/metavar_pattern_generic_gibberish.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_splat",
+      "rule_file": "tests/rules/taint_splat.yaml",
+      "code_file": "tests/rules/taint_splat.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=1, Semgrep=3",
+        "Finding 1: Line mismatch CR=3, Semgrep=5"
+      ],
+      "cr_findings_count": 1,
+      "semgrep_findings_count": 3,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/record_one_spread",
+      "rule_file": "tests/rules/record_one_spread.yaml",
+      "code_file": "tests/rules/record_one_spread.js",
+      "language": "javascript",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=0, Semgrep=1"
+      ],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_assume_safe_numbers1",
+      "rule_file": "tests/rules/taint_assume_safe_numbers1.yaml",
+      "code_file": "tests/rules/taint_assume_safe_numbers1.java",
+      "language": "java",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=14, Semgrep=1",
+        "Finding 1: Line mismatch CR=8, Semgrep=40"
+      ],
+      "cr_findings_count": 14,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/rule_extensions",
+      "rule_file": "tests/rules/rule_extensions.yaml",
+      "code_file": "tests/rules/rule_extensions.py",
+      "language": "python",
+      "matches": true,
+      "differences": [],
+      "cr_findings_count": 0,
+      "semgrep_findings_count": 0,
+      "cr_error": null,
+      "semgrep_error": null
+    },
+    {
+      "test_name": "rules/taint_typestate1",
+      "rule_file": "tests/rules/taint_typestate1.yaml",
+      "code_file": "tests/rules/taint_typestate1.py",
+      "language": "python",
+      "matches": false,
+      "differences": [
+        "Finding count mismatch: CR=36, Semgrep=1",
+        "Finding 1: Line mismatch CR=2, Semgrep=6"
+      ],
+      "cr_findings_count": 36,
+      "semgrep_findings_count": 1,
+      "cr_error": null,
+      "semgrep_error": null
+    }
+  ]
+}

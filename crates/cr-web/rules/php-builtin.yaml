@@ -1,0 +1,66 @@
+rules:
+  - id: php-sql-injection
+    name: "SQL Injection Risk"
+    description: "Detects potential SQL injection vulnerabilities in PHP"
+    severity: ERROR
+    confidence: HIGH
+    languages: [php]
+    patterns:
+      - "mysql_query($QUERY . $VAR)"
+      - "mysqli_query($CONN, $QUERY . $VAR)"
+      - "\"SELECT * FROM \" . $TABLE"
+    message: "Potential SQL injection vulnerability"
+    fix: "Use prepared statements with bound parameters"
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: php-xss-risk
+    name: "XSS Risk"
+    description: "Detects potential XSS vulnerabilities"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [php]
+    patterns:
+      - "echo $_GET[$VAR]"
+      - "echo $_POST[$VAR]"
+      - "print $_REQUEST[$VAR]"
+    message: "Potential XSS vulnerability"
+    fix: "Use htmlspecialchars() or filter_var() to sanitize output"
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: php-eval-usage
+    name: "Eval Usage"
+    description: "Detects usage of eval() which is dangerous"
+    severity: CRITICAL
+    confidence: HIGH
+    languages: [php]
+    patterns:
+      - "eval($CODE)"
+    message: "eval() is extremely dangerous and should be avoided"
+    fix: "Use safer alternatives or proper function calls"
+    metadata:
+      cwe: "CWE-95"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: php-file-inclusion
+    name: "File Inclusion Risk"
+    description: "Detects potential file inclusion vulnerabilities"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [php]
+    patterns:
+      - "include $_GET[$VAR]"
+      - "require $_POST[$VAR]"
+      - "include_once $VAR"
+    message: "Potential file inclusion vulnerability"
+    fix: "Validate and whitelist included files"
+    metadata:
+      cwe: "CWE-98"
+      owasp: "A03:2021"
+      category: "security"

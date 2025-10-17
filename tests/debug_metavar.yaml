@@ -1,0 +1,6 @@
+rules:
+- id: test-metavar
+  pattern: $VAR = $VALUE
+  message: Found assignment
+  severity: INFO
+  languages: [python]

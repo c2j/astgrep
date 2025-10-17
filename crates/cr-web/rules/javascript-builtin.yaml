@@ -1,0 +1,82 @@
+rules:
+  - id: js-console-log
+    name: "Console.log Usage"
+    description: "Detects console.log statements that should be removed in production"
+    severity: WARNING
+    confidence: HIGH
+    languages: [javascript]
+    patterns:
+      - "console.log($MSG)"
+      - "console.warn($MSG)"
+      - "console.error($MSG)"
+      - "console.debug($MSG)"
+    message: "Remove console statements before production deployment"
+    fix: "Use proper logging framework or remove debug statements"
+    metadata:
+      category: "best-practice"
+
+  - id: js-eval-usage
+    name: "Eval Usage"
+    description: "Detects usage of eval() which is dangerous and should be avoided"
+    severity: CRITICAL
+    confidence: HIGH
+    languages: [javascript]
+    patterns:
+      - "eval($CODE)"
+    message: "eval() is dangerous and should be avoided"
+    fix: "Use safer alternatives like JSON.parse() or proper function calls"
+    metadata:
+      cwe: "CWE-95"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: js-xss-risk
+    name: "XSS Risk"
+    description: "Detects potential XSS vulnerabilities in DOM manipulation"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [javascript]
+    patterns:
+      - "$ELEMENT.innerHTML = $VAR"
+      - "document.write($VAR)"
+      - "$ELEMENT.outerHTML = $VAR"
+    message: "Potential XSS vulnerability in DOM manipulation"
+    fix: "Use textContent, createElement, or proper sanitization"
+    metadata:
+      cwe: "CWE-79"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: js-hardcoded-secret
+    name: "Hardcoded Secret"
+    description: "Detects hardcoded API keys or secrets"
+    severity: CRITICAL
+    confidence: MEDIUM
+    languages: [javascript]
+    patterns:
+      - "const apiKey = \"$KEY\""
+      - "var secret = \"$SECRET\""
+      - "let token = \"$TOKEN\""
+    message: "Hardcoded secret or API key detected"
+    fix: "Use environment variables or secure configuration"
+    metadata:
+      cwe: "CWE-798"
+      owasp: "A07:2021"
+      category: "security"
+
+  - id: js-weak-crypto
+    name: "Weak Cryptography"
+    description: "Detects usage of weak cryptographic functions"
+    severity: ERROR
+    confidence: HIGH
+    languages: [javascript]
+    patterns:
+      - "crypto.createHash('md5')"
+      - "crypto.createHash('sha1')"
+      - "btoa($DATA)"
+    message: "Weak cryptographic function detected"
+    fix: "Use stronger algorithms like SHA-256 or bcrypt"
+    metadata:
+      cwe: "CWE-327"
+      owasp: "A02:2021"
+      category: "security"

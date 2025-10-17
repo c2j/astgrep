@@ -1,0 +1,15 @@
+rules:
+  - id: CS-SC-17
+    message: "应使用安全随机数 java.security.SecureRandom，而不是 java.util.Random"
+    languages: [java]
+    severity: WARNING
+    
+    patterns:
+      # 检测 java.util.Random 的使用
+      - pattern: new java.util.Random()
+      - pattern: new java.util.Random($SEED)
+      - pattern: new Random()
+      - pattern: new Random($SEED)
+      
+      # 检测 Math.random() 的使用
+      - pattern: Math.random()

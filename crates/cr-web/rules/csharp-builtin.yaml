@@ -1,0 +1,67 @@
+rules:
+  - id: csharp-console-writeline
+    name: "Console.WriteLine Usage"
+    description: "Detects Console.WriteLine that should be replaced with logging"
+    severity: WARNING
+    confidence: HIGH
+    languages: [csharp]
+    patterns:
+      - "Console.WriteLine($MSG)"
+      - "Console.Write($MSG)"
+    message: "Use proper logging instead of Console.WriteLine"
+    fix: "Replace with ILogger or similar logging framework"
+    metadata:
+      category: "best-practice"
+
+  - id: csharp-sql-injection
+    name: "SQL Injection Risk"
+    description: "Detects potential SQL injection vulnerabilities"
+    severity: ERROR
+    confidence: HIGH
+    languages: [csharp]
+    patterns:
+      - "SqlCommand($QUERY + $VAR)"
+      - "ExecuteQuery($QUERY + $VAR)"
+      - "\"SELECT * FROM \" + $TABLE"
+    message: "Potential SQL injection vulnerability"
+    fix: "Use parameterized queries with SqlParameter"
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: csharp-hardcoded-connection
+    name: "Hardcoded Connection String"
+    description: "Detects hardcoded database connection strings"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [csharp]
+    patterns:
+      - "connectionString = \"Server=$SERVER;Database=$DB;User Id=$USER;Password=$PWD;\""
+      - "new SqlConnection(\"$CONN_STR\")"
+    message: "Hardcoded connection string detected"
+    fix: "Use configuration files or environment variables"
+    metadata:
+      cwe: "CWE-798"
+      owasp: "A07:2021"
+      category: "security"
+
+  - id: csharp-empty-catch
+    name: "Empty Catch Block"
+    description: "Detects empty catch blocks that ignore exceptions"
+    severity: WARNING
+    confidence: HIGH
+    languages: [csharp]
+    patterns:
+      - |
+        try
+        {
+          $BODY
+        }
+        catch ($EXC $VAR)
+        {
+        }
+    message: "Empty catch block ignores exceptions"
+    fix: "Add proper exception handling or logging"
+    metadata:
+      category: "best-practice"

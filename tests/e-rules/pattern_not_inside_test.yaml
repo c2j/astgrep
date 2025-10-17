@@ -1,0 +1,55 @@
+rules:
+  - id: function-outside-class
+    name: Function defined outside class
+    description: Detects functions defined outside of class context
+    severity: INFO
+    languages: [python]
+    patterns:
+      - pattern: |
+          def $FUNC(...):
+            ...
+      - pattern-not-inside: |
+          class $CLASS:
+            ...
+
+  - id: eval-outside-sandbox
+    name: eval() used outside sandbox context
+    description: Detects eval() calls that are not within a sandbox function
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-not-inside: |
+          def sandbox(...):
+            ...
+            eval($CODE)
+            ...
+
+  - id: unsafe-eval-outside-try-catch
+    name: Unsafe eval outside try-catch
+    description: Detects eval() calls not protected by try-catch blocks
+    severity: WARNING
+    languages: [javascript]
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-not-inside: |
+          try {
+            ...
+            eval($CODE)
+            ...
+          } catch (...) {
+            ...
+          }
+
+  - id: sql-query-outside-transaction
+    name: SQL query outside transaction
+    description: Detects SQL queries not within transaction blocks
+    severity: WARNING
+    languages: [python]
+    patterns:
+      - pattern: cursor.execute($QUERY)
+      - pattern-not-inside: |
+          with connection.begin():
+            ...
+            cursor.execute($QUERY)
+            ...

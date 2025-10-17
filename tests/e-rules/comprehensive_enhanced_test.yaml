@@ -1,0 +1,84 @@
+rules:
+  - id: complex-security-check
+    name: Complex security vulnerability detection
+    description: Demonstrates combination of all enhanced pattern features
+    severity: CRITICAL
+    languages: [python]
+    patterns:
+      - pattern: $OBJ.$METHOD($ARG)
+      - pattern-inside: |
+          def $FUNC(...):
+            ...
+      - pattern-not-inside: |
+          try:
+            ...
+          except:
+            ...
+      - pattern-not-regex: "test_.*"  # Exclude test functions
+      - focus-metavariable: [$METHOD, $ARG]
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: "^(execute|eval|exec)$"
+      - metavariable-regex:
+          metavariable: $ARG
+          regex: ".*\\+.*"  # String concatenation
+
+  - id: unsafe-http-outside-dev
+    name: Unsafe HTTP requests outside development
+    description: Detects HTTP requests not in development/test contexts
+    severity: WARNING
+    languages: [python, javascript]
+    patterns:
+      - pattern: requests.get($URL, $OPTIONS)
+      - pattern-not-inside: |
+          if $ENV == "development":
+            ...
+      - pattern-not-inside: |
+          def test_$FUNC(...):
+            ...
+      - pattern-not-regex: ".*localhost.*"
+      - pattern-not-regex: ".*127\\.0\\.0\\.1.*"
+      - focus-metavariable: $URL
+      - metavariable-regex:
+          metavariable: $URL
+          regex: ".*http://.*"
+
+  - id: sql-injection-advanced
+    name: Advanced SQL injection detection
+    description: Comprehensive SQL injection pattern with multiple exclusions
+    severity: CRITICAL
+    languages: [python]
+    patterns:
+      - pattern: $CURSOR.execute($QUERY, $PARAMS)
+      - pattern-not-inside: |
+          with $CONN.begin():
+            ...
+      - pattern-not-regex: ".*test.*"
+      - focus-metavariable: $QUERY
+      - metavariable-regex:
+          metavariable: $QUERY
+          regex: ".*['\"].*\\+.*['\"].*"  # String concatenation in quotes
+
+  - id: dangerous-eval-comprehensive
+    name: Comprehensive dangerous eval detection
+    description: Detects eval usage with multiple safety exclusions
+    severity: ERROR
+    languages: [javascript]
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-not-inside: |
+          function sandbox$SUFFIX(...) {
+            ...
+          }
+      - pattern-not-inside: |
+          try {
+            ...
+          } catch ($ERR) {
+            ...
+          }
+      - pattern-not-regex: ".*test.*"
+      - pattern-not-regex: ".*mock.*"
+      - focus-metavariable: $CODE
+      - metavariable-regex:
+          metavariable: $CODE
+          regex: ".*['\"].*\\+.*['\"].*"

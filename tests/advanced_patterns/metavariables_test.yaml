@@ -1,0 +1,244 @@
+rules:
+  - id: dangerous-function-with-regex
+    message: Dangerous function call with specific pattern
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern: $FUNC($ARG)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "^(eval|exec|compile)$"
+
+  - id: assignment-with-dangerous-value
+    message: Assignment with dangerous function call
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: $VAR = $FUNC($...ARGS)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: ".*(dangerous|unsafe|risky).*"
+
+  - id: method-call-with-sensitive-object
+    message: Method call on sensitive object
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: $OBJ.$METHOD($...ARGS)
+      - metavariable-regex:
+          metavariable: $OBJ
+          regex: ".*(password|secret|key|token).*"
+
+  - id: string-with-credentials
+    message: String containing credentials
+    languages:
+      - python
+      - javascript
+    severity: ERROR
+    patterns:
+      - pattern: $VAR = "$VALUE"
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ".*(password|secret|key|token).*"
+
+  - id: function-name-comparison
+    message: Function name matches specific pattern
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: def $FUNC($...PARAMS):
+      - metavariable-comparison:
+          metavariable: $FUNC
+          comparison: re.match(r"test_.*", str($FUNC))
+
+  - id: numeric-comparison
+    message: Numeric value comparison
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: $VAR = $NUM
+      - metavariable-comparison:
+          metavariable: $NUM
+          comparison: int($NUM) > 1000
+
+  - id: string-length-check
+    message: String length validation
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: $VAR = "$STRING"
+      - metavariable-comparison:
+          metavariable: $STRING
+          comparison: len(str($STRING)) > 10
+
+  - id: metavar-pattern-complex
+    message: Complex metavariable pattern
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: $OBJ.$METHOD($ARG)
+      - metavariable-pattern:
+          metavariable: $ARG
+          patterns:
+            - pattern: "$STRING"
+            - metavariable-regex:
+                metavariable: $STRING
+                regex: ".*(admin|root|system).*"
+
+  - id: multiple-metavar-constraints
+    message: Multiple metavariable constraints
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern: $FUNC($ARG1, $ARG2)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "^(subprocess|os)\\.(system|popen|exec.*)$"
+      - metavariable-regex:
+          metavariable: $ARG1
+          regex: ".*[;&|].*"
+
+  - id: variable-name-pattern
+    message: Variable name follows pattern
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: $VAR = $VALUE
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: "^[a-z]+_[a-z]+$"
+
+  - id: import-module-pattern
+    message: Import with specific module pattern
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: import $MODULE
+      - metavariable-regex:
+          metavariable: $MODULE
+          regex: ".*(crypto|hash|cipher).*"
+
+  - id: class-name-convention
+    message: Class name convention check
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: class $CLASS:
+      - metavariable-regex:
+          metavariable: $CLASS
+          regex: "^[A-Z][a-zA-Z0-9]*$"
+
+  - id: file-operation-pattern
+    message: File operation with pattern
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: open($FILE, $MODE)
+      - metavariable-regex:
+          metavariable: $FILE
+          regex: ".*\\.(log|tmp|temp)$"
+      - metavariable-regex:
+          metavariable: $MODE
+          regex: "^[wa].*"
+
+  - id: url-pattern-metavar
+    message: URL pattern in variable
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: $VAR = "$URL"
+      - metavariable-regex:
+          metavariable: $URL
+          regex: "^https?://.*"
+
+  - id: nested-metavar-pattern
+    message: Nested metavariable pattern
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: $OBJ.$METHOD($ARG)
+      - metavariable-pattern:
+          metavariable: $ARG
+          patterns:
+            - pattern-either:
+                - pattern: "$STRING"
+                - pattern: $VAR
+            - metavariable-regex:
+                metavariable: $STRING
+                regex: ".*(password|secret).*"
+
+  - id: function-call-chain
+    message: Function call chain pattern
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: $OBJ1.$METHOD1().$METHOD2($ARG)
+      - metavariable-regex:
+          metavariable: $METHOD1
+          regex: "^get.*"
+      - metavariable-regex:
+          metavariable: $METHOD2
+          regex: "^set.*"
+
+  - id: assignment-type-check
+    message: Assignment with type checking
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: $VAR = $VALUE
+      - metavariable-comparison:
+          metavariable: $VALUE
+          comparison: type($VALUE).__name__ == "str"
+
+  - id: conditional-metavar
+    message: Conditional with metavariable
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: if $CONDITION:
+      - metavariable-pattern:
+          metavariable: $CONDITION
+          patterns:
+            - pattern: $VAR == $VALUE
+            - metavariable-regex:
+                metavariable: $VALUE
+                regex: "^(True|False|None)$"
+
+  - id: loop-variable-pattern
+    message: Loop variable pattern
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: for $VAR in $ITERABLE:
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: "^[a-z_]+$"
+
+  - id: exception-type-pattern
+    message: Exception type pattern
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: except $EXCEPTION as $VAR:
+      - metavariable-regex:
+          metavariable: $EXCEPTION
+          regex: ".*Error$"

@@ -1,0 +1,136 @@
+rules:
+  - id: function-calls-except-safe
+    message: Function call detected (excluding safe functions)
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: $FUNC($...ARGS)
+      - pattern-not: print($...ARGS)
+      - pattern-not: len($ARG)
+      - pattern-not: str($ARG)
+      - pattern-not: int($ARG)
+      - pattern-not: float($ARG)
+
+  - id: imports-except-standard
+    message: Import detected (excluding standard library)
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: import $MODULE
+      - pattern-not: import os
+      - pattern-not: import sys
+      - pattern-not: import json
+      - pattern-not: import re
+      - pattern-not: import datetime
+
+  - id: string-literals-except-safe
+    message: String literal detected (excluding safe patterns)
+    languages:
+      - python
+      - javascript
+    severity: WARNING
+    patterns:
+      - pattern: "$STRING"
+      - pattern-not: "hello"
+      - pattern-not: "world"
+      - pattern-not: "test"
+      - pattern-not: ""
+
+  - id: assignments-except-constants
+    message: Assignment detected (excluding constants)
+    languages:
+      - python
+    severity: INFO
+    patterns:
+      - pattern: $VAR = $VALUE
+      - pattern-not: $VAR = True
+      - pattern-not: $VAR = False
+      - pattern-not: $VAR = None
+      - pattern-not: $VAR = 0
+      - pattern-not: $VAR = 1
+
+  - id: method-calls-except-getters
+    message: Method call detected (excluding getters)
+    languages:
+      - python
+      - javascript
+    severity: INFO
+    patterns:
+      - pattern: $OBJ.$METHOD($...ARGS)
+      - pattern-not: $OBJ.get($...ARGS)
+      - pattern-not: $OBJ.getValue($...ARGS)
+      - pattern-not: $OBJ.getName($...ARGS)
+      - pattern-not: $OBJ.getType($...ARGS)
+
+  - id: file-operations-except-read-only
+    message: File operation detected (excluding read-only)
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: open($FILE, $MODE)
+      - pattern-not: open($FILE, "r")
+      - pattern-not: open($FILE, "rb")
+
+  - id: network-requests-except-get
+    message: Network request detected (excluding GET requests)
+    languages:
+      - python
+    severity: WARNING
+    patterns:
+      - pattern: requests.$METHOD($URL, $...ARGS)
+      - pattern-not: requests.get($URL, $...ARGS)
+
+  - id: complex-not-with-either
+    message: Complex pattern with NOT and EITHER
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: eval($CODE)
+          - pattern: exec($CMD)
+          - pattern: compile($CODE, $FILE, $MODE)
+      - pattern-not: 
+          patterns:
+            - pattern-inside: |
+                def test_$FUNC(...):
+                    ...
+            - pattern-inside: |
+                class Test$CLASS:
+                    ...
+
+  - id: dangerous-but-not-in-tests
+    message: Dangerous function outside of test context
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-not:
+          pattern-inside: |
+            def test_$FUNC(...):
+                ...
+      - pattern-not:
+          pattern-inside: |
+            class Test$CLASS:
+                ...
+      - pattern-not:
+          pattern-inside: |
+            if __name__ == "__main__":
+                ...
+
+  - id: sql-queries-except-safe
+    message: SQL query detected (excluding safe patterns)
+    languages:
+      - python
+    severity: ERROR
+    patterns:
+      - pattern: cursor.execute($QUERY)
+      - pattern-not: cursor.execute("SELECT * FROM users")
+      - pattern-not: cursor.execute("INSERT INTO logs ...")
+      - pattern-not: cursor.execute("UPDATE settings ...")
+      - pattern-not:
+          pattern: cursor.execute($QUERY, $PARAMS)

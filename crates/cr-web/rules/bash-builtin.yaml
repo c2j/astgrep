@@ -1,0 +1,44 @@
+rules:
+  - id: bash-unquoted-variable
+    name: "Unquoted Variable"
+    description: "Detects unquoted variables that can cause word splitting"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [bash]
+    patterns:
+      - "echo $VAR"
+      - "[ $VAR = $VALUE ]"
+    message: "Unquoted variables can cause word splitting issues"
+    fix: "Quote variables: \"$VAR\""
+    metadata:
+      category: "best-practice"
+
+  - id: bash-command-injection
+    name: "Command Injection Risk"
+    description: "Detects potential command injection vulnerabilities"
+    severity: ERROR
+    confidence: HIGH
+    languages: [bash]
+    patterns:
+      - "eval $CMD"
+      - "sh -c $CMD"
+      - "bash -c $CMD"
+    message: "Potential command injection vulnerability"
+    fix: "Validate and sanitize input before executing"
+    metadata:
+      cwe: "CWE-78"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: bash-set-e
+    name: "Missing set -e"
+    description: "Scripts should use 'set -e' to exit on errors"
+    severity: INFO
+    confidence: LOW
+    languages: [bash]
+    patterns:
+      - "#!/bin/bash"
+    message: "Consider using 'set -e' to exit on errors"
+    fix: "Add 'set -e' at the beginning of the script"
+    metadata:
+      category: "best-practice"

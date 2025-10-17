@@ -1,0 +1,14 @@
+rules:
+  - id: CS-MT-01
+    message: "线程资源应通过线程池提供，严禁使用 new Thread() 方式创建线程"
+    languages: [java]
+    severity: WARNING
+    
+    patterns:
+      # 检测 new Thread() 调用
+      - pattern: new Thread()
+      - pattern: new Thread($RUNNABLE)
+      - pattern: new Thread($RUNNABLE, $NAME)
+      - pattern: new Thread($GROUP, $RUNNABLE)
+      - pattern: new Thread($GROUP, $RUNNABLE, $NAME)
+      - pattern: new Thread($GROUP, $RUNNABLE, $NAME, $STACKSIZE)

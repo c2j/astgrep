@@ -1,0 +1,6 @@
+rules:
+- id: test-string-match
+  pattern: '"hello"'
+  message: Found hello string
+  severity: ERROR
+  languages: [python]

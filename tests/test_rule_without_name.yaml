@@ -1,0 +1,19 @@
+rules:
+  - id: sql-injection-test
+    languages:
+      - javascript
+      - typescript
+    message: |
+      Potential SQL injection vulnerability detected
+    pattern: |
+      "SELECT * FROM " + $VAR
+    severity: ERROR
+    
+  - id: xss-vulnerability
+    languages:
+      - javascript
+    message: |
+      Cross-site scripting vulnerability detected
+    pattern: |
+      $ELEMENT.innerHTML = $INPUT
+    severity: CRITICAL

@@ -1,0 +1,33 @@
+rules:
+  - id: "sql-injection-basic"
+    message: "Potential SQL injection vulnerability"
+    type: "security"
+    severity: "critical"
+    languages: ["javascript", "typescript"]
+    pattern: |
+      "SELECT * FROM $TABLE WHERE $COLUMN = " + $VAR
+    fix: |
+      Use parameterized queries instead of string concatenation
+    
+  - id: "xss-innerhtml"
+    message: "Potential XSS vulnerability using innerHTML"
+    type: "security"
+    severity: "error"
+    languages: ["javascript", "typescript"]
+    pattern: |
+      $ELEMENT.innerHTML = $VAR
+    fix: |
+      Use textContent or properly sanitize the input
+    
+  - id: "hardcoded-credentials"
+    message: "Hardcoded credentials detected"
+    type: "security"
+    severity: "critical"
+    languages: ["javascript", "typescript", "python", "java"]
+    pattern: |
+      var $VAR = "$PASSWORD"
+    where:
+      - variable: "$PASSWORD"
+        regex: "(password|secret|key|token).*"
+    fix: |
+      Use environment variables or secure configuration

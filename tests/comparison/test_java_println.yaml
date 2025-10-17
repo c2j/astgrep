@@ -1,0 +1,6 @@
+rules:
+- id: detect-println-calls
+  pattern: System.out.println(...)
+  message: Found System.out.println call
+  severity: INFO
+  languages: [java]

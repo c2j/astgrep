@@ -1,0 +1,81 @@
+rules:
+  - id: java-system-out
+    name: "Avoid System.out usage"
+    description: "Detects usage of System.out.print* methods which should be replaced with proper logging"
+    severity: WARNING
+    confidence: HIGH
+    languages: [java]
+    patterns:
+      - "System.out.println($MSG)"
+      - "System.out.print($MSG)"
+      - "System.out.printf($FMT, ...)"
+    message: "Use proper logging instead of System.out"
+    fix: "Replace with logger.info(), logger.warn(), or logger.error()"
+    metadata:
+      cwe: "CWE-532"
+      owasp: "A09:2021"
+      category: "best-practice"
+
+  - id: java-hardcoded-password
+    name: "Hardcoded Password"
+    description: "Detects hardcoded passwords in Java code"
+    severity: CRITICAL
+    confidence: MEDIUM
+    languages: [java]
+    patterns:
+      - "String password = \"$PWD\""
+      - "setPassword(\"$PWD\")"
+      - "password=\"$PWD\""
+    message: "Hardcoded password detected"
+    fix: "Use environment variables or secure configuration"
+    metadata:
+      cwe: "CWE-798"
+      owasp: "A07:2021"
+      category: "security"
+
+  - id: java-sql-injection
+    name: "SQL Injection Risk"
+    description: "Detects potential SQL injection vulnerabilities"
+    severity: ERROR
+    confidence: HIGH
+    languages: [java]
+    patterns:
+      - "executeQuery($QUERY + $VAR)"
+      - "createStatement().execute($QUERY + $VAR)"
+      - "\"SELECT * FROM \" + $TABLE + \" WHERE \" + $CONDITION"
+    message: "Potential SQL injection vulnerability"
+    fix: "Use prepared statements with parameterized queries"
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: java-empty-catch
+    name: "Empty Catch Block"
+    description: "Detects empty catch blocks that silently ignore exceptions"
+    severity: WARNING
+    confidence: HIGH
+    languages: [java]
+    patterns:
+      - |
+        try {
+          $BODY
+        } catch ($EXC $VAR) {
+        }
+    message: "Empty catch block silently ignores exceptions"
+    fix: "Add proper exception handling or logging"
+    metadata:
+      category: "best-practice"
+
+  - id: java-thread-sleep
+    name: "Thread.sleep() Usage"
+    description: "Detects usage of Thread.sleep() which can indicate poor design"
+    severity: INFO
+    confidence: MEDIUM
+    languages: [java]
+    patterns:
+      - "Thread.sleep($TIME)"
+    message: "Consider using proper synchronization instead of Thread.sleep()"
+    fix: "Use CountDownLatch, Semaphore, or other synchronization primitives"
+    metadata:
+      category: "performance"

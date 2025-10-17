@@ -1,0 +1,41 @@
+rules:
+  - id: sql-select-star
+    name: "SELECT * Usage"
+    description: "Detects SELECT * queries which can impact performance"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - "SELECT * FROM $TABLE"
+    message: "Avoid SELECT * in production queries"
+    fix: "Specify only the columns you need"
+    metadata:
+      category: "performance"
+
+  - id: sql-no-where
+    name: "Missing WHERE Clause"
+    description: "Detects UPDATE/DELETE without WHERE clause"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - "DELETE FROM $TABLE"
+      - "UPDATE $TABLE SET $COLUMN = $VALUE"
+    message: "UPDATE/DELETE without WHERE clause affects all rows"
+    fix: "Add appropriate WHERE clause to limit affected rows"
+    metadata:
+      category: "safety"
+
+  - id: sql-weak-password
+    name: "Weak Password Policy"
+    description: "Detects weak password requirements in user creation"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - "CREATE USER $USER IDENTIFIED BY '$PASSWORD'"
+    message: "Consider implementing strong password policies"
+    fix: "Use strong password requirements and hashing"
+    metadata:
+      cwe: "CWE-521"
+      category: "security"

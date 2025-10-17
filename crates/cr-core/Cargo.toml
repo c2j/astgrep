@@ -1,0 +1,25 @@
+[package]
+name = "cr-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core types and traits for CR-SemService static code analysis"
+
+[dependencies]
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"
+criterion = { version = "0.5", features = ["html_reports"] }
+cr-ast = { path = "../cr-ast" }
+cr-matcher = { path = "../cr-matcher" }
+cr-dataflow = { path = "../cr-dataflow" }
+cr-rules = { path = "../cr-rules" }
+
+[[bench]]
+name = "performance"
+harness = false

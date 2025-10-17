@@ -1,0 +1,168 @@
+rules:
+  - id: sql.injection-risk
+    message: "Potential SQL injection vulnerability"
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - pattern: SELECT * FROM $TABLE WHERE $CONDITION
+      - pattern-not: SELECT * FROM $TABLE WHERE $COLUMN = ?
+      - pattern-not: SELECT * FROM $TABLE WHERE $COLUMN = $1
+      - metavariable-regex:
+          metavariable: $CONDITION
+          regex: ".*\\+.*|.*'.*'.*|.*\".*\".*"
+      - focus-metavariable: $CONDITION
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      confidence: HIGH
+      impact: CRITICAL
+      likelihood: HIGH
+
+  - id: sql.union-injection
+    message: "Potential SQL injection via UNION"
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - pattern-regex: "UNION\\s+SELECT.*"
+      - pattern-not-regex: "UNION\\s+SELECT\\s+[a-zA-Z0-9_,\\s]+\\s+FROM\\s+[a-zA-Z0-9_]+"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      confidence: MEDIUM
+
+  - id: sql.dynamic-query-construction
+    message: "Dynamic SQL query construction detected"
+    severity: WARNING
+    languages: [sql]
+    patterns:
+      - pattern-regex: ".*\\|\\|.*|.*\\+.*"
+      - pattern-not-inside: |
+          PREPARE $STMT FROM $QUERY
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      confidence: MEDIUM
+
+  - id: sql.hardcoded-password
+    message: "Hardcoded password in SQL statement"
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - pattern-regex: "(PASSWORD|PWD)\\s*=\\s*'[^']{6,}'"
+      - pattern-not-regex: "(PASSWORD|PWD)\\s*=\\s*'\\$\\{.*\\}'"
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      confidence: HIGH
+
+  - id: sql.select-star
+    message: "SELECT * can expose sensitive data"
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - pattern: SELECT * FROM $TABLE
+      - pattern-not-inside: |
+          SELECT * FROM $TABLE LIMIT 1
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: sql.missing-where-clause
+    message: "DELETE/UPDATE without WHERE clause"
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern-regex: "DELETE\\s+FROM\\s+[a-zA-Z0-9_]+\\s*;?"
+          - pattern-regex: "UPDATE\\s+[a-zA-Z0-9_]+\\s+SET\\s+.*\\s*;?"
+      - pattern-not-regex: ".*WHERE.*"
+    metadata:
+      category: security
+      cwe: "CWE-20: Improper Input Validation"
+      confidence: HIGH
+
+  - id: sql.privilege-escalation
+    message: "Potential privilege escalation"
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: GRANT ALL ON *.* TO $USER
+          - pattern: GRANT ALL PRIVILEGES ON *.* TO $USER
+          - pattern: ALTER USER $USER IDENTIFIED BY $PASSWORD
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: HIGH
+
+  - id: sql.weak-encryption
+    message: "Weak encryption algorithm used"
+    severity: WARNING
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: MD5($DATA)
+          - pattern: SHA1($DATA)
+          - pattern: DES_ENCRYPT($DATA, $KEY)
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: MEDIUM
+
+  - id: sql.information-disclosure
+    message: "Potential information disclosure"
+    severity: WARNING
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: SELECT USER()
+          - pattern: SELECT VERSION()
+          - pattern: SELECT DATABASE()
+          - pattern: SHOW DATABASES
+          - pattern: SHOW TABLES
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: sql.time-based-attack
+    message: "Potential time-based SQL injection"
+    severity: WARNING
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: SLEEP($TIME)
+          - pattern: WAITFOR DELAY $TIME
+          - pattern: BENCHMARK($COUNT, $EXPR)
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      confidence: MEDIUM
+
+  - id: sql.file-operations
+    message: "File operations in SQL can be dangerous"
+    severity: WARNING
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: LOAD_FILE($PATH)
+          - pattern: INTO OUTFILE $PATH
+          - pattern: INTO DUMPFILE $PATH
+    metadata:
+      category: security
+      cwe: "CWE-22: Path Traversal"
+      confidence: MEDIUM
+
+  - id: sql.command-execution
+    message: "Command execution in SQL"
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: xp_cmdshell $CMD
+          - pattern: EXEC $CMD
+          - pattern: EXECUTE $CMD
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      confidence: HIGH

@@ -1,0 +1,56 @@
+- id: "java-system-out"
+  name: "Avoid System.out usage"
+  description: "Detects usage of System.out.print* methods which should be replaced with proper logging"
+  languages:
+    - "java"
+  severity: "warning"
+  confidence: "high"
+  category: "best-practice"
+  tags:
+    - "logging"
+    - "java"
+    - "best-practice"
+  enabled: true
+  metadata:
+    cwe: "CWE-532"
+    owasp: "A09:2021"
+
+- id: "unused-imports"
+  name: "Unused Import Detection"
+  description: "Detects unused import statements that should be removed"
+  languages:
+    - "java"
+    - "python"
+    - "javascript"
+  severity: "info"
+  confidence: "high"
+  category: "code-quality"
+  tags:
+    - "imports"
+    - "cleanup"
+    - "code-quality"
+  enabled: true
+  metadata:
+    impact: "low"
+    effort: "low"
+
+- id: "magic-numbers"
+  name: "Magic Number Detection"
+  description: "Detects magic numbers that should be replaced with named constants"
+  languages:
+    - "java"
+    - "python"
+    - "javascript"
+    - "c"
+    - "csharp"
+  severity: "warning"
+  confidence: "medium"
+  category: "maintainability"
+  tags:
+    - "constants"
+    - "readability"
+    - "maintainability"
+  enabled: true
+  metadata:
+    impact: "medium"
+    effort: "low"

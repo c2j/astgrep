@@ -1,0 +1,49 @@
+rules:
+  - id: detect-only-foo-package
+    name: Detect only foo package (not foo-bar or bar-foo)
+    description: Finds 'foo' package imports but excludes compound packages
+    severity: INFO
+    languages: [python]
+    patterns:
+      - pattern-regex: "import\\s+foo"
+      - pattern-not-regex: "import\\s+foo[-_]"
+      - pattern-not-regex: "import\\s+\\w+[-_]foo"
+
+  - id: simple-variable-names
+    name: Simple variable names only
+    description: Detects simple variable assignments excluding complex patterns
+    severity: INFO
+    languages: [python]
+    patterns:
+      - pattern-regex: "^\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*="
+      - pattern-not-regex: "^\\s*[a-zA-Z_][a-zA-Z0-9_]*\\[.*\\]\\s*="  # Exclude array access
+      - pattern-not-regex: "^\\s*[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_].*\\s*="  # Exclude attribute access
+
+  - id: basic-function-calls
+    name: Basic function calls only
+    description: Detects simple function calls excluding method calls
+    severity: INFO
+    languages: [javascript]
+    patterns:
+      - pattern-regex: "[a-zA-Z_][a-zA-Z0-9_]*\\("
+      - pattern-not-regex: "\\.[a-zA-Z_][a-zA-Z0-9_]*\\("  # Exclude method calls
+      - pattern-not-regex: "new\\s+[a-zA-Z_][a-zA-Z0-9_]*\\("  # Exclude constructor calls
+
+  - id: http-urls-not-https
+    name: HTTP URLs (not HTTPS)
+    description: Detects HTTP URLs but excludes HTTPS
+    severity: WARNING
+    languages: [python, javascript]
+    patterns:
+      - pattern-regex: "http://[^\\s\"']+"
+      - pattern-not-regex: "https://[^\\s\"']+"
+
+  - id: console-log-not-error
+    name: console.log but not console.error
+    description: Detects console.log calls but excludes console.error
+    severity: INFO
+    languages: [javascript]
+    patterns:
+      - pattern-regex: "console\\.[a-zA-Z]+"
+      - pattern-not-regex: "console\\.error"
+      - pattern-not-regex: "console\\.warn"

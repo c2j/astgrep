@@ -1,0 +1,6 @@
+rules:
+- id: test-simple-eval
+  pattern: eval(...)
+  message: Found eval call
+  severity: ERROR
+  languages: [python]

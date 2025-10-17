@@ -1,0 +1,22 @@
+rules:
+  - id: CS-EH-08
+    message: "不允许使用 e.printStackTrace()，不允许使用 System.out、System.err 打印日志，应使用日志框架"
+    languages: [java]
+    severity: WARNING
+    
+    patterns:
+      # 检测 printStackTrace() 调用
+      - pattern: $E.printStackTrace()
+      - pattern: $E.printStackTrace($STREAM)
+      
+      # 检测 System.out 使用
+      - pattern: System.out.print(...)
+      - pattern: System.out.println(...)
+      - pattern: System.out.printf(...)
+      - pattern: System.out.format(...)
+      
+      # 检测 System.err 使用
+      - pattern: System.err.print(...)
+      - pattern: System.err.println(...)
+      - pattern: System.err.printf(...)
+      - pattern: System.err.format(...)

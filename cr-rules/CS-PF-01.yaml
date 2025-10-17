@@ -1,0 +1,51 @@
+rules:
+  - id: CS-PF-01
+    message: "在循环体代码中使用\"+\"进行字符串拼接，应使用StringBuilder/StringBuffer"
+    languages: [java]
+    severity: WARNING
+    
+    patterns:
+      # 检测 for 循环中的字符串拼接
+      - pattern: |
+          for (...) {
+            ...
+            $STR = $STR + $OTHER;
+            ...
+          }
+          
+      - pattern: |
+          for (...) {
+            ...
+            $STR += $OTHER;
+            ...
+          }
+          
+      # 检测 while 循环中的字符串拼接
+      - pattern: |
+          while (...) {
+            ...
+            $STR = $STR + $OTHER;
+            ...
+          }
+          
+      - pattern: |
+          while (...) {
+            ...
+            $STR += $OTHER;
+            ...
+          }
+          
+      # 检测 do-while 循环中的字符串拼接
+      - pattern: |
+          do {
+            ...
+            $STR = $STR + $OTHER;
+            ...
+          } while (...);
+          
+      - pattern: |
+          do {
+            ...
+            $STR += $OTHER;
+            ...
+          } while (...);

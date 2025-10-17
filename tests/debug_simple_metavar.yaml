@@ -1,0 +1,6 @@
+rules:
+- id: test-simple-metavar
+  pattern: eval($CODE)
+  message: Found eval with code
+  severity: ERROR
+  languages: [python]

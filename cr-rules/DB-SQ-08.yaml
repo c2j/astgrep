@@ -1,0 +1,14 @@
+rules:
+  - id: DB-SQ-08
+    message: "查询最里层不允许使用 SELECT * 语句，应明确指定字段名"
+    languages: [java, generic]
+    severity: WARNING
+    
+    patterns:
+      # 1) Java 代码中的 SELECT * 语句
+      - patterns:
+          - pattern-regex: "(?i)SELECT\\s+\\*\\s+FROM"
+          
+      # 2) 检测嵌套查询中的 SELECT *
+      - patterns:
+          - pattern-regex: "(?i)\\(\\s*SELECT\\s+\\*\\s+FROM"

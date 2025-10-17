@@ -1,0 +1,14 @@
+[package]
+name = "cr-dataflow"
+version = "0.1.0"
+edition = "2021"
+description = "Data flow and taint analysis for CR-SemService"
+
+[dependencies]
+cr-core = { path = "../cr-core" }
+cr-ast = { path = "../cr-ast" }
+anyhow.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"

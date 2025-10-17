@@ -1,0 +1,6 @@
+rules:
+- id: detect-answer-java
+  pattern: '42'
+  message: Found the answer to everything in Java
+  severity: WARNING
+  languages: [java]

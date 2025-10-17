@@ -1,0 +1,66 @@
+rules:
+  - id: c-buffer-overflow
+    name: "Buffer Overflow Risk"
+    description: "Detects functions prone to buffer overflow"
+    severity: ERROR
+    confidence: HIGH
+    languages: [c]
+    patterns:
+      - "strcpy($DEST, $SRC)"
+      - "strcat($DEST, $SRC)"
+      - "sprintf($DEST, $FMT, ...)"
+      - "gets($BUFFER)"
+    message: "Function prone to buffer overflow"
+    fix: "Use safer alternatives like strncpy, strncat, snprintf, fgets"
+    metadata:
+      cwe: "CWE-120"
+      owasp: "A06:2021"
+      category: "security"
+
+  - id: c-format-string
+    name: "Format String Vulnerability"
+    description: "Detects potential format string vulnerabilities"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [c]
+    patterns:
+      - "printf($VAR)"
+      - "fprintf($FILE, $VAR)"
+      - "sprintf($DEST, $VAR)"
+    message: "Potential format string vulnerability"
+    fix: "Use format specifiers: printf(\"%s\", var)"
+    metadata:
+      cwe: "CWE-134"
+      owasp: "A03:2021"
+      category: "security"
+
+  - id: c-memory-leak
+    name: "Memory Leak Risk"
+    description: "Detects malloc without corresponding free"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [c]
+    patterns:
+      - "malloc($SIZE)"
+      - "calloc($NUM, $SIZE)"
+      - "realloc($PTR, $SIZE)"
+    message: "Ensure malloc/calloc/realloc has corresponding free"
+    fix: "Add free() call for each malloc/calloc/realloc"
+    metadata:
+      cwe: "CWE-401"
+      category: "memory"
+
+  - id: c-null-pointer
+    name: "Null Pointer Dereference"
+    description: "Detects potential null pointer dereference"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [c]
+    patterns:
+      - "*$PTR"
+      - "$PTR->$FIELD"
+    message: "Check for null before dereferencing pointer"
+    fix: "Add null check: if (ptr != NULL) { ... }"
+    metadata:
+      cwe: "CWE-476"
+      category: "safety"

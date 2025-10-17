@@ -1,0 +1,6 @@
+rules:
+- id: detect-foo-bar-import
+  pattern: import foo.bar
+  message: Found import foo.bar statement
+  severity: INFO
+  languages: [python]

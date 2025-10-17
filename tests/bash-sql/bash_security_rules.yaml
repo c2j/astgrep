@@ -1,0 +1,160 @@
+rules:
+  - id: bash.command-injection
+    message: "Potential command injection vulnerability"
+    severity: ERROR
+    languages: [bash]
+    patterns:
+      - pattern: eval $CODE
+      - pattern-not-inside: |
+          if [[ "$CODE" =~ ^[a-zA-Z0-9_]+$ ]]; then
+            ...
+          fi
+      - focus-metavariable: $CODE
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      confidence: HIGH
+      impact: CRITICAL
+      likelihood: MEDIUM
+
+  - id: bash.unsafe-user-input
+    message: "Unsafe use of user input in command execution"
+    severity: ERROR
+    languages: [bash]
+    patterns:
+      - pattern: $CMD $USER_INPUT
+      - pattern-not-inside: |
+          if [[ "$USER_INPUT" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+            ...
+          fi
+      - metavariable-regex:
+          metavariable: $USER_INPUT
+          regex: ".*\\$[0-9]+.*|.*\\$\\{[0-9]+\\}.*|.*\\$@.*|.*\\$\\*.*"
+      - focus-metavariable: [$CMD, $USER_INPUT]
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      confidence: HIGH
+
+  - id: bash.hardcoded-credentials
+    message: "Hardcoded credentials detected"
+    severity: WARNING
+    languages: [bash]
+    patterns:
+      - pattern-regex: "(PASSWORD|SECRET|TOKEN|KEY)\\s*=\\s*['\"][^'\"]{8,}['\"]"
+      - pattern-not-regex: "(PASSWORD|SECRET|TOKEN|KEY)\\s*=\\s*['\"]\\$\\{.*\\}['\"]"
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      confidence: MEDIUM
+
+  - id: bash.unsafe-temp-file
+    message: "Unsafe temporary file creation"
+    severity: WARNING
+    languages: [bash]
+    patterns:
+      - pattern-either:
+          - pattern: /tmp/$FILE
+          - pattern: /var/tmp/$FILE
+      - pattern-not-inside: |
+          $TEMP=$(mktemp)
+          ...
+      - metavariable-regex:
+          metavariable: $FILE
+          regex: "^[a-zA-Z0-9_]+$"
+    metadata:
+      category: security
+      cwe: "CWE-377: Insecure Temporary File"
+      confidence: MEDIUM
+
+  - id: bash.curl-without-verification
+    message: "curl used without SSL verification"
+    severity: WARNING
+    languages: [bash]
+    patterns:
+      - pattern-regex: "curl\\s+.*(-k|--insecure)\\s+"
+    metadata:
+      category: security
+      cwe: "CWE-295: Improper Certificate Validation"
+      confidence: MEDIUM
+
+  - id: bash.world-writable-file
+    message: "Creating world-writable files"
+    severity: ERROR
+    languages: [bash]
+    patterns:
+      - pattern-either:
+          - pattern: chmod 777 $FILE
+          - pattern: chmod a+w $FILE
+          - pattern: chmod o+w $FILE
+    metadata:
+      category: security
+      cwe: "CWE-732: Incorrect Permission Assignment for Critical Resource"
+      confidence: HIGH
+
+  - id: bash.sudo-without-password
+    message: "sudo used without password prompt"
+    severity: WARNING
+    languages: [bash]
+    patterns:
+      - pattern: sudo -n $CMD
+      - pattern-not-inside: |
+          if sudo -n true 2>/dev/null; then
+            ...
+          fi
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: MEDIUM
+
+  - id: bash.unquoted-variables
+    message: "Unquoted variable usage can lead to word splitting"
+    severity: INFO
+    languages: [bash]
+    patterns:
+      - pattern-regex: "\\$[a-zA-Z_][a-zA-Z0-9_]*"
+      - pattern-not-regex: "\\$[a-zA-Z_][a-zA-Z0-9_]*\\s*="
+      - pattern-not-inside: |
+          [[ $VAR ]]
+      - pattern-not-inside: |
+          (( $VAR ))
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: bash.dangerous-rm-command
+    message: "Dangerous rm command usage"
+    severity: ERROR
+    languages: [bash]
+    patterns:
+      - pattern-either:
+          - pattern: rm -rf /
+          - pattern: rm -rf /*
+          - pattern: rm -rf $HOME
+          - pattern: rm -rf ~
+      - pattern-not-inside: |
+          if [[ "$CONFIRM" == "yes" ]]; then
+            ...
+          fi
+    metadata:
+      category: security
+      cwe: "CWE-732: Incorrect Permission Assignment for Critical Resource"
+      confidence: HIGH
+
+  - id: bash.shell-injection-via-backticks
+    message: "Command injection via backticks"
+    severity: ERROR
+    languages: [bash]
+    patterns:
+      - pattern: "`$CMD`"
+      - pattern-not-inside: |
+          if [[ "$CMD" =~ ^[a-zA-Z0-9_/-]+$ ]]; then
+            ...
+          fi
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: ".*\\$.*"
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      confidence: HIGH

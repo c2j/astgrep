@@ -1,0 +1,11 @@
+rules:
+  - id: DB-SQ-10
+    message: "SQL语句中的关键字应大写，表名、字段名等应使用小写"
+    languages: [java, generic]
+    severity: INFO
+    
+    patterns:
+      # 检测小写的 SQL 关键字
+      - patterns:
+          - pattern-regex: "\\b(select|from|where|join|inner|left|right|outer|on|using|group|order|by|having|limit|insert|into|values|update|set|delete|create|table|alter|drop|index)\\b"
+          - pattern-not-regex: "\\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|OUTER|ON|USING|GROUP|ORDER|BY|HAVING|LIMIT|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|ALTER|DROP|INDEX)\\b"

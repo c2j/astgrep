@@ -1,0 +1,10 @@
+id: test-rule-id
+name: Test Rule
+description: Test description
+message: Test message
+severity: WARNING
+languages:
+  - java
+patterns:
+  - pattern: System.out.println($MESSAGE)
+  - pattern: System.out.print($MESSAGE)

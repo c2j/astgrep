@@ -1,0 +1,6 @@
+rules:
+- id: test-precision
+  pattern: '42'
+  message: Found number 42
+  severity: INFO
+  languages: [python]

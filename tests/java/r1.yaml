@@ -1,0 +1,14 @@
+# Java Code Standards - System.out Logging Rule
+rules:
+  - id: cs-eh-08-system-out-logging
+    name: "Avoid System.out for Logging"
+    description: "Detects usage of System.out and System.err for logging"
+    message: "System.out/System.err should not be used for logging. Use a proper logging framework instead."
+    severity: WARNING
+    languages:
+      - java
+    pattern-either:
+      - pattern: System.out.println($MESSAGE)
+      - pattern: System.out.print($MESSAGE)
+      - pattern: System.err.println($MESSAGE)
+      - pattern: System.err.print($MESSAGE)

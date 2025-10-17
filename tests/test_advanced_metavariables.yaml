@@ -1,0 +1,105 @@
+rules:
+  # Test metavariable-name functionality
+  - id: test-metavariable-name
+    message: Testing metavariable name constraint
+    languages: [javascript]
+    severity: WARNING
+    patterns:
+      - pattern: $MODULE.require($PATH)
+        metavariable-name:
+          metavariable: $MODULE
+          name: "fs"
+    
+  # Test metavariable-analysis with entropy
+  - id: test-metavariable-entropy
+    message: Testing metavariable entropy analysis
+    languages: [javascript]
+    severity: HIGH
+    patterns:
+      - pattern: const $SECRET = "$VALUE"
+        metavariable-analysis:
+          metavariable: $VALUE
+          analysis:
+            entropy:
+              min: 3.0
+              max: 6.0
+              charset: "alphanumeric"
+    
+  # Test metavariable-analysis with type analysis
+  - id: test-metavariable-type
+    message: Testing metavariable type analysis
+    languages: [javascript]
+    severity: MEDIUM
+    patterns:
+      - pattern: function $FUNC($PARAM) { return $PARAM; }
+        metavariable-analysis:
+          metavariable: $PARAM
+          analysis:
+            type:
+              expected: ["string", "number"]
+              forbidden: ["null"]
+    
+  # Test metavariable-analysis with complexity
+  - id: test-metavariable-complexity
+    message: Testing metavariable complexity analysis
+    languages: [javascript]
+    severity: LOW
+    patterns:
+      - pattern: |
+          function $FUNC() {
+            $BODY
+          }
+        metavariable-analysis:
+          metavariable: $BODY
+          analysis:
+            complexity:
+              max_lines: 10
+              max_cyclomatic: 5
+    
+  # Test enhanced metavariable-comparison with Python expression
+  - id: test-python-expression
+    message: Testing Python expression in metavariable comparison
+    languages: [javascript]
+    severity: INFO
+    patterns:
+      - pattern: const $VAR = $VALUE
+        metavariable-comparison:
+          metavariable: $VALUE
+          comparison: len($VALUE) > 10
+    
+  # Test pattern-all (all patterns must match)
+  - id: test-pattern-all
+    message: Testing pattern-all functionality
+    languages: [javascript]
+    severity: WARNING
+    pattern-all:
+      - pattern: function $FUNC($PARAM) { ... }
+      - pattern: $FUNC($ARG)
+      - metavariable-regex:
+          metavariable: $FUNC
+          regex: "^(eval|exec|Function)$"
+    
+  # Test pattern-any (any pattern must match)
+  - id: test-pattern-any
+    message: Testing pattern-any functionality
+    languages: [javascript]
+    severity: WARNING
+    pattern-any:
+      - pattern: eval($CODE)
+      - pattern: Function($CODE)
+      - pattern: new Function($CODE)
+    
+  # Test multiple focus-metavariable with union semantics
+  - id: test-multiple-focus
+    message: Testing multiple focus-metavariable
+    languages: [javascript]
+    severity: HIGH
+    patterns:
+      - pattern: |
+          function $FUNC($PARAM1, $PARAM2) {
+            $BODY
+          }
+        focus-metavariable: [$PARAM1, $PARAM2]
+        metavariable-regex:
+          metavariable: $PARAM1
+          regex: "^(password|secret|key)$"

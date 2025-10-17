@@ -1,0 +1,667 @@
+[2m2025-08-08T10:36:36.559828Z[0m [32m INFO[0m [2mcr_semservice[0m[2m:[0m Starting CR-SemService - Multi-language Static Code Analysis Tool
+[2m2025-08-08T10:36:36.566821Z[0m [32m INFO[0m [2mcr_cli[0m[2m:[0m Starting code analysis
+[2m2025-08-08T10:36:36.567130Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Starting enhanced analysis
+[2m2025-08-08T10:36:36.567191Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found 1 files to analyze
+[2m2025-08-08T10:36:36.567213Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Analyzing file: "tests/bash-sql/test_bash_script.sh"
+[2m2025-08-08T10:36:36.574785Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.command-injection' accepted for target language Bash
+[2m2025-08-08T10:36:36.575112Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.command-injection' extracted patterns: ["eval $CODE", "NOT_INSIDE:if [[ \"$CODE\" =~ ^[a-zA-Z0-9_]+$ ]]; then\n  ...\nfi\n"]
+[2m2025-08-08T10:36:36.575161Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-user-input' accepted for target language Bash
+[2m2025-08-08T10:36:36.575195Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-user-input' extracted patterns: ["$CMD $USER_INPUT", "NOT_INSIDE:if [[ \"$USER_INPUT\" =~ ^[a-zA-Z0-9_.-]+$ ]]; then\n  ...\nfi\n"]
+[2m2025-08-08T10:36:36.575219Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.hardcoded-credentials' accepted for target language Bash
+[2m2025-08-08T10:36:36.575290Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.hardcoded-credentials' extracted patterns: ["(PASSWORD|SECRET|TOKEN|KEY)\\s*=\\s*['\"][^'\"]{8,}['\"]", "NOT_REGEX:(PASSWORD|SECRET|TOKEN|KEY)\\s*=\\s*['\"]\\$\\{.*\\}['\"]"]
+[2m2025-08-08T10:36:36.575318Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-temp-file' accepted for target language Bash
+[2m2025-08-08T10:36:36.575383Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-temp-file' extracted patterns: ["/tmp/$FILE", "/var/tmp/$FILE", "NOT_INSIDE:$TEMP=$(mktemp)\n...\n"]
+[2m2025-08-08T10:36:36.575407Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.curl-without-verification' accepted for target language Bash
+[2m2025-08-08T10:36:36.575427Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.curl-without-verification' extracted patterns: ["curl\\s+.*(-k|--insecure)\\s+"]
+[2m2025-08-08T10:36:36.575452Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.world-writable-file' accepted for target language Bash
+[2m2025-08-08T10:36:36.575508Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.world-writable-file' extracted patterns: ["chmod 777 $FILE", "chmod a+w $FILE", "chmod o+w $FILE"]
+[2m2025-08-08T10:36:36.575554Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.sudo-without-password' accepted for target language Bash
+[2m2025-08-08T10:36:36.575599Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.sudo-without-password' extracted patterns: ["sudo -n $CMD", "NOT_INSIDE:if sudo -n true 2>/dev/null; then\n  ...\nfi\n"]
+[2m2025-08-08T10:36:36.575648Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unquoted-variables' accepted for target language Bash
+[2m2025-08-08T10:36:36.575704Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unquoted-variables' extracted patterns: ["\\$[a-zA-Z_][a-zA-Z0-9_]*", "NOT_REGEX:\\$[a-zA-Z_][a-zA-Z0-9_]*\\s*=", "NOT_INSIDE:[[ $VAR ]]\n", "NOT_INSIDE:(( $VAR ))\n"]
+[2m2025-08-08T10:36:36.575761Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.dangerous-rm-command' accepted for target language Bash
+[2m2025-08-08T10:36:36.613559Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.dangerous-rm-command' extracted patterns: ["rm -rf /", "rm -rf /*", "rm -rf $HOME", "rm -rf ~", "NOT_INSIDE:if [[ \"$CONFIRM\" == \"yes\" ]]; then\n  ...\nfi\n"]
+[2m2025-08-08T10:36:36.613658Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.shell-injection-via-backticks' accepted for target language Bash
+[2m2025-08-08T10:36:36.613709Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.shell-injection-via-backticks' extracted patterns: ["`$CMD`", "NOT_INSIDE:if [[ \"$CMD\" =~ ^[a-zA-Z0-9_/-]+$ ]]; then\n  ...\nfi\n"]
+[2m2025-08-08T10:36:36.613818Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Loaded 10 rules for Bash
+[2m2025-08-08T10:36:36.613852Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.command-injection' has NOT_INSIDE patterns, applying special handling
+[2m2025-08-08T10:36:36.614075Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.command-injection': Found 1 main patterns, 1 NOT_INSIDE patterns, 0 NOT_REGEX patterns
+[2m2025-08-08T10:36:36.614142Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: 'eval $CODE'
+[2m2025-08-08T10:36:36.614332Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: eval $CODE
+[2m2025-08-08T10:36:36.614815Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:36.614849Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:36.614869Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: eval $CODE
+[2m2025-08-08T10:36:36.614891Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:36.616553Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:36.624367Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:36.625605Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:36.625706Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:36.625730Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:36.625741Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:36.625757Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'eval $CODE' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:36.838405Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern 'eval $CODE' found 4 matches
+[2m2025-08-08T10:36:36.838456Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Filtering 4 candidate findings
+[2m2025-08-08T10:36:36.838513Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 8 included
+[2m2025-08-08T10:36:36.838557Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 10 included
+[2m2025-08-08T10:36:36.838615Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 20 included
+[2m2025-08-08T10:36:36.838656Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 118 included
+[2m2025-08-08T10:36:36.838675Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-user-input' has NOT_INSIDE patterns, applying special handling
+[2m2025-08-08T10:36:36.838688Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-user-input': Found 1 main patterns, 1 NOT_INSIDE patterns, 0 NOT_REGEX patterns
+[2m2025-08-08T10:36:36.838697Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: '$CMD $USER_INPUT'
+[2m2025-08-08T10:36:36.838708Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: $CMD $USER_INPUT
+[2m2025-08-08T10:36:36.838968Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:36.839013Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:36.839034Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: $CMD $USER_INPUT
+[2m2025-08-08T10:36:36.839049Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:36.839088Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:36.840845Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:36.840915Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:36.841016Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:36.841037Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:36.841048Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:36.841066Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern '$CMD $USER_INPUT' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:37.069912Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern '$CMD $USER_INPUT' found 0 matches
+[2m2025-08-08T10:36:37.069966Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Filtering 0 candidate findings
+[2m2025-08-08T10:36:37.073885Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: (PASSWORD|SECRET|TOKEN|KEY)\s*=\s*['"][^'"]{8,}['"]
+[2m2025-08-08T10:36:37.074091Z[0m [33m WARN[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching failed for tests/bash-sql/test_bash_script.sh: Parse error: YAML syntax error: found unknown escape character at line 8 column 46, while parsing a quoted scalar at line 8 column 18, falling back to tree-sitter
+[2m2025-08-08T10:36:37.074122Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: (PASSWORD|SECRET|TOKEN|KEY)\s*=\s*['"][^'"]{8,}['"]
+[2m2025-08-08T10:36:37.074132Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.074152Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.075441Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.076438Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.076521Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.076538Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.076547Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.076555Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern '(PASSWORD|SECRET|TOKEN|KEY)\s*=\s*['"][^'"]{8,}['"]' - is_regex_pattern: true, contains '$': false, contains '(': true, contains '|': true
+[2m2025-08-08T10:36:37.076570Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting to compile regex pattern: '(PASSWORD|SECRET|TOKEN|KEY)\s*=\s*['"][^'"]{8,}['"]'
+[2m2025-08-08T10:36:37.080382Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Regex compiled successfully, searching for matches...
+[2m2025-08-08T10:36:37.080749Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 9: 'user_input="$1"'
+[2m2025-08-08T10:36:37.080776Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 10: 'eval "echo $user_input"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:37.080792Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 13: 'rm $2  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:37.080806Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 16: 'cat $@  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:37.080827Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 19: 'if [[ "$user_input" =~ ^[a-zA-Z0-9_]+$ ]]; then'
+[2m2025-08-08T10:36:37.080840Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 20: '    eval "echo $user_input"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.081164Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'PASSWORD="supersecret123"' at line 27 position 0-25
+[2m2025-08-08T10:36:37.081284Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'KEY="sk-1234567890abcdef"' at line 28 position 4-29
+[2m2025-08-08T10:36:37.081305Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 31: 'PASSWORD="${DB_PASSWORD}"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.081476Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'PASSWORD="${DB_PASSWORD}"' at line 31 position 0-25
+[2m2025-08-08T10:36:37.081505Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 41: 'TEMP=$(mktemp)'
+[2m2025-08-08T10:36:37.081518Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 42: 'echo "data" > "$TEMP"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.081578Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 80: 'file_list=$HOME/files/*  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:37.081591Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 81: 'echo $file_list  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:37.081604Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 84: 'file_list="$HOME/files/*"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.081616Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 85: 'echo "$file_list"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.081655Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 95: 'if [[ "$CONFIRM" == "yes" ]]; then'
+[2m2025-08-08T10:36:37.081694Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 103: 'user_command="$3"'
+[2m2025-08-08T10:36:37.081705Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 104: 'result=`$user_command`  # Should trigger bash.shell-injection-via-backticks'
+[2m2025-08-08T10:36:37.081719Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 107: 'if [[ "$user_command" =~ ^[a-zA-Z0-9_/-]+$ ]]; then'
+[2m2025-08-08T10:36:37.081731Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 108: '    result=`$user_command`  # Should NOT trigger'
+[2m2025-08-08T10:36:37.081762Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 113: '    local input="$1"'
+[2m2025-08-08T10:36:37.081773Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 114: '    echo "Processing: $input"'
+[2m2025-08-08T10:36:37.081785Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 118: '    eval "$1"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:37.081799Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 123: '    if [[ -f "$file" ]]; then'
+[2m2025-08-08T10:36:37.081810Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 124: '        cat "$file"'
+[2m2025-08-08T10:36:37.081823Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 129: '    echo "Line: $line"'
+[2m2025-08-08T10:36:37.081836Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 133: 'case "$1" in'
+[2m2025-08-08T10:36:37.081850Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 141: '        echo "Unknown command: $1"'
+[2m2025-08-08T10:36:37.081865Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 147: 'for file in "${files[@]}"; do'
+[2m2025-08-08T10:36:37.081875Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 148: '    echo "Processing: $file"'
+[2m2025-08-08T10:36:37.081895Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 161: 'current_date=$(date)'
+[2m2025-08-08T10:36:37.081906Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 162: 'echo "Current date: $current_date"'
+[2m2025-08-08T10:36:37.081918Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 165: 'count=$((count + 1))'
+[2m2025-08-08T10:36:37.081929Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 166: 'echo "Count: $count"'
+[2m2025-08-08T10:36:37.081940Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 169: 'filename="${1:-default.txt}"'
+[2m2025-08-08T10:36:37.081950Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 170: 'echo "Filename: $filename"'
+[2m2025-08-08T10:36:37.082011Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: NOT_REGEX:(PASSWORD|SECRET|TOKEN|KEY)\s*=\s*['"]\$\{.*\}['"]
+[2m2025-08-08T10:36:37.082176Z[0m [33m WARN[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching failed for tests/bash-sql/test_bash_script.sh: Parse error: YAML syntax error: found unknown escape character at line 8 column 46, while parsing a quoted scalar at line 8 column 18, falling back to tree-sitter
+[2m2025-08-08T10:36:37.082192Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: NOT_REGEX:(PASSWORD|SECRET|TOKEN|KEY)\s*=\s*['"]\$\{.*\}['"]
+[2m2025-08-08T10:36:37.082201Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.082233Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.083571Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.085235Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.085330Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.085349Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.085377Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.085420Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-temp-file' has NOT_INSIDE patterns, applying special handling
+[2m2025-08-08T10:36:37.085461Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unsafe-temp-file': Found 2 main patterns, 1 NOT_INSIDE patterns, 0 NOT_REGEX patterns
+[2m2025-08-08T10:36:37.085473Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: '/tmp/$FILE'
+[2m2025-08-08T10:36:37.085499Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: /tmp/$FILE
+[2m2025-08-08T10:36:37.085677Z[0m [33m WARN[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching failed for tests/bash-sql/test_bash_script.sh: Parse error: YAML syntax error: found unexpected document indicator at line 11 column 1, while scanning a quoted scalar at line 10 column 18, falling back to tree-sitter
+[2m2025-08-08T10:36:37.085694Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: /tmp/$FILE
+[2m2025-08-08T10:36:37.085703Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.085723Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.087070Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.088123Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.088207Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.088225Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.088233Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.088242Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern '/tmp/$FILE' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:37.285274Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern '/tmp/$FILE' found 4 matches
+[2m2025-08-08T10:36:37.285335Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: '/var/tmp/$FILE'
+[2m2025-08-08T10:36:37.285359Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: /var/tmp/$FILE
+[2m2025-08-08T10:36:37.285729Z[0m [33m WARN[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching failed for tests/bash-sql/test_bash_script.sh: Parse error: YAML syntax error: found unexpected document indicator at line 11 column 1, while scanning a quoted scalar at line 10 column 18, falling back to tree-sitter
+[2m2025-08-08T10:36:37.285776Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: /var/tmp/$FILE
+[2m2025-08-08T10:36:37.285788Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.285817Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.287277Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.288371Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.288502Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.288523Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.288532Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.288542Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern '/var/tmp/$FILE' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:37.485101Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern '/var/tmp/$FILE' found 1 matches
+[2m2025-08-08T10:36:37.485200Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Filtering 5 candidate findings
+[2m2025-08-08T10:36:37.485246Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 37 included
+[2m2025-08-08T10:36:37.485286Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 38 included
+[2m2025-08-08T10:36:37.485381Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 58 included
+[2m2025-08-08T10:36:37.485470Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 96 included
+[2m2025-08-08T10:36:37.485510Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 38 included
+[2m2025-08-08T10:36:37.488344Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: curl\s+.*(-k|--insecure)\s+
+[2m2025-08-08T10:36:37.488523Z[0m [33m WARN[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching failed for tests/bash-sql/test_bash_script.sh: Parse error: YAML syntax error: found unknown escape character at line 8 column 23, while parsing a quoted scalar at line 8 column 18, falling back to tree-sitter
+[2m2025-08-08T10:36:37.488542Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: curl\s+.*(-k|--insecure)\s+
+[2m2025-08-08T10:36:37.488552Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.488570Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.489840Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.491264Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.491355Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.491378Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.491427Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.491460Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'curl\s+.*(-k|--insecure)\s+' - is_regex_pattern: true, contains '$': false, contains '(': true, contains '|': true
+[2m2025-08-08T10:36:37.491483Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting to compile regex pattern: 'curl\s+.*(-k|--insecure)\s+'
+[2m2025-08-08T10:36:37.493099Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Regex compiled successfully, searching for matches...
+[2m2025-08-08T10:36:37.493246Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 9: 'user_input="$1"'
+[2m2025-08-08T10:36:37.493263Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 10: 'eval "echo $user_input"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:37.493276Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 13: 'rm $2  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:37.493287Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 16: 'cat $@  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:37.493299Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 19: 'if [[ "$user_input" =~ ^[a-zA-Z0-9_]+$ ]]; then'
+[2m2025-08-08T10:36:37.493310Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 20: '    eval "echo $user_input"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.493326Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 31: 'PASSWORD="${DB_PASSWORD}"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.493343Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 41: 'TEMP=$(mktemp)'
+[2m2025-08-08T10:36:37.493353Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 42: 'echo "data" > "$TEMP"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.493820Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'curl -k ' at line 48 position 0-8
+[2m2025-08-08T10:36:37.494050Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'curl --insecure ' at line 49 position 0-16
+[2m2025-08-08T10:36:37.494229Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 80: 'file_list=$HOME/files/*  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:37.494262Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 81: 'echo $file_list  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:37.494275Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 84: 'file_list="$HOME/files/*"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.494353Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 85: 'echo "$file_list"  # Should NOT trigger'
+[2m2025-08-08T10:36:37.494392Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 95: 'if [[ "$CONFIRM" == "yes" ]]; then'
+[2m2025-08-08T10:36:37.494408Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 103: 'user_command="$3"'
+[2m2025-08-08T10:36:37.494419Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 104: 'result=`$user_command`  # Should trigger bash.shell-injection-via-backticks'
+[2m2025-08-08T10:36:37.494450Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 107: 'if [[ "$user_command" =~ ^[a-zA-Z0-9_/-]+$ ]]; then'
+[2m2025-08-08T10:36:37.494461Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 108: '    result=`$user_command`  # Should NOT trigger'
+[2m2025-08-08T10:36:37.494493Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 113: '    local input="$1"'
+[2m2025-08-08T10:36:37.494504Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 114: '    echo "Processing: $input"'
+[2m2025-08-08T10:36:37.494516Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 118: '    eval "$1"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:37.494543Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 123: '    if [[ -f "$file" ]]; then'
+[2m2025-08-08T10:36:37.494554Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 124: '        cat "$file"'
+[2m2025-08-08T10:36:37.494566Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 129: '    echo "Line: $line"'
+[2m2025-08-08T10:36:37.494578Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 133: 'case "$1" in'
+[2m2025-08-08T10:36:37.494593Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 141: '        echo "Unknown command: $1"'
+[2m2025-08-08T10:36:37.494606Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 147: 'for file in "${files[@]}"; do'
+[2m2025-08-08T10:36:37.494616Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 148: '    echo "Processing: $file"'
+[2m2025-08-08T10:36:37.494634Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 161: 'current_date=$(date)'
+[2m2025-08-08T10:36:37.494661Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 162: 'echo "Current date: $current_date"'
+[2m2025-08-08T10:36:37.494672Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 165: 'count=$((count + 1))'
+[2m2025-08-08T10:36:37.494682Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 166: 'echo "Count: $count"'
+[2m2025-08-08T10:36:37.494692Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 169: 'filename="${1:-default.txt}"'
+[2m2025-08-08T10:36:37.494721Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 170: 'echo "Filename: $filename"'
+[2m2025-08-08T10:36:37.501306Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: chmod 777 $FILE
+[2m2025-08-08T10:36:37.501571Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:37.501606Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:37.501654Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: chmod 777 $FILE
+[2m2025-08-08T10:36:37.501672Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.501715Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.503439Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.504605Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.504690Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.504710Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.504719Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.504747Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'chmod 777 $FILE' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:37.704878Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: chmod a+w $FILE
+[2m2025-08-08T10:36:37.705152Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:37.705171Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:37.705180Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: chmod a+w $FILE
+[2m2025-08-08T10:36:37.705189Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.705216Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.706678Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.707933Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.708028Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.708048Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.708057Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.708068Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'chmod a+w $FILE' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:37.905773Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: chmod o+w $FILE
+[2m2025-08-08T10:36:37.906029Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:37.906045Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:37.906054Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: chmod o+w $FILE
+[2m2025-08-08T10:36:37.906062Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:37.906106Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:37.907610Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:37.908767Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:37.908851Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:37.908868Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:37.908877Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:37.908886Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'chmod o+w $FILE' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.104529Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.sudo-without-password' has NOT_INSIDE patterns, applying special handling
+[2m2025-08-08T10:36:38.104576Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.sudo-without-password': Found 1 main patterns, 1 NOT_INSIDE patterns, 0 NOT_REGEX patterns
+[2m2025-08-08T10:36:38.104587Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: 'sudo -n $CMD'
+[2m2025-08-08T10:36:38.104598Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: sudo -n $CMD
+[2m2025-08-08T10:36:38.104812Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:38.104853Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:38.104877Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: sudo -n $CMD
+[2m2025-08-08T10:36:38.104903Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:38.104944Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:38.106481Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:38.107624Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:38.107746Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:38.107783Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:38.107792Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:38.107818Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'sudo -n $CMD' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.300399Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern 'sudo -n $CMD' found 3 matches
+[2m2025-08-08T10:36:38.300445Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Filtering 3 candidate findings
+[2m2025-08-08T10:36:38.300489Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 69 included
+[2m2025-08-08T10:36:38.300528Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 72 included
+[2m2025-08-08T10:36:38.300566Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 73 included
+[2m2025-08-08T10:36:38.300579Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unquoted-variables' has NOT_INSIDE patterns, applying special handling
+[2m2025-08-08T10:36:38.300591Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.unquoted-variables': Found 1 main patterns, 2 NOT_INSIDE patterns, 1 NOT_REGEX patterns
+[2m2025-08-08T10:36:38.300599Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: '\$[a-zA-Z_][a-zA-Z0-9_]*'
+[2m2025-08-08T10:36:38.300609Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: \$[a-zA-Z_][a-zA-Z0-9_]*
+[2m2025-08-08T10:36:38.300780Z[0m [33m WARN[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching failed for tests/bash-sql/test_bash_script.sh: Parse error: YAML syntax error: found unknown escape character at line 8 column 19, while parsing a quoted scalar at line 8 column 18, falling back to tree-sitter
+[2m2025-08-08T10:36:38.300816Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: \$[a-zA-Z_][a-zA-Z0-9_]*
+[2m2025-08-08T10:36:38.300825Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:38.300850Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:38.302741Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:38.303723Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:38.303807Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:38.303826Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:38.303835Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:38.303846Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern '\$[a-zA-Z_][a-zA-Z0-9_]*' - is_regex_pattern: true, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.303858Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting to compile regex pattern: '\$[a-zA-Z_][a-zA-Z0-9_]*'
+[2m2025-08-08T10:36:38.304062Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Regex compiled successfully, searching for matches...
+[2m2025-08-08T10:36:38.304159Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 9: 'user_input="$1"'
+[2m2025-08-08T10:36:38.304190Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 10: 'eval "echo $user_input"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:38.304256Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$user_input' at line 10 position 11-22
+[2m2025-08-08T10:36:38.304278Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 13: 'rm $2  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:38.304293Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 16: 'cat $@  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:38.304311Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 19: 'if [[ "$user_input" =~ ^[a-zA-Z0-9_]+$ ]]; then'
+[2m2025-08-08T10:36:38.304329Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$user_input' at line 19 position 7-18
+[2m2025-08-08T10:36:38.304349Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 20: '    eval "echo $user_input"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.304364Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$user_input' at line 20 position 15-26
+[2m2025-08-08T10:36:38.304385Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 31: 'PASSWORD="${DB_PASSWORD}"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.304409Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 41: 'TEMP=$(mktemp)'
+[2m2025-08-08T10:36:38.304426Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 42: 'echo "data" > "$TEMP"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.304458Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$TEMP' at line 42 position 15-20
+[2m2025-08-08T10:36:38.304516Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 80: 'file_list=$HOME/files/*  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:38.304537Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$HOME' at line 80 position 10-15
+[2m2025-08-08T10:36:38.304552Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 81: 'echo $file_list  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:38.304566Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$file_list' at line 81 position 5-15
+[2m2025-08-08T10:36:38.304579Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 84: 'file_list="$HOME/files/*"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.304595Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$HOME' at line 84 position 11-16
+[2m2025-08-08T10:36:38.304608Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 85: 'echo "$file_list"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.304622Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$file_list' at line 85 position 6-16
+[2m2025-08-08T10:36:38.304641Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 95: 'if [[ "$CONFIRM" == "yes" ]]; then'
+[2m2025-08-08T10:36:38.304654Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$CONFIRM' at line 95 position 7-15
+[2m2025-08-08T10:36:38.304672Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 103: 'user_command="$3"'
+[2m2025-08-08T10:36:38.304683Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 104: 'result=`$user_command`  # Should trigger bash.shell-injection-via-backticks'
+[2m2025-08-08T10:36:38.304703Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$user_command' at line 104 position 8-21
+[2m2025-08-08T10:36:38.304718Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 107: 'if [[ "$user_command" =~ ^[a-zA-Z0-9_/-]+$ ]]; then'
+[2m2025-08-08T10:36:38.304732Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$user_command' at line 107 position 7-20
+[2m2025-08-08T10:36:38.304745Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 108: '    result=`$user_command`  # Should NOT trigger'
+[2m2025-08-08T10:36:38.304759Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$user_command' at line 108 position 12-25
+[2m2025-08-08T10:36:38.304774Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 113: '    local input="$1"'
+[2m2025-08-08T10:36:38.304785Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 114: '    echo "Processing: $input"'
+[2m2025-08-08T10:36:38.304819Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$input' at line 114 position 22-28
+[2m2025-08-08T10:36:38.304850Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 118: '    eval "$1"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:38.304864Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 123: '    if [[ -f "$file" ]]; then'
+[2m2025-08-08T10:36:38.304876Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$file' at line 123 position 14-19
+[2m2025-08-08T10:36:38.304888Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 124: '        cat "$file"'
+[2m2025-08-08T10:36:38.304901Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$file' at line 124 position 13-18
+[2m2025-08-08T10:36:38.304926Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 129: '    echo "Line: $line"'
+[2m2025-08-08T10:36:38.304940Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$line' at line 129 position 16-21
+[2m2025-08-08T10:36:38.304954Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 133: 'case "$1" in'
+[2m2025-08-08T10:36:38.304971Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 141: '        echo "Unknown command: $1"'
+[2m2025-08-08T10:36:38.304985Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 147: 'for file in "${files[@]}"; do'
+[2m2025-08-08T10:36:38.304996Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 148: '    echo "Processing: $file"'
+[2m2025-08-08T10:36:38.305009Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$file' at line 148 position 22-27
+[2m2025-08-08T10:36:38.305030Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 161: 'current_date=$(date)'
+[2m2025-08-08T10:36:38.305042Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 162: 'echo "Current date: $current_date"'
+[2m2025-08-08T10:36:38.305055Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$current_date' at line 162 position 20-33
+[2m2025-08-08T10:36:38.305068Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 165: 'count=$((count + 1))'
+[2m2025-08-08T10:36:38.305080Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 166: 'echo "Count: $count"'
+[2m2025-08-08T10:36:38.305092Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$count' at line 166 position 13-19
+[2m2025-08-08T10:36:38.305105Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 169: 'filename="${1:-default.txt}"'
+[2m2025-08-08T10:36:38.305116Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 170: 'echo "Filename: $filename"'
+[2m2025-08-08T10:36:38.305129Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: '$filename' at line 170 position 16-25
+[2m2025-08-08T10:36:38.305163Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern '\$[a-zA-Z_][a-zA-Z0-9_]*' found 20 matches
+[2m2025-08-08T10:36:38.305176Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Filtering 20 candidate findings
+[2m2025-08-08T10:36:38.305280Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 10: 'eval "echo $user_input"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:38.306305Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 10
+[2m2025-08-08T10:36:38.306334Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 10 included
+[2m2025-08-08T10:36:38.306380Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 19 excluded by NOT_INSIDE pattern: [[ $VAR ]]
+
+[2m2025-08-08T10:36:38.306477Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 20: '    eval "echo $user_input"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.307482Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 20
+[2m2025-08-08T10:36:38.307511Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 20 included
+[2m2025-08-08T10:36:38.307621Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 42: 'echo "data" > "$TEMP"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.308619Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 42
+[2m2025-08-08T10:36:38.308648Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 42 included
+[2m2025-08-08T10:36:38.308746Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 80: 'file_list=$HOME/files/*  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:38.309741Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 80
+[2m2025-08-08T10:36:38.309769Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 80 included
+[2m2025-08-08T10:36:38.309868Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 81: 'echo $file_list  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:38.310876Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 81
+[2m2025-08-08T10:36:38.310904Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 81 included
+[2m2025-08-08T10:36:38.311002Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 84: 'file_list="$HOME/files/*"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.312007Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 84
+[2m2025-08-08T10:36:38.312036Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 84 included
+[2m2025-08-08T10:36:38.312135Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 85: 'echo "$file_list"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.313136Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 85
+[2m2025-08-08T10:36:38.313164Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 85 included
+[2m2025-08-08T10:36:38.313207Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 95 excluded by NOT_INSIDE pattern: [[ $VAR ]]
+
+[2m2025-08-08T10:36:38.313304Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 104: 'result=`$user_command`  # Should trigger bash.shell-injection-via-backticks'
+[2m2025-08-08T10:36:38.314305Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 104
+[2m2025-08-08T10:36:38.314333Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 104 included
+[2m2025-08-08T10:36:38.314376Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 107 excluded by NOT_INSIDE pattern: [[ $VAR ]]
+
+[2m2025-08-08T10:36:38.314471Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 108: '    result=`$user_command`  # Should NOT trigger'
+[2m2025-08-08T10:36:38.315488Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 108
+[2m2025-08-08T10:36:38.315516Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 108 included
+[2m2025-08-08T10:36:38.315615Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 114: '    echo "Processing: $input"'
+[2m2025-08-08T10:36:38.316769Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 114
+[2m2025-08-08T10:36:38.316846Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 114 included
+[2m2025-08-08T10:36:38.316888Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 123 excluded by NOT_INSIDE pattern: [[ $VAR ]]
+
+[2m2025-08-08T10:36:38.316981Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 124: '        cat "$file"'
+[2m2025-08-08T10:36:38.317988Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 124
+[2m2025-08-08T10:36:38.318015Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 124 included
+[2m2025-08-08T10:36:38.318110Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 129: '    echo "Line: $line"'
+[2m2025-08-08T10:36:38.319464Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 129
+[2m2025-08-08T10:36:38.319505Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 129 included
+[2m2025-08-08T10:36:38.319607Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 148: '    echo "Processing: $file"'
+[2m2025-08-08T10:36:38.320595Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 148
+[2m2025-08-08T10:36:38.320624Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 148 included
+[2m2025-08-08T10:36:38.320721Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 162: 'echo "Current date: $current_date"'
+[2m2025-08-08T10:36:38.321733Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 162
+[2m2025-08-08T10:36:38.321761Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 162 included
+[2m2025-08-08T10:36:38.321856Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 166: 'echo "Count: $count"'
+[2m2025-08-08T10:36:38.322994Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 166
+[2m2025-08-08T10:36:38.323022Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 166 included
+[2m2025-08-08T10:36:38.323117Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' (fixed: '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=') against line 170: 'echo "Filename: $filename"'
+[2m2025-08-08T10:36:38.324106Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m NOT_REGEX pattern '\$[a-zA-Z_][a-zA-Z0-9_]*\s*=' does not match line 170
+[2m2025-08-08T10:36:38.324133Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 170 included
+[2m2025-08-08T10:36:38.324150Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.dangerous-rm-command' has NOT_INSIDE patterns, applying special handling
+[2m2025-08-08T10:36:38.324162Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.dangerous-rm-command': Found 4 main patterns, 1 NOT_INSIDE patterns, 0 NOT_REGEX patterns
+[2m2025-08-08T10:36:38.324170Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: 'rm -rf /'
+[2m2025-08-08T10:36:38.324179Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: rm -rf /
+[2m2025-08-08T10:36:38.324421Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:38.324435Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:38.324444Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: rm -rf /
+[2m2025-08-08T10:36:38.324451Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:38.324509Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:38.325996Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:38.327078Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 2 raw matches
+[2m2025-08-08T10:36:38.327096Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Match 0: kind='comment', text='# rm -rf /  # Should trigger bash.dangerous-rm-command (commented for safety)'
+[2m2025-08-08T10:36:38.327105Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Match 1: kind='comment', text='# rm -rf /*  # Should trigger bash.dangerous-rm-command (commented for safety)'
+[2m2025-08-08T10:36:38.327184Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:38.327201Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:38.327210Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:38.327218Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'rm -rf /' - is_regex_pattern: false, contains '$': false, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.337158Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern 'rm -rf /' found 3 matches
+[2m2025-08-08T10:36:38.337223Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: 'rm -rf /*'
+[2m2025-08-08T10:36:38.337240Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: rm -rf /*
+[2m2025-08-08T10:36:38.337762Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:38.337830Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:38.337881Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: rm -rf /*
+[2m2025-08-08T10:36:38.337976Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:38.338114Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:38.339543Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:38.340673Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 1 raw matches
+[2m2025-08-08T10:36:38.340686Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Match 0: kind='comment', text='# rm -rf /*  # Should trigger bash.dangerous-rm-command (commented for safety)'
+[2m2025-08-08T10:36:38.340768Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:38.340787Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:38.340796Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:38.340804Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'rm -rf /*' - is_regex_pattern: true, contains '$': false, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.340817Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting to compile regex pattern: 'rm -rf /*'
+[2m2025-08-08T10:36:38.341044Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Regex compiled successfully, searching for matches...
+[2m2025-08-08T10:36:38.341139Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 9: 'user_input="$1"'
+[2m2025-08-08T10:36:38.341155Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 10: 'eval "echo $user_input"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:38.341167Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 13: 'rm $2  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:38.341179Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 16: 'cat $@  # Should trigger bash.unsafe-user-input'
+[2m2025-08-08T10:36:38.341190Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 19: 'if [[ "$user_input" =~ ^[a-zA-Z0-9_]+$ ]]; then'
+[2m2025-08-08T10:36:38.341200Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 20: '    eval "echo $user_input"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.341217Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 31: 'PASSWORD="${DB_PASSWORD}"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.341234Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 41: 'TEMP=$(mktemp)'
+[2m2025-08-08T10:36:38.341244Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 42: 'echo "data" > "$TEMP"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.341280Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 80: 'file_list=$HOME/files/*  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:38.341290Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 81: 'echo $file_list  # Should trigger bash.unquoted-variables'
+[2m2025-08-08T10:36:38.341301Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 84: 'file_list="$HOME/files/*"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.341311Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 85: 'echo "$file_list"  # Should NOT trigger'
+[2m2025-08-08T10:36:38.341419Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'rm -rf /' at line 91 position 2-10
+[2m2025-08-08T10:36:38.341450Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'rm -rf /' at line 92 position 2-10
+[2m2025-08-08T10:36:38.341468Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 95: 'if [[ "$CONFIRM" == "yes" ]]; then'
+[2m2025-08-08T10:36:38.341491Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Found regex match: 'rm -rf /' at line 96 position 4-12
+[2m2025-08-08T10:36:38.341510Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 103: 'user_command="$3"'
+[2m2025-08-08T10:36:38.341521Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 104: 'result=`$user_command`  # Should trigger bash.shell-injection-via-backticks'
+[2m2025-08-08T10:36:38.341533Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 107: 'if [[ "$user_command" =~ ^[a-zA-Z0-9_/-]+$ ]]; then'
+[2m2025-08-08T10:36:38.341543Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 108: '    result=`$user_command`  # Should NOT trigger'
+[2m2025-08-08T10:36:38.341555Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 113: '    local input="$1"'
+[2m2025-08-08T10:36:38.341565Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 114: '    echo "Processing: $input"'
+[2m2025-08-08T10:36:38.341576Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 118: '    eval "$1"  # Should trigger bash.command-injection'
+[2m2025-08-08T10:36:38.341589Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 123: '    if [[ -f "$file" ]]; then'
+[2m2025-08-08T10:36:38.341599Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 124: '        cat "$file"'
+[2m2025-08-08T10:36:38.341610Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 129: '    echo "Line: $line"'
+[2m2025-08-08T10:36:38.341622Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 133: 'case "$1" in'
+[2m2025-08-08T10:36:38.341637Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 141: '        echo "Unknown command: $1"'
+[2m2025-08-08T10:36:38.341650Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 147: 'for file in "${files[@]}"; do'
+[2m2025-08-08T10:36:38.341660Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 148: '    echo "Processing: $file"'
+[2m2025-08-08T10:36:38.341678Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 161: 'current_date=$(date)'
+[2m2025-08-08T10:36:38.341688Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 162: 'echo "Current date: $current_date"'
+[2m2025-08-08T10:36:38.341699Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 165: 'count=$((count + 1))'
+[2m2025-08-08T10:36:38.341709Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 166: 'echo "Count: $count"'
+[2m2025-08-08T10:36:38.341720Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 169: 'filename="${1:-default.txt}"'
+[2m2025-08-08T10:36:38.341730Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Checking line 170: 'echo "Filename: $filename"'
+[2m2025-08-08T10:36:38.341765Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern 'rm -rf /*' found 3 matches
+[2m2025-08-08T10:36:38.341779Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: 'rm -rf $HOME'
+[2m2025-08-08T10:36:38.341790Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: rm -rf $HOME
+[2m2025-08-08T10:36:38.342036Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:38.342050Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:38.342058Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: rm -rf $HOME
+[2m2025-08-08T10:36:38.342066Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:38.342085Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:38.343473Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:38.344682Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:38.344781Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:38.344800Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:38.344809Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:38.344820Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'rm -rf $HOME' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.538671Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern 'rm -rf $HOME' found 3 matches
+[2m2025-08-08T10:36:38.538722Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: 'rm -rf ~'
+[2m2025-08-08T10:36:38.538736Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: rm -rf ~
+[2m2025-08-08T10:36:38.538988Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:38.539003Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:38.539012Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: rm -rf ~
+[2m2025-08-08T10:36:38.539020Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:38.539046Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:38.540476Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:38.541690Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:38.541788Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:38.541809Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:38.541819Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:38.541828Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern 'rm -rf ~' - is_regex_pattern: false, contains '$': false, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.552043Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern 'rm -rf ~' found 0 matches
+[2m2025-08-08T10:36:38.552123Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Filtering 9 candidate findings
+[2m2025-08-08T10:36:38.552189Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 91 included
+[2m2025-08-08T10:36:38.552249Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 92 included
+[2m2025-08-08T10:36:38.552371Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 96 included
+[2m2025-08-08T10:36:38.552445Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 91 included
+[2m2025-08-08T10:36:38.552487Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 92 included
+[2m2025-08-08T10:36:38.552526Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 96 included
+[2m2025-08-08T10:36:38.552584Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 91 included
+[2m2025-08-08T10:36:38.552674Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 92 included
+[2m2025-08-08T10:36:38.552783Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 96 included
+[2m2025-08-08T10:36:38.552816Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.shell-injection-via-backticks' has NOT_INSIDE patterns, applying special handling
+[2m2025-08-08T10:36:38.552830Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Rule 'tests.bash-sql.bash.shell-injection-via-backticks': Found 1 main patterns, 1 NOT_INSIDE patterns, 0 NOT_REGEX patterns
+[2m2025-08-08T10:36:38.552839Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Processing main pattern: '`$CMD`'
+[2m2025-08-08T10:36:38.552851Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting enhanced pattern matching for pattern: `$CMD`
+[2m2025-08-08T10:36:38.553256Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching succeeded, found 0 matches
+[2m2025-08-08T10:36:38.553335Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Enhanced pattern matching found no matches, falling back to tree-sitter
+[2m2025-08-08T10:36:38.553386Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Attempting tree-sitter parsing for pattern: `$CMD`
+[2m2025-08-08T10:36:38.553396Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Creating TreeSitterParser for language: Bash
+[2m2025-08-08T10:36:38.553530Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Parsing source code with tree-sitter...
+[2m2025-08-08T10:36:38.555095Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing successful, searching for pattern matches...
+[2m2025-08-08T10:36:38.556188Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found 0 raw matches
+[2m2025-08-08T10:36:38.556274Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter analysis completed with 0 findings
+[2m2025-08-08T10:36:38.556294Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter parsing succeeded, found 0 matches
+[2m2025-08-08T10:36:38.556303Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Tree-sitter found no matches, falling back to simple matching
+[2m2025-08-08T10:36:38.556312Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Pattern '`$CMD`' - is_regex_pattern: false, contains '$': true, contains '(': false, contains '|': false
+[2m2025-08-08T10:36:38.740924Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Main pattern '`$CMD`' found 2 matches
+[2m2025-08-08T10:36:38.740971Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Filtering 2 candidate findings
+[2m2025-08-08T10:36:38.741018Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 104 included
+[2m2025-08-08T10:36:38.741057Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Finding at line 108 included
+┌──── ○○○ ────┐
+│ CR-SemService │
+└─────────────┘
+
+Scanning 1 file(s) with 1 rule(s):
+
+  CODE RULES
+  Scanning 1 file(s).
+
+  PROGRESS
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+
+
+┌─────────────────┐
+│ 45 Code Findings │
+└─────────────────┘
+
+    tests/bash-sql/test_bash_script.sh
+   ❯❯❱ tests.bash-sql.bash.hardcoded-credentials
+          Hardcoded credentials detected
+
+           27┆ PASSWORD="supersecret123"  # Should trigger bash.hardcoded-credentials
+            ⋮┆----------------------------------------
+           28┆ API_KEY="sk-1234567890abcdef"  # Should trigger bash.hardcoded-credentials
+            ⋮┆----------------------------------------
+           31┆ PASSWORD="${DB_PASSWORD}"  # Should NOT trigger
+
+   ❯❯❱ tests.bash-sql.bash.unsafe-temp-file
+          Unsafe temporary file creation
+
+           37┆ temp_file="/tmp/myapp_temp"  # Should trigger bash.unsafe-temp-file
+            ⋮┆----------------------------------------
+           38┆ echo "data" > /var/tmp/backup  # Should trigger bash.unsafe-temp-file
+            ⋮┆----------------------------------------
+           38┆ echo "data" > /var/tmp/backup  # Should trigger bash.unsafe-temp-file
+            ⋮┆----------------------------------------
+           58┆ chmod 777 /tmp/shared_file  # Should trigger bash.world-writable-file
+            ⋮┆----------------------------------------
+           96┆ rm -rf /tmp/safe_to_delete  # Should NOT trigger
+
+   ❯❯❱ tests.bash-sql.bash.sudo-without-password
+          sudo used without password prompt
+
+           69┆ sudo -n systemctl restart service  # Should trigger bash.sudo-without-password
+            ⋮┆----------------------------------------
+           72┆ if sudo -n true 2>/dev/null; then
+            ⋮┆----------------------------------------
+           73┆ sudo -n systemctl restart service  # Should NOT trigger
+
+   ❯❯❱ tests.bash-sql.bash.unquoted-variables
+          Unquoted variable usage can lead to word splitting
+
+           10┆ eval "echo $user_input"  # Should trigger bash.command-injection
+            ⋮┆----------------------------------------
+           20┆ eval "echo $user_input"  # Should NOT trigger
+            ⋮┆----------------------------------------
+           42┆ echo "data" > "$TEMP"  # Should NOT trigger
+            ⋮┆----------------------------------------
+           80┆ file_list=$HOME/files/*  # Should trigger bash.unquoted-variables
+            ⋮┆----------------------------------------
+           81┆ echo $file_list  # Should trigger bash.unquoted-variables
+            ⋮┆----------------------------------------
+           84┆ file_list="$HOME/files/*"  # Should NOT trigger
+            ⋮┆----------------------------------------
+           85┆ echo "$file_list"  # Should NOT trigger
+            ⋮┆----------------------------------------
+           104┆ result=`$user_command`  # Should trigger bash.shell-injection-via-backticks
+            ⋮┆----------------------------------------
+           108┆ result=`$user_command`  # Should NOT trigger
+            ⋮┆----------------------------------------
+           114┆ echo "Processing: $input"
+            ⋮┆----------------------------------------
+           124┆ cat "$file"
+            ⋮┆----------------------------------------
+           129┆ echo "Line: $line"
+            ⋮┆----------------------------------------
+           148┆ echo "Processing: $file"
+            ⋮┆----------------------------------------
+           162┆ echo "Current date: $current_date"
+            ⋮┆----------------------------------------
+           166┆ echo "Count: $count"
+            ⋮┆----------------------------------------
+           170┆ echo "Filename: $filename"
+
+   ❯❯❱ tests.bash-sql.bash.curl-without-verification
+          curl used without SSL verification
+
+           48┆ curl -k https://example.com/api  # Should trigger bash.curl-without-verification
+            ⋮┆----------------------------------------
+           49┆ curl --insecure https://example.com/data  # Should trigger bash.curl-without-verification
+
+   ❯❯❱ tests.bash-sql.bash.command-injection
+          Potential command injection vulnerability
+
+           8┆ # VULNERABLE: eval with user input
+            ⋮┆----------------------------------------
+           10┆ eval "echo $user_input"  # Should trigger bash.command-injection
+            ⋮┆----------------------------------------
+           20┆ eval "echo $user_input"  # Should NOT trigger
+            ⋮┆----------------------------------------
+           118┆ eval "$1"  # Should trigger bash.command-injection
+
+   ❯❯❱ tests.bash-sql.bash.world-writable-file
+          Creating world-writable files
+
+           58┆ chmod 777 /tmp/shared_file  # Should trigger bash.world-writable-file
+
+   ❯❯❱ tests.bash-sql.bash.dangerous-rm-command
+          Dangerous rm command usage
+
+           91┆ # rm -rf /  # Should trigger bash.dangerous-rm-command (commented for safety)
+            ⋮┆----------------------------------------
+           91┆ # rm -rf /  # Should trigger bash.dangerous-rm-command (commented for safety)
+            ⋮┆----------------------------------------
+           91┆ # rm -rf /  # Should trigger bash.dangerous-rm-command (commented for safety)
+            ⋮┆----------------------------------------
+           92┆ # rm -rf /*  # Should trigger bash.dangerous-rm-command (commented for safety)
+            ⋮┆----------------------------------------
+           92┆ # rm -rf /*  # Should trigger bash.dangerous-rm-command (commented for safety)
+            ⋮┆----------------------------------------
+           92┆ # rm -rf /*  # Should trigger bash.dangerous-rm-command (commented for safety)
+            ⋮┆----------------------------------------
+           96┆ rm -rf /tmp/safe_to_delete  # Should NOT trigger
+            ⋮┆----------------------------------------
+           96┆ rm -rf /tmp/safe_to_delete  # Should NOT trigger
+            ⋮┆----------------------------------------
+           96┆ rm -rf /tmp/safe_to_delete  # Should NOT trigger
+
+   ❯❯❱ tests.bash-sql.bash.shell-injection-via-backticks
+          Command injection via backticks
+
+           104┆ result=`$user_command`  # Should trigger bash.shell-injection-via-backticks
+            ⋮┆----------------------------------------
+           108┆ result=`$user_command`  # Should NOT trigger
+
+┌──────────────┐
+│ Scan Summary │
+└──────────────┘
+✅ Scan completed successfully.
+ • Findings: 45 (16 blocking)
+ • Rules run: 1
+ • Targets scanned: 1
+ • Parsed lines: ~100.0%
+ • No ignore information available
+Ran 1 rule on 1 file: 45 findings.
+
+[2m2025-08-08T10:36:38.743427Z[0m [32m INFO[0m [2mcr_cli::commands::analyze_enhanced[0m[2m:[0m Analysis completed in 2.173982634s
