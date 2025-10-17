@@ -9,9 +9,11 @@ use tracing::{info, warn};
 mod commands;
 mod profiler;
 mod tree_sitter_analyzer;
+pub mod vscode_integration;
 
 pub use commands::*;
 pub use profiler::*;
+pub use vscode_integration::*;
 
 /// CR-SemService: Multi-language Static Code Analysis Tool
 #[derive(Parser)]
