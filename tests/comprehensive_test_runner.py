@@ -67,23 +67,34 @@ class TestRunner:
         ]
 
     def discover_test_cases(self):
-        """Discover all test cases (YAML + code file pairs)"""
+        """Discover all test cases (YAML + code file pairs, or .sgrep + .yaml pairs)"""
         test_cases = []
-        
+
         for pattern_dir in self.test_patterns:
             pattern_path = self.tests_dir / pattern_dir
             if not pattern_path.exists():
                 continue
-            
+
             # Find all YAML files
             for yaml_file in pattern_path.rglob("*.yaml"):
+                # Skip YAML files that are not valid rule files (e.g., test data files)
+                try:
+                    with open(yaml_file, 'r') as f:
+                        yaml_content = yaml.safe_load(f)
+                    # Only process if it's a valid rule file (has 'rules' key) or is a simple data file
+                    if not isinstance(yaml_content, dict):
+                        continue
+                except Exception:
+                    # Skip files that can't be parsed as YAML
+                    continue
+
                 # Look for corresponding code files
                 base_name = yaml_file.stem
-                code_extensions = [".py", ".js", ".java", ".rb", ".kt", ".swift", ".php", ".cs", ".go", ".ts"]
-                
+                code_extensions = [".py", ".js", ".java", ".rb", ".kt", ".swift", ".php", ".cs", ".go", ".ts", ".sgrep", ".c", ".cpp", ".sh", ".sql", ".dockerfile", ".json", ".xml", ".html", ".yaml", ".yml"]
+
                 for ext in code_extensions:
                     code_file = yaml_file.parent / f"{base_name}{ext}"
-                    if code_file.exists():
+                    if code_file.exists() and code_file != yaml_file:
                         test_cases.append({
                             "rule_file": yaml_file,
                             "code_file": code_file,
@@ -91,7 +102,7 @@ class TestRunner:
                             "name": f"{pattern_dir}/{base_name}"
                         })
                         break
-        
+
         return test_cases
 
     def run_test_case(self, test_case):
