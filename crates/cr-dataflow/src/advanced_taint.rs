@@ -238,6 +238,72 @@ impl AdvancedTaintAnalyzer {
     pub fn clear(&mut self) {
         self.taint_states.clear();
     }
+
+    /// Apply context-aware filtering to taint states
+    pub fn filter_by_context(
+        &self,
+        taints: &[AdvancedTaintState],
+        context_key: &str,
+        context_value: &str,
+    ) -> Vec<AdvancedTaintState> {
+        taints
+            .iter()
+            .filter(|taint| taint.get_context(context_key) == Some(context_value))
+            .cloned()
+            .collect()
+    }
+
+    /// Combine multiple taint states with context awareness
+    pub fn combine_with_context(
+        &self,
+        taints: &[AdvancedTaintState],
+        merge_strategy: &str,
+    ) -> AdvancedTaintState {
+        match merge_strategy {
+            "union" => {
+                // Union: keep all transformations
+                let mut combined = taints[0].clone();
+                for taint in &taints[1..] {
+                    for transformation in &taint.transformations {
+                        if !combined.transformations.contains(transformation) {
+                            combined.transformations.push(transformation.clone());
+                        }
+                    }
+                }
+                combined
+            }
+            "intersection" => {
+                // Intersection: keep only common transformations
+                if taints.is_empty() {
+                    return AdvancedTaintState::new(TaintState::default());
+                }
+                let mut combined = taints[0].clone();
+                for taint in &taints[1..] {
+                    combined.transformations.retain(|t| taint.transformations.contains(t));
+                }
+                combined
+            }
+            "most_restrictive" => {
+                // Most restrictive: highest sanitization effectiveness
+                let mut most_restrictive = taints[0].clone();
+                for taint in &taints[1..] {
+                    let current_effectiveness: f32 = most_restrictive
+                        .transformations
+                        .iter()
+                        .map(|t| t.effectiveness())
+                        .sum();
+                    let new_effectiveness: f32 =
+                        taint.transformations.iter().map(|t| t.effectiveness()).sum();
+
+                    if new_effectiveness > current_effectiveness {
+                        most_restrictive = taint.clone();
+                    }
+                }
+                most_restrictive
+            }
+            _ => self.merge_taints(taints),
+        }
+    }
 }
 
 impl Default for AdvancedTaintAnalyzer {

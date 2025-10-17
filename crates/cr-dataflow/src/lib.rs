@@ -13,6 +13,7 @@ pub mod flows;
 pub mod call_graph;
 pub mod interprocedural;
 pub mod advanced_taint;
+pub mod symbol_table;
 
 pub use graph::*;
 pub use sources::*;
@@ -24,6 +25,7 @@ pub use flows::*;
 pub use call_graph::*;
 pub use interprocedural::*;
 pub use advanced_taint::*;
+pub use symbol_table::*;
 
 use cr_core::{AstNode, Result};
 use std::collections::{HashMap, HashSet};

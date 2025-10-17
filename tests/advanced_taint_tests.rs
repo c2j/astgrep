@@ -278,3 +278,66 @@ fn test_partial_sanitization() {
     assert!(!advanced.is_sanitized()); // 0.3 > 0.1
 }
 
+#[test]
+fn test_filter_by_context() {
+    let analyzer = AdvancedTaintAnalyzer::new();
+    let base_taint = TaintState::default();
+
+    let mut taint1 = AdvancedTaintState::new(base_taint.clone());
+    taint1.set_context("branch".to_string(), "true".to_string());
+
+    let mut taint2 = AdvancedTaintState::new(base_taint);
+    taint2.set_context("branch".to_string(), "false".to_string());
+
+    let filtered = analyzer.filter_by_context(&[taint1, taint2], "branch", "true");
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].get_context("branch"), Some("true"));
+}
+
+#[test]
+fn test_combine_with_context_union() {
+    let analyzer = AdvancedTaintAnalyzer::new();
+    let base_taint = TaintState::default();
+
+    let mut taint1 = AdvancedTaintState::new(base_taint.clone());
+    taint1.add_transformation(TaintTransformation::Concatenation);
+
+    let mut taint2 = AdvancedTaintState::new(base_taint);
+    taint2.add_transformation(TaintTransformation::Encoding("base64".to_string()));
+
+    let combined = analyzer.combine_with_context(&[taint1, taint2], "union");
+    assert_eq!(combined.transformations.len(), 2);
+}
+
+#[test]
+fn test_combine_with_context_intersection() {
+    let analyzer = AdvancedTaintAnalyzer::new();
+    let base_taint = TaintState::default();
+
+    let mut taint1 = AdvancedTaintState::new(base_taint.clone());
+    taint1.add_transformation(TaintTransformation::Concatenation);
+    taint1.add_transformation(TaintTransformation::Encoding("base64".to_string()));
+
+    let mut taint2 = AdvancedTaintState::new(base_taint);
+    taint2.add_transformation(TaintTransformation::Encoding("base64".to_string()));
+
+    let combined = analyzer.combine_with_context(&[taint1, taint2], "intersection");
+    assert_eq!(combined.transformations.len(), 1);
+}
+
+#[test]
+fn test_combine_with_context_most_restrictive() {
+    let analyzer = AdvancedTaintAnalyzer::new();
+    let base_taint = TaintState::default();
+
+    let mut taint1 = AdvancedTaintState::new(base_taint.clone());
+    taint1.add_transformation(TaintTransformation::Encoding("base64".to_string()));
+
+    let mut taint2 = AdvancedTaintState::new(base_taint);
+    taint2.add_transformation(TaintTransformation::Hashing("SHA256".to_string()));
+
+    let combined = analyzer.combine_with_context(&[taint1, taint2], "most_restrictive");
+    // Most restrictive should be the one with hashing (effectiveness 1.0)
+    assert_eq!(combined.transformations.len(), 1);
+}
+
