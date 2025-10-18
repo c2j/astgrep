@@ -1,0 +1,13 @@
+CR-SemService Validation Report
+Generated: 2025-10-18 06:27:31
+Project: /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+
+Test Results:
+- Quick Validation: See test_report.md
+- Comprehensive Tests: See test_report.json
+- Detailed Analysis: See test_report.md
+
+Reports Location: /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice/tests/validation_reports
+
+For more details, run:
+  python3 /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice/tests/test_analyzer.py

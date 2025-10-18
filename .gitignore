@@ -31,3 +31,6 @@ Thumbs.db
 # Output files
 *.sarif
 results.*
+
+# Python
+.venv
