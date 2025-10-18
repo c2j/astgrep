@@ -65,6 +65,24 @@ class TestRunner:
             "typing",
             "windows"
         ]
+        # 检查test_patterns 以及其子目录，将所有子目录添加到test_patterns
+        # 但避免重复添加已经存在的目录
+        tmp = []
+        seen = set()
+        for pattern_dir in self.test_patterns:
+            pattern_path = self.tests_dir / pattern_dir
+            if pattern_path.exists():
+                if pattern_dir not in seen:
+                    tmp.append(pattern_dir)
+                    seen.add(pattern_dir)
+                # 添加子目录
+                for sub_dir in pattern_path.iterdir():
+                    if sub_dir.is_dir():
+                        sub_dir_name = f"{pattern_dir}/{sub_dir.name}"
+                        if sub_dir_name not in seen:
+                            tmp.append(sub_dir_name)
+                            seen.add(sub_dir_name)
+        self.test_patterns = tmp
 
     def discover_test_cases(self):
         """Discover all test cases (YAML + code file pairs, or .sgrep + .yaml pairs)"""
@@ -76,7 +94,7 @@ class TestRunner:
             if not pattern_path.exists():
                 continue
 
-            # Find all YAML files recursively
+            # Find all YAML files recursively (only .yaml files, not .sgrep which are pattern files)
             for yaml_file in pattern_path.rglob("*.yaml"):
                 # Skip YAML files that are not valid rule files (e.g., test data files)
                 try:
