@@ -1,0 +1,220 @@
+rules:
+  - id: information-disclosure-001
+    name: "System Information Functions"
+    description: "Detects queries that expose system information"
+    severity: WARNING
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+(USER|VERSION|DATABASE|CURRENT_USER|CURRENT_DATABASE)\\s*\\("
+    message: "Query exposes system information"
+    fix: "Avoid exposing system information in application queries"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: information-disclosure-002
+    name: "SHOW Commands"
+    description: "Detects SHOW commands that expose database structure"
+    severity: WARNING
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SHOW\\s+(DATABASES|TABLES|SCHEMAS|COLUMNS|VARIABLES|PRIVILEGES)"
+    message: "SHOW command exposes database structure"
+    fix: "Use information_schema with proper restrictions instead"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: information-disclosure-003
+    name: "Information Schema Queries"
+    description: "Detects queries on information_schema that expose metadata"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+information_schema\\.(schemata|tables|columns|user_privileges)"
+    message: "Information schema query exposes database metadata"
+    fix: "Query only specific columns and filter by current database"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-004
+    name: "System Catalog Queries"
+    description: "Detects queries on system catalogs"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+.*\\s+FROM\\s+mysql\\.(user|db|tables_priv)"
+    message: "Query on system catalog exposes sensitive information"
+    fix: "Use SHOW GRANTS or information_schema instead"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: HIGH
+
+  - id: information-disclosure-005
+    name: "File System Access"
+    description: "Detects file system access via SQL"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "LOAD_FILE\\s*\\("
+      - pattern-regex: "INTO\\s+(OUTFILE|DUMPFILE)"
+    message: "File system access via SQL"
+    fix: "Use application-level file handling instead"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: information-disclosure-006
+    name: "Error-based Information Disclosure"
+    description: "Detects error-based information disclosure"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "extractvalue\\s*\\(.*SELECT"
+      - pattern-regex: "updatexml\\s*\\(.*SELECT"
+      - pattern-regex: "json_extract\\s*\\(.*SELECT"
+    message: "Error-based information disclosure detected"
+    fix: "Avoid using error messages to extract information"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-007
+    name: "Timing-based Information Disclosure"
+    description: "Detects timing-based information disclosure"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "IF\\s*\\(.*SLEEP\\s*\\("
+      - pattern-regex: "BENCHMARK\\s*\\(.*SELECT"
+      - pattern-regex: "WAITFOR\\s+DELAY"
+    message: "Timing-based information disclosure detected"
+    fix: "Avoid using timing to extract information"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-008
+    name: "Metadata Queries"
+    description: "Detects queries that expose table metadata"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+information_schema\\.(statistics|key_column_usage|table_constraints)"
+    message: "Metadata query exposes table structure"
+    fix: "Query only necessary metadata columns"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-009
+    name: "Performance Schema Queries"
+    description: "Detects queries on performance_schema"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+performance_schema\\."
+    message: "Performance schema query may expose sensitive information"
+    fix: "Query only specific columns and limit results"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-010
+    name: "Stored Procedure Information"
+    description: "Detects queries that expose stored procedure information"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+.*\\s+FROM\\s+information_schema\\.(routines|parameters)"
+    message: "Query exposes stored procedure information"
+    fix: "Restrict access to procedure metadata"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-011
+    name: "View Information"
+    description: "Detects queries that expose view definitions"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+view_definition\\s+FROM\\s+information_schema\\.views"
+    message: "Query exposes view definitions"
+    fix: "Restrict access to view metadata"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-012
+    name: "Privilege Information"
+    description: "Detects queries that expose privilege information"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+information_schema\\.(user_privileges|table_privileges|column_privileges)"
+    message: "Query exposes privilege information"
+    fix: "Use SHOW GRANTS for current user instead"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-013
+    name: "Configuration Information"
+    description: "Detects queries that expose configuration"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+@@(version|datadir|basedir|plugin_dir)"
+    message: "Query exposes database configuration"
+    fix: "Avoid exposing configuration information"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: information-disclosure-014
+    name: "Session Information"
+    description: "Detects queries that expose session information"
+    severity: INFO
+    confidence: LOW
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+CONNECTION_ID\\s*\\("
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+information_schema\\.processlist"
+    message: "Query exposes session information"
+    fix: "Limit access to session information"
+    metadata:
+      category: security
+      cwe: "CWE-200: Information Exposure"
+      confidence: LOW
+

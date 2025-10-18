@@ -28,6 +28,8 @@ class TestRunner:
             "errors": []
         }
         self.test_patterns = [
+            # New
+            "sql",
             # Core test suites
             "simple",
             "advanced_patterns",

@@ -1,0 +1,92 @@
+rules:
+  - id: select-star-001
+    name: "SELECT * Usage"
+    description: "Detects SELECT * queries which can impact performance and expose sensitive data"
+    severity: WARNING
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM"
+      - pattern-not-regex: "SELECT\\s+\\*\\s+FROM\\s+.*\\s+LIMIT\\s+[1-9]"
+      - pattern-not-regex: "SELECT\\s+\\*\\s+FROM\\s+.*\\s+LIMIT\\s+1[0-9]"
+    message: "Avoid SELECT * in production queries - specify only needed columns"
+    fix: "Replace SELECT * with specific column names: SELECT id, username, email FROM users"
+    metadata:
+      category: performance
+      cwe: "CWE-200: Information Exposure"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: select-star-002
+    name: "SELECT * in Subquery"
+    description: "Detects SELECT * usage in subqueries"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "\\(\\s*SELECT\\s+\\*\\s+FROM"
+    message: "SELECT * in subquery can impact performance"
+    fix: "Specify only the columns needed in the subquery"
+    metadata:
+      category: performance
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: select-star-003
+    name: "SELECT * in UNION"
+    description: "Detects SELECT * usage in UNION queries"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "UNION\\s+(ALL\\s+)?SELECT\\s+\\*"
+    message: "SELECT * in UNION can cause performance issues"
+    fix: "Specify matching columns in both SELECT statements"
+    metadata:
+      category: performance
+      cwe: "CWE-200: Information Exposure"
+      confidence: MEDIUM
+
+  - id: select-star-004
+    name: "SELECT * with JOIN"
+    description: "Detects SELECT * with JOIN operations"
+    severity: INFO
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+.*\\s+(INNER\\s+)?JOIN"
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+.*\\s+(LEFT|RIGHT|FULL)\\s+(OUTER\\s+)?JOIN"
+    message: "SELECT * with JOIN may retrieve unnecessary columns"
+    fix: "Specify only the columns needed from each table"
+    metadata:
+      category: performance
+      confidence: MEDIUM
+
+  - id: select-star-005
+    name: "SELECT * with GROUP BY"
+    description: "Detects SELECT * with GROUP BY which is often invalid"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+.*\\s+GROUP\\s+BY"
+    message: "SELECT * with GROUP BY is invalid in strict SQL mode"
+    fix: "Specify columns explicitly or use aggregate functions"
+    metadata:
+      category: correctness
+      confidence: HIGH
+
+  - id: select-star-006
+    name: "SELECT * Performance Anti-pattern"
+    description: "Detects SELECT * which is a performance anti-pattern"
+    severity: INFO
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SELECT\\s+\\*\\s+FROM\\s+[a-zA-Z0-9_]+\\s*WHERE"
+    message: "SELECT * with WHERE clause should specify columns"
+    fix: "List specific columns needed for the query"
+    metadata:
+      category: performance
+      confidence: MEDIUM
+

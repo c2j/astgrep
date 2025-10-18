@@ -1,0 +1,175 @@
+rules:
+  - id: sql-injection-001
+    name: "SQL Injection - String Concatenation"
+    description: "Detects SQL injection via string concatenation in WHERE clauses"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "WHERE\\s+.*\\s*\\+\\s*.*"
+      - pattern-regex: "WHERE\\s+.*\\s*\\|\\|\\s*.*"
+      - pattern-not-regex: "WHERE\\s+.*\\s*=\\s*\\?"
+      - pattern-not-regex: "WHERE\\s+.*\\s*=\\s*\\$[0-9]"
+    message: "SQL injection vulnerability: String concatenation in WHERE clause"
+    fix: "Use parameterized queries with placeholders (?) or named parameters"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+
+  - id: sql-injection-002
+    name: "SQL Injection - UNION-based"
+    description: "Detects UNION-based SQL injection attempts"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "UNION\\s+SELECT\\s+.*\\s+FROM\\s+.*"
+      - pattern-not-regex: "UNION\\s+SELECT\\s+[a-zA-Z0-9_,\\s]+\\s+FROM\\s+[a-zA-Z0-9_]+"
+    message: "Potential UNION-based SQL injection"
+    fix: "Validate and sanitize all user inputs before using in queries"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+
+  - id: sql-injection-003
+    name: "SQL Injection - Dynamic Query Construction"
+    description: "Detects dynamic SQL query construction with user input"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CONCAT\\s*\\(.*@.*\\)"
+      - pattern-regex: "SELECT\\s+.*\\s+WHERE\\s+.*\\s*\\+\\s*@"
+      - pattern-not-regex: "PREPARE\\s+.*\\s+FROM"
+    message: "Dynamic SQL construction detected - use parameterized queries"
+    fix: "Use prepared statements or stored procedures with parameters"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+
+  - id: sql-injection-004
+    name: "SQL Injection - Comment-based"
+    description: "Detects comment-based SQL injection attempts"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "WHERE\\s+.*\\s+--\\s*;?"
+      - pattern-regex: "WHERE\\s+.*\\s+/\\*.*\\*/"
+    message: "Comment-based SQL injection detected"
+    fix: "Use parameterized queries to prevent comment-based injection"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+
+  - id: sql-injection-005
+    name: "SQL Injection - Blind"
+    description: "Detects blind SQL injection patterns"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "WHERE\\s+.*\\s+AND\\s+\\(SELECT\\s+COUNT"
+      - pattern-regex: "WHERE\\s+.*\\s+AND\\s+CASE\\s+WHEN"
+    message: "Potential blind SQL injection pattern"
+    fix: "Use parameterized queries and input validation"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+
+  - id: sql-injection-006
+    name: "SQL Injection - Time-based"
+    description: "Detects time-based blind SQL injection"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SLEEP\\s*\\(.*\\)"
+      - pattern-regex: "BENCHMARK\\s*\\(.*\\)"
+      - pattern-regex: "WAITFOR\\s+DELAY"
+    message: "Time-based SQL injection pattern detected"
+    fix: "Use parameterized queries and avoid time-based operations in WHERE clauses"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+
+  - id: sql-injection-007
+    name: "SQL Injection - Stacked Queries"
+    description: "Detects stacked query SQL injection"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: ".*;\\s*(DROP|DELETE|INSERT|UPDATE|CREATE|ALTER)"
+    message: "Stacked query SQL injection detected"
+    fix: "Use parameterized queries and disable stacked queries if possible"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+
+  - id: sql-injection-008
+    name: "SQL Injection - Second-order"
+    description: "Detects second-order SQL injection patterns"
+    severity: WARNING
+    confidence: LOW
+    languages: [sql]
+    patterns:
+      - pattern-regex: "INSERT\\s+INTO\\s+.*\\s+VALUES\\s*\\(.*@.*\\)"
+      - pattern-regex: "SELECT\\s+.*\\s+WHERE\\s+.*=\\s*@stored"
+    message: "Potential second-order SQL injection"
+    fix: "Use parameterized queries for both storage and retrieval"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: LOW
+
+  - id: sql-injection-009
+    name: "SQL Injection - ORDER BY/LIMIT"
+    description: "Detects SQL injection in ORDER BY or LIMIT clauses"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "ORDER\\s+BY\\s+@"
+      - pattern-regex: "LIMIT\\s+@"
+      - pattern-regex: "FROM\\s+@"
+    message: "SQL injection in ORDER BY, LIMIT, or table name"
+    fix: "Use whitelist validation for dynamic column/table names"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+
+  - id: sql-injection-010
+    name: "SQL Injection - Quote Escape Bypass"
+    description: "Detects quote escape bypass attempts"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "WHERE\\s+.*\\s*=\\s*'.*'\\s+OR\\s+'[0-9]'\\s*=\\s*'[0-9]'"
+      - pattern-regex: "WHERE\\s+.*\\s*=\\s*\".*\"\\s+OR\\s+\"[0-9]\"\\s*=\\s*\"[0-9]\""
+    message: "Quote escape bypass SQL injection detected"
+    fix: "Use parameterized queries instead of string concatenation"
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+

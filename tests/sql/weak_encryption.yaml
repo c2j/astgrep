@@ -1,0 +1,197 @@
+rules:
+  - id: weak-encryption-001
+    name: "MD5 Hashing"
+    description: "Detects use of MD5 hashing which is cryptographically broken"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "MD5\\s*\\("
+    message: "MD5 is cryptographically broken and should not be used"
+    fix: "Use SHA256 or stronger: SELECT SHA256(password) FROM users"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+
+  - id: weak-encryption-002
+    name: "SHA1 Hashing"
+    description: "Detects use of SHA1 hashing which is deprecated"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "SHA1\\s*\\("
+    message: "SHA1 is deprecated and should not be used for security"
+    fix: "Use SHA256 or stronger: SELECT SHA256(password) FROM users"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+
+  - id: weak-encryption-003
+    name: "DES Encryption"
+    description: "Detects use of DES encryption which is weak"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "DES_ENCRYPT\\s*\\("
+      - pattern-regex: "DES_DECRYPT\\s*\\("
+    message: "DES is weak and should not be used"
+    fix: "Use AES encryption: SELECT AES_ENCRYPT(data, key) FROM table"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+
+  - id: weak-encryption-004
+    name: "Weak Hashing in Triggers"
+    description: "Detects weak hashing algorithms in database triggers"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+TRIGGER.*MD5\\s*\\("
+      - pattern-regex: "CREATE\\s+TRIGGER.*SHA1\\s*\\("
+    message: "Weak hashing in trigger"
+    fix: "Use SHA256 or stronger hashing algorithm"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: HIGH
+
+  - id: weak-encryption-005
+    name: "Weak Encryption in Stored Procedures"
+    description: "Detects weak encryption in stored procedures"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+PROCEDURE.*MD5\\s*\\("
+      - pattern-regex: "CREATE\\s+PROCEDURE.*SHA1\\s*\\("
+      - pattern-regex: "CREATE\\s+PROCEDURE.*DES_ENCRYPT\\s*\\("
+    message: "Weak encryption in stored procedure"
+    fix: "Use strong encryption algorithms"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: HIGH
+
+  - id: weak-encryption-006
+    name: "Weak Encryption in Views"
+    description: "Detects weak encryption in database views"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+VIEW.*MD5\\s*\\("
+      - pattern-regex: "CREATE\\s+VIEW.*SHA1\\s*\\("
+      - pattern-regex: "CREATE\\s+VIEW.*DES_ENCRYPT\\s*\\("
+    message: "Weak encryption in view"
+    fix: "Use strong encryption algorithms"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: HIGH
+
+  - id: weak-encryption-007
+    name: "Multiple Weak Algorithms"
+    description: "Detects multiple weak encryption algorithms in same query"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: ".*MD5\\s*\\(.*SHA1\\s*\\(.*"
+      - pattern-regex: ".*DES_ENCRYPT\\s*\\(.*MD5\\s*\\(.*"
+    message: "Multiple weak encryption algorithms detected"
+    fix: "Replace all weak algorithms with strong ones"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: MEDIUM
+
+  - id: weak-encryption-008
+    name: "Weak Encryption in Indexes"
+    description: "Detects weak encryption in database indexes"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+INDEX.*MD5\\s*\\("
+      - pattern-regex: "CREATE\\s+INDEX.*SHA1\\s*\\("
+    message: "Weak encryption in index"
+    fix: "Use strong encryption or remove from index"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: MEDIUM
+
+  - id: weak-encryption-009
+    name: "Weak Encryption in Constraints"
+    description: "Detects weak encryption in constraints and defaults"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CHECK\\s*\\(.*MD5\\s*\\("
+      - pattern-regex: "DEFAULT\\s+MD5\\s*\\("
+      - pattern-regex: "DEFAULT\\s+SHA1\\s*\\("
+    message: "Weak encryption in constraint or default"
+    fix: "Use strong encryption algorithm"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: MEDIUM
+
+  - id: weak-encryption-010
+    name: "Weak Encryption in Transactions"
+    description: "Detects weak encryption in transactions"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "BEGIN.*MD5\\s*\\(.*COMMIT"
+      - pattern-regex: "START\\s+TRANSACTION.*SHA1\\s*\\(.*COMMIT"
+    message: "Weak encryption in transaction"
+    fix: "Use strong encryption algorithm"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: MEDIUM
+
+  - id: weak-encryption-011
+    name: "Legacy Weak Encryption Functions"
+    description: "Detects use of legacy weak encryption functions"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "OLD_PASSWORD\\s*\\("
+      - pattern-regex: "PASSWORD\\s*\\("
+    message: "Legacy encryption function is deprecated and weak"
+    fix: "Use modern hashing: SHA256 or bcrypt"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: HIGH
+
+  - id: weak-encryption-012
+    name: "Weak Encryption with Hardcoded Keys"
+    description: "Detects weak encryption with hardcoded keys"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "DES_ENCRYPT\\s*\\([^,]+,\\s*'[^']+'"
+      - pattern-regex: "MD5\\s*\\(CONCAT\\([^,]+,\\s*'[^']+'"
+    message: "Weak encryption with hardcoded key or salt"
+    fix: "Use strong encryption with proper key management"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: MEDIUM
+

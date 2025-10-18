@@ -1,0 +1,101 @@
+rules:
+  - id: missing-where-001
+    name: "Missing WHERE Clause"
+    description: "Detects UPDATE/DELETE statements without WHERE clause"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "DELETE\\s+FROM\\s+[a-zA-Z0-9_]+\\s*;?"
+      - pattern-not-regex: "WHERE"
+      - pattern-not-regex: "LIMIT"
+    message: "UPDATE/DELETE without WHERE clause affects all rows"
+    fix: "Add appropriate WHERE clause to limit affected rows: DELETE FROM table WHERE condition"
+    metadata:
+      category: safety
+      cwe: "CWE-20: Improper Input Validation"
+      owasp: "A04:2021 - Insecure Design"
+      confidence: HIGH
+
+  - id: missing-where-002
+    name: "Missing WHERE Clause - UPDATE"
+    description: "Detects UPDATE statements without WHERE clause"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "UPDATE\\s+[a-zA-Z0-9_]+\\s+SET\\s+.*"
+      - pattern-not-regex: "WHERE"
+      - pattern-not-regex: "LIMIT"
+    message: "UPDATE without WHERE clause affects all rows"
+    fix: "Add WHERE clause to specify which rows to update: UPDATE table SET column = value WHERE condition"
+    metadata:
+      category: safety
+      cwe: "CWE-20: Improper Input Validation"
+      owasp: "A04:2021 - Insecure Design"
+      confidence: HIGH
+
+  - id: missing-where-003
+    name: "Missing WHERE Clause - DELETE with JOIN"
+    description: "Detects DELETE with JOIN but no WHERE clause"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "DELETE\\s+.*\\s+FROM\\s+.*\\s+JOIN"
+      - pattern-not-regex: "WHERE"
+    message: "DELETE with JOIN but no WHERE clause"
+    fix: "Add WHERE clause to specify which rows to delete"
+    metadata:
+      category: safety
+      cwe: "CWE-20: Improper Input Validation"
+      confidence: HIGH
+
+  - id: missing-where-004
+    name: "Missing WHERE Clause - UPDATE with JOIN"
+    description: "Detects UPDATE with JOIN but no WHERE clause"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "UPDATE\\s+.*\\s+JOIN"
+      - pattern-not-regex: "WHERE"
+    message: "UPDATE with JOIN but no WHERE clause"
+    fix: "Add WHERE clause to specify which rows to update"
+    metadata:
+      category: safety
+      cwe: "CWE-20: Improper Input Validation"
+      confidence: HIGH
+
+  - id: missing-where-005
+    name: "Dangerous Bulk Operation"
+    description: "Detects potentially dangerous bulk DELETE/UPDATE operations"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "DELETE\\s+FROM\\s+[a-zA-Z0-9_]*user[a-zA-Z0-9_]*"
+      - pattern-not-regex: "WHERE"
+    message: "Bulk DELETE on user table without WHERE clause is dangerous"
+    fix: "Always specify WHERE clause for user table operations"
+    metadata:
+      category: safety
+      cwe: "CWE-20: Improper Input Validation"
+      confidence: MEDIUM
+
+  - id: missing-where-006
+    name: "Missing WHERE in Stored Procedure"
+    description: "Detects DELETE/UPDATE without WHERE in stored procedures"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+PROCEDURE.*DELETE\\s+FROM"
+      - pattern-not-regex: "WHERE"
+    message: "DELETE without WHERE in stored procedure"
+    fix: "Add WHERE clause or use parameters to control which rows are affected"
+    metadata:
+      category: safety
+      cwe: "CWE-20: Improper Input Validation"
+      confidence: HIGH
+

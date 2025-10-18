@@ -1,0 +1,188 @@
+rules:
+  - id: privilege-escalation-001
+    name: "GRANT ALL PRIVILEGES"
+    description: "Detects GRANT ALL PRIVILEGES statements"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+ALL\\s+PRIVILEGES\\s+ON"
+    message: "GRANT ALL PRIVILEGES is a security risk"
+    fix: "Grant only specific privileges needed: GRANT SELECT, INSERT ON database.* TO user"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: privilege-escalation-002
+    name: "GRANT ALL on *.*"
+    description: "Detects GRANT ALL on all databases"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+ALL\\s+ON\\s+\\*\\.\\*"
+    message: "GRANT ALL on *.* grants excessive privileges"
+    fix: "Limit privileges to specific databases and tables"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: privilege-escalation-003
+    name: "ALTER USER Privilege Changes"
+    description: "Detects ALTER USER statements that may escalate privileges"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "ALTER\\s+USER\\s+.*\\s+GRANT\\s+ROLE"
+      - pattern-regex: "ALTER\\s+USER\\s+.*\\s+IDENTIFIED\\s+BY"
+    message: "ALTER USER may escalate privileges"
+    fix: "Review privilege changes and ensure they follow least privilege principle"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: MEDIUM
+
+  - id: privilege-escalation-004
+    name: "CREATE USER with Excessive Privileges"
+    description: "Detects CREATE USER followed by GRANT ALL"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+USER\\s+.*WITH\\s+GRANT\\s+OPTION"
+    message: "CREATE USER with GRANT OPTION is a security risk"
+    fix: "Create user without GRANT OPTION and grant only necessary privileges"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: HIGH
+
+  - id: privilege-escalation-005
+    name: "GRANT with GRANT OPTION"
+    description: "Detects GRANT statements with GRANT OPTION"
+    severity: WARNING
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+.*\\s+WITH\\s+GRANT\\s+OPTION"
+    message: "GRANT OPTION allows users to grant privileges to others"
+    fix: "Remove WITH GRANT OPTION unless absolutely necessary"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: privilege-escalation-006
+    name: "GRANT Administrative Privileges"
+    description: "Detects GRANT of administrative privileges"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+(SUPER|FILE|PROCESS|RELOAD|SHUTDOWN|REPLICATION)\\s+ON"
+    message: "Granting administrative privileges is a security risk"
+    fix: "Use role-based access control with limited privileges"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: HIGH
+
+  - id: privilege-escalation-007
+    name: "GRANT to Wildcard Host"
+    description: "Detects GRANT to wildcard hosts"
+    severity: WARNING
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+.*\\s+TO\\s+'[^']*'@'%'"
+      - pattern-regex: "GRANT\\s+.*\\s+TO\\s+'[^']*'@'[0-9]+\\.[0-9]+\\.%'"
+    message: "GRANT to wildcard host allows access from any location"
+    fix: "Restrict access to specific hosts or IP ranges"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+
+  - id: privilege-escalation-008
+    name: "Incomplete Privilege Revocation"
+    description: "Detects incomplete privilege revocation"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+ALL\\s+ON\\s+\\*\\.\\*.*REVOKE\\s+[A-Z]+\\s+ON"
+    message: "Incomplete privilege revocation may leave excessive privileges"
+    fix: "Revoke all privileges and grant only necessary ones"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: MEDIUM
+
+  - id: privilege-escalation-009
+    name: "Default User Excessive Privileges"
+    description: "Detects excessive privileges for default users"
+    severity: ERROR
+    confidence: HIGH
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+.*\\s+TO\\s+'root'@'%'"
+      - pattern-regex: "GRANT\\s+.*\\s+TO\\s+''@'%'"
+    message: "Default users should not have excessive privileges"
+    fix: "Limit root to localhost and remove anonymous users"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: HIGH
+
+  - id: privilege-escalation-010
+    name: "Role-based Privilege Escalation"
+    description: "Detects granting of administrative roles"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "GRANT\\s+'(admin|dba|super|root)_role'\\s+TO"
+    message: "Granting administrative roles may escalate privileges"
+    fix: "Use application-specific roles with limited privileges"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: MEDIUM
+
+  - id: privilege-escalation-011
+    name: "Stored Procedure DEFINER Escalation"
+    description: "Detects stored procedures with privilege escalation via DEFINER"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+DEFINER='(admin|root)'@"
+    message: "Stored procedure DEFINER with admin/root privileges"
+    fix: "Use limited user account as DEFINER"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: MEDIUM
+
+  - id: privilege-escalation-012
+    name: "View DEFINER Escalation"
+    description: "Detects views with privilege escalation via DEFINER"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern-regex: "CREATE\\s+DEFINER='(admin|root)'@.*VIEW"
+    message: "View DEFINER with admin/root privileges"
+    fix: "Use limited user account as DEFINER"
+    metadata:
+      category: security
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      confidence: MEDIUM
+

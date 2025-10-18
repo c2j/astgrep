@@ -2,8 +2,8 @@
 
 ## 📊 Summary
 
-- **Total Tests**: 2443
-- **Passed**: 2442 ✅
+- **Total Tests**: 2449
+- **Passed**: 2448 ✅
 - **Failed**: 0 ❌
 - **Skipped**: 1 ⏭️
 - **Pass Rate**: 100.0%
@@ -13,6 +13,7 @@
 
 | Suite | Total | Passed | Failed | Pass Rate |
 |-------|-------|--------|--------|----------|
+| sql | 6 | 6 | 0 | 100.0% |
 | simple | 3 | 3 | 0 | 100.0% |
 | advanced_patterns | 5 | 5 | 0 | 100.0% |
 | e-rules | 4 | 4 | 0 | 100.0% |
@@ -72,7 +73,7 @@
 
 ## ⚡ Performance
 
-- **Total Duration**: 1047.49s
-- **Average Test Time**: 0.429s
+- **Total Duration**: 1048.30s
+- **Average Test Time**: 0.428s
 - **Tests per Second**: 2.3
 
