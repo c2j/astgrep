@@ -85,16 +85,16 @@ class TestRunner:
         self.test_patterns = tmp
 
     def discover_test_cases(self):
-        """Discover all test cases (YAML + code file pairs, or .sgrep + .yaml pairs)"""
+        """Discover all test cases (YAML + code file pairs, or .sgrep + code file pairs)"""
         test_cases = []
-        code_extensions = [".py", ".js", ".java", ".rb", ".kt", ".swift", ".php", ".cs", ".go", ".ts", ".sgrep", ".c", ".cpp", ".sh", ".sql", ".dockerfile", ".json", ".xml", ".html", ".yaml", ".yml"]
+        code_extensions = [".py", ".js", ".java", ".rb", ".kt", ".swift", ".php", ".cs", ".go", ".ts", ".c", ".cpp", ".sh", ".sql", ".dockerfile", ".json", ".xml", ".html", ".ml", ".tsx", ".jsx"]
 
         for pattern_dir in self.test_patterns:
             pattern_path = self.tests_dir / pattern_dir
             if not pattern_path.exists():
                 continue
 
-            # Find all YAML files recursively (only .yaml files, not .sgrep which are pattern files)
+            # Find all YAML files recursively (YAML rule files)
             for yaml_file in pattern_path.rglob("*.yaml"):
                 # Skip YAML files that are not valid rule files (e.g., test data files)
                 try:
@@ -139,6 +139,40 @@ class TestRunner:
                                 })
                                 break
 
+            # Find all .sgrep files recursively (Semgrep pattern files)
+            for sgrep_file in pattern_path.rglob("*.sgrep"):
+                base_name = sgrep_file.stem
+                code_file_found = False
+
+                # Try to find code file in the same directory as .sgrep
+                for ext in code_extensions:
+                    code_file = sgrep_file.parent / f"{base_name}{ext}"
+                    if code_file.exists():
+                        test_cases.append({
+                            "rule_file": sgrep_file,
+                            "code_file": code_file,
+                            "suite": pattern_dir,
+                            "name": f"{pattern_dir}/{base_name}",
+                            "is_sgrep": True
+                        })
+                        code_file_found = True
+                        break
+
+                # If not found in same directory, search recursively in the pattern directory
+                if not code_file_found:
+                    for ext in code_extensions:
+                        matching_files = list(pattern_path.rglob(f"{base_name}{ext}"))
+                        if matching_files:
+                            code_file = matching_files[0]
+                            test_cases.append({
+                                "rule_file": sgrep_file,
+                                "code_file": code_file,
+                                "suite": pattern_dir,
+                                "name": f"{pattern_dir}/{base_name}",
+                                "is_sgrep": True
+                            })
+                            break
+
         return test_cases
 
     def run_test_case(self, test_case):
@@ -146,53 +180,115 @@ class TestRunner:
         try:
             rule_file = test_case["rule_file"]
             code_file = test_case["code_file"]
-            
-            # Load rule
-            with open(rule_file, 'r') as f:
-                rule_data = yaml.safe_load(f)
-            
-            if not rule_data or "rules" not in rule_data:
-                return {"status": "skipped", "reason": "Invalid rule format"}
-            
+            is_sgrep = test_case.get("is_sgrep", False)
+
+            # Handle .sgrep files by creating a temporary YAML rule file
+            if is_sgrep:
+                # Read the .sgrep pattern
+                with open(rule_file, 'r') as f:
+                    pattern = f.read().strip()
+
+                # Create a temporary YAML rule file
+                import tempfile
+                temp_rule = tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False)
+                try:
+                    # Determine the language from the code file extension
+                    code_ext = code_file.suffix.lower()
+                    lang_map = {
+                        '.py': 'python',
+                        '.js': 'javascript',
+                        '.jsx': 'javascript',
+                        '.ts': 'typescript',
+                        '.tsx': 'typescript',
+                        '.java': 'java',
+                        '.rb': 'ruby',
+                        '.go': 'go',
+                        '.php': 'php',
+                        '.cs': 'csharp',
+                        '.cpp': 'cpp',
+                        '.c': 'c',
+                        '.sh': 'bash',
+                        '.sql': 'sql',
+                        '.ml': 'ocaml',
+                        '.kt': 'kotlin',
+                        '.swift': 'swift'
+                    }
+                    language = lang_map.get(code_ext, 'python')
+
+                    # Write the temporary YAML rule
+                    rule_id = rule_file.stem
+                    yaml_content = f"""rules:
+  - id: {rule_id}
+    pattern: |
+      {pattern.replace(chr(10), chr(10) + '      ')}
+    message: Pattern match
+    languages: [{language}]
+    severity: INFO
+"""
+                    temp_rule.write(yaml_content)
+                    temp_rule.close()
+
+                    # Use the temporary rule file
+                    actual_rule_file = temp_rule.name
+                except Exception as e:
+                    return {"status": "failed", "reason": f"Failed to create temp rule: {str(e)}"}
+            else:
+                # Load YAML rule
+                with open(rule_file, 'r') as f:
+                    rule_data = yaml.safe_load(f)
+
+                if not rule_data or "rules" not in rule_data:
+                    return {"status": "skipped", "reason": "Invalid rule format"}
+
+                actual_rule_file = str(rule_file)
+
             # Run CR-SemService
             cmd = [
                 "cargo", "run", "--release", "--bin", "cr-semservice", "--",
                 "analyze",
                 str(code_file),
-                "-r", str(rule_file)
+                "-r", actual_rule_file
             ]
-            
-            result = subprocess.run(
-                cmd,
-                cwd=str(self.project_root),
-                capture_output=True,
-                timeout=30,
-                text=True
-            )
-            
-            # Parse results
+
             try:
-                output = json.loads(result.stdout) if result.stdout else {}
-            except json.JSONDecodeError:
-                output = {"raw_output": result.stdout}
+                result = subprocess.run(
+                    cmd,
+                    cwd=str(self.project_root),
+                    capture_output=True,
+                    timeout=30,
+                    text=True
+                )
 
-            # Check if we got valid JSON output (indicates successful execution)
-            # The tool outputs either "findings" or "matches" depending on the version
-            has_valid_output = isinstance(output, dict) and (
-                "findings" in output or
-                "matches" in output or
-                "summary" in output or
-                len(output) > 0
-            )
-            status = "passed" if has_valid_output else "failed"
+                # Parse results
+                try:
+                    output = json.loads(result.stdout) if result.stdout else {}
+                except json.JSONDecodeError:
+                    output = {"raw_output": result.stdout}
 
-            return {
-                "status": status,
-                "return_code": result.returncode,
-                "output": output,
-                "stderr": result.stderr[:500] if result.stderr else ""
-            }
-        
+                # Check if we got valid JSON output (indicates successful execution)
+                # The tool outputs either "findings" or "matches" depending on the version
+                has_valid_output = isinstance(output, dict) and (
+                    "findings" in output or
+                    "matches" in output or
+                    "summary" in output or
+                    len(output) > 0
+                )
+                status = "passed" if has_valid_output else "failed"
+
+                return {
+                    "status": status,
+                    "return_code": result.returncode,
+                    "output": output,
+                    "stderr": result.stderr[:500] if result.stderr else ""
+                }
+            finally:
+                # Clean up temporary rule file if it was created
+                if is_sgrep and actual_rule_file != str(rule_file):
+                    try:
+                        os.unlink(actual_rule_file)
+                    except Exception:
+                        pass
+
         except subprocess.TimeoutExpired:
             return {"status": "failed", "reason": "Timeout"}
         except Exception as e:
