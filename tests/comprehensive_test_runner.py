@@ -69,13 +69,14 @@ class TestRunner:
     def discover_test_cases(self):
         """Discover all test cases (YAML + code file pairs, or .sgrep + .yaml pairs)"""
         test_cases = []
+        code_extensions = [".py", ".js", ".java", ".rb", ".kt", ".swift", ".php", ".cs", ".go", ".ts", ".sgrep", ".c", ".cpp", ".sh", ".sql", ".dockerfile", ".json", ".xml", ".html", ".yaml", ".yml"]
 
         for pattern_dir in self.test_patterns:
             pattern_path = self.tests_dir / pattern_dir
             if not pattern_path.exists():
                 continue
 
-            # Find all YAML files
+            # Find all YAML files recursively
             for yaml_file in pattern_path.rglob("*.yaml"):
                 # Skip YAML files that are not valid rule files (e.g., test data files)
                 try:
@@ -90,8 +91,9 @@ class TestRunner:
 
                 # Look for corresponding code files
                 base_name = yaml_file.stem
-                code_extensions = [".py", ".js", ".java", ".rb", ".kt", ".swift", ".php", ".cs", ".go", ".ts", ".sgrep", ".c", ".cpp", ".sh", ".sql", ".dockerfile", ".json", ".xml", ".html", ".yaml", ".yml"]
+                code_file_found = False
 
+                # First, try to find code file in the same directory as YAML
                 for ext in code_extensions:
                     code_file = yaml_file.parent / f"{base_name}{ext}"
                     if code_file.exists() and code_file != yaml_file:
@@ -101,7 +103,23 @@ class TestRunner:
                             "suite": pattern_dir,
                             "name": f"{pattern_dir}/{base_name}"
                         })
+                        code_file_found = True
                         break
+
+                # If not found in same directory, search recursively in the pattern directory
+                if not code_file_found:
+                    for ext in code_extensions:
+                        matching_files = list(pattern_path.rglob(f"{base_name}{ext}"))
+                        if matching_files:
+                            code_file = matching_files[0]
+                            if code_file != yaml_file:
+                                test_cases.append({
+                                    "rule_file": yaml_file,
+                                    "code_file": code_file,
+                                    "suite": pattern_dir,
+                                    "name": f"{pattern_dir}/{base_name}"
+                                })
+                                break
 
         return test_cases
 
