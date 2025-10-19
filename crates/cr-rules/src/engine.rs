@@ -282,21 +282,106 @@ impl RuleExecutionEngine {
         Ok(matches)
     }
 
-    /// Simple pattern matching (placeholder)
+    /// Tokenize a string, preserving operators and punctuation as separate tokens
+    fn tokenize(&self, s: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut current_token = String::new();
+
+        for ch in s.chars() {
+            match ch {
+                // Operators and punctuation - treat as separate tokens
+                '+' | '-' | '*' | '/' | '%' | '=' | '<' | '>' | '!' |
+                '&' | '|' | '^' | '~' | '?' | ':' | ';' | ',' | '.' |
+                '(' | ')' | '[' | ']' | '{' | '}' => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                    tokens.push(ch.to_string());
+                }
+                // Whitespace - token separator
+                ' ' | '\t' | '\n' | '\r' => {
+                    if !current_token.is_empty() {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
+                }
+                // Regular characters - accumulate into current token
+                _ => {
+                    current_token.push(ch);
+                }
+            }
+        }
+
+        if !current_token.is_empty() {
+            tokens.push(current_token);
+        }
+
+        tokens
+    }
+
+    /// Simple pattern matching with metavariable support
     fn simple_pattern_match(&self, pattern: &str, text: &str) -> bool {
-        // Very simple implementation - just check if pattern keywords are in text
-        // Real implementation would use proper pattern matching with metavariables
-        let pattern_keywords: Vec<&str> = pattern
-            .split(|c: char| !c.is_alphanumeric() && c != '_')
-            .filter(|s| !s.is_empty() && !s.starts_with('$'))
-            .collect();
-
-        println!("🔍 Pattern: '{}' -> keywords: {:?}", pattern, pattern_keywords);
+        println!("🔍 Pattern: '{}'", pattern);
         println!("🔍 Node text: '{}'", text);
-        let matches = pattern_keywords.iter().all(|keyword| text.contains(keyword));
-        println!("🔍 Match result: {}", matches);
 
-        matches
+        // Tokenize pattern and text
+        let mut pattern_tokens = self.tokenize(pattern);
+        let text_tokens = self.tokenize(text);
+
+        println!("🔍 Pattern tokens: {:?}", pattern_tokens);
+        println!("🔍 Text tokens: {:?}", text_tokens);
+
+        // If pattern ends with semicolon but text doesn't, try matching without the semicolon
+        // This handles the case where tree-sitter separates expression nodes from statement terminators
+        let pattern_without_semicolon = if pattern_tokens.len() > text_tokens.len()
+            && pattern_tokens.last() == Some(&";".to_string()) {
+            println!("🔍 Pattern has trailing semicolon, trying to match without it");
+            pattern_tokens.pop(); // Remove the semicolon
+            true
+        } else {
+            false
+        };
+
+        // If pattern has different number of tokens, it can't match
+        if pattern_tokens.len() != text_tokens.len() {
+            println!("🔍 Token count mismatch: {} vs {}", pattern_tokens.len(), text_tokens.len());
+            return false;
+        }
+
+        // Track metavariable bindings
+        let mut metavar_bindings: HashMap<String, String> = HashMap::new();
+
+        // Match each token
+        for (pattern_token, text_token) in pattern_tokens.iter().zip(text_tokens.iter()) {
+            if pattern_token.starts_with('$') {
+                // This is a metavariable
+                let metavar_name = pattern_token.clone();
+
+                // Check if this metavariable was already bound
+                if let Some(existing_value) = metavar_bindings.get(&metavar_name) {
+                    // Metavariable must bind to the same value
+                    if existing_value != text_token {
+                        println!("🔍 Metavariable {} already bound to '{}', but found '{}'",
+                                metavar_name, existing_value, text_token);
+                        return false;
+                    }
+                } else {
+                    // Bind the metavariable
+                    println!("🔍 Binding metavariable {} to '{}'", metavar_name, text_token);
+                    metavar_bindings.insert(metavar_name, text_token.clone());
+                }
+            } else {
+                // This is a literal token - must match exactly
+                if pattern_token != text_token {
+                    println!("🔍 Literal token mismatch: '{}' vs '{}'", pattern_token, text_token);
+                    return false;
+                }
+            }
+        }
+
+        println!("🔍 Match successful! Bindings: {:?}", metavar_bindings);
+        true
     }
 
     /// Execute dataflow analysis
@@ -370,12 +455,17 @@ impl RuleExecutionEngine {
 
     /// Generate finding message
     fn generate_finding_message(&self, rule: &Rule, pattern: &Pattern, node: &dyn AstNode) -> String {
-        let default_pattern = "<complex pattern>".to_string();
-        let pattern_str = pattern.get_pattern_string().unwrap_or(&default_pattern);
-        if let Some(text) = node.text() {
-            format!("{}: Found '{}' matching pattern '{}'", rule.name, text, pattern_str)
+        // Use rule.description if available, otherwise generate a default message
+        if !rule.description.is_empty() {
+            rule.description.clone()
         } else {
-            format!("{}: Found node matching pattern '{}'", rule.name, pattern_str)
+            let default_pattern = "<complex pattern>".to_string();
+            let pattern_str = pattern.get_pattern_string().unwrap_or(&default_pattern);
+            if let Some(text) = node.text() {
+                format!("{}: Found '{}' matching pattern '{}'", rule.name, text, pattern_str)
+            } else {
+                format!("{}: Found node matching pattern '{}'", rule.name, pattern_str)
+            }
         }
     }
 

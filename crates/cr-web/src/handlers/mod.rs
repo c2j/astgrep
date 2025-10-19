@@ -6,6 +6,7 @@ pub mod docs;
 pub mod health;
 pub mod jobs;
 pub mod metrics;
+pub mod playground;
 pub mod root;
 pub mod rules;
 pub mod version;

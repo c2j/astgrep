@@ -143,6 +143,12 @@ impl TreeSitterParser {
     /// Convert tree-sitter tree to universal AST
     pub fn tree_to_universal_ast(&self, tree: &Tree, source: &str) -> Result<UniversalNode> {
         let root_node = tree.root_node();
+        eprintln!("🔍 Tree-sitter root node: kind={}, child_count={}", root_node.kind(), root_node.child_count());
+        for i in 0..root_node.child_count() {
+            if let Some(child) = root_node.child(i) {
+                eprintln!("🔍   Child {}: kind={}, text={:?}", i, child.kind(), child.utf8_text(source.as_bytes()).unwrap_or(""));
+            }
+        }
         self.convert_node(&root_node, source)
     }
     

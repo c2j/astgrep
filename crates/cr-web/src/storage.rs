@@ -471,6 +471,7 @@ mod tests {
                 duration_ms: 100,
             },
             metrics: None,
+            dataflow_info: None,
         };
         
         // Store results

@@ -10,13 +10,15 @@ use uuid::Uuid;
 pub struct AnalyzeRequest {
     /// Source code to analyze
     pub code: String,
-    
+
     /// Programming language
     pub language: String,
-    
+
     /// Rules to apply (optional, uses all if not specified)
-    pub rules: Option<Vec<String>>,
-    
+    /// Can be either a list of rule IDs or a YAML string
+    #[serde(default)]
+    pub rules: Option<serde_json::Value>,
+
     /// Analysis options
     pub options: Option<AnalysisOptions>,
 }
@@ -32,10 +34,11 @@ pub struct AnalyzeFileRequest {
     
     /// Programming language (optional, auto-detected if not specified)
     pub language: Option<String>,
-    
-    /// Rules to apply (optional)
-    pub rules: Option<Vec<String>>,
-    
+
+    /// Rules to apply (optional) - can be either a list of rule IDs or a YAML string
+    #[serde(default)]
+    pub rules: Option<serde_json::Value>,
+
     /// Analysis options
     pub options: Option<AnalysisOptions>,
 }
@@ -51,10 +54,11 @@ pub struct AnalyzeArchiveRequest {
     
     /// Languages to analyze (optional, auto-detected if not specified)
     pub languages: Option<Vec<String>>,
-    
-    /// Rules to apply (optional)
-    pub rules: Option<Vec<String>>,
-    
+
+    /// Rules to apply (optional) - can be either a list of rule IDs or a YAML string
+    #[serde(default)]
+    pub rules: Option<serde_json::Value>,
+
     /// File patterns to include
     pub include_patterns: Option<Vec<String>>,
     
@@ -70,13 +74,13 @@ pub struct AnalyzeArchiveRequest {
 pub struct AnalysisOptions {
     /// Minimum severity level to report
     pub min_severity: Option<String>,
-    
+
     /// Minimum confidence level to report
     pub min_confidence: Option<String>,
-    
+
     /// Maximum number of findings to return
     pub max_findings: Option<usize>,
-    
+
     /// Enable data flow analysis
     pub enable_dataflow: Option<bool>,
 
@@ -94,6 +98,9 @@ pub struct AnalysisOptions {
 
     /// Output format
     pub output_format: Option<String>,
+
+    /// Analysis mode (normal, pro, turbo)
+    pub mode: Option<String>,
 }
 
 /// Analysis response
@@ -123,12 +130,15 @@ pub struct AnalysisResponse {
 pub struct AnalysisResults {
     /// List of findings
     pub findings: Vec<Finding>,
-    
+
     /// Analysis summary
     pub summary: AnalysisSummary,
-    
+
     /// Performance metrics (if requested)
     pub metrics: Option<PerformanceMetrics>,
+
+    /// Data flow analysis information (if requested)
+    pub dataflow_info: Option<DataFlowInfo>,
 }
 
 /// Code analysis finding
@@ -136,24 +146,33 @@ pub struct AnalysisResults {
 pub struct Finding {
     /// Rule ID that triggered this finding
     pub rule_id: String,
-    
+
     /// Finding message
     pub message: String,
-    
+
     /// Severity level
     pub severity: String,
-    
+
     /// Confidence level
     pub confidence: String,
-    
+
     /// Location in the code
     pub location: Location,
-    
+
     /// Suggested fix (optional)
     pub fix: Option<String>,
-    
+
     /// Additional metadata
     pub metadata: Option<HashMap<String, serde_json::Value>>,
+
+    /// Metavariable bindings (if applicable)
+    pub metavariable_bindings: Option<Vec<MetavariableBinding>>,
+
+    /// Constraint matches (if applicable)
+    pub constraint_matches: Option<Vec<ConstraintMatch>>,
+
+    /// Taint flow information (if applicable)
+    pub taint_flow: Option<TaintFlow>,
 }
 
 /// Code location
@@ -431,6 +450,7 @@ impl Default for AnalysisOptions {
             enable_performance_analysis: Some(false),
             include_metrics: Some(false),
             output_format: Some("json".to_string()),
+            mode: Some("normal".to_string()),
         }
     }
 }
@@ -439,4 +459,181 @@ impl Default for JobStatus {
     fn default() -> Self {
         Self::Queued
     }
+}
+
+/// Metavariable binding information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetavariableBinding {
+    /// Variable name
+    pub name: String,
+
+    /// Bound value
+    pub value: String,
+
+    /// Location where the binding occurs
+    pub location: Location,
+
+    /// Type information (optional)
+    pub type_info: Option<String>,
+}
+
+/// Constraint match information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConstraintMatch {
+    /// Constraint expression
+    pub constraint: String,
+
+    /// Whether the constraint matched
+    pub matched: bool,
+
+    /// Additional details about the match
+    pub details: Option<String>,
+}
+
+/// Taint flow information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaintFlow {
+    /// Source location
+    pub source: Location,
+
+    /// Sink location
+    pub sink: Location,
+
+    /// Path from source to sink
+    pub path: Vec<Location>,
+
+    /// Type of taint
+    pub taint_type: String,
+}
+
+/// Data flow analysis information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DataFlowInfo {
+    /// List of taint flows detected
+    pub taint_flows: Vec<TaintFlow>,
+
+    /// Constant values found during analysis
+    pub constant_values: HashMap<String, String>,
+
+    /// Symbol table information
+    pub symbol_table: HashMap<String, SymbolInfo>,
+}
+
+/// Symbol information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SymbolInfo {
+    /// Symbol name
+    pub name: String,
+
+    /// Type information
+    pub type_info: String,
+
+    /// Location where symbol is defined
+    pub location: Location,
+
+    /// Symbol scope
+    pub scope: Option<String>,
+}
+
+/// SARIF output format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifOutput {
+    /// SARIF version
+    pub version: String,
+
+    /// SARIF runs
+    pub runs: Vec<SarifRun>,
+}
+
+/// SARIF run
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifRun {
+    /// Tool information
+    pub tool: SarifTool,
+
+    /// Analysis results
+    pub results: Vec<SarifResult>,
+}
+
+/// SARIF tool information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifTool {
+    /// Tool driver information
+    pub driver: SarifToolDriver,
+}
+
+/// SARIF tool driver
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifToolDriver {
+    /// Tool name
+    pub name: String,
+
+    /// Tool version
+    pub version: Option<String>,
+
+    /// Tool information URI
+    pub information_uri: Option<String>,
+}
+
+/// SARIF result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifResult {
+    /// Rule ID
+    pub rule_id: String,
+
+    /// Result message
+    pub message: SarifMessage,
+
+    /// Result locations
+    pub locations: Vec<SarifLocation>,
+
+    /// Result level
+    pub level: Option<String>,
+}
+
+/// SARIF message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifMessage {
+    /// Message text
+    pub text: String,
+}
+
+/// SARIF location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifLocation {
+    /// Physical location
+    pub physical_location: SarifPhysicalLocation,
+}
+
+/// SARIF physical location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifPhysicalLocation {
+    /// Artifact location
+    pub artifact_location: SarifArtifactLocation,
+
+    /// Region information
+    pub region: Option<SarifRegion>,
+}
+
+/// SARIF artifact location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifArtifactLocation {
+    /// File URI
+    pub uri: String,
+}
+
+/// SARIF region
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SarifRegion {
+    /// Start line
+    pub start_line: usize,
+
+    /// Start column
+    pub start_column: Option<usize>,
+
+    /// End line
+    pub end_line: Option<usize>,
+
+    /// End column
+    pub end_column: Option<usize>,
 }

@@ -14,6 +14,7 @@ use crate::{
         AnalyzeRequest, AnalyzeFileRequest, AnalyzeArchiveRequest,
         AnalysisResponse, AnalysisResults, Finding, Location,
         AnalysisSummary, JobStatus, PerformanceMetrics,
+        MetavariableBinding, ConstraintMatch, TaintFlow, DataFlowInfo, SymbolInfo,
     },
     WebConfig, WebError, WebResult,
     handlers::metrics::get_metrics_collector,
@@ -39,10 +40,10 @@ pub async fn analyze_code(
 
     // Generate job ID
     let job_id = Uuid::new_v4();
-    
+
     // Perform analysis (simplified implementation)
     let results = perform_code_analysis(&request, &config).await?;
-    
+
     let response = AnalysisResponse {
         job_id,
         status: JobStatus::Completed,
@@ -66,6 +67,37 @@ pub async fn analyze_code(
 
     info!("Code analysis completed, job_id: {}", job_id);
     Ok(Json(response))
+}
+
+/// Analyze code snippet and return SARIF format
+pub async fn analyze_code_sarif(
+    State(config): State<Arc<WebConfig>>,
+    Json(request): Json<AnalyzeRequest>,
+) -> WebResult<Json<serde_json::Value>> {
+    info!("Analyzing code snippet (SARIF format), language: {}", request.language);
+
+    // Validate request
+    if request.code.is_empty() {
+        return Err(WebError::bad_request("Code cannot be empty"));
+    }
+
+    if request.language.is_empty() {
+        return Err(WebError::bad_request("Language must be specified"));
+    }
+
+    // Perform analysis
+    let results = perform_code_analysis(&request, &config).await?;
+
+    // Convert to SARIF format
+    let sarif = convert_to_sarif(&results);
+
+    // Update metrics
+    let metrics_collector = get_metrics_collector();
+    metrics_collector.increment_request_count("POST", "/api/v1/analyze/sarif");
+    metrics_collector.increment_analysis_count(&request.language);
+
+    info!("Code analysis (SARIF) completed");
+    Ok(Json(serde_json::to_value(sarif).unwrap()))
 }
 
 /// Analyze uploaded file
@@ -267,12 +299,30 @@ async fn perform_code_analysis(
     // Load rules (either from request or default rules)
     let mut rule_engine = RuleEngine::new();
 
-    if let Some(ref rules) = request.rules {
-        // Use custom rules from request
-        for rule_content in rules {
-            if let Err(e) = rule_engine.load_rules_from_yaml(rule_content) {
-                warn!("Failed to load custom rule: {}", e);
+    if let Some(ref rules_value) = request.rules {
+        // Handle both YAML string and array of rule IDs
+        if let Some(yaml_str) = rules_value.as_str() {
+            // YAML string from playground
+            eprintln!("🔍 Received YAML rules:\n{}", yaml_str);
+            if let Err(e) = rule_engine.load_rules_from_yaml(yaml_str) {
+                warn!("Failed to load custom YAML rules: {}", e);
+                return Err(WebError::bad_request(format!("Invalid YAML rules: {}", e)));
             }
+            eprintln!("🔍 Loaded {} rules from YAML", rule_engine.rule_count());
+        } else if let Some(rule_ids) = rules_value.as_array() {
+            // Array of rule IDs
+            for rule_id in rule_ids {
+                if let Some(id_str) = rule_id.as_str() {
+                    // Load specific rule by ID (placeholder - implement as needed)
+                    warn!("Loading rule by ID not yet implemented: {}", id_str);
+                }
+            }
+            // If no rules loaded, use defaults
+            if rule_engine.rule_count() == 0 {
+                load_default_rules_for_language(&mut rule_engine, language, config).await?;
+            }
+        } else {
+            return Err(WebError::bad_request("Invalid rules format"));
         }
     } else {
         // Load default rules for the language
@@ -327,6 +377,9 @@ async fn perform_code_analysis(
         },
         fix: f.fix_suggestion,
         metadata: Some(f.metadata.into_iter().map(|(k, v)| (k, serde_json::Value::String(v))).collect()),
+        metavariable_bindings: None, // Will be populated by dataflow analysis
+        constraint_matches: None, // Will be populated by constraint analysis
+        taint_flow: None, // Will be populated by taint analysis
     }).collect();
 
     // Create summary
@@ -364,10 +417,23 @@ async fn perform_code_analysis(
             }
         });
 
+    // Collect dataflow information if requested
+    let dataflow_info = request.options.as_ref()
+        .and_then(|opts| opts.enable_dataflow_analysis)
+        .unwrap_or(false)
+        .then(|| {
+            DataFlowInfo {
+                taint_flows: vec![],
+                constant_values: HashMap::new(),
+                symbol_table: HashMap::new(),
+            }
+        });
+
     Ok(AnalysisResults {
         findings: web_findings,
         summary,
         metrics,
+        dataflow_info,
     })
 }
 
@@ -404,6 +470,9 @@ async fn load_default_rules_for_language(
         Language::Php => "php",
         Language::CSharp => "csharp",
         Language::C => "c",
+        Language::Ruby => "ruby",
+        Language::Kotlin => "kotlin",
+        Language::Swift => "swift",
     };
 
     let rules_path = config.rules_directory.join(format!("{}.yaml", language_str));
@@ -562,6 +631,42 @@ rules:
       - "gets("
     message: "Use safer alternatives"
 "#.to_string(),
+        Language::Ruby => r#"
+rules:
+  - id: ruby-puts-usage
+    name: "Puts Usage"
+    description: "Detects puts statements"
+    severity: WARNING
+    confidence: HIGH
+    languages: [ruby]
+    patterns:
+      - "puts "
+    message: "Use proper logging instead of puts"
+"#.to_string(),
+        Language::Kotlin => r#"
+rules:
+  - id: kotlin-println-usage
+    name: "Println Usage"
+    description: "Detects println statements"
+    severity: WARNING
+    confidence: HIGH
+    languages: [kotlin]
+    patterns:
+      - "println("
+    message: "Use proper logging instead of println"
+"#.to_string(),
+        Language::Swift => r#"
+rules:
+  - id: swift-print-usage
+    name: "Print Usage"
+    description: "Detects print statements"
+    severity: WARNING
+    confidence: HIGH
+    languages: [swift]
+    patterns:
+      - "print("
+    message: "Use proper logging instead of print"
+"#.to_string(),
     }
 }
 
@@ -665,6 +770,7 @@ async fn perform_archive_analysis(
         findings: all_findings,
         summary,
         metrics,
+        dataflow_info: None,
     })
 }
 
@@ -927,6 +1033,51 @@ async fn perform_performance_analysis(
     }
 
     Ok(findings)
+}
+
+/// Convert analysis results to SARIF format
+pub fn convert_to_sarif(results: &AnalysisResults) -> crate::models::SarifOutput {
+    use crate::models::{
+        SarifOutput, SarifRun, SarifTool, SarifToolDriver, SarifResult, SarifMessage,
+        SarifLocation, SarifPhysicalLocation, SarifArtifactLocation, SarifRegion,
+    };
+
+    let results: Vec<SarifResult> = results.findings.iter().map(|finding| {
+        SarifResult {
+            rule_id: finding.rule_id.clone(),
+            message: SarifMessage {
+                text: finding.message.clone(),
+            },
+            locations: vec![SarifLocation {
+                physical_location: SarifPhysicalLocation {
+                    artifact_location: SarifArtifactLocation {
+                        uri: finding.location.file.clone(),
+                    },
+                    region: Some(SarifRegion {
+                        start_line: finding.location.start_line,
+                        start_column: Some(finding.location.start_column),
+                        end_line: Some(finding.location.end_line),
+                        end_column: Some(finding.location.end_column),
+                    }),
+                },
+            }],
+            level: Some(finding.severity.clone()),
+        }
+    }).collect();
+
+    SarifOutput {
+        version: "2.1.0".to_string(),
+        runs: vec![SarifRun {
+            tool: SarifTool {
+                driver: SarifToolDriver {
+                    name: "CR-SemService".to_string(),
+                    version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                    information_uri: Some("https://github.com/c2j/cr-semservice".to_string()),
+                },
+            },
+            results,
+        }],
+    }
 }
 
 /// Detect programming language from filename
