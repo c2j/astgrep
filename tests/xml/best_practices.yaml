@@ -1,0 +1,288 @@
+rules:
+  - id: xml-best-practice-001
+    name: "Missing XML Declaration"
+    description: "XML files should start with XML declaration"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-not-regex: "^\\s*<\\?xml\\s+version"
+    message: "XML file should start with <?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    fix: "Add XML declaration at the beginning of the file"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-best-practice-002
+    name: "Missing Encoding Declaration"
+    description: "XML declaration should include encoding"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<\\?xml\\s+version\\s*=\\s*[\"'][^\"']+[\"']\\s*\\?>"
+      - pattern-not-regex: "encoding\\s*=\\s*[\"']"
+    message: "XML declaration should include encoding attribute"
+    fix: "Add encoding=\"UTF-8\" to XML declaration"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-naming-convention-001
+    name: "Element Name with Spaces"
+    description: "XML element names should not contain spaces"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<[a-zA-Z][a-zA-Z0-9]*\\s+[a-zA-Z]"
+    message: "XML element names should not contain spaces - use camelCase or kebab-case"
+    fix: "Replace spaces with camelCase or kebab-case naming"
+    metadata:
+      category: best-practice
+      confidence: MEDIUM
+
+  - id: xml-empty-element-001
+    name: "Empty Element Not Self-Closing"
+    description: "Empty elements should use self-closing syntax"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<(\\w+)>\\s*</\\1>"
+    message: "Empty element should use self-closing syntax <element/>"
+    fix: "Replace <element></element> with <element/>"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-attribute-quotes-001
+    name: "Attribute Without Quotes"
+    description: "XML attribute values should be quoted"
+    severity: WARNING
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "\\w+\\s*=\\s*[^\"'\\s>][^\\s>]*"
+    message: "XML attribute values must be quoted"
+    fix: "Add quotes around attribute values"
+    metadata:
+      category: best-practice
+      confidence: HIGH
+
+  - id: xml-namespace-prefix-001
+    name: "Namespace Prefix Not Declared"
+    description: "Namespace prefixes should be declared"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<(\\w+):(\\w+)"
+      - pattern-not-regex: "xmlns:\\w+\\s*=\\s*[\"']"
+    message: "Namespace prefix used without declaration"
+    fix: "Declare namespace prefix with xmlns:prefix=\"URI\""
+    metadata:
+      category: best-practice
+      confidence: MEDIUM
+
+  - id: xml-comment-best-practice-001
+    name: "Comment Contains Double Hyphen"
+    description: "XML comments should not contain double hyphens"
+    severity: WARNING
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<!--[^-]*--[^-]"
+    message: "XML comments should not contain double hyphens (--)"
+    fix: "Remove or replace double hyphens in comments"
+    metadata:
+      category: best-practice
+      confidence: HIGH
+
+  - id: xml-cdata-usage-001
+    name: "Special Characters Without CDATA"
+    description: "Content with special characters should use CDATA"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: ">[^<]*[&<>]{3,}[^<]*<"
+      - pattern-not-regex: "<!\\[CDATA\\["
+    message: "Consider using CDATA section for content with special characters"
+    fix: "Wrap content in <![CDATA[...]]>"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-root-element-001
+    name: "Multiple Root Elements"
+    description: "XML document should have exactly one root element"
+    severity: ERROR
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "^[^<]*<\\?xml[^>]*\\?>\\s*<\\w+[^>]*>.*</\\w+>\\s*<\\w+"
+    message: "XML document must have exactly one root element"
+    fix: "Wrap multiple elements in a single root element"
+    metadata:
+      category: best-practice
+      confidence: HIGH
+
+  - id: xml-version-001
+    name: "Unsupported XML Version"
+    description: "XML version should be 1.0 or 1.1"
+    severity: WARNING
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<\\?xml\\s+version\\s*=\\s*[\"'](?!1\\.[01])[^\"']+[\"']"
+    message: "XML version should be 1.0 or 1.1"
+    fix: "Use version=\"1.0\" or version=\"1.1\""
+    metadata:
+      category: best-practice
+      confidence: HIGH
+
+  - id: xml-encoding-001
+    name: "Non-Standard Encoding"
+    description: "Prefer UTF-8 encoding for XML files"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "encoding\\s*=\\s*[\"'](?!UTF-8|utf-8)[^\"']+[\"']"
+    message: "Consider using UTF-8 encoding for better compatibility"
+    fix: "Use encoding=\"UTF-8\""
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-boolean-values-001
+    name: "Non-Standard Boolean Values"
+    description: "Use lowercase true/false for boolean values"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: ">\\s*(TRUE|FALSE|True|False|YES|NO|Yes|No|1|0)\\s*<"
+    message: "Use lowercase 'true' or 'false' for boolean values"
+    fix: "Replace with lowercase 'true' or 'false'"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-indentation-001
+    name: "Inconsistent Indentation"
+    description: "XML should have consistent indentation"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "\\n[ \\t]+<\\w+[^>]*>\\n[ \\t]{0,1}<"
+    message: "Use consistent indentation (2 or 4 spaces)"
+    fix: "Apply consistent indentation throughout the file"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-attribute-order-001
+    name: "Attributes Not Alphabetically Ordered"
+    description: "Consider ordering attributes alphabetically for consistency"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<\\w+\\s+[z-Z]\\w*\\s*=\\s*[\"'][^\"']*[\"']\\s+[a-m]\\w*\\s*="
+    message: "Consider ordering attributes alphabetically"
+    fix: "Reorder attributes alphabetically"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-long-lines-001
+    name: "Long Lines in XML"
+    description: "XML lines should not exceed 120 characters"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "^.{121,}$"
+    message: "Line exceeds 120 characters - consider breaking into multiple lines"
+    fix: "Break long lines for better readability"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-mixed-content-001
+    name: "Mixed Content Pattern"
+    description: "Avoid mixing text and child elements"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: ">\\s*\\w+[^<]*<\\w+[^>]*>[^<]*</\\w+>[^<]*\\w+\\s*<"
+    message: "Avoid mixing text content with child elements"
+    fix: "Use either text content or child elements, not both"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-default-namespace-001
+    name: "Default Namespace Usage"
+    description: "Consider using explicit namespace prefixes"
+    severity: INFO
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "xmlns\\s*=\\s*[\"']http"
+      - pattern-not-regex: "xmlns:\\w+\\s*="
+    message: "Consider using explicit namespace prefix instead of default namespace"
+    fix: "Use xmlns:prefix=\"URI\" and prefix:element syntax"
+    metadata:
+      category: best-practice
+      confidence: LOW
+
+  - id: xml-schema-location-001
+    name: "Schema Location Best Practice"
+    description: "Schema location should use HTTPS"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "schemaLocation\\s*=\\s*[\"']http://(?!www\\.w3\\.org)"
+    message: "Schema location should use HTTPS for security"
+    fix: "Replace HTTP with HTTPS in schema location"
+    metadata:
+      category: best-practice
+      confidence: MEDIUM
+
+  - id: xml-processing-instruction-001
+    name: "Processing Instruction Best Practice"
+    description: "Processing instructions should be well-formed"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<\\?\\w+[^?]*[^?]\\s*>"
+      - pattern-not-regex: "<\\?\\w+[^?]*\\?>"
+    message: "Processing instruction should end with ?>"
+    fix: "Ensure processing instruction ends with ?>"
+    metadata:
+      category: best-practice
+      confidence: MEDIUM
+
+  - id: xml-entity-reference-001
+    name: "Unescaped Special Characters"
+    description: "Special characters should be escaped or in CDATA"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: ">[^<]*[&<>][^<]*<"
+      - pattern-not-regex: "&(amp|lt|gt|quot|apos);"
+      - pattern-not-regex: "<!\\[CDATA\\["
+    message: "Special characters (&, <, >) should be escaped or wrapped in CDATA"
+    fix: "Use &amp; &lt; &gt; or wrap in <![CDATA[...]]>"
+    metadata:
+      category: best-practice
+      confidence: MEDIUM
+
