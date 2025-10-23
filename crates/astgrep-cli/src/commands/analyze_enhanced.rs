@@ -1531,7 +1531,17 @@ fn apply_rule_with_not_inside(rule: &ParsedRule, file_path: &PathBuf, source_cod
         // Check if this finding matches any NOT_REGEX pattern
         if should_include {
             for not_regex_pattern in &not_regex_patterns {
-                if is_finding_matching_regex(&finding, not_regex_pattern, source_code) {
+                // Special handling for XML namespace validation rules
+                if rule.id.contains("xml-namespace-prefix") {
+                    // Extract the prefix from the finding message or location
+                    if let Some(prefix) = extract_prefix_from_finding(&finding, source_code) {
+                        if is_xml_namespace_prefix_declared(&prefix, source_code) {
+                            info!("Finding at line {} excluded: namespace prefix '{}' is declared", finding.location.start_line, prefix);
+                            should_include = false;
+                            break;
+                        }
+                    }
+                } else if is_finding_matching_regex(&finding, not_regex_pattern, source_code) {
                     info!("Finding at line {} excluded by NOT_REGEX pattern: {}", finding.location.start_line, not_regex_pattern);
                     should_include = false;
                     break;
@@ -1782,6 +1792,76 @@ fn is_finding_matching_regex(finding: &Finding, not_regex_pattern: &str, source_
     }
 
     false
+}
+
+/// Check if a namespace prefix is declared in the XML document
+/// This is a special handler for XML namespace validation
+fn is_xml_namespace_prefix_declared(prefix: &str, source_code: &str) -> bool {
+    use regex::Regex;
+
+    // Look for xmlns:prefix= declaration anywhere in the document
+    let pattern = format!(r#"xmlns:{}[\s]*="#, regex::escape(prefix));
+    if let Ok(regex) = Regex::new(&pattern) {
+        return regex.is_match(source_code);
+    }
+    false
+}
+
+/// Extract all namespace prefixes used in XML elements
+fn extract_used_namespace_prefixes(source_code: &str) -> std::collections::HashSet<String> {
+    use regex::Regex;
+    let mut prefixes = std::collections::HashSet::new();
+
+    // Match <prefix:element patterns
+    if let Ok(regex) = Regex::new(r"<(\w+):(\w+)") {
+        for cap in regex.captures_iter(source_code) {
+            if let Some(prefix_match) = cap.get(1) {
+                prefixes.insert(prefix_match.as_str().to_string());
+            }
+        }
+    }
+
+    prefixes
+}
+
+/// Extract all declared namespace prefixes in XML
+fn extract_declared_namespace_prefixes(source_code: &str) -> std::collections::HashSet<String> {
+    use regex::Regex;
+    let mut prefixes = std::collections::HashSet::new();
+
+    // Match xmlns:prefix= declarations
+    if let Ok(regex) = Regex::new(r#"xmlns:(\w+)[\s]*="#) {
+        for cap in regex.captures_iter(source_code) {
+            if let Some(prefix_match) = cap.get(1) {
+                prefixes.insert(prefix_match.as_str().to_string());
+            }
+        }
+    }
+
+    prefixes
+}
+
+/// Extract namespace prefix from a finding location in XML
+fn extract_prefix_from_finding(finding: &Finding, source_code: &str) -> Option<String> {
+    use regex::Regex;
+
+    let lines: Vec<&str> = source_code.lines().collect();
+    let finding_line = finding.location.start_line;
+
+    if finding_line > 0 && finding_line <= lines.len() {
+        let line = lines[finding_line - 1];
+
+        // Try to extract prefix from <prefix:element pattern
+        if let Ok(regex) = Regex::new(r"<(\w+):(\w+)") {
+            if let Some(cap) = regex.captures(line) {
+                if let Some(prefix_match) = cap.get(1) {
+                    return Some(prefix_match.as_str().to_string());
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Clone)]
