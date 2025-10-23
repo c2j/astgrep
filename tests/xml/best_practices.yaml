@@ -71,19 +71,19 @@ rules:
       confidence: HIGH
 
   - id: xml-namespace-prefix-001
-    name: "Common Namespace Prefix Not Declared"
-    description: "Check for common namespace prefixes that are used but not declared"
+    name: "Undeclared Namespace Prefix"
+    description: "Detect namespace prefixes that are used but not declared in the document"
     severity: WARNING
-    confidence: HIGH
+    confidence: MEDIUM
     languages: [xml]
     patterns:
-      - pattern-regex: "<(soap|xsi|xsd|wsdl):(\\w+)"
+      - pattern-regex: "<(\\w+):(\\w+)"
       - pattern-not-regex: "xmlns:\\1\\s*="
-    message: "Namespace prefix '${1}' is commonly used but not declared"
+    message: "Namespace prefix '${1}' is used but not declared"
     fix: "Declare namespace prefix with xmlns:${1}=\"URI\""
     metadata:
       category: best-practice
-      confidence: HIGH
+      confidence: MEDIUM
 
   - id: xml-comment-best-practice-001
     name: "Comment Contains Double Hyphen"
