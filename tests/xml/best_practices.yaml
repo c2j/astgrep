@@ -92,7 +92,7 @@ rules:
     confidence: HIGH
     languages: [xml]
     patterns:
-      - pattern-regex: "<!--[^-]*--[^-]"
+      - pattern-regex: "<!--[^-]*--[^->]"
     message: "XML comments should not contain double hyphens (--)"
     fix: "Remove or replace double hyphens in comments"
     metadata:
