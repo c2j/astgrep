@@ -77,8 +77,7 @@ rules:
     confidence: MEDIUM
     languages: [xml]
     patterns:
-      - pattern-regex: "<(\\w+):(\\w+)"
-      - pattern-not-regex: "xmlns:\\w+\\s*=\\s*[\"']"
+      - pattern-regex: "<(\\w+):(\\w+)(?![^>]*xmlns:\\1)"
     message: "Namespace prefix used without declaration"
     fix: "Declare namespace prefix with xmlns:prefix=\"URI\""
     metadata:
