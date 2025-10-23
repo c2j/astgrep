@@ -113,7 +113,7 @@ rules:
 The fixed validation now provides clear, informative output:
 
 ```
-=== CR-SemService Rule Validation Results ===
+=== astgrep Rule Validation Results ===
 
 ✅ All rules are valid!
 

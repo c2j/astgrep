@@ -1,4 +1,4 @@
-# CR-SemService Validation Suite Summary
+# astgrep Validation Suite Summary
 
 **Created**: 2025-10-17 17:30  
 **Status**: ✅ Complete and Ready to Use
@@ -7,7 +7,7 @@
 
 ## 📋 Overview
 
-A comprehensive validation suite has been created to test CR-SemService functionality against real-world test cases and rules. The suite includes automated test discovery, execution, analysis, and report generation.
+A comprehensive validation suite has been created to test astgrep functionality against real-world test cases and rules. The suite includes automated test discovery, execution, analysis, and report generation.
 
 ---
 
@@ -35,7 +35,7 @@ Tests core functionality with minimal overhead:
 ### 3. **comprehensive_test_runner.py** - Full Testing
 Discovers and runs all test cases:
 - Auto-discovers YAML rules + code file pairs
-- Runs CR-SemService against each test
+- Runs astgrep against each test
 - Collects detailed metrics
 - Generates JSON report
 

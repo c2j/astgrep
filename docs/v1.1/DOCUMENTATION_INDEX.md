@@ -1,4 +1,4 @@
-# CR-SemService 文档索引
+# astgrep 文档索引
 
 **最后更新**: 2025-10-18  
 **总文档数**: 23 份
@@ -234,8 +234,8 @@
 
 ## 📞 快速链接
 
-- **项目**: CR-SemService
-- **仓库**: https://github.com/c2j/cr-semservice
+- **项目**: astgrep
+- **仓库**: https://github.com/c2j/astgrep
 - **Playground**: http://127.0.0.1:8080/playground
 - **API 文档**: http://127.0.0.1:8080/docs
 

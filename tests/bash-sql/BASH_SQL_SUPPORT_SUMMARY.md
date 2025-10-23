@@ -1,8 +1,8 @@
-# CR-SemService Bash and SQL Complete Support Implementation
+# astgrep Bash and SQL Complete Support Implementation
 
 ## Overview
 
-This document summarizes the complete implementation of Bash and SQL language support for CR-SemService based on tree-sitter parsing. The implementation provides full static code analysis capabilities for both languages with comprehensive security rule coverage.
+This document summarizes the complete implementation of Bash and SQL language support for astgrep based on tree-sitter parsing. The implementation provides full static code analysis capabilities for both languages with comprehensive security rule coverage.
 
 ## Implementation Summary
 
@@ -143,7 +143,7 @@ tests/bash-sql/
 
 ```bash
 # Analyze Bash script for security issues
-./target/debug/cr-semservice analyze \
+./target/debug/astgrep analyze \
   --config tests/bash-sql/bash_security_rules.yaml \
   script.sh
 ```
@@ -152,7 +152,7 @@ tests/bash-sql/
 
 ```bash
 # Analyze SQL file for security vulnerabilities
-./target/debug/cr-semservice analyze \
+./target/debug/astgrep analyze \
   --config tests/bash-sql/sql_security_rules.yaml \
   queries.sql
 ```
@@ -220,7 +220,7 @@ tests/bash-sql/
 1. **Memory Usage**: Tree-sitter parsing requires additional memory for AST storage
 2. **Performance**: Analysis time scales linearly with file size
 3. **Rule Maintenance**: Security rules should be regularly updated for new vulnerability patterns
-4. **Integration**: Both languages integrate seamlessly with existing CR-SemService workflow
+4. **Integration**: Both languages integrate seamlessly with existing astgrep workflow
 
 ## Future Enhancements
 
@@ -234,11 +234,11 @@ tests/bash-sql/
 
 ## Conclusion
 
-The Bash and SQL support implementation successfully extends CR-SemService's capabilities to cover two critical languages for infrastructure and data security. The implementation provides:
+The Bash and SQL support implementation successfully extends astgrep's capabilities to cover two critical languages for infrastructure and data security. The implementation provides:
 
 - **Comprehensive Coverage**: 23 security rules across both languages
 - **Excellent Performance**: Sub-second analysis for typical file sizes
 - **Production Quality**: Thoroughly tested and validated implementation
 - **Extensible Architecture**: Foundation for future language additions
 
-This implementation significantly enhances CR-SemService's value proposition for organizations needing comprehensive static analysis across diverse technology stacks, particularly in DevOps and data engineering environments where Bash scripts and SQL queries are prevalent.
+This implementation significantly enhances astgrep's value proposition for organizations needing comprehensive static analysis across diverse technology stacks, particularly in DevOps and data engineering environments where Bash scripts and SQL queries are prevalent.

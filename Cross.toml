@@ -1,0 +1,23 @@
+# Cross 交叉编译配置文件
+# 用于使用 cross 工具进行交叉编译
+
+[build]
+# 构建前执行的命令
+pre-build = []
+
+# Linux x86_64 musl 目标
+[target.x86_64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:latest"
+
+# Linux aarch64 musl 目标（ARM64）
+[target.aarch64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:latest"
+
+# Linux x86_64 gnu 目标
+[target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:latest"
+
+# Linux aarch64 gnu 目标（ARM64）
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:latest"
+

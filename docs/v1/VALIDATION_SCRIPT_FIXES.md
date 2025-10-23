@@ -22,14 +22,14 @@
 cargo run --release -- analyze ...
 
 # ✅ 正确的命令
-cargo run --release --bin cr-semservice -- analyze ...
+cargo run --release --bin astgrep -- analyze ...
 ```
 
 **错误信息**:
 ```
 error: `cargo run` could not determine which binary to run. 
 Use the `--bin` option to specify a binary, or the `default-run` manifest key.
-available binaries: cr-semservice, validate-rule
+available binaries: astgrep, validate-rule
 ```
 
 **影响的文件**:
@@ -54,7 +54,7 @@ available binaries: cr-semservice, validate-rule
 **文件**: `tests/quick_validation.py`
 
 **修改内容**:
-1. 第 114 行: 添加 `--bin cr-semservice`
+1. 第 114 行: 添加 `--bin astgrep`
 2. 第 91 行: 更新 Ruby 测试文件路径
 3. 第 104-147 行: 改进测试结果验证逻辑
 
@@ -70,7 +70,7 @@ cmd = [
 
 # 修复后
 cmd = [
-    "cargo", "run", "--release", "--bin", "cr-semservice", "--",
+    "cargo", "run", "--release", "--bin", "astgrep", "--",
     "analyze",
     str(code_file),
     "-r", str(rule_file)
@@ -82,7 +82,7 @@ cmd = [
 **文件**: `tests/comprehensive_test_runner.py`
 
 **修改内容**:
-1. 第 80 行: 添加 `--bin cr-semservice`
+1. 第 80 行: 添加 `--bin astgrep`
 
 **代码变更**:
 ```python
@@ -96,7 +96,7 @@ cmd = [
 
 # 修复后
 cmd = [
-    "cargo", "run", "--release", "--bin", "cr-semservice", "--",
+    "cargo", "run", "--release", "--bin", "astgrep", "--",
     "analyze",
     str(code_file),
     "-r", str(rule_file)
@@ -238,7 +238,7 @@ python3 -m pip install --break-system-packages pyyaml
 ```
 
 ### 问题: Cargo 二进制错误
-**解决方案**: 确保使用 `--bin cr-semservice` 指定
+**解决方案**: 确保使用 `--bin astgrep` 指定
 
 ### 问题: 文件未找到
 **解决方案**: 检查文件路径是否正确
@@ -263,6 +263,6 @@ python3 -m pip install --break-system-packages pyyaml
 ---
 
 **修复时间**: 2025-10-17 18:00  
-**修复者**: CR-SemService 开发团队  
+**修复者**: astgrep 开发团队  
 **版本**: 1.0
 

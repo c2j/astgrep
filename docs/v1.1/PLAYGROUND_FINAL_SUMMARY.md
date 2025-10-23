@@ -1,14 +1,14 @@
 # Playground 最终总结
 
 **完成日期**: 2025-10-18  
-**项目**: CR-SemService Playground 完整升级  
+**项目**: astgrep Playground 完整升级  
 **总体状态**: ✅ 完成
 
 ---
 
 ## 🎉 项目完成
 
-我已成功完成了 CR-SemService Playground 的完整升级，包括界面重新设计和功能增强。
+我已成功完成了 astgrep Playground 的完整升级，包括界面重新设计和功能增强。
 
 ---
 
@@ -126,7 +126,7 @@
 ### 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 

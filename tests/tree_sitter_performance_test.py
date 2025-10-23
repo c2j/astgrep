@@ -145,7 +145,7 @@ def run_analysis(rule_yaml, source_code, filename):
         
         # Run analysis
         cmd = [
-            "./target/debug/cr-semservice",
+            "./target/debug/astgrep",
             "analyze",
             "--config", rule_file,
             source_file

@@ -1,4 +1,4 @@
-# CR-SemService
+# astgrep
 
 A high-performance, multi-language static code analysis tool for security vulnerabilities and code quality, implemented in Rust.
 
@@ -18,8 +18,8 @@ A high-performance, multi-language static code analysis tool for security vulner
 
 ```bash
 # Clone the repository
-git clone https://github.com/c2j/cr-semservice.git
-cd cr-semservice
+git clone https://github.com/c2j/astgrep.git
+cd astgrep
 
 # Build the project
 cargo build --release
@@ -32,38 +32,38 @@ cargo install --path .
 
 ```bash
 # Analyze current directory
-cr-semservice analyze
+astgrep analyze
 
 # Analyze specific files/directories
-cr-semservice analyze src/ tests/
+astgrep analyze src/ tests/
 
 # Use specific rules
-cr-semservice analyze --rules security-rules.yml
+astgrep analyze --rules security-rules.yml
 
 # Specify languages
-cr-semservice analyze --language java --language python
+astgrep analyze --language java --language python
 
 # Output to file in SARIF format
-cr-semservice analyze --format sarif --output results.sarif
+astgrep analyze --format sarif --output results.sarif
 
 # Validate rule files
-cr-semservice validate rules/*.yml
+astgrep validate rules/*.yml
 
 # List supported languages
-cr-semservice languages
+astgrep languages
 ```
 
 ## Architecture
 
 The project is organized into several crates:
 
-- `cr-core`: Core types, traits, and error handling
-- `cr-ast`: Universal AST definitions and operations
-- `cr-rules`: Rule parsing, validation, and execution engine
-- `cr-parser`: Language parsers and adapters
-- `cr-matcher`: Pattern matching engine
-- `cr-dataflow`: Data flow and taint analysis
-- `cr-cli`: Command-line interface
+- `astgrep-core`: Core types, traits, and error handling
+- `astgrep-ast`: Universal AST definitions and operations
+- `astgrep-rules`: Rule parsing, validation, and execution engine
+- `astgrep-parser`: Language parsers and adapters
+- `astgrep-matcher`: Pattern matching engine
+- `astgrep-dataflow`: Data flow and taint analysis
+- `astgrep-cli`: Command-line interface
 
 ## Development
 
@@ -97,7 +97,7 @@ Each crate has comprehensive unit tests. Run tests with:
 cargo test
 
 # Run tests for specific crate
-cargo test -p cr-core
+cargo test -p astgrep-core
 
 # Run tests with output
 cargo test -- --nocapture
@@ -156,4 +156,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/c2j/cr-semservice).
+For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/c2j/astgrep).

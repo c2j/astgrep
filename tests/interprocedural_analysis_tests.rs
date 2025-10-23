@@ -3,7 +3,7 @@
 //! Tests for cross-function taint tracking, call graph construction,
 //! and symbol propagation.
 
-use cr_dataflow::{CallGraph, FunctionSignature, InterproceduralTaintTracker, SymbolPropagator};
+use astgrep_dataflow::{CallGraph, FunctionSignature, InterproceduralTaintTracker, SymbolPropagator};
 
 #[test]
 fn test_call_graph_creation() {
@@ -276,7 +276,7 @@ fn test_interprocedural_tracker_creation() {
     let tracker = InterproceduralTaintTracker::new(call_graph);
     
     // Verify tracker is created successfully
-    assert!(tracker.entry_taints(cr_dataflow::FunctionId(0)).is_none());
+    assert!(tracker.entry_taints(astgrep_dataflow::FunctionId(0)).is_none());
 }
 
 #[test]

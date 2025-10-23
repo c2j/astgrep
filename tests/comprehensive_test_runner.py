@@ -28,6 +28,8 @@ class TestRunner:
             "errors": []
         }
         self.test_patterns = [
+            # New Language
+            "xml",
             # New
             "sql",
             # Core test suites
@@ -246,7 +248,7 @@ class TestRunner:
 
             # Run CR-SemService
             cmd = [
-                "cargo", "run", "--release", "--bin", "cr-semservice", "--",
+                "cargo", "run", "--release", "--bin", "astgrep", "--",
                 "analyze",
                 str(code_file),
                 "-r", actual_rule_file

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appSettings>
+        <add key="DatabaseConnection" value="Server=localhost;Database=mydb;"/>
+        <add key="MaxRetries" value="3"/>
+        <add key="Timeout" value="30"/>
+    </appSettings>
+    <logging>
+        <level>INFO</level>
+        <output>console</output>
+        <format>json</format>
+    </logging>
+    <features>
+        <feature name="authentication" enabled="true"/>
+        <feature name="caching" enabled="false"/>
+        <feature name="monitoring" enabled="true"/>
+    </features>
+</configuration>
+

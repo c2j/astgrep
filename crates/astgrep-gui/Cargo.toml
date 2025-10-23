@@ -1,0 +1,50 @@
+[package]
+name = "astgrep-gui"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chen Jianjun <chenjj.yz@gmail.com>"]
+description = "GUI playground for astgrep static code analysis tool"
+license = "MIT"
+
+[[bin]]
+name = "astgrep-gui"
+path = "src/main.rs"
+
+[dependencies]
+# Internal crates
+astgrep-core = { path = "../astgrep-core" }
+astgrep-ast = { path = "../astgrep-ast" }
+astgrep-matcher = { path = "../astgrep-matcher" }
+astgrep-parser = { path = "../astgrep-parser" }
+astgrep-dataflow = { path = "../astgrep-dataflow" }
+astgrep-rules = { path = "../astgrep-rules" }
+
+# GUI framework
+eframe = { workspace = true }
+egui = { workspace = true }
+egui_extras = { workspace = true }
+rfd = { workspace = true }
+
+# Syntax highlighting
+syntect = { workspace = true }
+
+# Core dependencies
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Async and concurrency
+tokio = { workspace = true }
+
+# Utilities
+regex = { workspace = true }
+once_cell = { workspace = true }
+
+# Additional dependencies for GUI
+webbrowser = { workspace = true }
+chrono = { workspace = true }
+sys-info = { workspace = true }

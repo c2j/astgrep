@@ -11,7 +11,7 @@
 ### 原始界面布局
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                    │
+│ Header: astgrep Playground                    │
 ├──────────────────────┬──────────────────────────────┤
 │ Code | File          │ Results | Metadata | Docs    │
 ├──────────────────────┼──────────────────────────────┤
@@ -30,7 +30,7 @@
 ### 目标界面布局
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                    │
+│ Header: astgrep Playground                    │
 ├──────────────────────┬──────────────────────────────┤
 │ simple | advanced    │ test code | metadata | docs  │
 ├──────────────────────┼──────────────────────────────┤
@@ -221,7 +221,7 @@ button[onclick="analyzeCode()"] {
 ### 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 

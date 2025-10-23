@@ -2,10 +2,10 @@
 //!
 //! Comprehensive tests for Phase 4: Complete Compatibility features
 
-use cr_dataflow::constant_propagation::{ConstantValue, ConstantPropagator};
-use cr_dataflow::constant_analysis::{ConstantAnalyzer, ConstantInfo};
-use cr_rules::marketplace::{MarketplaceRule, RuleMarketplace};
-use cr_cli::vscode_integration::{VsCodeDiagnostic, VsCodeExtension};
+use astgrep_dataflow::constant_propagation::{ConstantValue, ConstantPropagator};
+use astgrep_dataflow::constant_analysis::{ConstantAnalyzer, ConstantInfo};
+use astgrep_rules::marketplace::{MarketplaceRule, RuleMarketplace};
+use astgrep_cli::vscode_integration::{VsCodeDiagnostic, VsCodeExtension};
 
 #[test]
 fn test_phase4_constant_propagation_integration() {

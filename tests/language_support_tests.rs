@@ -2,8 +2,8 @@
 //!
 //! Tests for verifying that Ruby, Kotlin, and Swift parsers are properly integrated.
 
-use cr_core::Language;
-use cr_parser::ParserFactory;
+use astgrep_core::Language;
+use astgrep_parser::ParserFactory;
 use std::path::Path;
 
 #[test]

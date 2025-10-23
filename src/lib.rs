@@ -4,44 +4,44 @@
 //! with advanced pattern matching, taint analysis, and language-specific optimizations.
 
 // Re-export core functionality
-pub use cr_core as core;
-pub use cr_ast as ast;
-pub use cr_matcher as matcher;
-pub use cr_parser as parser;
-pub use cr_dataflow as dataflow;
-pub use cr_dataflow::{
+pub use astgrep_core as core;
+pub use astgrep_ast as ast;
+pub use astgrep_matcher as matcher;
+pub use astgrep_parser as parser;
+pub use astgrep_dataflow as dataflow;
+pub use astgrep_dataflow::{
     EnhancedTaintTracker, DataFlowGraph, DataFlowNode, EdgeType,
     Source, SourceType, Sink, SinkType, Sanitizer
 };
-pub use cr_rules as rules;
-pub use cr_cli as cli;
+pub use astgrep_rules as rules;
+pub use astgrep_cli as cli;
 
 // Re-export commonly used types for convenience
-pub use cr_core::{
+pub use astgrep_core::{
     Language, Severity, Confidence, Location,
     SemgrepPattern, PatternType, AstNode, Result,
     Condition, MetavariableRegex, MetavariableComparison, ComparisonOperator
 };
 
-pub use cr_ast::{UniversalNode, NodeType};
+pub use astgrep_ast::{UniversalNode, NodeType};
 
-pub use cr_matcher::{
+pub use astgrep_matcher::{
     AdvancedSemgrepMatcher, PreciseExpressionMatcher, 
     MatchingConfig, MatchResult
 };
 
-pub use cr_parser::{
+pub use astgrep_parser::{
     php_optimizer::PhpOptimizer,
     javascript_optimizer::JavaScriptOptimizer,
     LanguageParserRegistry,
     tree_sitter_parser::TreeSitterParser
 };
 
-pub use cr_dataflow::{
+pub use astgrep_dataflow::{
     TaintAnalysisConfig, SanitizerType
 };
 
-pub use cr_rules::{
+pub use astgrep_rules::{
     Rule, Pattern, RuleEngine, RuleValidator
 };
 
@@ -62,7 +62,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// # Examples
 /// 
 /// ```rust
-/// use cr_semservice::{
+/// use astgrep::{
 ///     AdvancedSemgrepMatcher, SemgrepPattern, PatternType,
 ///     UniversalNode, NodeType
 /// };

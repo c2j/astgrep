@@ -1,4 +1,4 @@
-//! Test utilities and mock implementations for CR-SemService
+//! Test utilities and mock implementations for astgrep
 //! 
 //! This crate contains all mock implementations and test utilities that were
 //! previously scattered throughout the production code. This separation ensures
@@ -19,7 +19,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cr_core::{AstNode, LanguageParser};
+    use astgrep_core::{AstNode, LanguageParser};
 
     #[test]
     fn test_mock_ast_node_creation() {
@@ -30,7 +30,7 @@ mod tests {
 
     #[test]
     fn test_mock_parser_creation() {
-        let parser = MockParser::new(cr_core::Language::Java);
-        assert_eq!(parser.language(), cr_core::Language::Java);
+        let parser = MockParser::new(astgrep_core::Language::Java);
+        assert_eq!(parser.language(), astgrep_core::Language::Java);
     }
 }

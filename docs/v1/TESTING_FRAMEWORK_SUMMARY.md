@@ -1,4 +1,4 @@
-# CR-SemService Testing Framework Summary
+# astgrep Testing Framework Summary
 
 **Created**: 2025-10-17 17:30  
 **Status**: ✅ Complete and Production-Ready
@@ -7,7 +7,7 @@
 
 ## 🎯 Executive Summary
 
-A comprehensive, production-ready testing and validation framework has been created for CR-SemService. The framework enables automated testing of the project's functionality against real-world test cases, with detailed reporting and analysis capabilities.
+A comprehensive, production-ready testing and validation framework has been created for astgrep. The framework enables automated testing of the project's functionality against real-world test cases, with detailed reporting and analysis capabilities.
 
 ---
 
@@ -36,7 +36,7 @@ A comprehensive, production-ready testing and validation framework has been crea
 - Discovers 700+ test cases automatically
 
 ### ✅ Comprehensive Testing
-- Runs CR-SemService against each test case
+- Runs astgrep against each test case
 - Collects detailed metrics and results
 - Handles timeouts and errors gracefully
 - Supports all pattern types (pattern-either, pattern-not, etc.)
@@ -389,7 +389,7 @@ self.test_patterns = [
 
 ## 🏆 Summary
 
-The CR-SemService Testing Framework provides:
+The astgrep Testing Framework provides:
 - ✅ Automated test discovery and execution
 - ✅ Comprehensive analysis and reporting
 - ✅ Multiple output formats

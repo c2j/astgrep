@@ -1,8 +1,8 @@
-# CR-SemService 代码审查报告
+# astgrep 代码审查报告
 
 ## 执行摘要
 
-**审查范围**: CR-SemService 项目的 `src` 和 `crates` 目录
+**审查范围**: astgrep 项目的 `src` 和 `crates` 目录
 **审查日期**: 2025-08-09
 **审查者**: 资深开发经理
 
@@ -22,7 +22,7 @@
 
 ## 概述
 
-本报告对 CR-SemService 项目的 `src` 和 `crates` 目录下的代码进行了全面审查，重点关注以下问题：
+本报告对 astgrep 项目的 `src` 和 `crates` 目录下的代码进行了全面审查，重点关注以下问题：
 - Mock 代码和测试桩
 - 硬编码值
 - 重复代码模式
@@ -82,7 +82,7 @@ for lang in [Language::Java, Language::JavaScript, Language::Python, Language::S
 // crates/cr-cli/src/commands/init.rs (行 40-74)
 fn generate_default_config() -> String {
     format!(
-        "# CR-SemService Configuration File\n\
+        "# astgrep Configuration File\n\
         verbose = false\n\
         threads = 0\n\
         // 大量硬编码配置
@@ -609,7 +609,7 @@ impl AstAdapter for JavaAdapter {
         AdapterMetadata {
             name: "Java Adapter".to_string(),
             version: "1.0.0".to_string(),
-            description: "Java language adapter for CR-SemService".to_string(),
+            description: "Java language adapter for astgrep".to_string(),
             supported_features: vec!["basic_parsing".to_string()],
         }
     }

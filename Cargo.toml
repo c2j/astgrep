@@ -1,38 +1,38 @@
 [package]
-name = "cr-semservice"
+name = "astgrep"
 version = "0.1.0"
 edition = "2021"
 authors = ["Chen Jianjun <chenjj.yz@gmail.com>"]
 description = "A multi-language static code analysis tool for security vulnerabilities and code quality"
 license = "MIT"
-repository = "https://github.com/c2j/cr-semservice"
+repository = "https://github.com/c2j/astgrep"
 keywords = ["static-analysis", "security", "code-quality", "ast", "vulnerability"]
 categories = ["development-tools", "command-line-utilities"]
 
 [workspace]
 members = [
-    "crates/cr-ast",
-    "crates/cr-rules",
-    "crates/cr-parser",
-    "crates/cr-matcher",
-    "crates/cr-dataflow",
-    "crates/cr-cli",
-    "crates/cr-core",
-    "crates/cr-web",
-    "crates/cr-gui",
+    "crates/astgrep-ast",
+    "crates/astgrep-rules",
+    "crates/astgrep-parser",
+    "crates/astgrep-matcher",
+    "crates/astgrep-dataflow",
+    "crates/astgrep-cli",
+    "crates/astgrep-core",
+    "crates/astgrep-web",
+    "crates/astgrep-gui",
     "crates/test-utils",
 ]
 
 [dependencies]
 regex = "1.11.1"
 # Internal crates
-cr-core = { path = "crates/cr-core" }
-cr-ast = { path = "crates/cr-ast" }
-cr-matcher = { path = "crates/cr-matcher" }
-cr-parser = { path = "crates/cr-parser" }
-cr-dataflow = { path = "crates/cr-dataflow" }
-cr-rules = { path = "crates/cr-rules" }
-cr-cli = { path = "crates/cr-cli" }
+astgrep-core = { path = "crates/astgrep-core" }
+astgrep-ast = { path = "crates/astgrep-ast" }
+astgrep-matcher = { path = "crates/astgrep-matcher" }
+astgrep-parser = { path = "crates/astgrep-parser" }
+astgrep-dataflow = { path = "crates/astgrep-dataflow" }
+astgrep-rules = { path = "crates/astgrep-rules" }
+astgrep-cli = { path = "crates/astgrep-cli" }
 
 # External dependencies
 anyhow.workspace = true
@@ -51,6 +51,9 @@ anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# OpenSSL with vendored feature for static linking
+openssl = { version = "0.10", features = ["vendored"] }
 
 # Async and concurrency
 tokio = { version = "1.0", features = ["full"] }
@@ -92,12 +95,8 @@ criterion = { version = "0.5", features = ["html_reports"] }
 # Main dependencies are already defined above
 
 [[bin]]
-name = "cr-semservice"
+name = "astgrep"
 path = "src/main.rs"
-
-[[bin]]
-name = "validate-rule"
-path = "examples/validate_rule.rs"
 
 [dev-dependencies]
 criterion.workspace = true

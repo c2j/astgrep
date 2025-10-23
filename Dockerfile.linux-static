@@ -1,0 +1,102 @@
+# Dockerfile for building static Linux binaries
+# Multi-stage build for minimal final image
+
+# ============================================
+# Stage 1: Builder
+# ============================================
+FROM rust:1.87-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    musl-dev \
+    gcc \
+    g++ \
+    make \
+    pkgconfig \
+    openssl-dev \
+    openssl-libs-static \
+    perl \
+    linux-headers
+
+# Set working directory
+WORKDIR /build
+
+# Copy dependency files first for better caching
+COPY Cargo.toml Cargo.lock ./
+COPY crates/astgrep-ast/Cargo.toml crates/astgrep-ast/
+COPY crates/astgrep-rules/Cargo.toml crates/astgrep-rules/
+COPY crates/astgrep-parser/Cargo.toml crates/astgrep-parser/
+COPY crates/astgrep-matcher/Cargo.toml crates/astgrep-matcher/
+COPY crates/astgrep-dataflow/Cargo.toml crates/astgrep-dataflow/
+COPY crates/astgrep-cli/Cargo.toml crates/astgrep-cli/
+COPY crates/astgrep-core/Cargo.toml crates/astgrep-core/
+COPY crates/astgrep-web/Cargo.toml crates/astgrep-web/
+COPY crates/test-utils/Cargo.toml crates/test-utils/
+
+# Create dummy source files to cache dependencies
+RUN mkdir -p src crates/astgrep-ast/src crates/astgrep-rules/src \
+    crates/astgrep-parser/src crates/astgrep-matcher/src \
+    crates/astgrep-dataflow/src crates/astgrep-cli/src \
+    crates/astgrep-core/src crates/astgrep-web/src \
+    crates/test-utils/src && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-ast/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-rules/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-parser/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-matcher/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-dataflow/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-cli/src/lib.rs && \
+    echo "fn main() {}" > crates/astgrep-cli/src/main.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-core/src/lib.rs && \
+    echo "pub fn dummy() {}" > crates/astgrep-web/src/lib.rs && \
+    echo "fn main() {}" > crates/astgrep-web/src/main.rs && \
+    echo "pub fn dummy() {}" > crates/test-utils/src/lib.rs
+
+# Build dependencies (this layer will be cached)
+RUN cargo build --release --target x86_64-unknown-linux-musl && \
+    rm -rf src crates/*/src
+
+# Copy actual source code
+COPY . .
+
+# Build the actual binaries with static linking
+ENV RUSTFLAGS="-C target-feature=+crt-static"
+RUN cargo build --release --target x86_64-unknown-linux-musl -p astgrep && \
+    cargo build --release --target x86_64-unknown-linux-musl -p astgrep-cli && \
+    cargo build --release --target x86_64-unknown-linux-musl -p astgrep-web
+
+# Strip binaries to reduce size
+RUN strip target/x86_64-unknown-linux-musl/release/astgrep && \
+    strip target/x86_64-unknown-linux-musl/release/astgrep-cli && \
+    strip target/x86_64-unknown-linux-musl/release/astgrep-web
+
+# ============================================
+# Stage 2: Runtime (minimal)
+# ============================================
+FROM scratch AS runtime
+
+# Copy binaries from builder
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep /usr/local/bin/astgrep
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-cli /usr/local/bin/astgrep-cli
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-web /usr/local/bin/astgrep-web
+
+# Set entrypoint
+ENTRYPOINT ["/usr/local/bin/astgrep"]
+
+# ============================================
+# Stage 3: Export (for extracting binaries)
+# ============================================
+FROM alpine:latest AS export
+
+# Copy binaries from builder
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep /export/astgrep
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-cli /export/astgrep-cli
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-web /export/astgrep-web
+
+# Create tarball
+WORKDIR /export
+RUN tar czf /astgrep-linux-x86_64.tar.gz *
+
+# Default stage is runtime
+FROM runtime
+

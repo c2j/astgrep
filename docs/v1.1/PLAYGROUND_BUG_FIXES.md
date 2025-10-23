@@ -259,7 +259,7 @@ panelBody.querySelectorAll('.tab-content').forEach(el =>
 ### 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 

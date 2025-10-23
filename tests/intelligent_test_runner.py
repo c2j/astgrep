@@ -32,7 +32,7 @@ def run_semgrep(config_file: str, target_file: str) -> Tuple[List[Dict], str]:
 def run_cr_semservice(config_file: str, target_file: str) -> Tuple[List[Dict], str]:
     """运行CR-SemService并返回结果"""
     try:
-        cmd = ["cargo", "run", "--bin", "cr-semservice", "analyze", 
+        cmd = ["cargo", "run", "--bin", "astgrep", "analyze", 
                "--config", config_file, target_file]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         

@@ -112,9 +112,9 @@
   "runs": [{
     "tool": {
       "driver": {
-        "name": "CR-SemService",
+        "name": "astgrep",
         "version": "0.1.0",
-        "information_uri": "https://github.com/c2j/cr-semservice"
+        "information_uri": "https://github.com/c2j/astgrep"
       }
     },
     "results": [...]

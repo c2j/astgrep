@@ -12,7 +12,7 @@ from pathlib import Path
 def run_cr_analysis(rule_file, target_file):
     """Run CR-SemService analysis"""
     cmd = [
-        "./target/debug/cr-semservice",
+        "./target/debug/astgrep",
         "analyze",
         "--config", rule_file,
         target_file
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     print("🚀 Running enhanced features tests...")
     
     # Check if binary exists
-    if not os.path.exists("./target/debug/cr-semservice"):
+    if not os.path.exists("./target/debug/astgrep"):
         print("❌ Binary not found. Please build the project first:")
         print("   cargo build")
         sys.exit(1)

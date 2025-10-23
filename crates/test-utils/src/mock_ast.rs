@@ -1,7 +1,7 @@
 //! Mock AST node implementations for testing
 
-use cr_core::AstNode;
-use cr_ast::{UniversalNode, NodeType};
+use astgrep_core::AstNode;
+use astgrep_ast::{UniversalNode, NodeType};
 
 /// Mock AST node for testing purposes
 #[derive(Clone, Debug)]

@@ -1,0 +1,7 @@
+rules:
+  - id: java-thread
+    languages: [java]
+    message: "自主线程"
+    patterns:
+      - pattern: '$thread.start()'
+    severity: ERROR

@@ -2,8 +2,8 @@
 //!
 //! Tests for verifying that constant propagation and analysis features work correctly.
 
-use cr_dataflow::constant_propagation::{ConstantPropagator, ConstantValue};
-use cr_dataflow::constant_analysis::{ConstantAnalyzer, ConstantInfo};
+use astgrep_dataflow::constant_propagation::{ConstantPropagator, ConstantValue};
+use astgrep_dataflow::constant_analysis::{ConstantAnalyzer, ConstantInfo};
 
 #[test]
 fn test_constant_value_string() {

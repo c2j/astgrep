@@ -1,4 +1,4 @@
-# CR-SemService Playground 使用指南
+# astgrep Playground 使用指南
 
 **功能**: 交互式 API 测试和代码分析工具  
 **访问地址**: http://127.0.0.1:8080/playground  
@@ -11,7 +11,7 @@
 ### 1. 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 

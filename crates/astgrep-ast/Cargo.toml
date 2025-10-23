@@ -1,0 +1,13 @@
+[package]
+name = "astgrep-ast"
+version = "0.1.0"
+edition = "2021"
+description = "Universal AST definitions for astgrep"
+
+[dependencies]
+astgrep-core = { path = "../astgrep-core" }
+serde.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"

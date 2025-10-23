@@ -1,0 +1,266 @@
+rules:
+  - id: xml-xxe-001
+    name: "XXE - External Entity Declaration"
+    description: "Detects XML External Entity (XXE) vulnerability through ENTITY declarations"
+    severity: ERROR
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<!ENTITY\\s+\\w+\\s+SYSTEM\\s+[\"']"
+      - pattern-regex: "<!ENTITY\\s+\\w+\\s+PUBLIC\\s+[\"']"
+    message: "XML External Entity (XXE) vulnerability detected - external entity declaration found"
+    fix: "Disable external entity processing in XML parser configuration"
+    metadata:
+      category: security
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      owasp: "A05:2021 - Security Misconfiguration"
+      confidence: HIGH
+
+  - id: xml-xxe-002
+    name: "XXE - Parameter Entity"
+    description: "Detects parameter entity declarations that can lead to XXE"
+    severity: ERROR
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<!ENTITY\\s+%\\s*\\w+\\s+SYSTEM"
+      - pattern-regex: "<!ENTITY\\s+%\\s*\\w+\\s+PUBLIC"
+    message: "Parameter entity XXE vulnerability detected"
+    fix: "Disable DTD processing and external entity resolution"
+    metadata:
+      category: security
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      owasp: "A05:2021 - Security Misconfiguration"
+      confidence: HIGH
+
+  - id: xml-hardcoded-credentials-001
+    name: "Hardcoded Credentials in XML"
+    description: "Detects hardcoded passwords in XML configuration files"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<password>(?!\\$\\{|\\*+|x+)[^<]{3,}</password>"
+      - pattern-regex: "<passwd>(?!\\$\\{|\\*+|x+)[^<]{3,}</passwd>"
+      - pattern-regex: "password\\s*=\\s*[\"'](?!\\$\\{|\\*+|x+)[^\"']{3,}[\"']"
+    message: "Hardcoded password detected in XML configuration"
+    fix: "Use environment variables or secure credential management systems"
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      confidence: MEDIUM
+
+  - id: xml-hardcoded-credentials-002
+    name: "Hardcoded API Keys in XML"
+    description: "Detects hardcoded API keys or tokens in XML"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<apiKey>[A-Za-z0-9_\\-]{20,}</apiKey>"
+      - pattern-regex: "<api_key>[A-Za-z0-9_\\-]{20,}</api_key>"
+      - pattern-regex: "<token>[A-Za-z0-9_\\-]{20,}</token>"
+      - pattern-regex: "<secret>[A-Za-z0-9_\\-]{20,}</secret>"
+    message: "Hardcoded API key or token detected in XML"
+    fix: "Store sensitive credentials in secure vaults or environment variables"
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      confidence: MEDIUM
+
+  - id: xml-insecure-protocol-001
+    name: "Insecure HTTP Protocol"
+    description: "Detects usage of insecure HTTP protocol in XML configurations"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "http://(?!localhost|127\\.0\\.0\\.1|example\\.com)"
+      - pattern-not-regex: "xmlns:?\\w*\\s*=\\s*[\"']http://"
+    message: "Insecure HTTP protocol detected - use HTTPS instead"
+    fix: "Replace HTTP URLs with HTTPS for secure communication"
+    metadata:
+      category: security
+      cwe: "CWE-319: Cleartext Transmission of Sensitive Information"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: MEDIUM
+
+  - id: xml-xpath-injection-001
+    name: "XPath Injection Risk"
+    description: "Detects potential XPath injection vulnerabilities"
+    severity: WARNING
+    confidence: LOW
+    languages: [xml]
+    patterns:
+      - pattern-regex: "\\[@\\w+\\s*=\\s*[\"']\\s*\\+\\s*"
+      - pattern-regex: "\\[@\\w+\\s*=\\s*concat\\("
+    message: "Potential XPath injection vulnerability"
+    fix: "Use parameterized XPath queries or input validation"
+    metadata:
+      category: security
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+      owasp: "A03:2021 - Injection"
+      confidence: LOW
+
+  - id: xml-debug-enabled-001
+    name: "Debug Mode Enabled"
+    description: "Detects debug mode enabled in XML configuration"
+    severity: WARNING
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<debug>\\s*true\\s*</debug>"
+      - pattern-regex: "debug\\s*=\\s*[\"']true[\"']"
+      - pattern-regex: "<debugMode>\\s*true\\s*</debugMode>"
+    message: "Debug mode is enabled in configuration"
+    fix: "Disable debug mode in production environments"
+    metadata:
+      category: security
+      cwe: "CWE-489: Active Debug Code"
+      owasp: "A05:2021 - Security Misconfiguration"
+      confidence: HIGH
+
+  - id: xml-verbose-errors-001
+    name: "Verbose Error Messages"
+    description: "Detects verbose error message configuration"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<displayErrors>\\s*true\\s*</displayErrors>"
+      - pattern-regex: "<showExceptions>\\s*true\\s*</showExceptions>"
+      - pattern-regex: "displayErrors\\s*=\\s*[\"']true[\"']"
+    message: "Verbose error messages enabled - may leak sensitive information"
+    fix: "Disable detailed error messages in production"
+    metadata:
+      category: security
+      cwe: "CWE-209: Generation of Error Message Containing Sensitive Information"
+      owasp: "A05:2021 - Security Misconfiguration"
+      confidence: MEDIUM
+
+  - id: xml-wildcard-cors-001
+    name: "Wildcard CORS Configuration"
+    description: "Detects wildcard (*) in CORS configuration"
+    severity: WARNING
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<allowedOrigins?>\\s*\\*\\s*</allowedOrigins?>"
+      - pattern-regex: "allowedOrigin\\s*=\\s*[\"']\\*[\"']"
+      - pattern-regex: "<Access-Control-Allow-Origin>\\s*\\*\\s*</Access-Control-Allow-Origin>"
+    message: "Wildcard CORS configuration detected - allows any origin"
+    fix: "Specify explicit allowed origins instead of using wildcard"
+    metadata:
+      category: security
+      cwe: "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"
+      owasp: "A05:2021 - Security Misconfiguration"
+      confidence: HIGH
+
+  - id: xml-sql-connection-string-001
+    name: "SQL Connection String in XML"
+    description: "Detects SQL connection strings with embedded credentials"
+    severity: ERROR
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<connectionString>.*password\\s*=\\s*[^;]+.*</connectionString>"
+      - pattern-regex: "connectionString\\s*=\\s*[\"'].*password\\s*=\\s*[^;\"']+.*[\"']"
+    message: "SQL connection string with embedded password detected"
+    fix: "Use integrated authentication or store credentials securely"
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      confidence: MEDIUM
+
+  - id: xml-weak-encryption-001
+    name: "Weak Encryption Algorithm"
+    description: "Detects usage of weak encryption algorithms"
+    severity: WARNING
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<algorithm>\\s*(DES|RC4|MD5|SHA1)\\s*</algorithm>"
+      - pattern-regex: "algorithm\\s*=\\s*[\"'](DES|RC4|MD5|SHA1)[\"']"
+      - pattern-regex: "<encryption>\\s*(DES|RC4)\\s*</encryption>"
+    message: "Weak encryption algorithm detected"
+    fix: "Use strong encryption algorithms like AES-256, SHA-256, or SHA-3"
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+
+  - id: xml-file-upload-path-001
+    name: "Unrestricted File Upload Path"
+    description: "Detects unrestricted file upload paths"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<uploadPath>\\s*/tmp\\s*</uploadPath>"
+      - pattern-regex: "<uploadDir>\\s*/var/tmp\\s*</uploadDir>"
+      - pattern-regex: "uploadPath\\s*=\\s*[\"']/tmp[\"']"
+    message: "File upload to world-writable directory detected"
+    fix: "Use application-specific upload directory with proper permissions"
+    metadata:
+      category: security
+      cwe: "CWE-434: Unrestricted Upload of File with Dangerous Type"
+      owasp: "A04:2021 - Insecure Design"
+      confidence: MEDIUM
+
+  - id: xml-session-timeout-001
+    name: "Long Session Timeout"
+    description: "Detects excessively long session timeout values"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<sessionTimeout>\\s*[3-9]\\d{3,}\\s*</sessionTimeout>"
+      - pattern-regex: "sessionTimeout\\s*=\\s*[\"'][3-9]\\d{3,}[\"']"
+    message: "Session timeout is too long (>3600 seconds)"
+    fix: "Set session timeout to reasonable value (e.g., 1800 seconds)"
+    metadata:
+      category: security
+      cwe: "CWE-613: Insufficient Session Expiration"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      confidence: MEDIUM
+
+  - id: xml-ssl-disabled-001
+    name: "SSL/TLS Disabled"
+    description: "Detects disabled SSL/TLS configuration"
+    severity: ERROR
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<ssl>\\s*false\\s*</ssl>"
+      - pattern-regex: "<enableSSL>\\s*false\\s*</enableSSL>"
+      - pattern-regex: "ssl\\s*=\\s*[\"']false[\"']"
+    message: "SSL/TLS is disabled in configuration"
+    fix: "Enable SSL/TLS for secure communication"
+    metadata:
+      category: security
+      cwe: "CWE-319: Cleartext Transmission of Sensitive Information"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+
+  - id: xml-certificate-validation-disabled-001
+    name: "Certificate Validation Disabled"
+    description: "Detects disabled certificate validation"
+    severity: ERROR
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - pattern-regex: "<validateCertificate>\\s*false\\s*</validateCertificate>"
+      - pattern-regex: "<verifyCert>\\s*false\\s*</verifyCert>"
+      - pattern-regex: "validateCertificate\\s*=\\s*[\"']false[\"']"
+    message: "Certificate validation is disabled"
+    fix: "Enable certificate validation to prevent MITM attacks"
+    metadata:
+      category: security
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: "A02:2021 - Cryptographic Failures"
+      confidence: HIGH
+

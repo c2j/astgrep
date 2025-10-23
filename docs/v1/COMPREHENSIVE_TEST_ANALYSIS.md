@@ -248,5 +248,5 @@ bash tests/validate.sh full
 ---
 
 **版本**: 1.0  
-**作者**: CR-SemService 开发团队
+**作者**: astgrep 开发团队
 

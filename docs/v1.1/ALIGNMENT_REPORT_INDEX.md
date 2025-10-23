@@ -242,10 +242,10 @@ API 端点:     ████████████████████ 100
 ## 📞 相关资源
 
 ### 项目信息
-- **项目名**: CR-SemService
+- **项目名**: astgrep
 - **作者**: Chen Jianjun
 - **邮箱**: chenjj.yz@gmail.com
-- **仓库**: https://github.com/c2j/cr-semservice
+- **仓库**: https://github.com/c2j/astgrep
 
 ### 核心模块
 - **cr-service**: 核心分析引擎

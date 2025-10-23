@@ -1,8 +1,8 @@
-# 🎯 CR-SemService: Semgrep Compatibility Achievement
+# 🎯 astgrep: Semgrep Compatibility Achievement
 
 ## 🏆 Perfect Compatibility Achieved!
 
-CR-SemService has successfully achieved **100% compatibility** with Semgrep, the industry-standard static analysis tool. Our enhanced implementation produces identical results while offering significant performance improvements and additional features.
+astgrep has successfully achieved **100% compatibility** with Semgrep, the industry-standard static analysis tool. Our enhanced implementation produces identical results while offering significant performance improvements and additional features.
 
 ## 📊 Compatibility Test Results
 
@@ -24,7 +24,7 @@ CR-SemService has successfully achieved **100% compatibility** with Semgrep, the
 ```bash
 # Clone and build
 git clone <repository>
-cd cr-semservice
+cd astgrep
 cargo build
 
 # Run compatibility tests
@@ -37,7 +37,7 @@ cargo run --example test_comparison
 ### Expected Output
 
 ```
-🔍 Testing CR-SemService against Semgrep results
+🔍 Testing astgrep against Semgrep results
 ================================================
 
 Test 1: String Match
@@ -115,7 +115,7 @@ Our Universal AST correctly handles:
 
 ## 📈 Performance Comparison
 
-| Metric | CR-SemService | Semgrep | Improvement |
+| Metric | astgrep | Semgrep | Improvement |
 |--------|---------------|---------|-------------|
 | **Speed** | ~50-120ms | ~900-1200ms | **10-18x faster** |
 | **Memory** | ~15MB | ~70MB | **4.7x less** |
@@ -156,7 +156,7 @@ Our Universal AST correctly handles:
 
 ### Modular Design
 ```
-cr-semservice/
+astgrep/
 ├── crates/
 │   ├── cr-core/          # Core analysis engine
 │   ├── cr-ast/           # Universal AST implementation
@@ -200,19 +200,19 @@ cr-semservice/
 
 ## 🎉 Conclusion
 
-CR-SemService represents a **significant advancement** in static analysis tooling:
+astgrep represents a **significant advancement** in static analysis tooling:
 
 - ✅ **100% Semgrep Compatibility**: Drop-in replacement capability
 - 🚀 **Superior Performance**: 10-18x speed improvement
 - 🔧 **Enhanced Features**: Additional analysis capabilities
 - 🏭 **Production Ready**: Comprehensive testing and validation
 
-The enhanced CR-SemService can serve as a **high-performance alternative** to Semgrep while maintaining perfect compatibility and adding powerful new features for advanced security analysis.
+The enhanced astgrep can serve as a **high-performance alternative** to Semgrep while maintaining perfect compatibility and adding powerful new features for advanced security analysis.
 
 ---
 
 **Compatibility Verified**: 2025-08-06  
-**CR-SemService Version**: 0.1.0  
+**astgrep Version**: 0.1.0  
 **Semgrep Version Tested**: 1.131.0  
 **Test Coverage**: 4 core compatibility tests  
 **Result**: ✅ **100% COMPATIBLE**

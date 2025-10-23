@@ -1,4 +1,4 @@
-# CR-SemService Playground 实现总结
+# astgrep Playground 实现总结
 
 **完成日期**: 2025-10-18  
 **功能**: 交互式 API 测试和代码分析工具  

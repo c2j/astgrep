@@ -1,4 +1,4 @@
-# CR-SemService .sgrep 支持最终报告
+# astgrep .sgrep 支持最终报告
 
 **报告时间**: 2025-10-17 21:00  
 **执行状态**: ✅ 完成 - 2443 个测试，100% 通过率
@@ -7,7 +7,7 @@
 
 ## 🎉 **Semgrep 兼容性完成！**
 
-CR-SemService 现已完全支持 Semgrep 兼容的 `.sgrep` 模式文件，实现了与 Semgrep 的完整兼容性。
+astgrep 现已完全支持 Semgrep 兼容的 `.sgrep` 模式文件，实现了与 Semgrep 的完整兼容性。
 
 ---
 
@@ -94,7 +94,7 @@ Quality Score: 100.0/100
    ↓
 5. 生成临时 YAML 规则文件
    ↓
-6. 运行 CR-SemService 分析
+6. 运行 astgrep 分析
    ↓
 7. 清理临时文件
    ↓
@@ -167,7 +167,7 @@ Quality Score: 100.0/100
 
 ## 🎉 **结论**
 
-CR-SemService 现已完全支持 Semgrep 兼容的 `.sgrep` 模式文件，实现了与 Semgrep 的完整兼容性。测试覆盖范围从 545 个扩展到 **2443 个**，通过率达到 **100%**。框架已准备好用于生产环境。
+astgrep 现已完全支持 Semgrep 兼容的 `.sgrep` 模式文件，实现了与 Semgrep 的完整兼容性。测试覆盖范围从 545 个扩展到 **2443 个**，通过率达到 **100%**。框架已准备好用于生产环境。
 
 ### 最终统计
 - **总测试数**: 2443

@@ -1,0 +1,25 @@
+[package]
+name = "astgrep-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core types and traits for astgrep static code analysis"
+
+[dependencies]
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"
+criterion = { version = "0.5", features = ["html_reports"] }
+astgrep-ast = { path = "../astgrep-ast" }
+astgrep-matcher = { path = "../astgrep-matcher" }
+astgrep-dataflow = { path = "../astgrep-dataflow" }
+astgrep-rules = { path = "../astgrep-rules" }
+
+[[bench]]
+name = "performance"
+harness = false

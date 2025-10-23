@@ -213,10 +213,10 @@ API 端点:     ████████████████████ 100
 
 ## 📞 相关信息
 
-- **项目**: CR-SemService
+- **项目**: astgrep
 - **作者**: Chen Jianjun
 - **邮箱**: chenjj.yz@gmail.com
-- **仓库**: https://github.com/c2j/cr-semservice
+- **仓库**: https://github.com/c2j/astgrep
 
 ---
 

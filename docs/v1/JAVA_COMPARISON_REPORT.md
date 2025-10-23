@@ -7,7 +7,7 @@ Generated on: Thu Aug  7 08:31:14 CST 2025
 ### Overview
 - **Total Java test files**: 124
 - **Semgrep version**: 1.131.0
-- **CR-SemService version**: 0.1.0
+- **astgrep version**: 0.1.0
 
 ### Test Categories
 
@@ -19,7 +19,7 @@ Generated on: Thu Aug  7 08:31:14 CST 2025
 
 ### Detailed Test Results
 
-| Test File | Rule Type | Semgrep Matches | CR-SemService Matches | Status |
+| Test File | Rule Type | Semgrep Matches | astgrep Matches | Status |
 |-----------|-----------|-----------------|----------------------|--------|
 | [0;34mℹ️ | N/A | N/A | N/A | ⚠️ NO RULE |
 | Discovering | N/A | N/A | N/A | ⚠️ NO RULE |

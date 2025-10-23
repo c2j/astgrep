@@ -1,7 +1,7 @@
 # Playground 界面重新设计 - 完成报告
 
 **完成日期**: 2025-10-18  
-**项目**: CR-SemService Playground 界面重新设计  
+**项目**: astgrep Playground 界面重新设计  
 **状态**: ✅ 完成
 
 ---
@@ -84,7 +84,7 @@
 ### 原始界面
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                    │
+│ Header: astgrep Playground                    │
 ├──────────────────────┬──────────────────────────────┤
 │ Code | File          │ Results | Metadata | Docs    │
 ├──────────────────────┼──────────────────────────────┤
@@ -104,7 +104,7 @@
 ### 新设计界面
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                    │
+│ Header: astgrep Playground                    │
 ├──────────────────────┬──────────────────────────────┤
 │ simple | advanced    │ test code | metadata | docs  │
 ├──────────────────────┼──────────────────────────────┤
@@ -186,7 +186,7 @@
 ### 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 

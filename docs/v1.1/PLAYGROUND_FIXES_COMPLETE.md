@@ -1,7 +1,7 @@
 # Playground 功能修复 - 完成报告
 
 **完成日期**: 2025-10-18  
-**项目**: CR-SemService Playground 功能修复  
+**项目**: astgrep Playground 功能修复  
 **总体状态**: ✅ 完成
 
 ---
@@ -178,7 +178,7 @@
 ### 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 

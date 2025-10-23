@@ -55,7 +55,7 @@ def run_comprehensive_tests():
 
 def run_cr_analysis(rule_file, target_file):
     """Run CR-SemService analysis"""
-    cmd = ["./target/debug/cr-semservice", "analyze", "--config", rule_file, target_file]
+    cmd = ["./target/debug/astgrep", "analyze", "--config", rule_file, target_file]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=".")
     
     if result.returncode != 0:

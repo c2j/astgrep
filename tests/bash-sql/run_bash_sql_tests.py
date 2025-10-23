@@ -12,7 +12,7 @@ from pathlib import Path
 def run_analysis(rule_file, target_file, language):
     """Run CR-SemService analysis on a file"""
     cmd = [
-        "./target/debug/cr-semservice",
+        "./target/debug/astgrep",
         "analyze",
         "--config", rule_file,
         target_file
@@ -46,7 +46,7 @@ def test_language_support():
     print("🔍 Testing language support...")
     
     # Test languages command
-    cmd = ["./target/debug/cr-semservice", "languages"]
+    cmd = ["./target/debug/astgrep", "languages"]
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=".")
     
     if result.returncode == 0:
@@ -205,7 +205,7 @@ def main():
     print("=" * 50)
     
     # Check if binary exists
-    if not os.path.exists("./target/debug/cr-semservice"):
+    if not os.path.exists("./target/debug/astgrep"):
         print("❌ Binary not found. Please build the project first:")
         print("   cargo build")
         sys.exit(1)

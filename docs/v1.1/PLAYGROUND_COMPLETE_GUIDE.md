@@ -11,7 +11,7 @@
 ### 1. 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 
@@ -33,7 +33,7 @@ http://127.0.0.1:8080/playground
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                    │
+│ Header: astgrep Playground                    │
 ├──────────────────────┬──────────────────────────────┤
 │ simple | advanced    │ test code | metadata | docs  │
 ├──────────────────────┼──────────────────────────────┤

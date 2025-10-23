@@ -2,8 +2,8 @@
 //!
 //! Tests for transformation tracking, taint merging, and context-aware analysis.
 
-use cr_dataflow::advanced_taint::{AdvancedTaintAnalyzer, AdvancedTaintState, TaintTransformation};
-use cr_dataflow::taint::TaintState;
+use astgrep_dataflow::advanced_taint::{AdvancedTaintAnalyzer, AdvancedTaintState, TaintTransformation};
+use astgrep_dataflow::taint::TaintState;
 
 #[test]
 fn test_taint_transformation_identity() {

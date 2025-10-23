@@ -1,9 +1,0 @@
-rules:
-  - id: CS-RD-09
-    message: "方法参数个数不宜超过7个，否则应使用对象进行参数传递"
-    languages: [java]
-    severity: INFO
-    
-    patterns:
-      # 检测方法参数超过7个的情况
-      - pattern-regex: "\\b\\w+\\s*\\([^)]*,[^)]*,[^)]*,[^)]*,[^)]*,[^)]*,[^)]*,[^)]*"

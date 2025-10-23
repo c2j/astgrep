@@ -1,7 +1,0 @@
-rules:
-  - id: test-simple
-    message: "Test simple pattern"
-    languages: [java]
-    severity: WARNING
-    patterns:
-      - pattern-regex: "DELETE FROM user"

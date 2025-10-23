@@ -1,8 +1,8 @@
-# CR-SemService Enhancement Summary
+# astgrep Enhancement Summary
 
 ## 🎯 Overview
 
-This document summarizes the major enhancements made to the CR-SemService static code analysis tool. The improvements focus on advanced pattern matching, precise expression analysis, enhanced taint tracking, and language-specific optimizations.
+This document summarizes the major enhancements made to the astgrep static code analysis tool. The improvements focus on advanced pattern matching, precise expression analysis, enhanced taint tracking, and language-specific optimizations.
 
 ## ✨ Key Enhancements
 
@@ -167,7 +167,7 @@ The enhancement includes a comprehensive demonstration (`enhanced_features_demo.
 
 ## 📝 Conclusion
 
-The enhanced CR-SemService now provides:
+The enhanced astgrep now provides:
 - **Advanced Pattern Matching** with support for complex Semgrep-style patterns
 - **Precise Expression Analysis** with configurable matching algorithms
 - **Enhanced Taint Tracking** with field, context, and path sensitivity

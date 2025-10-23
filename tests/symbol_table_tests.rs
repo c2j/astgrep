@@ -2,7 +2,7 @@
 //!
 //! Tests for symbol management, type tracking, and scope handling.
 
-use cr_dataflow::symbol_table::{SymbolTable, TypeInfo, ScopeType, Symbol};
+use astgrep_dataflow::symbol_table::{SymbolTable, TypeInfo, ScopeType, Symbol};
 
 #[test]
 fn test_type_info_primitive() {

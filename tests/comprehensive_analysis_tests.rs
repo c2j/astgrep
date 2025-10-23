@@ -1,11 +1,11 @@
-//! Comprehensive analysis tests for CR-SemService
+//! Comprehensive analysis tests for astgrep
 //! 
 //! These tests verify the complete analysis pipeline with real functionality.
 
-use cr_core::Language;
-use cr_parser::LanguageParserRegistry;
-use cr_rules::{RuleEngine, RuleParser, RuleContext};
-use cr_dataflow::DataFlowAnalyzer;
+use astgrep_core::Language;
+use astgrep_parser::LanguageParserRegistry;
+use astgrep_rules::{RuleEngine, RuleParser, RuleContext};
+use astgrep_dataflow::DataFlowAnalyzer;
 use tempfile::TempDir;
 use std::fs;
 
@@ -115,7 +115,7 @@ public class VulnerableApp {
 
     // Verify we found critical security issues
     let critical_findings = findings.iter()
-        .filter(|f| matches!(f.severity, cr_core::Severity::Critical))
+        .filter(|f| matches!(f.severity, astgrep_core::Severity::Critical))
         .count();
     
     assert!(critical_findings > 0, "Should find at least one critical vulnerability");

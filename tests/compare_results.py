@@ -16,7 +16,7 @@ def run_semgrep():
 
 def run_our_tool():
     """Run our tool and return the results"""
-    cmd = ["./target/debug/cr-semservice", "analyze", 
+    cmd = ["./target/debug/astgrep", "analyze", 
            "--rules", "tests/bash-sql/bash_security_rules.yaml",
            "tests/bash-sql/test_bash_script.sh", 
            "--compatible", "semgrep", "--format", "json", "--quiet"]

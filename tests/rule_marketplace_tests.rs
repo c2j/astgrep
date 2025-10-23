@@ -2,7 +2,7 @@
 //!
 //! Tests for verifying that the rule marketplace features work correctly.
 
-use cr_rules::marketplace::{MarketplaceRule, RuleMarketplace};
+use astgrep_rules::marketplace::{MarketplaceRule, RuleMarketplace};
 
 #[test]
 fn test_marketplace_rule_new() {

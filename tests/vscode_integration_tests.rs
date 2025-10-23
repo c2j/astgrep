@@ -2,7 +2,7 @@
 //!
 //! Tests for verifying that VS Code integration features work correctly.
 
-use cr_cli::vscode_integration::{VsCodeDiagnostic, VsCodeConfig, VsCodeExtension};
+use astgrep_cli::vscode_integration::{VsCodeDiagnostic, VsCodeConfig, VsCodeExtension};
 
 #[test]
 fn test_vscode_diagnostic_new() {

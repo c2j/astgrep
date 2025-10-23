@@ -1,11 +1,11 @@
-//! Integration tests for CR-SemService
+//! Integration tests for astgrep
 //! 
 //! These tests verify the complete analysis pipeline from source code to findings.
 
-use cr_core::{Language, AnalysisConfig, OutputFormat};
-use cr_parser::LanguageParserRegistry;
-use cr_rules::{RuleEngine, RuleParser};
-use cr_matcher::AdvancedSemgrepMatcher;
+use astgrep_core::{Language, AnalysisConfig, OutputFormat};
+use astgrep_parser::LanguageParserRegistry;
+use astgrep_rules::{RuleEngine, RuleParser};
+use astgrep_matcher::AdvancedSemgrepMatcher;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use std::fs;
@@ -98,7 +98,7 @@ const apiKey = "sk-1234567890abcdef";
     let java_ast = parser_registry.parse_file(&java_file, &java_source)
         .expect("Failed to parse Java file");
     
-    let java_context = cr_rules::RuleContext::new(
+    let java_context = astgrep_rules::RuleContext::new(
         java_file.to_string_lossy().to_string(),
         Language::Java,
         java_source.clone(),
@@ -112,7 +112,7 @@ const apiKey = "sk-1234567890abcdef";
     let js_ast = parser_registry.parse_file(&js_file, &js_source)
         .expect("Failed to parse JavaScript file");
     
-    let js_context = cr_rules::RuleContext::new(
+    let js_context = astgrep_rules::RuleContext::new(
         js_file.to_string_lossy().to_string(),
         Language::JavaScript,
         js_source.clone(),

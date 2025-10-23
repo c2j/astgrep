@@ -2,7 +2,7 @@
 
 ## 🎯 Project Overview
 
-This document summarizes the successful implementation and testing of advanced Semgrep pattern features in CR-SemService, providing comprehensive support for all major Semgrep pattern types with enhanced performance and additional capabilities.
+This document summarizes the successful implementation and testing of advanced Semgrep pattern features in astgrep, providing comprehensive support for all major Semgrep pattern types with enhanced performance and additional capabilities.
 
 ## ✅ Completed Features
 
@@ -236,4 +236,4 @@ This document summarizes the successful implementation and testing of advanced S
 **Compatibility**: 100% with Semgrep  
 **Performance**: 10-18x faster execution  
 
-🎯 **CR-SemService now provides complete advanced Semgrep pattern support with superior performance and enhanced capabilities!**
+🎯 **astgrep now provides complete advanced Semgrep pattern support with superior performance and enhanced capabilities!**

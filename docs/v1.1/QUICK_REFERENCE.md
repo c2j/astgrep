@@ -1,4 +1,4 @@
-# CR-SemService Playground 快速参考
+# astgrep Playground 快速参考
 
 **最后更新**: 2025-10-18
 
@@ -9,7 +9,7 @@
 ### 1. 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 
@@ -31,7 +31,7 @@ http://127.0.0.1:8080/playground
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                    │
+│ Header: astgrep Playground                    │
 ├──────────────────────┬──────────────────────────────┤
 │ Code | File          │ Results | Metadata | Docs    │
 ├──────────────────────┼──────────────────────────────┤
@@ -249,8 +249,8 @@ String query = "SELECT * FROM users WHERE id = " + userId;
 
 ## 📞 支持
 
-- **项目**: CR-SemService
-- **仓库**: https://github.com/c2j/cr-semservice
+- **项目**: astgrep
+- **仓库**: https://github.com/c2j/astgrep
 - **问题**: 查看 GitHub Issues
 
 ---

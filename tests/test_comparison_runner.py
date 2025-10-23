@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive test runner to compare cr-semservice with semgrep.
+Comprehensive test runner to compare astgrep with semgrep.
 This script discovers test rule files and their corresponding code files,
 runs both tools, and compares their results.
 """
@@ -68,9 +68,9 @@ class TestResult:
         self.matches = False
 
 def run_cr_semservice(rule_file: str, code_file: str) -> Tuple[Dict[str, Any], str]:
-    """Run cr-semservice and return parsed JSON output and any error."""
+    """Run astgrep and return parsed JSON output and any error."""
     try:
-        cmd = ["./target/debug/cr-semservice", "analyze", "--config", rule_file, code_file, "--format", "json"]
+        cmd = ["./target/debug/astgrep", "analyze", "--config", rule_file, code_file, "--format", "json"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         
         if result.returncode != 0:
@@ -141,7 +141,7 @@ def run_semgrep(rule_file: str, code_file: str) -> Tuple[Dict[str, Any], str]:
 
 def normalize_finding(finding: Dict[str, Any], tool: str) -> Dict[str, Any]:
     """Normalize finding format between tools."""
-    if tool == "cr-semservice":
+    if tool == "astgrep":
         location = finding.get("location", {})
         return {
             "rule_id": finding.get("rule_id", ""),
@@ -172,7 +172,7 @@ def normalize_finding(finding: Dict[str, Any], tool: str) -> Dict[str, Any]:
 def compare_findings(test_result: TestResult) -> None:
     """Compare findings between the two tools and update test_result."""
     # Normalize findings
-    cr_normalized = [normalize_finding(f, "cr-semservice") for f in test_result.cr_findings]
+    cr_normalized = [normalize_finding(f, "astgrep") for f in test_result.cr_findings]
     semgrep_normalized = [normalize_finding(f, "semgrep") for f in test_result.semgrep_findings]
     
     # Sort findings by line number for comparison
@@ -239,7 +239,7 @@ def find_test_pairs(test_dirs: List[str], supported_languages: Set[str]) -> List
     return test_pairs
 
 def main():
-    parser = argparse.ArgumentParser(description="Compare cr-semservice with semgrep on test files")
+    parser = argparse.ArgumentParser(description="Compare astgrep with semgrep on test files")
     parser.add_argument("--test-dirs", nargs="+", 
                        default=["tests/simple", "tests/rules", "tests/comparison"],
                        help="Directories containing test files")

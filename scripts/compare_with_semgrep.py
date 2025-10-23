@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Automated comparison script between cr-semservice and semgrep.
+Automated comparison script between astgrep and semgrep.
 This script runs both tools on test files and compares their results.
 """
 
@@ -26,9 +26,9 @@ class ComparisonResult:
         self.matches = False
 
 def run_cr_semservice(config_path: str, target_path: str) -> Dict[str, Any]:
-    """Run cr-semservice and return parsed JSON output."""
+    """Run astgrep and return parsed JSON output."""
     try:
-        cmd = ["./target/debug/cr-semservice", "analyze", "--config", config_path, target_path]
+        cmd = ["./target/debug/astgrep", "analyze", "--config", config_path, target_path]
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=".")
         
         if result.returncode != 0:
@@ -90,7 +90,7 @@ def run_semgrep(config_path: str, target_path: str) -> Dict[str, Any]:
 
 def normalize_finding(finding: Dict[str, Any], tool: str) -> Dict[str, Any]:
     """Normalize finding format between tools."""
-    if tool == "cr-semservice":
+    if tool == "astgrep":
         return {
             "rule_id": finding.get("rule_id", ""),
             "message": finding.get("message", "").strip(),
@@ -119,7 +119,7 @@ def compare_findings(cr_findings: List[Dict], semgrep_findings: List[Dict]) -> C
     result = ComparisonResult("test")
     
     # Normalize findings
-    cr_normalized = [normalize_finding(f, "cr-semservice") for f in cr_findings]
+    cr_normalized = [normalize_finding(f, "astgrep") for f in cr_findings]
     semgrep_normalized = [normalize_finding(f, "semgrep") for f in semgrep_findings]
     
     result.cr_findings = cr_normalized
@@ -163,7 +163,7 @@ def find_test_pairs(test_dir: str) -> List[Tuple[str, str]]:
     return test_pairs
 
 def main():
-    parser = argparse.ArgumentParser(description="Compare cr-semservice with semgrep")
+    parser = argparse.ArgumentParser(description="Compare astgrep with semgrep")
     parser.add_argument("--test-dir", default="tests/taint_maturity", 
                        help="Directory containing test files")
     parser.add_argument("--specific-test", help="Run specific test (config,target)")

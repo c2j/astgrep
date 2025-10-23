@@ -1,6 +1,6 @@
 //! Mock parser implementations for testing
 
-use cr_core::{LanguageParser, Language, AstNode, Result};
+use astgrep_core::{LanguageParser, Language, AstNode, Result};
 use crate::mock_ast::MockAstNode;
 use std::path::Path;
 
@@ -64,7 +64,7 @@ impl MockParser {
 impl LanguageParser for MockParser {
     fn parse(&self, source: &str, _file_path: &Path) -> Result<Box<dyn AstNode>> {
         if self.should_fail {
-            return Err(cr_core::AnalysisError::parse_error("Mock parser configured to fail"));
+            return Err(astgrep_core::AnalysisError::parse_error("Mock parser configured to fail"));
         }
 
         if let Some(ref custom_result) = self.custom_result {

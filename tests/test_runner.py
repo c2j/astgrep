@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-测试执行框架 - 批量运行semgrep和cr-semservice并比较结果
+测试执行框架 - 批量运行semgrep和astgrep并比较结果
 """
 
 import os
@@ -149,11 +149,11 @@ class TestRunner:
             return None, str(e), time.time() - start_time
     
     def run_cr_semservice(self, rule_file: str, target_file: str) -> Tuple[Optional[str], Optional[str], float]:
-        """运行cr-semservice"""
+        """运行astgrep"""
         start_time = time.time()
         try:
             cmd = [
-                "cargo", "run", "--bin", "cr-semservice", 
+                "cargo", "run", "--bin", "astgrep", 
                 "analyze", "--config", rule_file, target_file
             ]
             result = subprocess.run(
@@ -184,9 +184,9 @@ class TestRunner:
             return []
     
     def parse_cr_semservice_output(self, output: str) -> List[Dict]:
-        """解析cr-semservice输出"""
+        """解析astgrep输出"""
         try:
-            # cr-semservice输出可能包含日志，需要提取JSON部分
+            # astgrep输出可能包含日志，需要提取JSON部分
             lines = output.strip().split('\n')
 
             # 寻找JSON块的开始和结束
@@ -219,7 +219,7 @@ class TestRunner:
                 return []
 
         except Exception as e:
-            print(f"    解析cr-semservice输出失败: {e}")
+            print(f"    解析astgrep输出失败: {e}")
             # 尝试简单的方法：查找包含findings的行
             try:
                 if '"findings"' in output:
@@ -240,7 +240,7 @@ class TestRunner:
         
         # 比较发现数量
         if len(semgrep_findings) != len(cr_findings):
-            differences.append(f"发现数量不同: semgrep={len(semgrep_findings)}, cr-semservice={len(cr_findings)}")
+            differences.append(f"发现数量不同: semgrep={len(semgrep_findings)}, astgrep={len(cr_findings)}")
         
         # 简单的位置比较（这里可以进一步优化）
         semgrep_locations = set()
@@ -276,7 +276,7 @@ class TestRunner:
             test_case.rule_file, test_case.target_file
         )
 
-        # 运行cr-semservice
+        # 运行astgrep
         cr_output, cr_error, cr_time = self.run_cr_semservice(
             test_case.rule_file, test_case.target_file
         )

@@ -1,4 +1,4 @@
-# CR-SemService 性能优化和测试报告
+# astgrep 性能优化和测试报告
 
 ## 📊 测试覆盖率总结
 
@@ -272,4 +272,4 @@ export CR_PARALLEL_EXECUTION=true
 
 ---
 
-*本报告基于 CR-SemService v0.1.0 的性能优化和测试结果*
+*本报告基于 astgrep v0.1.0 的性能优化和测试结果*

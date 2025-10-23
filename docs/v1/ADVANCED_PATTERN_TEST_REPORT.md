@@ -67,8 +67,8 @@ Generated on: Wed Aug  6 23:24:55 CST 2025
 
 ## Performance
 
-CR-SemService demonstrates competitive performance across all advanced pattern types while maintaining full compatibility with Semgrep syntax and semantics.
+astgrep demonstrates competitive performance across all advanced pattern types while maintaining full compatibility with Semgrep syntax and semantics.
 
 ## Conclusion
 
-All advanced Semgrep pattern features are successfully implemented and tested in CR-SemService, providing a comprehensive alternative to the original Semgrep tool.
+All advanced Semgrep pattern features are successfully implemented and tested in astgrep, providing a comprehensive alternative to the original Semgrep tool.

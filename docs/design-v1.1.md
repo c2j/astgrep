@@ -1,4 +1,4 @@
-# CR-SemService v1.1 设计文档
+# astgrep v1.1 设计文档
 
 **版本**: v1.1  
 **发布日期**: 2025-10-19  
@@ -9,7 +9,7 @@
 
 ## 1. 版本概述
 
-CR-SemService v1.1 是在 v1.0 基础上的重要功能增强版本，主要新增了 **Web Playground** 交互式测试平台，并对核心引擎进行了多项优化和修复。
+astgrep v1.1 是在 v1.0 基础上的重要功能增强版本，主要新增了 **Web Playground** 交互式测试平台，并对核心引擎进行了多项优化和修复。
 
 ### 1.1 版本定位
 
@@ -60,7 +60,7 @@ CR-SemService v1.1 是在 v1.0 基础上的重要功能增强版本，主要新�
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                            │
+│ Header: astgrep Playground                            │
 ├──────────────────────┬──────────────────────────────────────┤
 │ 左侧面板 (45%)       │ 右侧面板 (55%)                       │
 ├──────────────────────┼──────────────────────────────────────┤
@@ -545,7 +545,7 @@ const line = finding.location?.start_line || finding.line || '?';
 
 ```bash
 # 进入项目目录
-cd /path/to/cr-semservice
+cd /path/to/astgrep
 
 # 启动 Web 服务器
 cargo run --package cr-web --bin cr-web-server --release
@@ -645,7 +645,7 @@ cargo run --package cr-web --bin cr-web-server --release
 
 ## 10. 总结
 
-CR-SemService v1.1 在 v1.0 的坚实基础上，成功引入了 Web Playground 交互式测试平台，极大地提升了用户体验和开发效率。通过对核心引擎的优化和多项关键 Bug 的修复，v1.1 版本在功能完整性、性能和稳定性方面都有显著提升。
+astgrep v1.1 在 v1.0 的坚实基础上，成功引入了 Web Playground 交互式测试平台，极大地提升了用户体验和开发效率。通过对核心引擎的优化和多项关键 Bug 的修复，v1.1 版本在功能完整性、性能和稳定性方面都有显著提升。
 
 **关键成就**:
 - ✅ 完整的 Web Playground 实现
@@ -660,5 +660,5 @@ CR-SemService v1.1 在 v1.0 的坚实基础上，成功引入了 Web Playground 
 
 **文档版本**: 1.0  
 **最后更新**: 2025-10-19  
-**作者**: CR-SemService 开发团队
+**作者**: astgrep 开发团队
 

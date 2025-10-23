@@ -1,0 +1,264 @@
+# astgrep Web Server Configuration File
+# 
+# This file configures the astgrep REST API server for static code analysis.
+# All settings have sensible defaults, so you only need to specify what you want to change.
+#
+# Configuration Priority (highest to lowest):
+# 1. Command-line arguments
+# 2. Environment variables (ASTGREP_*)
+# 3. Configuration file (this file)
+# 4. Built-in defaults
+
+# ============================================================================
+# SERVER CONFIGURATION
+# ============================================================================
+
+# Server bind address (IP:PORT)
+# Default: "127.0.0.1:8080"
+# Examples:
+#   "127.0.0.1:8080"  - Listen only on localhost
+#   "0.0.0.0:8080"    - Listen on all interfaces
+#   "192.168.1.100:9090" - Listen on specific IP and port
+bind_address = "127.0.0.1:8080"
+
+# Maximum upload size in bytes (100MB by default)
+# Default: 104857600 (100 * 1024 * 1024)
+# Examples:
+#   52428800   - 50MB
+#   104857600  - 100MB
+#   209715200  - 200MB
+max_upload_size = 104857600
+
+# Maximum number of concurrent analysis jobs
+# Default: 10
+# Increase this for higher throughput, but be aware of memory usage
+max_concurrent_jobs = 10
+
+# Rules directory path (relative or absolute)
+# Default: "rules"
+# This directory should contain YAML rule files for analysis
+rules_directory = "rules"
+
+# Temporary files directory
+# Default: "/tmp/astgrep"
+# Used for storing intermediate analysis results and job data
+temp_directory = "/tmp/astgrep"
+
+# ============================================================================
+# TIMEOUT CONFIGURATION
+# ============================================================================
+
+# Request timeout duration (in seconds)
+# Default: 300 (5 minutes)
+# This is the maximum time allowed for a single analysis request
+[request_timeout]
+secs = 300
+nanos = 0
+
+# Job cleanup interval (in seconds)
+# Default: 3600 (1 hour)
+# How often to clean up completed/failed jobs
+[job_cleanup_interval]
+secs = 3600
+nanos = 0
+
+# Job retention duration (in seconds)
+# Default: 86400 (24 hours)
+# How long to keep job results before cleanup
+[job_retention_duration]
+secs = 86400
+nanos = 0
+
+# ============================================================================
+# RATE LIMITING CONFIGURATION
+# ============================================================================
+
+[rate_limit]
+# Enable rate limiting
+# Default: true
+enabled = true
+
+# Requests per minute per IP address
+# Default: 60
+# Set to 0 to disable rate limiting
+requests_per_minute = 60
+
+# Burst size (number of requests allowed in a burst)
+# Default: 10
+# Allows temporary spikes above the rate limit
+burst_size = 10
+
+# ============================================================================
+# CORS CONFIGURATION
+# ============================================================================
+
+[cors]
+# Allowed origins for CORS requests
+# Default: ["*"] (allow all origins)
+# Examples:
+#   ["*"]                                    - Allow all origins
+#   ["http://localhost:3000"]                - Allow specific origin
+#   ["https://example.com", "https://app.example.com"] - Allow multiple origins
+allowed_origins = ["*"]
+
+# Allowed HTTP methods
+# Default: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+allowed_methods = [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS",
+]
+
+# Allowed HTTP headers
+# Default: ["Content-Type", "Authorization", "X-Request-ID"]
+allowed_headers = [
+    "Content-Type",
+    "Authorization",
+    "X-Request-ID",
+]
+
+# Max age for CORS preflight requests (in seconds)
+# Default: 3600 (1 hour)
+[cors.max_age]
+secs = 3600
+nanos = 0
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+[logging]
+# Log level: "trace", "debug", "info", "warn", "error"
+# Default: "info"
+level = "info"
+
+# Enable request logging (logs all incoming requests)
+# Default: true
+log_requests = true
+
+# Enable response logging (logs all outgoing responses)
+# Default: false
+# Warning: May produce verbose output
+log_responses = false
+
+# Optional: Log file path (if not specified, logs go to stdout)
+# Examples:
+#   "/var/log/astgrep/server.log"
+#   "./logs/astgrep.log"
+# log_file = "/var/log/astgrep/server.log"
+
+# ============================================================================
+# AUTHENTICATION CONFIGURATION (Optional)
+# ============================================================================
+
+# Enable authentication for API endpoints
+# Default: false
+enable_auth = false
+
+# JWT secret key for authentication (required if enable_auth is true)
+# Generate a strong secret: openssl rand -base64 32
+# Example: "your-secret-key-here"
+# jwt_secret = "your-secret-key-here"
+
+# ============================================================================
+# DATABASE CONFIGURATION (Optional, requires 'database' feature)
+# ============================================================================
+
+# Uncomment to enable database support
+# [database]
+# # Database connection URL
+# # Examples:
+# #   "sqlite:///tmp/astgrep.db"
+# #   "postgresql://user:password@localhost/astgrep"
+# #   "mysql://user:password@localhost/astgrep"
+# url = "sqlite:///tmp/astgrep.db"
+# 
+# # Maximum number of database connections
+# max_connections = 10
+# 
+# # Connection timeout (in seconds)
+# [database.connect_timeout]
+# secs = 30
+# nanos = 0
+# 
+# # Enable automatic migrations
+# auto_migrate = true
+
+# ============================================================================
+# METRICS CONFIGURATION (Optional, requires 'metrics' feature)
+# ============================================================================
+
+# Uncomment to enable metrics collection
+# [metrics]
+# # Enable metrics collection
+# enabled = true
+# 
+# # Metrics endpoint path
+# endpoint = "/metrics"
+# 
+# # Optional: Prometheus metrics port (if different from main server port)
+# # prometheus_port = 9090
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+
+# Example 1: Development Configuration
+# ============================================================================
+# bind_address = "127.0.0.1:8080"
+# max_upload_size = 52428800  # 50MB
+# max_concurrent_jobs = 5
+# rules_directory = "./rules"
+# temp_directory = "./tmp"
+# 
+# [logging]
+# level = "debug"
+# log_requests = true
+# log_responses = true
+
+# Example 2: Production Configuration
+# ============================================================================
+# bind_address = "0.0.0.0:8080"
+# max_upload_size = 209715200  # 200MB
+# max_concurrent_jobs = 20
+# rules_directory = "/etc/astgrep/rules"
+# temp_directory = "/var/tmp/astgrep"
+# enable_auth = true
+# jwt_secret = "your-production-secret-key"
+# 
+# [logging]
+# level = "warn"
+# log_requests = false
+# log_responses = false
+# log_file = "/var/log/astgrep/server.log"
+# 
+# [rate_limit]
+# enabled = true
+# requests_per_minute = 100
+# burst_size = 20
+# 
+# [cors]
+# allowed_origins = ["https://example.com", "https://app.example.com"]
+
+# Example 3: High-Performance Configuration
+# ============================================================================
+# bind_address = "0.0.0.0:8080"
+# max_upload_size = 524288000  # 500MB
+# max_concurrent_jobs = 50
+# rules_directory = "/opt/astgrep/rules"
+# temp_directory = "/mnt/fast-storage/astgrep"
+# 
+# [request_timeout]
+# secs = 600  # 10 minutes
+# 
+# [rate_limit]
+# enabled = true
+# requests_per_minute = 200
+# burst_size = 50
+# 
+# [logging]
+# level = "info"
+# log_file = "/var/log/astgrep/server.log"
+

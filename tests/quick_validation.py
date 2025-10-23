@@ -111,7 +111,7 @@ class QuickValidator:
                 return {"name": test["name"], "passed": False, "reason": "Files not found"}
 
             cmd = [
-                "cargo", "run", "--release", "--bin", "cr-semservice", "--",
+                "cargo", "run", "--release", "--bin", "astgrep", "--",
                 "analyze",
                 str(code_file),
                 "-r", str(rule_file)

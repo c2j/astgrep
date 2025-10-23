@@ -1,0 +1,18 @@
+[package]
+name = "astgrep-rules"
+version = "0.1.0"
+edition = "2021"
+description = "Rule parsing and execution engine for astgrep"
+
+[dependencies]
+astgrep-core = { path = "../astgrep-core" }
+astgrep-ast = { path = "../astgrep-ast" }
+astgrep-matcher = { path = "../astgrep-matcher" }
+astgrep-dataflow = { path = "../astgrep-dataflow" }
+serde.workspace = true
+serde_yaml.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+tempfile = "3.8"

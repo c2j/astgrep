@@ -1,7 +1,7 @@
 # Playground 最终总结 - UI 优化完成
 
 **完成日期**: 2025-10-18  
-**项目**: CR-SemService Playground UI 优化  
+**项目**: astgrep Playground UI 优化  
 **状态**: ✅ 完成
 
 ---
@@ -51,7 +51,7 @@
 **之后**:
 ```
 ┌──────────────────────────────────────────────────────┐
-│ Header: CR-SemService Playground                     │
+│ Header: astgrep Playground                     │
 ├──────────────────────┬───────────────────────────────┤
 │ Code | File          │ Results | Metadata | Docs     │
 ├──────────────────────┼───────────────────────────────┤
@@ -157,7 +157,7 @@
 ### 启动服务
 
 ```bash
-cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/cr-semservice
+cd /Volumes/Raiden_C2J/Projects/Desktop_Projects/CR/astgrep
 cargo run -p cr-web --bin cr-web
 ```
 

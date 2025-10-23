@@ -1,6 +1,6 @@
 # 如何运行 CR-Web
 
-**项目**: CR-SemService Web 服务  
+**项目**: astgrep Web 服务  
 **语言**: Rust  
 **框架**: Axum (异步 Web 框架)
 

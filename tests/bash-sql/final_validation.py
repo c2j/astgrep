@@ -31,7 +31,7 @@ def validate_language_support():
     print("🌟 LANGUAGE SUPPORT VALIDATION")
     print("="*60)
     
-    output = run_command(["./target/debug/cr-semservice", "languages"], "Checking supported languages")
+    output = run_command(["./target/debug/astgrep", "languages"], "Checking supported languages")
     
     if output:
         if "bash" in output.lower() and "sql" in output.lower():
@@ -49,7 +49,7 @@ def validate_bash_analysis():
     print("="*60)
     
     cmd = [
-        "./target/debug/cr-semservice",
+        "./target/debug/astgrep",
         "analyze",
         "--config", "tests/bash-sql/bash_security_rules.yaml",
         "tests/bash-sql/test_bash_script.sh",
@@ -105,7 +105,7 @@ def validate_sql_analysis():
     print("="*60)
     
     cmd = [
-        "./target/debug/cr-semservice",
+        "./target/debug/astgrep",
         "analyze",
         "--config", "tests/bash-sql/sql_security_rules.yaml",
         "tests/bash-sql/test_sql_queries.sql",
@@ -162,7 +162,7 @@ def validate_performance():
     
     # Test Bash performance
     bash_cmd = [
-        "./target/debug/cr-semservice",
+        "./target/debug/astgrep",
         "analyze",
         "--config", "tests/bash-sql/bash_security_rules.yaml",
         "tests/bash-sql/test_bash_script.sh",
@@ -185,7 +185,7 @@ def validate_performance():
     
     # Test SQL performance
     sql_cmd = [
-        "./target/debug/cr-semservice",
+        "./target/debug/astgrep",
         "analyze",
         "--config", "tests/bash-sql/sql_security_rules.yaml",
         "tests/bash-sql/test_sql_queries.sql",
@@ -228,7 +228,7 @@ def main():
     print("="*70)
     
     # Check if binary exists
-    if not os.path.exists("./target/debug/cr-semservice"):
+    if not os.path.exists("./target/debug/astgrep"):
         print("❌ Binary not found. Please build the project first:")
         print("   cargo build")
         sys.exit(1)

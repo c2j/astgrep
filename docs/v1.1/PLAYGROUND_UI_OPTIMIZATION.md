@@ -15,7 +15,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Header: CR-SemService Playground                       │
+│  Header: astgrep Playground                       │
 ├──────────────────────┬──────────────────────────────────┤
 │                      │                                  │
 │   Input Panel        │      Results Panel               │

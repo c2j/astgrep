@@ -1,6 +1,6 @@
 # Java Rules Comparison Summary
 
-## 🔍 CR-SemService vs Semgrep Java Analysis
+## 🔍 astgrep vs Semgrep Java Analysis
 
 **Generated**: August 6, 2025  
 **Test Environment**: macOS with Semgrep 1.131.0
@@ -50,7 +50,7 @@ class Test {
 
 **Results:**
 - **Semgrep**: 1 match ✅
-- **CR-SemService**: 2 matches ⚠️ (over-detection)
+- **astgrep**: 2 matches ⚠️ (over-detection)
 - **Status**: Results differ (+1 extra match)
 
 ### Test 2: Metavariable Comparison (`metavar_comparison_bitxor.java`)
@@ -78,7 +78,7 @@ public class A {
 
 **Results:**
 - **Semgrep**: 1 match ✅
-- **CR-SemService**: 0 matches ❌ (under-detection)
+- **astgrep**: 0 matches ❌ (under-detection)
 - **Status**: Missing metavariable comparison support
 
 ### Test 3: Symbolic Propagation (`sym_prop_class_attr.java`)
@@ -92,7 +92,7 @@ pattern-sinks:
 
 **Results:**
 - **Semgrep**: 1 match ✅
-- **CR-SemService**: 2 matches ⚠️ (over-detection)
+- **astgrep**: 2 matches ⚠️ (over-detection)
 - **Status**: Results differ (+1 extra match)
 
 ### Test 4: Constant Propagation (`cp_private_class_attr.java`)
@@ -104,7 +104,7 @@ pattern: return $X;
 
 **Results:**
 - **Semgrep**: 1 match ✅
-- **CR-SemService**: 0 matches ❌ (under-detection)
+- **astgrep**: 0 matches ❌ (under-detection)
 - **Status**: Missing constant propagation support
 
 ---
@@ -210,7 +210,7 @@ pattern: return $X;
 
 ## 📋 Test Results Summary
 
-| Test Type | Total Tests | Semgrep Matches | CR-SemService Matches | Accuracy |
+| Test Type | Total Tests | Semgrep Matches | astgrep Matches | Accuracy |
 |-----------|-------------|-----------------|----------------------|----------|
 | Taint Analysis | 15 | ~15 | ~30 (over-detection) | ~50% |
 | Metavariable | 7 | ~7 | ~0 (missing feature) | 0% |
@@ -222,7 +222,7 @@ pattern: return $X;
 
 ## 🚀 Conclusion
 
-CR-SemService shows **promising foundation** for Java analysis but requires significant development to match Semgrep's capabilities:
+astgrep shows **promising foundation** for Java analysis but requires significant development to match Semgrep's capabilities:
 
 ### Strengths
 - ✅ Solid architecture and framework
@@ -247,5 +247,5 @@ CR-SemService shows **promising foundation** for Java analysis but requires sign
 ---
 
 **Report Generated**: August 6, 2025  
-**Tools Used**: Semgrep 1.131.0, CR-SemService 0.1.0  
+**Tools Used**: Semgrep 1.131.0, astgrep 0.1.0  
 **Test Files**: 38 Java files with corresponding YAML rules

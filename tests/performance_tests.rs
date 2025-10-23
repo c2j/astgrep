@@ -1,12 +1,12 @@
-//! Performance tests for CR-SemService
+//! Performance tests for astgrep
 //! 
 //! These tests verify that the system performs within acceptable limits
 //! and can handle various load scenarios.
 
-use cr_core::{Language, constants::defaults};
-use cr_parser::LanguageParserRegistry;
-use cr_matcher::AdvancedSemgrepMatcher;
-use cr_ast::{UniversalNode, NodeType};
+use astgrep_core::{Language, constants::defaults};
+use astgrep_parser::LanguageParserRegistry;
+use astgrep_matcher::AdvancedSemgrepMatcher;
+use astgrep_ast::{UniversalNode, NodeType};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
@@ -113,8 +113,8 @@ fn test_pattern_matching_performance() {
     let ast = create_complex_ast(100); // 100 nodes
 
     // Test simple pattern matching
-    let simple_pattern = cr_core::SemgrepPattern {
-        pattern_type: cr_core::PatternType::Simple("$FUNC($ARG)".to_string()),
+    let simple_pattern = astgrep_core::SemgrepPattern {
+        pattern_type: astgrep_core::PatternType::Simple("$FUNC($ARG)".to_string()),
         metavariable_pattern: None,
         focus: None,
         conditions: Vec::new(),
@@ -133,8 +133,8 @@ fn test_pattern_matching_performance() {
     );
 
     // Test complex pattern matching
-    let complex_pattern = cr_core::SemgrepPattern {
-        pattern_type: cr_core::PatternType::Simple("$OBJ.$METHOD($ARG1, $ARG2)".to_string()),
+    let complex_pattern = astgrep_core::SemgrepPattern {
+        pattern_type: astgrep_core::PatternType::Simple("$OBJ.$METHOD($ARG1, $ARG2)".to_string()),
         metavariable_pattern: None,
         focus: None,
         conditions: Vec::new(),

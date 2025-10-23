@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XML Best Practices Test Cases -->
+<!-- This file contains examples of XML best practices and anti-patterns -->
+
+<!-- ============================================================================ -->
+<!-- 1. XML Declaration Best Practices -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Proper XML declaration with version and encoding -->
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+  <data>Properly declared XML</data>
+</root>
+
+<!-- GOOD: XML 1.1 declaration -->
+<?xml version="1.1" encoding="UTF-8"?>
+<root>
+  <data>XML 1.1 document</data>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 2. Empty Elements -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Self-closing empty element -->
+<configuration>
+  <feature name="logging" enabled="true"/>
+  <feature name="caching" enabled="false"/>
+</configuration>
+
+<!-- POOR: Empty element not self-closing -->
+<!-- ruleid: xml-empty-element-001 -->
+<configuration>
+  <feature></feature>
+  <option></option>
+</configuration>
+
+<!-- ============================================================================ -->
+<!-- 3. Attribute Quoting -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Attributes properly quoted -->
+<element attribute="value" number="123" flag="true"/>
+
+<!-- GOOD: Double quotes for attributes -->
+<person name="John Doe" age="30" city="New York"/>
+
+<!-- ============================================================================ -->
+<!-- 4. Namespace Usage -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Namespace properly declared -->
+<root xmlns:app="http://example.com/app" xmlns:data="http://example.com/data">
+  <app:configuration>
+    <data:item>Value</data:item>
+  </app:configuration>
+  <qapp2:configuration>
+    <data:item>Value1</data:item>
+  </qapp2:configuration>
+</root>
+
+<!-- GOOD: Default namespace with prefix -->
+<root xmlns="http://example.com/default" xmlns:custom="http://example.com/custom">
+  <item>Default namespace</item>
+  <custom:item>Custom namespace</custom:item>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 5. Comments Best Practices -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Proper XML comment -->
+<root>
+  <!-- This is a valid comment -->
+  <data>Content</data>
+  <!-- Another valid comment with special chars: @#$%^&*() -->
+</root>
+
+<!-- POOR: Comment with double hyphens -->
+<!-- ruleid: xml-comment-best-practice-001 -->
+<root>
+  <!-- This comment has -- double hyphens -- which is not recommended -->
+  <data>Content</data>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 6. CDATA Usage -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: CDATA for special characters -->
+<script>
+  <![CDATA[
+    function example() {
+      if (x < 10 && y > 5) {
+        return x & y;
+      }
+    }
+  ]]>
+</script>
+
+<!-- GOOD: CDATA for code snippets -->
+<code>
+  <![CDATA[
+    SELECT * FROM users WHERE id > 100 && status = 'active';
+  ]]>
+</code>
+
+<!-- GOOD: Properly escaped special characters -->
+<message>
+  <text>Value is &lt; 10 &amp; &gt; 5</text>
+</message>
+
+<!-- ============================================================================ -->
+<!-- 7. Boolean Values -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Lowercase boolean values -->
+<settings>
+  <debug>false</debug>
+  <logging>true</logging>
+  <caching>false</caching>
+</settings>
+
+<!-- POOR: Non-standard boolean values -->
+<!-- ruleid: xml-boolean-values-001 -->
+<settings>
+  <debug>FALSE</debug>
+  <logging>TRUE</logging>
+  <caching>Yes</caching>
+  <monitoring>1</monitoring>
+</settings>
+
+<!-- ============================================================================ -->
+<!-- 8. Indentation and Formatting -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Consistent 2-space indentation -->
+<configuration>
+  <database>
+    <host>localhost</host>
+    <port>5432</port>
+    <credentials>
+      <username>admin</username>
+      <password>${DB_PASSWORD}</password>
+    </credentials>
+  </database>
+</configuration>
+
+<!-- GOOD: Consistent 4-space indentation -->
+<application>
+    <name>MyApp</name>
+    <version>1.0.0</version>
+    <settings>
+        <timeout>30</timeout>
+        <retries>3</retries>
+    </settings>
+</application>
+
+<!-- ============================================================================ -->
+<!-- 9. Attribute Ordering -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Attributes in alphabetical order -->
+<person age="30" city="New York" country="USA" name="John Doe"/>
+
+<!-- GOOD: Attributes ordered consistently -->
+<product category="electronics" id="12345" name="Laptop" price="999.99"/>
+
+<!-- ============================================================================ -->
+<!-- 10. Root Element -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Single root element -->
+<root>
+  <item>First</item>
+  <item>Second</item>
+  <item>Third</item>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 11. Encoding Best Practices -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: UTF-8 encoding (recommended) -->
+<?xml version="1.0" encoding="UTF-8"?>
+<data>
+  <text>Unicode characters: 你好世界 🌍</text>
+</data>
+
+<!-- ============================================================================ -->
+<!-- 12. Schema Location with HTTPS -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Schema location with HTTPS -->
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="https://example.com/schema https://example.com/schema.xsd">
+  <data>Content</data>
+</root>
+
+<!-- POOR: Schema location with HTTP -->
+<!-- ruleid: xml-schema-location-001 -->
+<root xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://example.com/schema http://example.com/schema.xsd">
+  <data>Content</data>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 13. Processing Instructions -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Well-formed processing instruction -->
+<?xml-stylesheet type="text/xsl" href="style.xsl"?>
+<root>
+  <data>Content</data>
+</root>
+
+<!-- GOOD: Custom processing instruction -->
+<?custom-instruction param="value"?>
+<root>
+  <data>Content</data>
+</root>
+
+<!-- ============================================================================ -->
+<!-- 14. Entity References -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Properly escaped entities -->
+<text>
+  <message>Tom &amp; Jerry</message>
+  <comparison>5 &lt; 10 &amp; 10 &gt; 5</comparison>
+  <quote>He said &quot;Hello&quot;</quote>
+  <apostrophe>It&apos;s working</apostrophe>
+</text>
+
+<!-- ============================================================================ -->
+<!-- 15. Mixed Content (Avoid) -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Element-only content -->
+<person>
+  <name>John Doe</name>
+  <age>30</age>
+  <city>New York</city>
+</person>
+
+<!-- GOOD: Text-only content -->
+<description>This is a simple text description without child elements.</description>
+
+<!-- POOR: Mixed content (text and elements) -->
+<!-- ruleid: xml-mixed-content-001 -->
+<paragraph>
+  This is some text
+  <bold>with bold</bold>
+  and more text
+  <italic>with italic</italic>
+  at the end.
+</paragraph>
+
+<!-- ============================================================================ -->
+<!-- 16. Namespace Prefix Best Practice -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Explicit namespace prefixes -->
+<app:root xmlns:app="http://example.com/app" xmlns:data="http://example.com/data">
+  <app:config>
+    <data:item>Value 1</data:item>
+    <data:item>Value 2</data:item>
+  </app:config>
+</app:root>
+
+<!-- ============================================================================ -->
+<!-- 17. Well-Structured Configuration Example -->
+<!-- ============================================================================ -->
+
+<!-- GOOD: Complete well-structured configuration -->
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration xmlns="http://example.com/config"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation="http://example.com/config https://example.com/config.xsd">
+  
+  <!-- Application Settings -->
+  <application>
+    <name>MyApplication</name>
+    <version>2.0.0</version>
+    <environment>production</environment>
+  </application>
+  
+  <!-- Database Configuration -->
+  <database>
+    <host>db.example.com</host>
+    <port>5432</port>
+    <name>myapp_db</name>
+    <ssl>true</ssl>
+    <credentials>
+      <username>${DB_USER}</username>
+      <password>${DB_PASSWORD}</password>
+    </credentials>
+  </database>
+  
+  <!-- Security Settings -->
+  <security>
+    <encryption>
+      <algorithm>AES-256</algorithm>
+      <keySize>256</keySize>
+    </encryption>
+    <session>
+      <timeout>1800</timeout>
+      <secure>true</secure>
+    </session>
+    <cors>
+      <allowedOrigin>https://app.example.com</allowedOrigin>
+      <allowedOrigin>https://admin.example.com</allowedOrigin>
+    </cors>
+  </security>
+  
+  <!-- Logging Configuration -->
+  <logging>
+    <level>INFO</level>
+    <format>JSON</format>
+    <output>
+      <console enabled="true"/>
+      <file enabled="true" path="/var/log/app.log"/>
+    </output>
+  </logging>
+  
+</configuration>
+

@@ -1,8 +1,8 @@
-# CR-SemService Validation Suite Guide
+# astgrep Validation Suite Guide
 
 ## Overview
 
-The CR-SemService Validation Suite provides comprehensive testing and validation of the project's functionality against real-world test cases and rules.
+The astgrep Validation Suite provides comprehensive testing and validation of the project's functionality against real-world test cases and rules.
 
 ## Components
 
@@ -31,7 +31,7 @@ python3 tests/comprehensive_test_runner.py
 
 **Features:**
 - Auto-discovers test cases (YAML rules + code files)
-- Runs CR-SemService against each test case
+- Runs astgrep against each test case
 - Collects detailed results and metrics
 - Generates JSON report
 

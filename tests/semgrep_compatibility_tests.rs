@@ -6,7 +6,7 @@
 //! - fix-regex support
 //! - paths support
 
-use cr_rules::parser::RuleParser;
+use astgrep_rules::parser::RuleParser;
 
 #[test]
 fn test_pattern_all_support() {

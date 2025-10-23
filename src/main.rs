@@ -10,8 +10,8 @@ async fn main() -> Result<()> {
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
 
-    info!("Starting CR-SemService - Multi-language Static Code Analysis Tool");
+    info!("Starting astgrep - Multi-language Static Code Analysis Tool");
 
     // Delegate to CLI module
-    cr_cli::run().await
+    astgrep_cli::run().await
 }

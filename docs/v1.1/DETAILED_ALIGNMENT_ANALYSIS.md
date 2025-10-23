@@ -7,7 +7,7 @@
 ### CR-Service 提供的核心能力
 
 ```
-cr-semservice (主库)
+astgrep (主库)
 ├── cr-core: 核心类型和特性
 │   ├── Language (8种语言支持)
 │   ├── Severity, Confidence 等级

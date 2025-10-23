@@ -1,8 +1,8 @@
-# CR-SemService 项目分析 - 文档索引
+# astgrep 项目分析 - 文档索引
 
 ## 📚 分析文档导航
 
-本分析包含6份详细文档，共1800+行内容，全面评估了CR-SemService项目的实现完整性。
+本分析包含6份详细文档，共1800+行内容，全面评估了astgrep项目的实现完整性。
 
 ---
 
@@ -205,10 +205,10 @@
 ## 📞 相关资源
 
 ### 项目信息
-- **项目名**: CR-SemService
+- **项目名**: astgrep
 - **作者**: Chen Jianjun
 - **邮箱**: chenjj.yz@gmail.com
-- **仓库**: https://github.com/c2j/cr-semservice
+- **仓库**: https://github.com/c2j/astgrep
 
 ### 原始文档
 - **设计文档**: docs/design.md

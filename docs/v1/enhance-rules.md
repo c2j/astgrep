@@ -1,4 +1,4 @@
-# CR-SemService Semgrep Rule Syntax Enhancement Plan
+# astgrep Semgrep Rule Syntax Enhancement Plan
 
 ## 📋 Current Implementation Status
 

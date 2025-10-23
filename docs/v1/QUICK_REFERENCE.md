@@ -1,4 +1,4 @@
-# CR-SemService 实现完整性快速参考
+# astgrep 实现完整性快速参考
 
 ## 📊 一页纸总结
 
@@ -232,12 +232,12 @@ cargo test
 
 ### 分析
 ```bash
-./target/release/cr-semservice analyze src/
+./target/release/astgrep analyze src/
 ```
 
 ### 验证规则
 ```bash
-./target/release/cr-semservice validate rules/*.yml
+./target/release/astgrep validate rules/*.yml
 ```
 
 ---
@@ -283,10 +283,10 @@ cargo test
 
 ## 📞 联系方式
 
-- **项目**: CR-SemService
+- **项目**: astgrep
 - **作者**: Chen Jianjun
 - **邮箱**: chenjj.yz@gmail.com
-- **仓库**: https://github.com/c2j/cr-semservice
+- **仓库**: https://github.com/c2j/astgrep
 
 ---
 

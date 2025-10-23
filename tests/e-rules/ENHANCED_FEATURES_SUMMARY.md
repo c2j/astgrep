@@ -1,8 +1,8 @@
-# CR-SemService Enhanced Features Implementation Summary
+# astgrep Enhanced Features Implementation Summary
 
 ## Overview
 
-This document summarizes the implementation of enhanced rule features for CR-SemService based on the requirements in `enhance-rules.md`. The implementation focuses on Phase 1 core missing operators and enhanced focus-metavariable support.
+This document summarizes the implementation of enhanced rule features for astgrep based on the requirements in `enhance-rules.md`. The implementation focuses on Phase 1 core missing operators and enhanced focus-metavariable support.
 
 ## Implemented Features
 
@@ -185,7 +185,7 @@ tests/e-rules/
 
 ## Conclusion
 
-The enhanced features implementation successfully extends CR-SemService's pattern matching capabilities while maintaining excellent performance characteristics. The implementation is backward-compatible, well-tested, and ready for production use.
+The enhanced features implementation successfully extends astgrep's pattern matching capabilities while maintaining excellent performance characteristics. The implementation is backward-compatible, well-tested, and ready for production use.
 
 **Key Achievements**:
 - ✅ Implemented all Phase 1 core missing operators

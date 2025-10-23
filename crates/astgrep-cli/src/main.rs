@@ -1,0 +1,17 @@
+use anyhow::Result;
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize tracing
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::INFO)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)?;
+
+    info!("Starting astgrep-cli - Command Line Interface for astgrep");
+
+    // Delegate to CLI module
+    astgrep_cli::run().await
+}

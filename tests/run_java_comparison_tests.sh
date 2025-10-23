@@ -120,9 +120,9 @@ run_cr_semservice_test() {
     fi
 
     # Try to run our CLI tool if available
-    if [ -f "target/debug/cr-semservice" ] || [ -f "target/release/cr-semservice" ]; then
+    if [ -f "target/debug/astgrep" ] || [ -f "target/release/astgrep" ]; then
         # Use our CLI tool
-        local output=$(cargo run --bin cr-semservice -- analyze --config "$yaml_file" "$java_file" --format json 2>/dev/null || echo '{"findings":[]}')
+        local output=$(cargo run --bin astgrep -- analyze --config "$yaml_file" "$java_file" --format json 2>/dev/null || echo '{"findings":[]}')
         local match_count=$(echo "$output" | grep -c '"rule_id"' 2>/dev/null || echo "0")
         # Clean the result
         match_count=$(echo "$match_count" | tr -d '\n\r' | grep -o '[0-9]*' | head -1)
