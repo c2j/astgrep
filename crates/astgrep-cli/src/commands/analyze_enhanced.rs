@@ -430,6 +430,25 @@ fn apply_metavariable_pattern(
         Err(_) => return Ok(findings), // Skip if language cannot be determined
     };
 
+    // Check if pattern looks like a regex (contains regex metacharacters)
+    let is_likely_regex = pattern.contains('(') && pattern.contains(')') &&
+                         (pattern.contains('\\') || pattern.contains('[') || pattern.contains('*') || pattern.contains('+'));
+
+    if is_likely_regex {
+        info!("Pattern looks like regex, attempting direct regex matching: {}", pattern);
+        match apply_regex_pattern(rule, pattern, file_path, source_code) {
+            Ok(regex_findings) => {
+                info!("Regex pattern matching found {} matches", regex_findings.len());
+                if !regex_findings.is_empty() {
+                    return Ok(regex_findings);
+                }
+            }
+            Err(e) => {
+                warn!("Regex pattern matching failed: {}", e);
+            }
+        }
+    }
+
     // Try to use our enhanced rule parser and matcher first
     info!("Attempting enhanced pattern matching for pattern: {}", pattern);
     match apply_enhanced_pattern_matching(rule, file_path, source_code, language) {
@@ -880,9 +899,20 @@ fn apply_tree_sitter_pattern_matching(
                 continue;
             }
 
+            // Try to extract capture groups from the matched text if the pattern is a regex
+            let mut message = rule.message.clone();
+            if let Ok(node_text) = node.utf8_text(source_code.as_bytes()) {
+                // Try to match the pattern as a regex to extract capture groups
+                if let Ok(regex) = regex::Regex::new(pattern) {
+                    if let Some(captures) = regex.captures(node_text) {
+                        message = replace_capture_groups(&message, &captures);
+                    }
+                }
+            }
+
             let finding = Finding {
                 rule_id: rule.id.clone(),
-                message: rule.message.clone(),
+                message,
                 severity: rule.severity.clone(),
                 confidence: Confidence::High,
                 location: Location {
@@ -1711,6 +1741,21 @@ fn extract_mktemp_variable(line: &str) -> Option<String> {
     None
 }
 
+/// Replace capture groups in message template with actual captured values
+fn replace_capture_groups(message: &str, captures: &regex::Captures) -> String {
+    let mut result = message.to_string();
+
+    // Replace numbered capture groups: ${1}, ${2}, etc.
+    for i in 1..captures.len() {
+        if let Some(captured) = captures.get(i) {
+            let placeholder = format!("${{{}}}", i);
+            result = result.replace(&placeholder, captured.as_str());
+        }
+    }
+
+    result
+}
+
 /// Apply a regex pattern to source code and return findings
 fn apply_regex_pattern(rule: &ParsedRule, pattern: &str, file_path: &PathBuf, source_code: &str) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
@@ -1724,39 +1769,45 @@ fn apply_regex_pattern(rule: &ParsedRule, pattern: &str, file_path: &PathBuf, so
                 continue;
             }
 
-            if let Some(mat) = regex.find(line) {
-                // Check if the match is inside a comment on the same line
-                if let Some(comment_pos) = line.find('#') {
-                    if mat.start() >= comment_pos {
-                        continue; // Skip matches inside inline comments
+            // Use captures_iter to get all matches with capture groups
+            for captures in regex.captures_iter(line) {
+                if let Some(mat) = captures.get(0) {
+                    // Check if the match is inside a comment on the same line
+                    if let Some(comment_pos) = line.find('#') {
+                        if mat.start() >= comment_pos {
+                            continue; // Skip matches inside inline comments
+                        }
                     }
-                }
-                if let Some(comment_pos) = line.find("//") {
-                    if mat.start() >= comment_pos {
-                        continue; // Skip matches inside inline comments
+                    if let Some(comment_pos) = line.find("//") {
+                        if mat.start() >= comment_pos {
+                            continue; // Skip matches inside inline comments
+                        }
                     }
-                }
 
-                // Additional check: if the line starts with # (comment), skip the match entirely
-                if line.trim_start().starts_with('#') {
-                    continue; // Skip matches in comment lines
-                }
+                    // Additional check: if the line starts with # (comment), skip the match entirely
+                    if line.trim_start().starts_with('#') {
+                        continue; // Skip matches in comment lines
+                    }
 
-                let finding = Finding {
-                    rule_id: rule.id.clone(),
-                    message: rule.message.clone(),
-                    severity: rule.severity.clone(),
-                    location: Location {
-                        file: file_path.clone(),
-                        start_line: line_num + 1,
-                        end_line: line_num + 1,
-                        start_column: mat.start() + 1,
-                        end_column: mat.end() + 1,
-                    },
-                    confidence: Confidence::High,
-                    fix: None,
-                };
-                findings.push(finding);
+                    // Replace capture groups in the message
+                    let message = replace_capture_groups(&rule.message, &captures);
+
+                    let finding = Finding {
+                        rule_id: rule.id.clone(),
+                        message,
+                        severity: rule.severity.clone(),
+                        location: Location {
+                            file: file_path.clone(),
+                            start_line: line_num + 1,
+                            end_line: line_num + 1,
+                            start_column: mat.start() + 1,
+                            end_column: mat.end() + 1,
+                        },
+                        confidence: Confidence::High,
+                        fix: None,
+                    };
+                    findings.push(finding);
+                }
             }
         }
     }
