@@ -100,7 +100,7 @@ impl MetricsCollector {
     }
 
     /// Record analysis duration
-    pub fn record_analysis_duration(&self, language: &str, duration_ms: u64) {
+    pub fn record_analysis_duration(&self, language: &str, _duration_ms: u64) {
         // Store duration for histogram metrics
         // For now, we'll just track the count and could extend to track durations
         self.increment_analysis_count(language);
@@ -110,7 +110,7 @@ impl MetricsCollector {
     }
 
     /// Record rule execution metrics
-    pub fn record_rule_execution(&self, rule_id: &str, duration_ms: u64, success: bool) {
+    pub fn record_rule_execution(&self, rule_id: &str, _duration_ms: u64, success: bool) {
         // Track rule execution statistics
         let status = if success { "success" } else { "failure" };
         let key = format!("rule_execution:{}:{}", rule_id, status);

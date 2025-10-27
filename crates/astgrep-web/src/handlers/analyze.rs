@@ -473,6 +473,7 @@ async fn load_default_rules_for_language(
         Language::Ruby => "ruby",
         Language::Kotlin => "kotlin",
         Language::Swift => "swift",
+        Language::Xml => "xml",
     };
 
     let rules_path = config.rules_directory.join(format!("{}.yaml", language_str));
@@ -666,6 +667,18 @@ rules:
     patterns:
       - "print("
     message: "Use proper logging instead of print"
+"#.to_string(),
+        Language::Xml => r#"
+rules:
+  - id: xml-best-practices
+    name: "XML Best Practices"
+    description: "Detects XML best practice violations"
+    severity: WARNING
+    confidence: HIGH
+    languages: [xml]
+    patterns:
+      - "<!--"
+    message: "Review XML structure and comments"
 "#.to_string(),
     }
 }

@@ -212,7 +212,7 @@ fn get_disk_usage() -> f64 {
     // In a production system, you would use a proper system monitoring library
     use std::fs;
 
-    if let Ok(metadata) = fs::metadata("/") {
+    if let Ok(_metadata) = fs::metadata("/") {
         // This is a simplified calculation
         // In reality, you'd need to check available vs total space
         50.0 // Placeholder - would need proper disk space calculation
