@@ -22,7 +22,7 @@ RUN apk add --no-cache \
 WORKDIR /build
 
 # Copy dependency files first for better caching
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 COPY crates/astgrep-ast/Cargo.toml crates/astgrep-ast/
 COPY crates/astgrep-rules/Cargo.toml crates/astgrep-rules/
 COPY crates/astgrep-parser/Cargo.toml crates/astgrep-parser/
@@ -31,14 +31,15 @@ COPY crates/astgrep-dataflow/Cargo.toml crates/astgrep-dataflow/
 COPY crates/astgrep-cli/Cargo.toml crates/astgrep-cli/
 COPY crates/astgrep-core/Cargo.toml crates/astgrep-core/
 COPY crates/astgrep-web/Cargo.toml crates/astgrep-web/
+COPY crates/astgrep-gui/Cargo.toml crates/astgrep-gui/
 COPY crates/test-utils/Cargo.toml crates/test-utils/
 
 # Create dummy source files to cache dependencies
 RUN mkdir -p src crates/astgrep-ast/src crates/astgrep-rules/src \
     crates/astgrep-parser/src crates/astgrep-matcher/src \
     crates/astgrep-dataflow/src crates/astgrep-cli/src \
-    crates/astgrep-core/src crates/astgrep-web/src \
-    crates/test-utils/src && \
+    crates/astgrep-core/src crates/astgrep-web/src crates/astgrep-gui/src \
+    crates/test-utils/src crates/astgrep-core/benches && \
     echo "fn main() {}" > src/main.rs && \
     echo "pub fn dummy() {}" > crates/astgrep-ast/src/lib.rs && \
     echo "pub fn dummy() {}" > crates/astgrep-rules/src/lib.rs && \
@@ -50,7 +51,9 @@ RUN mkdir -p src crates/astgrep-ast/src crates/astgrep-rules/src \
     echo "pub fn dummy() {}" > crates/astgrep-core/src/lib.rs && \
     echo "pub fn dummy() {}" > crates/astgrep-web/src/lib.rs && \
     echo "fn main() {}" > crates/astgrep-web/src/main.rs && \
-    echo "pub fn dummy() {}" > crates/test-utils/src/lib.rs
+    echo "pub fn dummy() {}" > crates/test-utils/src/lib.rs && \
+    echo "fn main() {}" > crates/astgrep-gui/src/main.rs && \
+    echo "fn main() {}" > crates/astgrep-core/benches/performance.rs
 
 # Build dependencies (this layer will be cached)
 RUN cargo build --release --target x86_64-unknown-linux-musl && \
@@ -60,6 +63,7 @@ RUN cargo build --release --target x86_64-unknown-linux-musl && \
 COPY . .
 
 # Build the actual binaries with static linking
+# Note: GUI is skipped in Docker builds due to GUI framework dependencies
 ENV RUSTFLAGS="-C target-feature=+crt-static"
 RUN cargo build --release --target x86_64-unknown-linux-musl -p astgrep && \
     cargo build --release --target x86_64-unknown-linux-musl -p astgrep-cli && \

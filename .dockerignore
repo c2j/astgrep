@@ -1,0 +1,182 @@
+# Build artifacts and target directories
+target/
+**/target/
+dist/
+build/
+out/
+.output/
+
+# Rust build artifacts
+**/*.rs.bk
+*.pdb
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs and temporary files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+tmp/
+temp/
+.cache/
+.parcel-cache/
+
+# Node.js (if any)
+node_modules/
+dist-ssr/
+*.local
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# Documentation and non-essential files
+README.md
+*.md
+docs/
+documentation/
+requirement/
+
+# Testing
+coverage/
+.nyc_output/
+cypress/videos/
+cypress/screenshots/
+tests/
+**/tests/
+test/
+**/test/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+.jenkins/
+Jenkinsfile
+
+# Docker files (avoid recursive Docker builds)
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+.docker/
+
+# Development scripts
+scripts/
+*.sh
+*.bat
+*.ps1
+
+# Package manager files
+Cargo.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE and development tools
+.eslintcache
+.stylelintcache
+.eslintrc*
+.prettierrc*
+.editorconfig
+
+# Backup and temporary files
+*.bak
+*.backup
+*.tmp
+*.temp
+*.orig
+*.rej
+
+# Application data and user files
+data/
+storage/
+uploads/
+downloads/
+
+# Fonts (keep essential fonts, exclude large ones if not needed)
+# assets/fonts/
+
+# Large binary files that might not be needed
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Platform-specific build outputs
+dist/linux/
+dist/macos/
+dist/windows/
+
+# Rust-specific ignores
+rust-toolchain
+rust-toolchain.toml
+.cargo/config
+.cargo/config.toml
+
+# Application-specific data directories
+.seeu/
+.isearch/
+.inote/
