@@ -670,6 +670,7 @@ impl CrGuiApp {
             astgrep_core::Language::Ruby => "rb",
             astgrep_core::Language::Kotlin => "kt",
             astgrep_core::Language::Swift => "swift",
+            astgrep_core::Language::Xml => "xml",
         };
         let file_path = PathBuf::from(format!("test_file.{}", file_extension));
         let ast = self.parser_registry.parse_file(&file_path, source_code)
