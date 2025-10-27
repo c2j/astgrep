@@ -599,6 +599,10 @@ impl CrGuiApp {
             "bash" => astgrep_core::Language::Bash,
             "c" => astgrep_core::Language::C,
             "csharp" => astgrep_core::Language::CSharp,
+            "ruby" => astgrep_core::Language::Ruby,
+            "kotlin" => astgrep_core::Language::Kotlin,
+            "swift" => astgrep_core::Language::Swift,
+            "xml" => astgrep_core::Language::Xml,
             _ => {
                 println!("⚠️ Unsupported language: {}", language);
                 self.analysis_results.clear();

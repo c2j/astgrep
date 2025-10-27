@@ -448,6 +448,10 @@ fn parse_language(language_str: &str) -> WebResult<Language> {
         "php" => Ok(Language::Php),
         "csharp" | "c#" | "cs" => Ok(Language::CSharp),
         "c" => Ok(Language::C),
+        "ruby" | "rb" => Ok(Language::Ruby),
+        "kotlin" | "kt" => Ok(Language::Kotlin),
+        "swift" => Ok(Language::Swift),
+        "xml" => Ok(Language::Xml),
         _ => Err(WebError::bad_request(&format!("Unsupported language: {}", language_str))),
     }
 }
@@ -1115,6 +1119,9 @@ fn detect_language_from_filename(filename: &str) -> String {
         "rs" => "rust".to_string(),
         "php" => "php".to_string(),
         "rb" => "ruby".to_string(),
+        "kt" | "kts" => "kotlin".to_string(),
+        "swift" => "swift".to_string(),
+        "xml" => "xml".to_string(),
         _ => "text".to_string(),
     }
 }
