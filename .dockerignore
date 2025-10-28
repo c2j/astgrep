@@ -180,3 +180,5 @@ rust-toolchain.toml
 .seeu/
 .isearch/
 .inote/
+
+scripts/

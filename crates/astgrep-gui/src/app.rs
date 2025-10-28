@@ -798,6 +798,42 @@ impl CrGuiApp {
                     ui.label(format!("  Error: {}", error));
                     ui.label(format!("  Warning: {}", warning));
                     ui.label(format!("  Info: {}", info));
+
+                    // 完整 JSON 展示
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.strong("Full JSON");
+
+                    let metadata_value = serde_json::json!({
+                        "analysis_mode": format!("{:?}", self.ui_state.analysis_mode),
+                        "language": self.code_editor.get_language(),
+                        "total_findings": self.analysis_results.len(),
+                        "severity_counts": {
+                            "CRITICAL": critical,
+                            "ERROR": error,
+                            "WARNING": warning,
+                            "INFO": info
+                        },
+                        "findings": self.analysis_results,
+                    });
+
+                    let mut json_str = match serde_json::to_string_pretty(&metadata_value) {
+                        Ok(s) => s,
+                        Err(e) => format!("<error serializing json: {}>", e),
+                    };
+
+                    egui::ScrollArea::vertical()
+                        .id_source("metadata_json_scroll")
+                        .max_height(300.0)
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::TextEdit::multiline(&mut json_str)
+                                    .code_editor()
+                                    .desired_width(ui.available_width())
+                                    .desired_rows(12)
+                                    .interactive(false),
+                            );
+                        });
                 });
             });
         }

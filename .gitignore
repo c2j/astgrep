@@ -33,4 +33,7 @@ Thumbs.db
 results.*
 
 # Python
-.venv
+.venv/
+
+dist/
+__pycache__/

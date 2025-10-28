@@ -208,7 +208,7 @@ impl RuleExecutionEngine {
         if let Some(pattern_str) = pattern_str_opt {
             let has_metavars = pattern_str.contains('$');
             if !has_metavars {
-                let spans = self.find_pattern_spans_in_source(&pattern_str, &context.source_code);
+                let spans = self.find_pattern_spans_in_source(&pattern_str, &context.source_code, context.language);
                 println!("🔍 Pattern matching found {} spans", spans.len());
 
                 // Optional: deduplicate identical spans
@@ -253,7 +253,7 @@ impl RuleExecutionEngine {
         if let PatternType::Either(ref subs) = &pattern.pattern_type {
             for sub in subs {
                 if let Some(sub_pat) = sub.get_pattern_string() {
-                    let spans = self.find_pattern_spans_in_source(sub_pat, &context.source_code);
+                    let spans = self.find_pattern_spans_in_source(sub_pat, &context.source_code, context.language);
                     for (start_byte, end_byte) in spans {
                         let (start_line, start_col) = Self::byte_index_to_line_col(&context.source_code, start_byte);
                         let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
@@ -286,7 +286,7 @@ impl RuleExecutionEngine {
         }
 
         // Fallback: no simple/regex pattern string available, use node-based matching (locations may be coarse)
-        let matches = self.find_pattern_matches(pattern, _ast)?;
+        let matches = self.find_pattern_matches(pattern, _ast, context.language)?;
         println!("🔍 Fallback matching found {} matches", matches.len());
 
         // Keep only smallest, non-overlapping node spans
@@ -402,7 +402,7 @@ impl RuleExecutionEngine {
     }
 
     /// Find pattern matches in AST (simplified implementation)
-    fn find_pattern_matches(&self, pattern: &Pattern, ast: &dyn AstNode) -> Result<Vec<Box<dyn AstNode>>> {
+    fn find_pattern_matches(&self, pattern: &Pattern, ast: &dyn AstNode, language: astgrep_core::Language) -> Result<Vec<Box<dyn AstNode>>> {
         let mut matches = Vec::new();
         let mut node_count = 0;
 
@@ -415,7 +415,7 @@ impl RuleExecutionEngine {
                 // For Either patterns, try each sub-pattern
                 for (i, sub_pattern) in sub_patterns.iter().enumerate() {
                     println!("🔍 Trying Either sub-pattern {}: {:?}", i + 1, sub_pattern);
-                    let sub_matches = self.find_pattern_matches(sub_pattern, ast)?;
+                    let sub_matches = self.find_pattern_matches(sub_pattern, ast, language)?;
                     println!("🔍 Either sub-pattern {} found {} matches", i + 1, sub_matches.len());
                     matches.extend(sub_matches);
                 }
@@ -429,7 +429,7 @@ impl RuleExecutionEngine {
                         println!("🔍 Visiting node #{}: '{}'", node_count, text);
                         if let Some(pattern_str) = pattern.get_pattern_string() {
                             println!("🔍 Pattern string: '{}'", pattern_str);
-                            if self.simple_pattern_match(pattern_str, text) {
+                            if self.simple_pattern_match(pattern_str, text, language) {
                                 println!("🔍 MATCH FOUND! Adding node to matches");
                                 matches.push(node.clone_node());
                             }
@@ -508,7 +508,8 @@ impl RuleExecutionEngine {
     }
 
     /// Try to match a pattern starting at token index `start` and return end token index on success
-    fn try_match_tokens(&self, pattern_tokens: &[String], text_tokens: &[(String, usize, usize)], start: usize) -> Option<usize> {
+    /// `case_insensitive` controls literal comparisons (used for SQL keywords, etc.)
+    fn try_match_tokens(&self, pattern_tokens: &[String], text_tokens: &[(String, usize, usize)], start: usize, case_insensitive: bool) -> Option<usize> {
         let mut i = 0usize; // pattern index
         let mut j = start;  // text token index
         let mut bindings: HashMap<String, Vec<String>> = HashMap::new();
@@ -542,7 +543,12 @@ impl RuleExecutionEngine {
                             } else { return None; }
                         } else {
                             let mut pos = j; let mut found = None;
-                            while pos < text_tokens.len() { if &text_tokens[pos].0 == next_lit { found = Some(pos); break; } pos += 1; }
+                            while pos < text_tokens.len() {
+                                let tt = &text_tokens[pos].0;
+                                let matched = if case_insensitive { tt.eq_ignore_ascii_case(next_lit) } else { tt == next_lit };
+                                if matched { found = Some(pos); break; }
+                                pos += 1;
+                            }
                             if let Some(end_pos) = found {
                                 if end_pos == j { return None; }
                                 let capture: Vec<String> = text_tokens[j..end_pos].iter().map(|t| t.0.clone()).collect();
@@ -553,7 +559,8 @@ impl RuleExecutionEngine {
                     }
                 }
             } else {
-                if &text_tokens[j].0 != p_tok { return None; }
+                let matched = if case_insensitive { text_tokens[j].0.eq_ignore_ascii_case(p_tok) } else { &text_tokens[j].0 == p_tok };
+                if !matched { return None; }
                 i += 1; j += 1;
             }
         }
@@ -561,13 +568,14 @@ impl RuleExecutionEngine {
     }
 
     /// Find spans (byte start, byte end) of matches in the given source
-    fn find_pattern_spans_in_source(&self, pattern: &str, source: &str) -> Vec<(usize, usize)> {
+    fn find_pattern_spans_in_source(&self, pattern: &str, source: &str, language: astgrep_core::Language) -> Vec<(usize, usize)> {
         let mut pattern_tokens = self.tokenize(pattern);
         if pattern_tokens.last() == Some(&";".to_string()) { pattern_tokens.pop(); }
         let text_tokens = self.tokenize_spanned(source);
         let mut spans = Vec::new();
+        let case_insensitive = matches!(language, astgrep_core::Language::Sql);
         for start in 0..text_tokens.len() {
-            if let Some(end_idx) = self.try_match_tokens(&pattern_tokens, &text_tokens, start) {
+            if let Some(end_idx) = self.try_match_tokens(&pattern_tokens, &text_tokens, start, case_insensitive) {
                 let start_byte = text_tokens[start].1;
                 let end_byte = if end_idx == 0 { 0 } else { text_tokens[end_idx - 1].2 };
                 spans.push((start_byte, end_byte));
@@ -597,7 +605,7 @@ impl RuleExecutionEngine {
     /// - 碰到 $META 时，按“直到下一个字面量”为止进行贪婪匹配；若下一个字面量是右括号，则做成对括号的平衡匹配；
     /// - 允许 pattern 末尾分号为可选；
     /// - 从每个可能的起点尝试匹配，一旦成功即返回 true。
-    fn simple_pattern_match(&self, pattern: &str, text: &str) -> bool {
+    fn simple_pattern_match(&self, pattern: &str, text: &str, language: astgrep_core::Language) -> bool {
         println!("🔍 Pattern: '{}'", pattern);
         println!("🔍 Node text: '{}'", text);
 
@@ -615,6 +623,9 @@ impl RuleExecutionEngine {
             println!("🔍 Pattern has trailing semicolon; making it optional for matching");
             pattern_tokens.pop();
         }
+
+        let case_insensitive = matches!(language, astgrep_core::Language::Sql);
+
 
         // 局部闭包：从给定起点尝试匹配，支持 $META 捕获多 token
         let try_match_from = |start: usize| -> bool {
@@ -678,7 +689,8 @@ impl RuleExecutionEngine {
                                 let mut pos = j;
                                 let mut found_k: Option<usize> = None;
                                 while pos < text_tokens.len() {
-                                    if &text_tokens[pos] == next_lit { found_k = Some(pos); break; }
+                                    let matched = if case_insensitive { text_tokens[pos].eq_ignore_ascii_case(next_lit) } else { &text_tokens[pos] == next_lit };
+                                    if matched { found_k = Some(pos); break; }
                                     pos += 1;
                                 }
                                 if let Some(end_pos) = found_k {
@@ -699,8 +711,9 @@ impl RuleExecutionEngine {
                         }
                     }
                 } else {
-                    // 字面量需要严格相等
-                    if &text_tokens[j] != p_tok { return false; }
+                    // 字面量需要严格相等（SQL 等大小写不敏感语言放宽为不区分大小写）
+                    let matched = if case_insensitive { text_tokens[j].eq_ignore_ascii_case(p_tok) } else { &text_tokens[j] == p_tok };
+                    if !matched { return false; }
                     i += 1;
                     j += 1;
                 }
@@ -732,8 +745,8 @@ impl RuleExecutionEngine {
 
         // Simplified dataflow analysis
         // In a real implementation, this would use proper taint analysis
-        let sources = self.find_dataflow_nodes(ast, &dataflow.sources)?;
-        let sinks = self.find_dataflow_nodes(ast, &dataflow.sinks)?;
+        let sources = self.find_dataflow_nodes(ast, &dataflow.sources, context.language)?;
+        let sinks = self.find_dataflow_nodes(ast, &dataflow.sinks, context.language)?;
 
         // Check if there are potential flows from sources to sinks
         if !sources.is_empty() && !sinks.is_empty() {
@@ -757,13 +770,13 @@ impl RuleExecutionEngine {
     }
 
     /// Find nodes matching dataflow patterns
-    fn find_dataflow_nodes(&self, ast: &dyn AstNode, patterns: &[String]) -> Result<Vec<Box<dyn AstNode>>> {
+    fn find_dataflow_nodes(&self, ast: &dyn AstNode, patterns: &[String], language: astgrep_core::Language) -> Result<Vec<Box<dyn AstNode>>> {
         let mut matches = Vec::new();
 
         for pattern in patterns {
             astgrep_core::ast_utils::visit_nodes(ast, &mut |node| {
                 if let Some(text) = node.text() {
-                    if self.simple_pattern_match(pattern, text) {
+                    if self.simple_pattern_match(pattern, text, language) {
                         matches.push(node.clone_node());
                     }
                 }
@@ -958,6 +971,15 @@ mod tests {
 
         assert!(result.is_success());
         assert_eq!(result.rule_id, "dataflow-rule");
+    }
+
+
+    #[test]
+    fn test_sql_case_insensitive_simple_pattern() {
+        let engine = RuleExecutionEngine::new();
+        let pattern = "DELETE FROM $TABLE";
+        let text = "delete from user;";
+        assert!(engine.simple_pattern_match(pattern, text, Language::Sql));
     }
 
     #[test]
