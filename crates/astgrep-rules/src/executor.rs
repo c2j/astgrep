@@ -142,7 +142,44 @@ impl AdvancedRuleExecutor {
         // Find pattern matches using the advanced matcher
         let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
 
-        for match_result in matches {
+        // Heuristic de-dup: keep only smallest, non-overlapping spans to avoid repeated matches
+        let mut mm: Vec<((usize, usize), usize, usize, usize, usize, SemgrepMatchResult)> = matches
+            .into_iter()
+            .map(|m| {
+                if let Some((sl, sc, el, ec)) = m.node.location() {
+                    let dl = el.saturating_sub(sl);
+                    let dc = ec.saturating_sub(sc);
+                    ((dl, dc), sl, sc, el, ec, m)
+                } else {
+                    ((usize::MAX, usize::MAX), 0, 0, usize::MAX, usize::MAX, m)
+                }
+            })
+            .collect();
+        mm.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| (a.1, a.2, a.3, a.4).cmp(&(b.1, b.2, b.3, b.4))));
+
+        let overlaps = |a: (usize, usize, usize, usize), b: (usize, usize, usize, usize)| -> bool {
+            let (a_sl, a_sc, a_el, a_ec) = a;
+            let (b_sl, b_sc, b_el, b_ec) = b;
+            // Simple line-based overlap, with basic column checks when on same line
+            if a_el < b_sl || b_el < a_sl { return false; }
+            if a_sl == b_el && a_sc >= b_ec { return false; }
+            if b_sl == a_el && b_sc >= a_ec { return false; }
+            true
+        };
+
+        let mut selected_spans: Vec<(usize, usize, usize, usize)> = Vec::new();
+        let mut filtered: Vec<SemgrepMatchResult> = Vec::new();
+        'outer: for (_, sl, sc, el, ec, m) in mm {
+            for s in &selected_spans {
+                if overlaps((sl, sc, el, ec), *s) {
+                    continue 'outer;
+                }
+            }
+            selected_spans.push((sl, sc, el, ec));
+            filtered.push(m);
+        }
+
+        for match_result in filtered {
             // Check pattern conditions
             if self.check_pattern_conditions(pattern, &match_result, dataflow_analysis)? {
                 let finding = self.create_finding_from_match(rule, pattern, &match_result, file_path)?;

@@ -4,7 +4,7 @@
 # ============================================
 # Stage 1: Builder
 # ============================================
-FROM rust:1.87-alpine AS builder
+FROM rust:1.88-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -67,12 +67,15 @@ COPY . .
 ENV RUSTFLAGS="-C target-feature=+crt-static"
 RUN cargo build --release --target x86_64-unknown-linux-musl -p astgrep && \
     cargo build --release --target x86_64-unknown-linux-musl -p astgrep-cli && \
-    cargo build --release --target x86_64-unknown-linux-musl -p astgrep-web
+    cargo build --release --target x86_64-unknown-linux-musl -p astgrep-web 
+    
+RUN    cargo build --release --target x86_64-unknown-linux-musl -p astgrep-gui
 
 # Strip binaries to reduce size
 RUN strip target/x86_64-unknown-linux-musl/release/astgrep && \
     strip target/x86_64-unknown-linux-musl/release/astgrep-cli && \
-    strip target/x86_64-unknown-linux-musl/release/astgrep-web
+    strip target/x86_64-unknown-linux-musl/release/astgrep-web && \
+    strip target/x86_64-unknown-linux-musl/release/astgrep-gui
 
 # ============================================
 # Stage 2: Runtime (minimal)
@@ -83,6 +86,7 @@ FROM scratch AS runtime
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep /usr/local/bin/astgrep
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-cli /usr/local/bin/astgrep-cli
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-web /usr/local/bin/astgrep-web
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-gui /usr/local/bin/astgrep-gui
 
 # Set entrypoint
 ENTRYPOINT ["/usr/local/bin/astgrep"]
@@ -96,6 +100,7 @@ FROM alpine:latest AS export
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep /export/astgrep
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-cli /export/astgrep-cli
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-web /export/astgrep-web
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/astgrep-gui /export/astgrep-gui
 
 # Create tarball
 WORKDIR /export

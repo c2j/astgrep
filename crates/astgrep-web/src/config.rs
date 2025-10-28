@@ -215,16 +215,31 @@ impl WebConfig {
         }
         
         if !self.rules_directory.exists() {
-            return Err(anyhow::anyhow!("rules_directory does not exist: {}", self.rules_directory.display()));
+            // Default handling: try to create the rules directory instead of erroring
+            match std::fs::create_dir_all(&self.rules_directory) {
+                Ok(_) => {
+                    tracing::warn!(
+                        "rules_directory did not exist. Created at: {}",
+                        self.rules_directory.display()
+                    );
+                }
+                Err(e) => {
+                    // Could not create; continue without failing validation
+                    tracing::warn!(
+                        "rules_directory not found and could not be created ({}). Continuing without rules.",
+                        e
+                    );
+                }
+            }
         }
-        
+
         if self.enable_auth && self.jwt_secret.is_none() {
             return Err(anyhow::anyhow!("jwt_secret is required when authentication is enabled"));
         }
-        
+
         Ok(())
     }
-    
+
     /// Create temporary directory if it doesn't exist
     pub fn ensure_temp_directory(&self) -> anyhow::Result<()> {
         if !self.temp_directory.exists() {
@@ -252,7 +267,7 @@ mod tests {
         let config = WebConfig::default();
         let serialized = toml::to_string(&config).unwrap();
         let deserialized: WebConfig = toml::from_str(&serialized).unwrap();
-        
+
         assert_eq!(config.bind_address, deserialized.bind_address);
         assert_eq!(config.max_upload_size, deserialized.max_upload_size);
     }
@@ -261,10 +276,10 @@ mod tests {
     fn test_config_file_operations() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
-        
+
         let config = WebConfig::default();
         config.to_file(&config_path).unwrap();
-        
+
         let loaded_config = WebConfig::from_file(&config_path).unwrap();
         assert_eq!(config.bind_address, loaded_config.bind_address);
     }
@@ -273,14 +288,14 @@ mod tests {
     fn test_config_validation() {
         let mut config = WebConfig::default();
         config.rules_directory = PathBuf::from("/non/existent/path");
-        assert!(config.validate().is_err()); // rules_directory doesn't exist
-        
+        assert!(config.validate().is_ok()); // missing rules dir is handled (created or skipped)
+
         config.rules_directory = std::env::temp_dir();
         assert!(config.validate().is_ok());
-        
+
         config.enable_auth = true;
         assert!(config.validate().is_err()); // jwt_secret is None
-        
+
         config.jwt_secret = Some("secret".to_string());
         assert!(config.validate().is_ok());
     }

@@ -7,18 +7,29 @@ use crate::app::AppSettings;
 pub struct CodeEditor {
     /// Source code content
     content: String,
-    
+
     /// Current language
     language: String,
-    
+
     /// Line numbers visibility
     show_line_numbers: bool,
-    
+
+    /// Current font size (synced from AppSettings)
+    font_size: f32,
+
     /// Current cursor position
     cursor_pos: usize,
-    
+
     /// Highlighted ranges (for showing analysis results)
     highlighted_ranges: Vec<HighlightRange>,
+
+    /// Simple undo stack (stores previous contents)
+    undo_stack: Vec<String>,
+    /// Simple redo stack
+    redo_stack: Vec<String>,
+
+    /// Toolbar action: request to load example for current language
+    request_load_examples: bool,
 }
 
 #[derive(Clone)]
@@ -37,37 +48,59 @@ impl CodeEditor {
             content: String::new(),
             language: "java".to_string(),
             show_line_numbers: true,
+            font_size: 14.0,
             cursor_pos: 0,
             highlighted_ranges: Vec::new(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            request_load_examples: false,
         }
     }
-    
+
     pub fn set_content(&mut self, content: &str) {
         self.content = content.to_string();
     }
-    
+
+    /// Set content and record undo snapshot
+    pub fn set_content_with_undo(&mut self, new_content: String) {
+        let prev = std::mem::replace(&mut self.content, new_content);
+        self.undo_stack.push(prev);
+        self.redo_stack.clear();
+    }
+
     pub fn get_content(&self) -> &str {
         &self.content
     }
-    
+
     pub fn set_language(&mut self, language: &str) {
         self.language = language.to_string();
     }
+    /// Take and clear the one-shot request flag for loading examples
+    pub fn take_request_load_examples(&mut self) -> bool {
+        let r = self.request_load_examples;
+        self.request_load_examples = false;
+        r
+    }
+
 
     pub fn get_language(&self) -> String {
         self.language.clone()
     }
-    
+
     pub fn add_highlight(&mut self, range: HighlightRange) {
         self.highlighted_ranges.push(range);
     }
-    
+
     pub fn clear_highlights(&mut self) {
         self.highlighted_ranges.clear();
     }
-    
-    pub fn show(&mut self, ui: &mut egui::Ui, settings: &AppSettings) -> bool {
+
+    pub fn show(&mut self, ui: &mut egui::Ui, settings: &mut AppSettings) -> bool {
         let mut analyze_clicked = false;
+
+        // Sync local flags from global settings
+        self.show_line_numbers = settings.show_line_numbers;
+        self.font_size = settings.font_size;
 
         ui.vertical(|ui| {
             // Toolbar
@@ -79,10 +112,16 @@ impl CodeEditor {
                         ui.selectable_value(&mut self.language, "java".to_string(), "Java");
                         ui.selectable_value(&mut self.language, "javascript".to_string(), "JavaScript");
                         ui.selectable_value(&mut self.language, "python".to_string(), "Python");
+                        ui.selectable_value(&mut self.language, "sql".to_string(), "SQL");
+                        ui.selectable_value(&mut self.language, "xml".to_string(), "XML");
                         ui.selectable_value(&mut self.language, "go".to_string(), "Go");
                         ui.selectable_value(&mut self.language, "rust".to_string(), "Rust");
                         ui.selectable_value(&mut self.language, "php".to_string(), "PHP");
                     });
+
+                if ui.button("📋 Load Example").clicked() {
+                    self.request_load_examples = true;
+                }
 
                 ui.separator();
 
@@ -95,13 +134,20 @@ impl CodeEditor {
                 }
 
                 if ui.button("🔄 Clear").clicked() {
-                    self.content.clear();
+                    let prev = std::mem::take(&mut self.content);
+                    self.undo_stack.push(prev);
+                    self.redo_stack.clear();
                     self.clear_highlights();
                 }
 
                 ui.separator();
 
-                ui.checkbox(&mut self.show_line_numbers, "Line numbers");
+                // Toggle global setting for line numbers
+                let mut show_ln = settings.show_line_numbers;
+                if ui.checkbox(&mut show_ln, "Line numbers").changed() {
+                    settings.show_line_numbers = show_ln;
+                    self.show_line_numbers = show_ln;
+                }
 
                 ui.separator();
 
@@ -123,8 +169,12 @@ impl CodeEditor {
 
         analyze_clicked
     }
-    
-    fn show_code_editor(&mut self, ui: &mut egui::Ui, _settings: &AppSettings) {
+
+    fn show_code_editor(&mut self, ui: &mut egui::Ui, settings: &AppSettings) {
+        // 在渲染前快照一份内容，用于本帧的撤销记录（避免多处编辑重复入栈）
+        let pre_content_snapshot = self.content.clone();
+        let mut snapshot_taken = false;
+
         // 使用更简单的方法：在TextEdit前面添加行号前缀
         if self.show_line_numbers {
             // 创建带行号的显示文本
@@ -148,123 +198,117 @@ impl CodeEditor {
                 display_content.pop();
             }
 
-            ui.vertical(|ui| {
-                // 显示带行号的代码（只读）
-                ui.label("代码预览（带行号）:");
-                egui::ScrollArea::both()
-                    .id_source("code_preview_scroll")
-                    .max_height(300.0)
-                    .show(ui, |ui| {
-                        let font_id = egui::FontId::monospace(14.0);
-                        let line_count = self.content.lines().count().max(1);
-                        let line_height = ui.fonts(|f| f.row_height(&font_id));
+            // 单一滚动容器：去掉内部额外的 ScrollArea，避免错位
+            ui.horizontal(|ui| {
+                let font_id = egui::FontId::monospace(settings.font_size);
+                let line_count = self.content.lines().count().max(1);
+                let line_height = ui.fonts(|f| f.row_height(&font_id));
 
-                        // 计算行号区域的宽度
-                        let line_number_width = ui.fonts(|f| {
-                            f.glyph_width(&font_id, '0') * (line_count.to_string().len() as f32 + 1.0)
-                        });
+                // 行号列宽度（按位数 + 少许间距）
+                let digits = (line_count as f32).log10().floor() as usize + 1;
+                let digit_w = ui.fonts(|f| f.glyph_width(&font_id, '0'));
+                let line_number_width = digit_w * (digits as f32 + 2.0);
 
-                        ui.horizontal(|ui| {
-                            // 先创建文本编辑器来获取其实际的布局信息
-                            let text_response = ui.add(
-                                egui::TextEdit::multiline(&mut self.content)
-                                    .font(font_id.clone())
-                                    .code_editor()
-                                    .desired_width(ui.available_width() - line_number_width - 8.0)
-                                    .interactive(true)
-                            );
+                // 渲染文本编辑器并获取精确的文本绘制起点
+                let te = egui::TextEdit::multiline(&mut self.content)
+                    .font(font_id.clone())
+                    .code_editor()
+                    .desired_rows(line_count)
+                    .desired_width(ui.available_width() - line_number_width - 6.0)
+                    .interactive(true);
+                let output = te.show(ui);
 
-                            // 获取文本编辑器的实际位置和尺寸
-                            let text_rect = text_response.rect;
+                if output.response.changed() && !snapshot_taken {
+                    self.undo_stack.push(pre_content_snapshot.clone());
+                    self.redo_stack.clear();
+                    snapshot_taken = true;
+                }
 
-                            // 计算行号区域，使其与文本区域高度完全匹配
-                            let line_number_rect = egui::Rect::from_min_size(
-                                egui::pos2(text_rect.min.x - line_number_width - 4.0, text_rect.min.y),
-                                egui::vec2(line_number_width, text_rect.height())
-                            );
+                let text_rect = output.response.rect;
+                let text_draw_pos = output.text_draw_pos; // 精确对齐用
 
-                            // 绘制行号背景
-                            ui.painter().rect_filled(
-                                line_number_rect,
-                                egui::Rounding::ZERO,
-                                ui.style().visuals.code_bg_color.gamma_multiply(0.8)
-                            );
+                // 行号区域：与文本同高并靠左
+                let line_number_rect = egui::Rect::from_min_size(
+                    egui::pos2(text_rect.min.x - line_number_width - 4.0, text_rect.min.y),
+                    egui::vec2(line_number_width, text_rect.height()),
+                );
 
-                            // 获取文本编辑器内部的实际文本起始位置
-                            // TextEdit通常有一些内部padding
-                            let text_padding = ui.style().spacing.button_padding.y;
-                            let actual_text_start_y = text_rect.min.y + text_padding;
+                // 背景
+                ui.painter().rect_filled(
+                    line_number_rect,
+                    egui::Rounding::ZERO,
+                    ui.style().visuals.code_bg_color.gamma_multiply(0.8),
+                );
 
-                            // 绘制行号文本 - 与实际文本行对齐
-                            for (i, _) in self.content.lines().enumerate() {
-                                let line_number = i + 1;
-                                let y_pos = actual_text_start_y + (i as f32 * line_height);
+                // 绘制行号（以 TextEdit 的实际 text_draw_pos.y 作为对齐基准）
+                for (i, _) in self.content.lines().enumerate() {
+                    let y = text_draw_pos.y + (i as f32) * line_height;
+                    let has_highlight = self.highlighted_ranges.iter().any(|h| h.start_line == i);
 
-                                // 检查这一行是否有高亮 (highlighted_ranges使用0-based索引，i也是0-based)
-                                let has_highlight = self.highlighted_ranges.iter().any(|h| h.start_line == i);
+                    ui.painter().text(
+                        egui::pos2(line_number_rect.max.x - 16.0, y),
+                        egui::Align2::RIGHT_TOP,
+                        (i + 1).to_string(),
+                        font_id.clone(),
+                        ui.style().visuals.text_color().gamma_multiply(0.6),
+                    );
 
-                                // 绘制行号（统一右对齐到距离右边缘16像素的位置）
-                                ui.painter().text(
-                                    egui::pos2(line_number_rect.max.x - 16.0, y_pos),
-                                    egui::Align2::RIGHT_TOP,
-                                    line_number.to_string(),
-                                    font_id.clone(),
-                                    ui.style().visuals.text_color().gamma_multiply(0.6)
-                                );
+                    let marker = if has_highlight { "*" } else { " " };
+                    ui.painter().text(
+                        egui::pos2(line_number_rect.max.x - 8.0, y),
+                        egui::Align2::RIGHT_TOP,
+                        marker.to_string(),
+                        font_id.clone(),
+                        if has_highlight { egui::Color32::from_rgb(255, 0, 0) } else { ui.style().visuals.text_color().gamma_multiply(0.6) },
+                    );
+                }
 
-                                // 在行号后面绘制空格或星号
-                                let marker = if has_highlight { "*" } else { " " };
-                                ui.painter().text(
-                                    egui::pos2(line_number_rect.max.x - 8.0, y_pos),
-                                    egui::Align2::RIGHT_TOP,
-                                    marker.to_string(),
-                                    font_id.clone(),
-                                    if has_highlight {
-                                        egui::Color32::from_rgb(255, 0, 0) // 红色星号
-                                    } else {
-                                        ui.style().visuals.text_color().gamma_multiply(0.6) // 与行号相同的颜色
-                                    }
-                                );
-                            }
-
-                            // 绘制分隔线
-                            ui.painter().vline(
-                                line_number_rect.max.x,
-                                line_number_rect.y_range(),
-                                egui::Stroke::new(1.0, ui.style().visuals.text_color().gamma_multiply(0.3))
-                            );
-
-                            // 高亮现在通过行号旁边的星号显示，不再需要绘制高亮框
-                        });
-                    });
-
-                ui.separator();
-
-                // 可编辑的代码区域
-                ui.label("编辑区域:");
-                egui::ScrollArea::both()
-                    .id_source("code_edit_scroll")
-                    .max_height(250.0)
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut self.content)
-                                .font(egui::FontId::monospace(14.0))
-                                .code_editor()
-                                .desired_width(ui.available_width())
-                                .desired_rows(15)
-                        );
-                    });
+                // 分隔线
+                ui.painter().vline(
+                    line_number_rect.max.x,
+                    line_number_rect.y_range(),
+                    egui::Stroke::new(1.0, ui.style().visuals.text_color().gamma_multiply(0.3)),
+                );
             });
         } else {
             // 没有行号时，直接显示编辑器
-            ui.add(
+            let resp = ui.add(
                 egui::TextEdit::multiline(&mut self.content)
-                    .font(egui::FontId::monospace(14.0))
+                    .font(egui::FontId::monospace(settings.font_size))
                     .code_editor()
                     .desired_width(ui.available_width())
                     .desired_rows(30)
             );
+            if resp.changed() && !snapshot_taken {
+                self.undo_stack.push(pre_content_snapshot);
+                self.redo_stack.clear();
+            }
         }
+    }
+
+    /// Undo last change, returns true if changed
+    pub fn undo(&mut self) -> bool {
+        if let Some(prev) = self.undo_stack.pop() {
+            let curr = std::mem::replace(&mut self.content, prev);
+            self.redo_stack.push(curr);
+            true
+        } else { false }
+    }
+
+    /// Redo last undone change, returns true if changed
+    pub fn redo(&mut self) -> bool {
+        if let Some(next) = self.redo_stack.pop() {
+            let curr = std::mem::replace(&mut self.content, next);
+            self.undo_stack.push(curr);
+            true
+        } else { false }
+    }
+
+    /// Append given text at the end and record undo snapshot
+    pub fn paste_append(&mut self, text: &str) {
+        self.undo_stack.push(self.content.clone());
+        self.redo_stack.clear();
+        self.content.push_str(text);
     }
 
     /// 最终版本的高亮绘制方法 - 修复偏移
@@ -273,7 +317,7 @@ impl CodeEditor {
             return;
         }
 
-        let font_id = egui::FontId::monospace(14.0);
+        let font_id = egui::FontId::monospace(self.font_size);
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let display_lines: Vec<&str> = display_content.lines().collect();
 
@@ -318,7 +362,7 @@ impl CodeEditor {
             return;
         }
 
-        let font_id = egui::FontId::monospace(14.0);
+        let font_id = egui::FontId::monospace(self.font_size);
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let display_lines: Vec<&str> = display_content.lines().collect();
 
@@ -373,7 +417,7 @@ impl CodeEditor {
             return;
         }
 
-        let font_id = egui::FontId::monospace(14.0);
+        let font_id = egui::FontId::monospace(self.font_size);
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let display_lines: Vec<&str> = display_content.lines().collect();
 
@@ -409,7 +453,7 @@ impl CodeEditor {
             return;
         }
 
-        let font_id = egui::FontId::monospace(14.0);
+        let font_id = egui::FontId::monospace(self.font_size);
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let char_width = ui.fonts(|f| f.glyph_width(&font_id, ' '));
         let display_lines: Vec<&str> = display_content.lines().collect();
@@ -510,10 +554,10 @@ impl CodeEditor {
             }
         }
     }
-    
+
     fn draw_highlights(&self, ui: &mut egui::Ui) {
         // Draw highlight backgrounds for analysis results
-        let font_id = egui::FontId::monospace(14.0);
+        let font_id = egui::FontId::monospace(self.font_size);
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let lines: Vec<&str> = self.content.lines().collect();
 
@@ -645,23 +689,25 @@ impl CodeEditor {
             }
         }
     }
-    
+
     fn open_file(&mut self) {
         // Use rfd to open file dialog
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Source Files", &["java", "js", "py", "go", "rs", "php"])
+            .add_filter("Source Files", &["java", "js", "py", "go", "rs", "php", "sql", "xml"])
             .add_filter("All Files", &["*"])
             .pick_file()
         {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 self.content = content;
-                
+
                 // Detect language from file extension
                 if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
                     match extension {
                         "java" => self.language = "java".to_string(),
                         "js" | "jsx" => self.language = "javascript".to_string(),
                         "py" => self.language = "python".to_string(),
+                        "sql" => self.language = "sql".to_string(),
+                        "xml" => self.language = "xml".to_string(),
                         "go" => self.language = "go".to_string(),
                         "rs" => self.language = "rust".to_string(),
                         "php" => self.language = "php".to_string(),
@@ -671,11 +717,11 @@ impl CodeEditor {
             }
         }
     }
-    
+
     fn save_file(&self) {
         // Use rfd to save file dialog
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Source Files", &["java", "js", "py", "go", "rs", "php"])
+            .add_filter("Source Files", &["java", "js", "py", "go", "rs", "php", "sql", "xml"])
             .add_filter("All Files", &["*"])
             .save_file()
         {
@@ -684,17 +730,17 @@ impl CodeEditor {
             }
         }
     }
-    
+
     /// Get the current line and column of the cursor
     pub fn get_cursor_position(&self) -> (usize, usize) {
         let mut line = 1;
         let mut col = 1;
-        
+
         for (i, ch) in self.content.char_indices() {
             if i >= self.cursor_pos {
                 break;
             }
-            
+
             if ch == '\n' {
                 line += 1;
                 col = 1;
@@ -702,10 +748,10 @@ impl CodeEditor {
                 col += 1;
             }
         }
-        
+
         (line, col)
     }
-    
+
     /// Highlight a specific range in the code
     pub fn highlight_range(&mut self, start_line: usize, start_col: usize, end_line: usize, end_col: usize, color: egui::Color32, message: String) {
         self.highlighted_ranges.push(HighlightRange {

@@ -219,12 +219,26 @@ impl RuleEditor {
         }
     }
 
-    
-    fn format_yaml(&mut self) {
-        // Simple formatting - in real implementation, use proper YAML formatter
-        // For now, just ensure consistent indentation
+
+    pub fn format_yaml(&mut self) -> bool {
+        // Round-trip through serde_yaml for basic formatting
+        if self.content.trim().is_empty() {
+            return false;
+        }
+        match serde_yaml::from_str::<serde_yaml::Value>(&self.content) {
+            Ok(val) => match serde_yaml::to_string(&val) {
+                Ok(formatted) => {
+                    self.content = formatted;
+                    // Re-parse after formatting
+                    self.parse_rule();
+                    true
+                }
+                Err(_) => false,
+            },
+            Err(_) => false,
+        }
     }
-    
+
     fn load_example_rule(&mut self) {
         let example = r#"rules:
   - id: example-rule

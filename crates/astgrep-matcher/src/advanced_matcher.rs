@@ -48,41 +48,51 @@ impl AdvancedSemgrepMatcher {
     /// Find all matches for a pattern in the AST
     pub fn find_matches(&mut self, pattern: &SemgrepPattern, root: &dyn AstNode) -> Result<Vec<SemgrepMatchResult>> {
         let mut matches = Vec::new();
+        // Prefer the smallest (most specific) nodes: search children first and only
+        // record a match for a parent if no descendant matched.
         self.find_matches_recursive(pattern, root, &mut matches, 0)?;
         Ok(matches)
     }
 
     /// Recursively find matches in the AST
+    /// Returns whether this subtree produced any match (to enable parent suppression)
     fn find_matches_recursive(
         &mut self,
         pattern: &SemgrepPattern,
         node: &dyn AstNode,
         matches: &mut Vec<SemgrepMatchResult>,
         depth: usize,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         // Check depth limit
         if let Some(max_depth) = self.max_depth {
             if depth > max_depth {
-                return Ok(());
+                return Ok(false);
             }
         }
 
-        // Try to match at current node
-        let snapshot = self.metavar_manager.snapshot();
-        if self.matches_pattern(pattern, node)? {
-            let bindings = self.metavar_manager.get_binding_values();
-            matches.push(SemgrepMatchResult::new(node.clone_node(), bindings));
-        }
-        self.metavar_manager.restore(snapshot);
-
-        // Recursively check children
+        // First, recurse into children
+        let mut subtree_has_match = false;
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                self.find_matches_recursive(pattern, child, matches, depth + 1)?;
+                if self.find_matches_recursive(pattern, child, matches, depth + 1)? {
+                    subtree_has_match = true;
+                }
             }
         }
 
-        Ok(())
+        // Try to match at current node only if no descendant produced a match
+        if !subtree_has_match {
+            let snapshot = self.metavar_manager.snapshot();
+            if self.matches_pattern(pattern, node)? {
+                let bindings = self.metavar_manager.get_binding_values();
+                matches.push(SemgrepMatchResult::new(node.clone_node(), bindings));
+                self.metavar_manager.restore(snapshot);
+                return Ok(true);
+            }
+            self.metavar_manager.restore(snapshot);
+        }
+
+        Ok(subtree_has_match)
     }
 
     /// Check if a pattern matches a node

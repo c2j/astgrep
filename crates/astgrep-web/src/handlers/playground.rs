@@ -296,6 +296,39 @@ pub async fn playground() -> WebResult<Html<String>> {
             color: white;
             border-color: #667eea;
         }
+        /* Code editor with line numbers */
+        .code-input-container {
+            display: flex;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fafafa;
+            min-height: 300px;
+        }
+        .code-input-container .line-numbers {
+            width: 44px;
+            background: #f0f0f0;
+            color: #999;
+            padding: 10px 6px;
+            text-align: right;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            border-right: 1px solid #ddd;
+            user-select: none;
+            overflow: hidden;
+        }
+        .code-input-container textarea {
+            border: none;
+            outline: none;
+            background: transparent;
+            flex: 1;
+            padding: 10px 10px 10px 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            resize: vertical;
+        }
+
         @media (max-width: 1200px) {
             .main-content { flex-direction: column; }
             .left-panel { flex: 0 0 auto; border-right: none; border-bottom: 1px solid #e0e0e0; }
@@ -373,8 +406,6 @@ pub async fn playground() -> WebResult<Html<String>> {
                     <button class="tab" onclick="switchRightTab('metadata-tab', event)">metadata</button>
                     <button class="tab" onclick="switchRightTab('docs-tab', event)">docs</button>
                     <div style="flex: 1;"></div>
-                    <button id="mode-pro" class="tab" style="padding: 8px 12px; font-size: 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 3px; margin-right: 8px; cursor: pointer;" onclick="setMode('pro', event)">Pro</button>
-                    <button id="mode-turbo" class="tab" style="padding: 8px 12px; font-size: 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 3px; cursor: pointer;" onclick="setMode('turbo', event)">Turbo</button>
                 </div>
 
                 <div class="panel-body">
@@ -382,21 +413,27 @@ pub async fn playground() -> WebResult<Html<String>> {
                     <div id="test-code-tab" class="tab-content active">
                         <div class="form-group">
                             <label>Language</label>
-                            <select id="language" style="margin-bottom: 12px;">
-                                <option value="javascript">JavaScript</option>
-                                <option value="python">Python</option>
-                                <option value="java">Java</option>
-                                <option value="sql">SQL</option>
-                                <option value="bash">Bash</option>
-                                <option value="php">PHP</option>
-                                <option value="csharp">C#</option>
-                                <option value="c">C</option>
-                            </select>
+                            <div style="display:flex; gap:8px; align-items:center; margin-bottom: 12px;">
+                                <select id="language" style="flex:1;">
+                                    <option value="javascript">JavaScript</option>
+                                    <option value="python">Python</option>
+                                    <option value="java">Java</option>
+                                    <option value="sql">SQL</option>
+                                    <option value="bash">Bash</option>
+                                    <option value="xml">XML</option>
+                                    <option value="php">PHP</option>
+                                    <option value="csharp">C#</option>
+                                    <option value="c">C</option>
+                                </select>
+                                <button id="btn-load-example" class="secondary" title="Load example rule & code" onclick="loadExamplesForSelectedLanguage()">📋 Load Example</button>
+                            </div>
                         </div>
 
                         <div class="form-group">
                             <label>Code</label>
-                            <textarea id="code-input" placeholder="Enter code to analyze..." style="min-height: 300px; background: #fafafa; border: 1px solid #ddd;">// Prompt the user for a number
+                            <div class="code-input-container">
+                                <div id="code-line-numbers" class="line-numbers"></div>
+                                <textarea id="code-input" placeholder="Enter code to analyze..." style="min-height: 300px; background: #fafafa;" oninput="updateLineNumbers()" onscroll="syncCodeScroll()">// Prompt the user for a number
 var userInput = prompt("Enter a number:");
 
 // Convert the user input to a number
@@ -412,6 +449,7 @@ console.log('The square of ${number} is ${square}');
 } else {
   console.log("Invalid input. Please enter a valid number.");
 }</textarea>
+                            </div>
                         </div>
 
                         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
@@ -421,21 +459,20 @@ console.log('The square of ${number} is ${square}');
 
                         <!-- Results Section -->
                         <div style="margin-top: 20px; border-top: 1px solid #e0e0e0; padding-top: 16px;">
-                            <div style="font-weight: 600; color: #333; margin-bottom: 12px; font-size: 13px;">Matches</div>
-
+                            <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <div style="font-weight: 600; color: #333; font-size: 13px;">Matches</div>
+                                <div style="font-size: 12px; color: #666; display: flex; gap: 8px; align-items: center;">
+                                    <span>排序:</span>
+                                    <select id="sort-key" onchange="rerenderResults()" style="padding: 4px 6px; border: 1px solid #ddd; border-radius: 3px;">
+                                        <option value="line" selected>行号</option>
+                                        <option value="severity">严重等级</option>
+                                        <option value="rule_id">规则ID</option>
+                                    </select>
+                                    <button id="sort-direction" class="secondary" onclick="toggleSortDirection()" title="升序/降序">↑</button>
+                                </div>
+                            </div>
                             <div id="results-content" style="font-size: 12px;">
-                                <div style="background: #f0f7ff; border: 1px solid #b3d9ff; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
-                                    <div style="font-weight: 600; color: #0066cc; margin-bottom: 4px;">Line 9</div>
-                                    <div style="color: #333; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;">Use Math.pow(<number>, 2);</div>
-                                </div>
-                                <div style="background: #fffbf0; border: 1px solid #ffd699; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
-                                    <div style="color: #666; font-size: 11px;">No test assertions</div>
-                                    <div style="color: #999; font-size: 11px; margin-top: 4px;">Add rule-id: <rule-id> above lines your rule should catch to signify a test.</div>
-                                </div>
-                                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #666;">
-                                    <div>✓ 1 match</div>
-                                    <div>Semgrep v1.41.0 · in 0.6s · ● tests passed ▼</div>
-                                </div>
+                                <div style="color: #999; font-size: 12px;">Run analysis to see results</div>
                             </div>
                         </div>
                     </div>
@@ -465,11 +502,252 @@ console.log('The square of ${number} is ${square}');
             </div>
         </div>
     </div>
+    <div id="status-bar" style="border-top: 1px solid #e0e0e0; background: #f8f9fa; padding: 8px 12px; font-size: 12px; color: #555; display: flex; justify-content: space-between; align-items: center;">
+        <div id="status-text">Ready.</div>
+        <div id="status-stats"></div>
+    </div>
+
 
     <script>
         const API_BASE = 'http://127.0.0.1:8080/api/v1';
         let currentFormat = 'json';
         let currentMode = 'normal';
+        let sortKey = 'line';
+        let sortAsc = true;
+        let lastFindings = [];
+        let lastResponseData = null;
+        let lastDurationMs = 0;
+
+        // -------- Helpers: status, positions, line numbers, scrolling --------
+        function setStatus(text, stats) {
+            const statusText = document.getElementById('status-text');
+            const statusStats = document.getElementById('status-stats');
+            if (statusText) statusText.textContent = text || '';
+            if (statusStats) statusStats.textContent = stats || '';
+        }
+
+        function normalizePos(f) {
+            const loc = f.location || {};
+            return {
+                sL: Number(loc.start_line || f.start_line || f.line || 1) || 1,
+                sC: Number(loc.start_column || f.start_column || 1) || 1,
+                eL: Number(loc.end_line || f.end_line || loc.start_line || f.line || 1) || 1,
+                eC: Number(loc.end_column || f.end_column || loc.start_column || 1) || 1,
+            };
+        }
+        function comparePosition(a, b) {
+            const A = normalizePos(a), B = normalizePos(b);
+            if (A.sL !== B.sL) return A.sL - B.sL;
+            if (A.sC !== B.sC) return A.sC - B.sC;
+            if (A.eL !== B.eL) return A.eL - B.eL;
+            return A.eC - B.eC;
+        }
+        function severityWeight(sev) {
+            const s = (sev || '').toString().toLowerCase();
+            const map = { critical: 4, high: 3, error: 3, warning: 2, medium: 2, low: 1, info: 0 };
+            return map[s] ?? 0;
+        }
+
+        function updateLineNumbers() {
+            const ta = document.getElementById('code-input');
+            const ln = document.getElementById('code-line-numbers');
+            if (!ta || !ln) return;
+            const lines = ta.value.split('\n').length || 1;
+            let html = '';
+            for (let i = 1; i <= lines; i++) html += `<div>${i}</div>`;
+            ln.innerHTML = html;
+            syncCodeScroll();
+        }
+        function syncCodeScroll() {
+            const ta = document.getElementById('code-input');
+            const ln = document.getElementById('code-line-numbers');
+            if (!ta || !ln) return;
+            ln.scrollTop = ta.scrollTop;
+        }
+        function getIndexFromLineCol(text, line, col) {
+            const L = Math.max(1, Number(line) || 1);
+            const C = Math.max(1, Number(col) || 1);
+            const arr = text.split('\n');
+            const li = Math.min(L, arr.length);
+            let idx = 0;
+            for (let i = 0; i < li - 1; i++) idx += arr[i].length + 1; // +1 for \n
+            const lineLen = arr[li - 1]?.length ?? 0;
+            return idx + Math.min(lineLen, C - 1);
+        }
+        function jumpToLocation(sL, sC, eL, eC) {
+            const ta = document.getElementById('code-input');
+            if (!ta) return;
+            const text = ta.value;
+            const start = getIndexFromLineCol(text, sL, sC);
+            const end = getIndexFromLineCol(text, eL || sL, eC || sC);
+            try {
+                ta.focus();
+                ta.setSelectionRange(start, Math.max(start, end));
+            } catch (_) {}
+            // approximate scroll: 1.5 line-height * (line-1)
+            const approxLineHeight = 18; // px (12px font-size * 1.5 line-height)
+            ta.scrollTop = Math.max(0, (Math.max(1, sL) - 1) * approxLineHeight - ta.clientHeight / 3);
+            syncCodeScroll();
+        }
+
+        function clearResults() {
+            const content = document.getElementById('results-content');
+            if (content) content.innerHTML = '<div style="color:#999; font-size:12px;">Run analysis to see results</div>';
+            const metadata = document.getElementById('metadata-content');
+            if (metadata) metadata.innerHTML = '<p>Run analysis to see metadata</p>';
+            // 清除代码选择和滚动（避免上一轮高亮干扰）
+            const ta = document.getElementById('code-input');
+            if (ta) {
+                try { ta.setSelectionRange(0, 0); } catch (_) {}
+                ta.scrollTop = 0;
+                syncCodeScroll();
+            }
+            lastFindings = [];
+            lastResponseData = null;
+            lastDurationMs = 0;
+            setStatus('Ready.', '');
+        }
+
+        function toggleSortDirection() {
+            sortAsc = !sortAsc;
+            const btn = document.getElementById('sort-direction');
+            if (btn) btn.textContent = sortAsc ? '↑' : '↓';
+            rerenderResults();
+        }
+
+        function rerenderResults() {
+            const content = document.getElementById('results-content');
+            if (!content) return;
+            const keySel = document.getElementById('sort-key');
+            const key = keySel ? keySel.value : sortKey;
+            sortKey = key;
+
+            if (!lastFindings || lastFindings.length === 0) {
+                content.innerHTML = '<div style="color:#999; font-size:12px;">No matches</div>';
+                return;
+            }
+
+            const idxs = Array.from({ length: lastFindings.length }, (_, i) => i);
+            idxs.sort((i, j) => {
+                const A = lastFindings[i];
+                const B = lastFindings[j];
+                let cmp = 0;
+                if (key === 'line') cmp = comparePosition(A, B);
+                else if (key === 'severity') cmp = severityWeight(A.severity) - severityWeight(B.severity);
+                else if (key === 'rule_id') cmp = String(A.rule_id || '').localeCompare(String(B.rule_id || ''));
+                return sortAsc ? cmp : -cmp;
+            });
+
+            const severityColors = {
+                critical: { bg: '#fff5f5', border: '#feb2b2', icon: '🔴' },
+                high: { bg: '#fff5f5', border: '#feb2b2', icon: '🟠' },
+                warning: { bg: '#fffaf0', border: '#fbd38d', icon: '🟡' },
+                info: { bg: '#f0f7ff', border: '#b3d9ff', icon: '🔵' }
+            };
+
+            let html = '';
+            for (const idx of idxs) {
+                const f = lastFindings[idx];
+                const pos = normalizePos(f);
+                const sev = (f.severity || 'info').toLowerCase();
+                const colors = severityColors[sev] || severityColors.info;
+                const locText = `L${pos.sL}:C${pos.sC}` + (pos.eL !== pos.sL || pos.eC !== pos.sC ? ` → L${pos.eL}:C${pos.eC}` : '');
+                html += `
+                    <div style="background: ${colors.bg}; border: 1px solid ${colors.border}; border-radius: 4px; padding: 10px; margin-bottom: 10px;">
+                        <div style="display:flex; justify-content: space-between; align-items:center; gap:8px;">
+                            <div style="font-weight:600; color:#333;">${colors.icon} ${escapeHtml(f.message || 'No message')}</div>
+                            <div style="display:flex; gap:6px;">
+                                <button class="secondary" style="padding:2px 6px;" title="Jump" onclick="jumpToLocation(${pos.sL}, ${pos.sC}, ${pos.eL}, ${pos.eC})">🎯</button>
+                                <button class="secondary" style="padding:2px 6px;" title="Copy" onclick="copyFinding(${idx})">📋</button>
+                            </div>
+                        </div>
+                        <div style="font-size:11px; color:#666; margin-top:6px;">
+                            <strong>Rule:</strong> ${escapeHtml(f.rule_id || 'N/A')} | <strong>Severity:</strong> ${sev.toUpperCase()} | <strong>Loc:</strong> ${locText}
+                        </div>
+                    </div>`;
+            }
+
+            // footer with stats
+            const rulesExecuted = lastResponseData?.summary?.rules_executed;
+            const filesAnalyzed = lastResponseData?.summary?.files_analyzed;
+            html += `
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e0e0e0; display:flex; justify-content: space-between; color:#666; font-size:12px;">
+                    <div>✓ ${lastFindings.length} match${lastFindings.length !== 1 ? 'es' : ''}</div>
+                    <div>${filesAnalyzed ? filesAnalyzed + ' file' + (filesAnalyzed!==1?'s':'') + ' · ' : ''}${rulesExecuted ? rulesExecuted + ' rules · ' : ''}${lastDurationMs}ms</div>
+                </div>`;
+
+            content.innerHTML = html;
+        }
+        async function copyFinding(idx) {
+            try {
+                const f = lastFindings?.[idx];
+                if (!f) return;
+                const p = normalizePos(f);
+                const text = [
+                    `Rule: ${f.rule_id || 'N/A'}`,
+                    `Severity: ${(f.severity || 'info').toUpperCase()}`,
+                    `Location: L${p.sL}:C${p.sC}` + ((p.eL !== p.sL || p.eC !== p.sC) ? ` -> L${p.eL}:C${p.eC}` : ''),
+                    `Message: ${f.message || ''}`
+                ].join('\n');
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                }
+                setStatus('Copied.', `${(f.rule_id || 'rule')} · L${p.sL}:C${p.sC}`);
+            } catch (e) {
+                console.error('copy failed', e);
+                setStatus('Copy failed', '');
+            }
+        }
+
+        function loadExamplesForSelectedLanguage() {
+            const sel = document.getElementById('language');
+            const lang = sel ? sel.value : 'javascript';
+            const examples = {
+                javascript: {
+                    code: `function greet(name) {\n  eval('console.log(\"Hello, \" + name)');\n}\n\ngreet(userInput);`,
+                    yaml: `rules:\n  - id: no_eval_js\n    message: Avoid eval(); use safer alternatives\n    languages:\n      - javascript\n    severity: WARNING\n    pattern: eval($X)`
+                },
+                python: {
+                    code: `import pickle\n\nuser_data = input('> ')\nobj = pickle.loads(user_data)  # insecure deserialization` ,
+                    yaml: `rules:\n  - id: insecure_pickle\n    message: Avoid pickle.loads on untrusted input\n    languages:\n      - python\n    severity: WARNING\n    pattern: pickle.loads($X)`
+                },
+                java: {
+                    code: `public class Demo {\n  public static void run(String cmd) throws Exception {\n    Runtime.getRuntime().exec(cmd); // command injection risk\n  }\n}` ,
+                    yaml: `rules:\n  - id: java_command_injection\n    message: Avoid Runtime.exec with untrusted input\n    languages:\n      - java\n    severity: WARNING\n    pattern: Runtime.getRuntime().exec($X)`
+                },
+                bash: {
+                    code: `#!/usr/bin/env bash\ninput=$1\neval "$input"   # dangerous` ,
+                    yaml: `rules:\n  - id: bash_eval\n    message: Avoid eval in shell scripts\n    languages:\n      - bash\n    severity: WARNING\n    pattern: eval $X`
+                },
+                sql: {
+                    code: `SELECT * FROM users WHERE id = "' || user_id || '";` ,
+                    yaml: `rules:\n  - id: select_star\n    message: Avoid SELECT *; specify columns\n    languages:\n      - sql\n    severity: WARNING\n    pattern: SELECT * FROM $TABLE`
+                },
+                xml: {
+                    code: `<config>\n  <password>secret123</password>\n</config>` ,
+                    yaml: `rules:\n  - id: xml_hardcoded_password\n    message: Avoid hardcoded passwords in XML\n    languages:\n      - xml\n    severity: WARNING\n    pattern: <password>$VALUE</password>`
+                }
+            };
+
+            const ex = examples[lang] || examples.javascript;
+            const yamlBox = document.getElementById('rule-yaml');
+            const advBox = document.getElementById('rule-advanced');
+            const codeBox = document.getElementById('code-input');
+
+            if (yamlBox) yamlBox.value = ex.yaml;
+            if (advBox && document.getElementById('advanced-tab')?.classList.contains('active')) advBox.value = ex.yaml;
+            if (codeBox) codeBox.value = ex.code;
+
+            updateLineNumbers();
+            validateYAMLRule();
+            clearResults();
+            setStatus('Example loaded.', `${lang}`);
+        }
+
+
 
         // 左侧面板tab切换
         function switchLeftTab(tabId, event) {
@@ -542,28 +820,7 @@ console.log('The square of ${number} is ${square}');
             }
         }
 
-        function setMode(mode, event) {
-            if (event) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-            currentMode = mode;
-
-            // 更新按钮样式
-            const proBtn = document.getElementById('mode-pro');
-            const turboBtn = document.getElementById('mode-turbo');
-
-            if (proBtn) {
-                proBtn.style.background = mode === 'pro' ? '#667eea' : '#f0f0f0';
-                proBtn.style.color = mode === 'pro' ? 'white' : '#333';
-            }
-            if (turboBtn) {
-                turboBtn.style.background = mode === 'turbo' ? '#667eea' : '#f0f0f0';
-                turboBtn.style.color = mode === 'turbo' ? 'white' : '#333';
-            }
-
-            console.log('Mode set to:', mode);
-        }
+        // mode removed
 
         function toggleRunMenu(event) {
             if (event) {
@@ -578,12 +835,13 @@ console.log('The square of ${number} is ${square}');
             const loading = document.getElementById('loading');
             const resultsContent = document.getElementById('results-content');
 
-            if (loading) {
-                loading.style.display = 'block';
-            }
-            if (resultsContent) {
-                resultsContent.innerHTML = '<div style="color: #999; font-size: 12px;">Analyzing...</div>';
-            }
+            if (loading) loading.style.display = 'block';
+            if (resultsContent) resultsContent.innerHTML = '<div style="color: #999; font-size: 12px;">Analyzing...</div>';
+
+            const statusText = document.getElementById('status-text');
+            const statusStats = document.getElementById('status-stats');
+            if (statusText) statusText.textContent = 'Analyzing...';
+            if (statusStats) statusStats.textContent = '';
         }
 
         function hideLoading() {
@@ -709,10 +967,7 @@ console.log('The square of ${number} is ${square}');
                 const requestBody = {
                     code,
                     language,
-                    rules: yamlRule,  // 发送YAML规则
-                    options: {
-                        mode: currentMode
-                    }
+                    rules: yamlRule // 发送YAML规则
                 };
 
                 const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -726,21 +981,25 @@ console.log('The square of ${number} is ${square}');
                     displayEnhancedResults(data, startTime);
                 } else {
                     hideLoading();
+                    const errMsg = escapeHtml(data.error || 'Analysis failed');
                     document.getElementById('results-content').innerHTML = `
                         <div style="background: #fff5f5; border: 1px solid #feb2b2; border-radius: 4px; padding: 12px;">
                             <div style="font-weight: 600; color: #d32f2f; margin-bottom: 4px;">❌ Error</div>
-                            <div style="font-size: 12px; color: #333;">${escapeHtml(data.error || 'Analysis failed')}</div>
+                            <div style="font-size: 12px; color: #333;">${errMsg}</div>
                         </div>
                     `;
+                    setStatus('Error.', errMsg);
                 }
             } catch (error) {
                 hideLoading();
+                const errText = escapeHtml(error.message);
                 document.getElementById('results-content').innerHTML = `
                     <div style="background: #fff5f5; border: 1px solid #feb2b2; border-radius: 4px; padding: 12px;">
                         <div style="font-weight: 600; color: #d32f2f; margin-bottom: 4px;">❌ Error</div>
-                        <div style="font-size: 12px; color: #333;">${escapeHtml(error.message)}</div>
+                        <div style="font-size: 12px; color: #333;">${errText}</div>
                     </div>
                 `;
+                setStatus('Error.', errText);
             }
         }
 
@@ -912,98 +1171,70 @@ console.log('The square of ${number} is ${square}');
             const ruleYaml = document.getElementById('rule-yaml');
             const ruleAdvanced = document.getElementById('rule-advanced');
 
-            if (ruleYaml) {
-                ruleYaml.addEventListener('input', validateYAMLRule);
-            }
-            if (ruleAdvanced) {
-                ruleAdvanced.addEventListener('input', validateYAMLRule);
-            }
+            if (ruleYaml) ruleYaml.addEventListener('input', validateYAMLRule);
+            if (ruleAdvanced) ruleAdvanced.addEventListener('input', validateYAMLRule);
 
             // 初始化 Inspect Rule
             validateYAMLRule();
 
-            // 初始化mode按钮
-            setMode('normal', null);
+            // 初始化行号
+            updateLineNumbers();
+
+            // 初始化排序方向箭头
+            const sortDirBtn = document.getElementById('sort-direction');
+            if (sortDirBtn) sortDirBtn.textContent = '↑';
         });
 
         // 改进的结果显示
         function displayEnhancedResults(data, startTime) {
             hideLoading();
             const duration = Date.now() - startTime;
-            const content = document.getElementById('results-content');
+            lastDurationMs = duration;
+            lastResponseData = data || null;
 
+            const content = document.getElementById('results-content');
             if (!content) {
                 console.error('results-content element not found');
                 return;
             }
 
-            // 调试：打印完整的响应数据
-            console.log('🔍 Full response data:', JSON.stringify(data, null, 2));
-            console.log('🔍 data.results:', data.results);
-            console.log('🔍 data.results?.findings:', data.results?.findings);
-            console.log('🔍 data.findings:', data.findings);
-
-            // 从响应中提取findings
-            const findings = data.results?.findings || data.findings || [];
-            console.log('🔍 Extracted findings:', findings);
-
-            if (findings.length === 0) {
-                content.innerHTML = `
-                    <div style="background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
-                        <div style="font-weight: 600; color: #22863a; margin-bottom: 4px;">✓ No issues found</div>
-                        <div style="font-size: 11px; color: #666;">All checks passed successfully</div>
-                    </div>
-                `;
-                return;
-            }
-
-            let html = '';
-            const severityColors = {
-                'critical': { bg: '#fff5f5', border: '#feb2b2', icon: '🔴' },
-                'high': { bg: '#fff5f5', border: '#feb2b2', icon: '🟠' },
-                'warning': { bg: '#fffaf0', border: '#fbd38d', icon: '🟡' },
-                'info': { bg: '#f0f7ff', border: '#b3d9ff', icon: '🔵' }
-            };
-
-            findings.forEach((finding, idx) => {
-                const severity = (finding.severity || 'info').toLowerCase();
-                const colors = severityColors[severity] || severityColors['info'];
-                const line = finding.location?.start_line || finding.line || '?';
-
-                html += `
-                    <div style="background: ${colors.bg}; border: 1px solid ${colors.border}; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
-                        <div style="font-weight: 600; color: #333; margin-bottom: 4px;">
-                            ${colors.icon} Line ${line}
-                        </div>
-                        <div style="color: #333; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 12px; margin-bottom: 8px;">
-                            ${escapeHtml(finding.message || 'No message')}
-                        </div>
-                        <div style="font-size: 11px; color: #666;">
-                            <strong>Rule:</strong> ${escapeHtml(finding.rule_id || 'N/A')} |
-                            <strong>Severity:</strong> ${severity.toUpperCase()} |
-                            <strong>Confidence:</strong> ${finding.confidence || 'N/A'}
-                        </div>
-                    </div>
-                `;
-            });
-
-            // 添加统计信息
-            html += `
-                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #666;">
-                    <div>✓ ${findings.length} match${findings.length !== 1 ? 'es' : ''}</div>
-                    <div>astgrep · in ${duration}ms · ● tests passed ▼</div>
-                </div>
-            `;
-
-            // 确保清空旧内容后再设置新内容
-            content.innerHTML = '';
-            content.innerHTML = html;
+            // 统一提取 findings
+            const findings = (data && (data.results?.findings || data.findings)) || [];
 
             // 更新元数据
             const metadata = document.getElementById('metadata-content');
             if (metadata) {
                 metadata.innerHTML = `<pre style="font-size: 11px; overflow-x: auto; color: #333;">${JSON.stringify(data, null, 2)}</pre>`;
             }
+
+            if (!Array.isArray(findings) || findings.length === 0) {
+                content.innerHTML = `
+                    <div style="background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
+                        <div style="font-weight: 600; color: #22863a; margin-bottom: 4px;">✓ No issues found</div>
+                        <div style="font-size: 11px; color: #666;">All checks passed successfully</div>
+                    </div>
+                `;
+                setStatus('Complete.', `0 matches · ${duration}ms`);
+                lastFindings = [];
+                return;
+            }
+
+            // 先按位置信息排序（默认）
+            const defaultSorted = [...findings].sort(comparePosition);
+            lastFindings = defaultSorted;
+
+            // 根据当前排序控件重新渲染
+            rerenderResults();
+
+            // 更新状态栏
+            const rulesExecuted = data?.summary?.rules_executed;
+            const filesAnalyzed = data?.summary?.files_analyzed;
+            const statsParts = [];
+            statsParts.push(`${findings.length} match${findings.length !== 1 ? 'es' : ''}`);
+            if (filesAnalyzed) statsParts.push(`${filesAnalyzed} file${filesAnalyzed !== 1 ? 's' : ''}`);
+            if (rulesExecuted) statsParts.push(`${rulesExecuted} rules`);
+            statsParts.push(`${duration}ms`);
+            setStatus('Complete.', statsParts.join(' · '));
         }
 
         // 键盘快捷键支持
@@ -1017,7 +1248,7 @@ console.log('The square of ${number} is ${square}');
     </script>
 </body>
 </html>"#;
-    
+
     Ok(Html(html.to_string()))
 }
 
@@ -1029,7 +1260,7 @@ mod tests {
     async fn test_playground() {
         let result = playground().await;
         assert!(result.is_ok());
-        
+
         let html = result.unwrap().0;
         assert!(html.contains("astgrep Playground"));
         assert!(html.contains("analyzeCode"));

@@ -173,13 +173,8 @@ impl RuleValidator {
 
         // Check for common metavariable naming issues
         for metavar in &metavars {
-            if metavar.len() < 2 {
-                return Err(AnalysisError::rule_validation_error(format!(
-                    "Pattern {} metavariable '{}' too short (minimum 2 characters)",
-                    pattern_index, metavar
-                )));
-            }
-
+            // Allow single-character metavariables like $X for Semgrep compatibility
+            // Only enforce uppercase-start in strict mode
             if !metavar.chars().next().unwrap().is_uppercase() {
                 if self.strict_validation {
                     return Err(AnalysisError::rule_validation_error(format!(

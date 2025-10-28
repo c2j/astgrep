@@ -22,36 +22,36 @@ impl MenuBar {
                 // File menu
                 ui.menu_button("File", |ui| {
                     if ui.button("📁 Open Rule...").clicked() {
-                        self.open_rule_file();
+                        ui_state.request_open_rule = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("💾 Save Rule...").clicked() {
-                        self.save_rule_file();
+                        ui_state.request_save_rule = true;
                         ui.close_menu();
                     }
-                    
+
                     ui.separator();
-                    
+
                     if ui.button("📂 Open Code...").clicked() {
-                        self.open_code_file();
+                        ui_state.request_open_code = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("💾 Save Code...").clicked() {
-                        self.save_code_file();
+                        ui_state.request_save_code = true;
                         ui.close_menu();
                     }
-                    
+
                     ui.separator();
-                    
+
                     if ui.button("📤 Export Results...").clicked() {
-                        self.export_results();
+                        ui_state.request_export_results = true;
                         ui.close_menu();
                     }
-                    
+
                     ui.separator();
-                    
+
                     if ui.button("🚪 Exit").clicked() {
                         std::process::exit(0);
                     }
@@ -60,41 +60,41 @@ impl MenuBar {
                 // Edit menu
                 ui.menu_button("Edit", |ui| {
                     if ui.button("↶ Undo").clicked() {
-                        // TODO: Implement undo
+                        ui_state.request_undo = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("↷ Redo").clicked() {
-                        // TODO: Implement redo
+                        ui_state.request_redo = true;
                         ui.close_menu();
                     }
-                    
+
                     ui.separator();
-                    
+
                     if ui.button("✂️ Cut").clicked() {
-                        // TODO: Implement cut
+                        ui_state.request_cut = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("📋 Copy").clicked() {
-                        // TODO: Implement copy
+                        ui_state.request_copy = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("📄 Paste").clicked() {
-                        // TODO: Implement paste
+                        ui_state.request_paste = true;
                         ui.close_menu();
                     }
-                    
+
                     ui.separator();
-                    
+
                     if ui.button("🔍 Find...").clicked() {
-                        // TODO: Implement find
+                        ui_state.request_find = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("🔄 Replace...").clicked() {
-                        // TODO: Implement replace
+                        ui_state.request_replace = true;
                         ui.close_menu();
                     }
                 });
@@ -102,29 +102,29 @@ impl MenuBar {
                 // Analysis menu
                 ui.menu_button("Analysis", |ui| {
                     if ui.button("▶️ Run Analysis").clicked() {
-                        self.run_analysis();
+                        ui_state.request_run_analysis = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("⏹️ Stop Analysis").clicked() {
-                        self.stop_analysis();
+                        ui_state.request_stop_analysis = true;
                         ui.close_menu();
                     }
-                    
+
                     ui.separator();
-                    
+
                     if ui.button("✅ Validate Rule").clicked() {
-                        self.validate_rule();
+                        ui_state.request_validate_rule = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("🔧 Format Rule").clicked() {
-                        self.format_rule();
+                        ui_state.request_format_rule = true;
                         ui.close_menu();
                     }
-                    
+
                     ui.separator();
-                    
+
                     ui.checkbox(&mut settings.auto_analyze, "Auto-analyze");
                 });
                 
@@ -162,12 +162,12 @@ impl MenuBar {
                         self.open_documentation();
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("🎯 Examples").clicked() {
-                        self.load_examples();
+                        ui_state.request_load_examples = true;
                         ui.close_menu();
                     }
-                    
+
                     if ui.button("🐛 Report Issue").clicked() {
                         self.report_issue();
                         ui.close_menu();
@@ -181,21 +181,7 @@ impl MenuBar {
                     }
                 });
                 
-                // Right-aligned items
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Language selector
-                    ui.label("Language:");
-                    egui::ComboBox::from_id_source("main_language_selector")
-                        .selected_text(format!("{:?}", settings.selected_language))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::Java, "Java");
-                            ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::JavaScript, "JavaScript");
-                            ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::Python, "Python");
-                            ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::C, "C");
-                            ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::CSharp, "C#");
-                            ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::Php, "PHP");
-                        });
-                });
+
             });
         });
         

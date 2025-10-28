@@ -40,6 +40,7 @@ CONTAINER_ID=$(docker create astgrep-builder)
 docker cp "$CONTAINER_ID:/export/astgrep" dist/linux-x86_64/
 docker cp "$CONTAINER_ID:/export/astgrep-cli" dist/linux-x86_64/
 docker cp "$CONTAINER_ID:/export/astgrep-web" dist/linux-x86_64/
+docker cp "$CONTAINER_ID:/export/astgrep-gui" dist/linux-x86_64/
 
 # 复制压缩包
 docker cp "$CONTAINER_ID:/astgrep-linux-x86_64.tar.gz" dist/

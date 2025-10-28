@@ -139,10 +139,10 @@ pub async fn analyze_file(
 
     // Generate job ID
     let job_id = Uuid::new_v4();
-    
+
     // Perform analysis
     let results = perform_code_analysis(&analyze_request, &config).await?;
-    
+
     let response = AnalysisResponse {
         job_id,
         status: JobStatus::Completed,
@@ -180,10 +180,10 @@ pub async fn analyze_archive(
 
     // Generate job ID
     let job_id = Uuid::new_v4();
-    
+
     // Extract and analyze archive (simplified implementation)
     let results = perform_archive_analysis(&archive_data, &request, &config).await?;
-    
+
     let response = AnalysisResponse {
         job_id,
         status: JobStatus::Completed,
@@ -213,7 +213,7 @@ pub async fn analyze_multipart(
         WebError::bad_request(format!("Invalid multipart data: {}", e))
     })? {
         let field_name = field.name().unwrap_or("").to_string();
-        
+
         match field_name.as_str() {
             "file" => {
                 filename = field.file_name().unwrap_or("unknown").to_string();
@@ -256,10 +256,10 @@ pub async fn analyze_multipart(
 
     // Generate job ID
     let job_id = Uuid::new_v4();
-    
+
     // Perform analysis
     let results = perform_code_analysis(&analyze_request, &config).await?;
-    
+
     let response = AnalysisResponse {
         job_id,
         status: JobStatus::Completed,
@@ -359,6 +359,22 @@ async fn perform_code_analysis(
         }
     }
 
+    // Deduplicate findings by (rule_id + location) to avoid repeated matches
+    {
+        use std::collections::HashSet;
+        let mut seen: HashSet<(String, usize, usize, usize, usize)> = HashSet::new();
+        findings.retain(|f| {
+            let key = (
+                f.rule_id.clone(),
+                f.location.start_line,
+                f.location.start_column,
+                f.location.end_line,
+                f.location.end_column,
+            );
+            seen.insert(key)
+        });
+    }
+
     let duration = start_time.elapsed();
 
     // Convert findings to web model format
@@ -385,7 +401,7 @@ async fn perform_code_analysis(
     // Create summary
     let mut findings_by_severity = HashMap::new();
     let mut findings_by_confidence = HashMap::new();
-    
+
     for finding in &web_findings {
         *findings_by_severity.entry(finding.severity.clone()).or_insert(0) += 1;
         *findings_by_confidence.entry(finding.confidence.clone()).or_insert(0) += 1;
@@ -1159,5 +1175,35 @@ mod tests {
         assert_eq!(results.summary.total_findings, results.findings.len());
         assert_eq!(results.summary.files_analyzed, 1);
         assert!(results.metrics.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_multiplication_rule_no_duplicates() {
+        let yaml = r#"
+rules:
+  - id: multiplication_rule
+    pattern: "$VAR1 * $VAR2;"
+    message: "Use Math.pow(<number>, 2);"
+    languages: [javascript]
+    severity: INFO
+"#;
+        let code = r#"
+const number = parseFloat(userInput);
+var square = number * number;
+"#;
+        let request = AnalyzeRequest {
+            code: code.to_string(),
+            language: "javascript".to_string(),
+            rules: Some(serde_json::Value::String(yaml.to_string())),
+            options: None,
+        };
+        let config = WebConfig::default();
+        let results = perform_code_analysis(&request, &config).await.unwrap();
+        let matches: Vec<_> = results
+            .findings
+            .iter()
+            .filter(|f| f.rule_id == "multiplication_rule")
+            .collect();
+        assert_eq!(matches.len(), 1, "should return exactly 1 match, got {}", matches.len());
     }
 }
