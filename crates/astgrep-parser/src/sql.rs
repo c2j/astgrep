@@ -1,5 +1,5 @@
 //! SQL language parser and adapter
-//! 
+//!
 //! This module provides SQL-specific parsing and AST adaptation.
 
 use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
@@ -19,7 +19,7 @@ impl SqlAdapter {
     /// Parse SQL-specific constructs
     fn parse_sql_construct(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
         let trimmed = source.trim().to_uppercase();
-        
+
         if trimmed.starts_with("SELECT ") {
             self.parse_select_statement(source)
         } else if trimmed.starts_with("INSERT ") {
@@ -44,12 +44,12 @@ impl SqlAdapter {
     /// Parse SELECT statement
     fn parse_select_statement(&self, source: &str) -> Result<UniversalNode> {
         let mut select_node = AstBuilder::select_statement();
-        
+
         // Extract SELECT columns (simplified)
         if let Some(from_pos) = source.to_uppercase().find(" FROM ") {
             let select_part = &source[6..from_pos].trim(); // Skip "SELECT"
             let from_part = &source[from_pos + 6..].trim(); // Skip " FROM "
-            
+
             // Parse columns
             for column in select_part.split(',') {
                 let column = column.trim();
@@ -57,7 +57,7 @@ impl SqlAdapter {
                     select_node = select_node.with_column(column.to_string());
                 }
             }
-            
+
             // Parse FROM clause
             let table_part = if let Some(where_pos) = from_part.to_uppercase().find(" WHERE ") {
                 &from_part[..where_pos]
@@ -68,9 +68,9 @@ impl SqlAdapter {
             } else {
                 from_part
             };
-            
+
             select_node = select_node.with_table(table_part.trim().to_string());
-            
+
             // Parse WHERE clause
             if let Some(where_pos) = from_part.to_uppercase().find(" WHERE ") {
                 let where_part = &from_part[where_pos + 7..]; // Skip " WHERE "
@@ -81,26 +81,26 @@ impl SqlAdapter {
                 } else {
                     where_part
                 };
-                
+
                 select_node = select_node.with_where(condition.trim().to_string());
             }
         }
-        
+
         Ok(select_node.with_text(source.to_string()))
     }
 
     /// Parse INSERT statement
     fn parse_insert_statement(&self, source: &str) -> Result<UniversalNode> {
         let mut insert_node = AstBuilder::insert_statement();
-        
+
         // INSERT INTO table_name (columns) VALUES (values)
         if let Some(into_pos) = source.to_uppercase().find(" INTO ") {
             let after_into = &source[into_pos + 6..]; // Skip " INTO "
-            
+
             if let Some(paren_pos) = after_into.find('(') {
                 let table_name = after_into[..paren_pos].trim();
                 insert_node = insert_node.with_table(table_name.to_string());
-                
+
                 // Extract columns
                 if let Some(close_paren) = after_into.find(')') {
                     let columns_str = &after_into[paren_pos + 1..close_paren];
@@ -113,75 +113,75 @@ impl SqlAdapter {
                 }
             }
         }
-        
+
         Ok(insert_node.with_text(source.to_string()))
     }
 
     /// Parse UPDATE statement
     fn parse_update_statement(&self, source: &str) -> Result<UniversalNode> {
         let mut update_node = AstBuilder::update_statement();
-        
+
         // UPDATE table_name SET column = value WHERE condition
         if let Some(set_pos) = source.to_uppercase().find(" SET ") {
             let table_part = &source[7..set_pos].trim(); // Skip "UPDATE "
             update_node = update_node.with_table(table_part.to_string());
-            
+
             let after_set = &source[set_pos + 5..]; // Skip " SET "
-            
+
             // Parse SET clause
             let set_part = if let Some(where_pos) = after_set.to_uppercase().find(" WHERE ") {
                 &after_set[..where_pos]
             } else {
                 after_set
             };
-            
+
             for assignment in set_part.split(',') {
                 let assignment = assignment.trim();
                 if !assignment.is_empty() {
                     update_node = update_node.with_assignment(assignment.to_string());
                 }
             }
-            
+
             // Parse WHERE clause
             if let Some(where_pos) = after_set.to_uppercase().find(" WHERE ") {
                 let where_part = &after_set[where_pos + 7..]; // Skip " WHERE "
                 update_node = update_node.with_where(where_part.trim().to_string());
             }
         }
-        
+
         Ok(update_node.with_text(source.to_string()))
     }
 
     /// Parse DELETE statement
     fn parse_delete_statement(&self, source: &str) -> Result<UniversalNode> {
         let mut delete_node = AstBuilder::delete_statement();
-        
+
         // DELETE FROM table_name WHERE condition
         if let Some(from_pos) = source.to_uppercase().find(" FROM ") {
             let after_from = &source[from_pos + 6..]; // Skip " FROM "
-            
+
             let table_part = if let Some(where_pos) = after_from.to_uppercase().find(" WHERE ") {
                 &after_from[..where_pos]
             } else {
                 after_from
             };
-            
+
             delete_node = delete_node.with_table(table_part.trim().to_string());
-            
+
             // Parse WHERE clause
             if let Some(where_pos) = after_from.to_uppercase().find(" WHERE ") {
                 let where_part = &after_from[where_pos + 7..]; // Skip " WHERE "
                 delete_node = delete_node.with_where(where_part.trim().to_string());
             }
         }
-        
+
         Ok(delete_node.with_text(source.to_string()))
     }
 
     /// Parse CREATE statement
     fn parse_create_statement(&self, source: &str) -> Result<UniversalNode> {
         let upper_source = source.to_uppercase();
-        
+
         if upper_source.contains("CREATE TABLE ") {
             self.parse_create_table(source)
         } else if upper_source.contains("CREATE INDEX ") {
@@ -197,14 +197,14 @@ impl SqlAdapter {
     /// Parse CREATE TABLE statement
     fn parse_create_table(&self, source: &str) -> Result<UniversalNode> {
         let mut create_table_node = AstBuilder::create_table_statement();
-        
+
         if let Some(table_pos) = source.to_uppercase().find("CREATE TABLE ") {
             let after_table = &source[table_pos + 13..]; // Skip "CREATE TABLE "
-            
+
             if let Some(paren_pos) = after_table.find('(') {
                 let table_name = after_table[..paren_pos].trim();
                 create_table_node = create_table_node.with_table(table_name.to_string());
-                
+
                 // Extract column definitions
                 if let Some(close_paren) = after_table.rfind(')') {
                     let columns_str = &after_table[paren_pos + 1..close_paren];
@@ -217,7 +217,7 @@ impl SqlAdapter {
                 }
             }
         }
-        
+
         Ok(create_table_node.with_text(source.to_string()))
     }
 
@@ -287,6 +287,20 @@ impl SqlParser {
 
 impl LanguageParser for SqlParser {
     fn parse(&self, source: &str, file_path: &Path) -> Result<Box<dyn AstNode>> {
+        // Prefer tree-sitter (tree-sitter-sequel) by default; allow override via env: ASTGREP_SQL_PARSER=manual
+        #[cfg(feature = "sql-tree-sitter")]
+        {
+            if std::env::var("ASTGREP_SQL_PARSER").as_deref() != Ok("manual") {
+                if let Ok(mut ts_parser) = crate::tree_sitter_parser::TreeSitterParser::new() {
+                    if let Ok(Some(tree)) = ts_parser.parse(source, Language::Sql) {
+                        if let Ok(universal_node) = ts_parser.tree_to_universal_ast(&tree, source) {
+                            return Ok(Box::new(universal_node));
+                        }
+                    }
+                }
+            }
+        }
+
         let context = AdapterContext::new(
             file_path.to_string_lossy().to_string(),
             source.to_string(),
@@ -339,7 +353,7 @@ mod tests {
     #[test]
     fn test_parse_select_statement() {
         let adapter = SqlAdapter::new();
-        
+
         let result = adapter.parse_select_statement("SELECT id, name FROM users WHERE age > 18");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -349,7 +363,7 @@ mod tests {
     #[test]
     fn test_parse_insert_statement() {
         let adapter = SqlAdapter::new();
-        
+
         let result = adapter.parse_insert_statement("INSERT INTO users (name, email) VALUES ('John', 'john@example.com')");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -359,7 +373,7 @@ mod tests {
     #[test]
     fn test_parse_update_statement() {
         let adapter = SqlAdapter::new();
-        
+
         let result = adapter.parse_update_statement("UPDATE users SET name = 'Jane' WHERE id = 1");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -369,7 +383,7 @@ mod tests {
     #[test]
     fn test_parse_delete_statement() {
         let adapter = SqlAdapter::new();
-        
+
         let result = adapter.parse_delete_statement("DELETE FROM users WHERE age < 18");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -379,7 +393,7 @@ mod tests {
     #[test]
     fn test_parse_create_table() {
         let adapter = SqlAdapter::new();
-        
+
         let result = adapter.parse_create_table("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -390,9 +404,39 @@ mod tests {
     fn test_sql_adapter_metadata() {
         let adapter = SqlAdapter::new();
         let metadata = adapter.metadata();
-        
+
         assert_eq!(metadata.name, "SqlAdapter");
         assert!(metadata.supported_features.contains(&"select_statements".to_string()));
         assert!(metadata.supported_features.contains(&"create_statements".to_string()));
     }
+
+    #[test]
+    fn test_sql_parser_default_uses_tree_sitter() {
+        // Ensure default path (no manual override)
+        std::env::remove_var("ASTGREP_SQL_PARSER");
+        let parser = SqlParser::new();
+        let source = "SELECT id, name FROM users WHERE age > 18";
+        let node = parser
+            .parse(source, Path::new("query.sql"))
+            .expect("parse ok");
+        // Tree-sitter path attaches original ts_kind metadata on the root node
+        assert!(node.get_attribute("ts_kind").is_some(), "expected ts_kind metadata when using tree-sitter path");
+    }
+
+    #[test]
+    fn test_sql_parser_manual_override() {
+        // Force manual parser
+        std::env::set_var("ASTGREP_SQL_PARSER", "manual");
+        let parser = SqlParser::new();
+        let source = "SELECT id FROM users";
+        let node = parser
+            .parse(source, Path::new("query.sql"))
+            .expect("parse ok");
+        // Manual path should not have ts_kind metadata and should produce SQL-specific node types
+        assert!(node.get_attribute("ts_kind").is_none(), "manual path should not include ts_kind metadata");
+        assert_eq!(node.node_type(), "select_statement");
+        // Cleanup
+        std::env::remove_var("ASTGREP_SQL_PARSER");
+    }
+
 }

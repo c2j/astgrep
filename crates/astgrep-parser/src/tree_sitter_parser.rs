@@ -84,19 +84,19 @@ impl TreeSitterParser {
         
         // Initialize Python parser
         let mut parser = Parser::new();
-        if parser.set_language(tree_sitter_python::language()).is_ok() {
+        if parser.set_language(&tree_sitter_python::LANGUAGE.into()).is_ok() {
             parsers.insert(Language::Python, parser);
         }
 
         // Initialize JavaScript parser
         let mut parser = Parser::new();
-        if parser.set_language(tree_sitter_javascript::language()).is_ok() {
+        if parser.set_language(&tree_sitter_javascript::LANGUAGE.into()).is_ok() {
             parsers.insert(Language::JavaScript, parser);
         }
 
         // Initialize Java parser
         let mut parser = Parser::new();
-        if parser.set_language(tree_sitter_java::language()).is_ok() {
+        if parser.set_language(&tree_sitter_java::LANGUAGE.into()).is_ok() {
             parsers.insert(Language::Java, parser);
         }
 
@@ -111,19 +111,19 @@ impl TreeSitterParser {
             }
         }
 
-        // Initialize SQL parser (using basic parsing for now)
-        // Note: SQL will use the basic SQL adapter instead of tree-sitter
-        // {
-        //     let mut parser = Parser::new();
-        //     if parser.set_language(tree_sitter_sql::language()).is_ok() {
-        //         parsers.insert(Language::Sql, parser);
-        //     }
-        // }
+        // Initialize SQL parser via tree-sitter-sequel when feature enabled
+        #[cfg(feature = "sql-tree-sitter")]
+        {
+            let mut parser = Parser::new();
+            if parser.set_language(&tree_sitter_sequel::LANGUAGE.into()).is_ok() {
+                parsers.insert(Language::Sql, parser);
+            }
+        }
 
         // Initialize Bash parser
         {
             let mut parser = Parser::new();
-            if parser.set_language(tree_sitter_bash::language()).is_ok() {
+            if parser.set_language(&tree_sitter_bash::LANGUAGE.into()).is_ok() {
                 parsers.insert(Language::Bash, parser);
             }
         }
@@ -143,12 +143,6 @@ impl TreeSitterParser {
     /// Convert tree-sitter tree to universal AST
     pub fn tree_to_universal_ast(&self, tree: &Tree, source: &str) -> Result<UniversalNode> {
         let root_node = tree.root_node();
-        eprintln!("🔍 Tree-sitter root node: kind={}, child_count={}", root_node.kind(), root_node.child_count());
-        for i in 0..root_node.child_count() {
-            if let Some(child) = root_node.child(i) {
-                eprintln!("🔍   Child {}: kind={}, text={:?}", i, child.kind(), child.utf8_text(source.as_bytes()).unwrap_or(""));
-            }
-        }
         self.convert_node(&root_node, source)
     }
     
@@ -357,19 +351,24 @@ impl TreeSitterParser {
             "test_command" | "test_operator" => NodeType::BinaryExpression,
             "redirected_statement" | "file_redirect" => NodeType::ExpressionStatement,
 
-            // SQL-specific constructs
-            "select_statement" | "insert_statement" | "update_statement" | "delete_statement" |
-            "create_statement" | "drop_statement" | "alter_statement" => NodeType::ExpressionStatement,
+            // SQL-specific constructs (align with manual SQL adapter node types)
+            "select_statement" => NodeType::SelectStatement,
+            "insert_statement" => NodeType::InsertStatement,
+            "update_statement" => NodeType::UpdateStatement,
+            "delete_statement" => NodeType::DeleteStatement,
+            "create_statement" => NodeType::CreateStatement,
+            "drop_statement" => NodeType::DropStatement,
+            "alter_statement" => NodeType::AlterStatement,
+            // SQL clauses map to a generic SqlExpression container
             "from_clause" | "where_clause" | "having_clause" | "order_by_clause" |
-            "group_by_clause" | "limit_clause" => NodeType::ExpressionStatement,
-            "join_clause" | "inner_join" | "left_join" | "right_join" | "full_join" => NodeType::ExpressionStatement,
+            "group_by_clause" | "limit_clause" | "join_clause" | "inner_join" |
+            "left_join" | "right_join" | "full_join" | "subquery" | "parenthesized_expression" => NodeType::SqlExpression,
+            // Common SQL tokens
             "column_reference" | "table_reference" | "field" => NodeType::Identifier,
             "function_call" | "aggregate_function" => NodeType::CallExpression,
             "binary_expression" | "comparison_predicate" | "in_predicate" |
-            "like_predicate" | "between_predicate" => NodeType::BinaryExpression,
+            "like_predicate" | "between_predicate" | "union" | "intersect" | "except" => NodeType::BinaryExpression,
             "literal" | "string_literal" | "number_literal" | "boolean_literal" => NodeType::Literal,
-            "subquery" | "parenthesized_expression" => NodeType::ExpressionStatement,
-            "union" | "intersect" | "except" => NodeType::BinaryExpression,
 
             // Error handling
             "ERROR" => NodeType::Unknown,

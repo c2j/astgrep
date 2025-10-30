@@ -1,0 +1,8 @@
+rules:
+ - id: sql-min-ellipsis
+   pattern: |
+     SELECT $... ORDER BY $...
+   message: test
+   languages: [sql]
+   severity: INFO
+

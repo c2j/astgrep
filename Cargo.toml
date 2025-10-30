@@ -64,16 +64,22 @@ dashmap = "5.5"
 clap = { version = "4.4", features = ["derive", "env"] }
 config = "0.14"
 
+
+# Testing
+criterion = { version = "0.5", features = ["html_reports"] }
+
 # Parsing and regex
 regex = "1.10"
-tree-sitter = "0.20"
-tree-sitter-highlight = "0.20"
-tree-sitter-python = "0.20"
-tree-sitter-javascript = "0.20"
-tree-sitter-java = "0.20"
-tree-sitter-bash = "0.20"
+tree-sitter = "0.25"
+tree-sitter-highlight = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-java = "0.23.5"
+tree-sitter-bash = "0.25"
 # Use a simpler approach for SQL - we'll implement basic SQL parsing without tree-sitter for now
 # tree-sitter-sql = { package = "devgen-tree-sitter-sql", version = "0.21" }
+tree-sitter-sequel = "0.3.11"
+
 
 # Performance and caching
 lru = "0.12"
@@ -90,7 +96,6 @@ chrono = { version = "0.4", features = ["serde"] }
 sys-info = "0.9"
 
 # Testing
-criterion = { version = "0.5", features = ["html_reports"] }
 
 # Main dependencies are already defined above
 
@@ -101,6 +106,7 @@ path = "src/main.rs"
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.8"
+
 
 [profile.release]
 lto = true

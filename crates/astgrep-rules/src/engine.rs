@@ -7,6 +7,8 @@ use astgrep_core::{AstNode, Finding, Location, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
+use regex::Regex;
+
 
 /// Rule execution engine
 pub struct RuleExecutionEngine {
@@ -203,60 +205,14 @@ impl RuleExecutionEngine {
 
         let mut findings = Vec::new();
 
-        // Prefer matching directly on full source ONLY for pure-literal patterns (no metavariables)
-        let pattern_str_opt = pattern.get_pattern_string().cloned();
-        if let Some(pattern_str) = pattern_str_opt {
-            let has_metavars = pattern_str.contains('$');
-            if !has_metavars {
-                let spans = self.find_pattern_spans_in_source(&pattern_str, &context.source_code, context.language);
-                println!("🔍 Pattern matching found {} spans", spans.len());
+        // 1) Regex patterns: run real regex over full source
+        if let PatternType::Regex(ref regex_str) = &pattern.pattern_type {
+            match Regex::new(regex_str) {
+                Ok(re) => {
+                    for m in re.find_iter(&context.source_code) {
+                        let (start_line, start_col) = Self::byte_index_to_line_col(&context.source_code, m.start());
+                        let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, m.end());
 
-                // Optional: deduplicate identical spans
-                use std::collections::HashSet;
-                let mut seen: HashSet<(usize, usize)> = HashSet::new();
-
-                for (start_byte, end_byte) in spans {
-                    if !seen.insert((start_byte, end_byte)) { continue; }
-                    let (start_line, start_col) = Self::byte_index_to_line_col(&context.source_code, start_byte);
-                    let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
-
-                    let location = Location::new(
-                        std::path::PathBuf::from(&context.file_path),
-                        start_line,
-                        start_col,
-                        end_line,
-                        end_col,
-                    );
-
-                    // Extract matched text for message context (best-effort)
-                    let matched_text = &context.source_code[start_byte..end_byte.min(context.source_code.len())];
-
-                    let finding = Finding::new(
-                        rule.id.clone(),
-                        if !rule.description.is_empty() { rule.description.clone() } else { format!("Match: {}", matched_text) },
-                        rule.severity,
-                        rule.confidence,
-                        location,
-                    )
-                    .with_metadata("pattern".to_string(), pattern.get_pattern_string().unwrap_or(&"".to_string()).clone());
-
-                    let finding = if let Some(ref fix) = rule.fix { finding.with_fix(fix.clone()) } else { finding };
-                    findings.push(finding);
-                }
-
-                println!("🔍 Pattern execution complete. Generated {} findings", findings.len());
-                return Ok(findings);
-            }
-        }
-
-        // If this is a pattern-either, try each simple alternative on full source to get precise locations
-        if let PatternType::Either(ref subs) = &pattern.pattern_type {
-            for sub in subs {
-                if let Some(sub_pat) = sub.get_pattern_string() {
-                    let spans = self.find_pattern_spans_in_source(sub_pat, &context.source_code, context.language);
-                    for (start_byte, end_byte) in spans {
-                        let (start_line, start_col) = Self::byte_index_to_line_col(&context.source_code, start_byte);
-                        let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
                         let location = Location::new(
                             std::path::PathBuf::from(&context.file_path),
                             start_line,
@@ -264,19 +220,137 @@ impl RuleExecutionEngine {
                             end_line,
                             end_col,
                         );
-                        let matched_text = &context.source_code[start_byte..end_byte.min(context.source_code.len())];
-                        let mut finding = Finding::new(
+
+                        let matched_text = &context.source_code[m.start()..m.end().min(context.source_code.len())];
+
+                        let finding = Finding::new(
                             rule.id.clone(),
                             if !rule.description.is_empty() { rule.description.clone() } else { format!("Match: {}", matched_text) },
                             rule.severity,
                             rule.confidence,
                             location,
-                        );
-                        // Record which alternative matched
-                        finding = finding.with_metadata("pattern".to_string(), sub_pat.clone());
-                        if let Some(ref fix) = rule.fix { finding = finding.with_fix(fix.clone()); }
+                        )
+                        .with_metadata("pattern".to_string(), regex_str.clone());
+
+                        let finding = if let Some(ref fix) = rule.fix { finding.with_fix(fix.clone()) } else { finding };
                         findings.push(finding);
                     }
+                    println!("🔍 Regex pattern execution complete. Generated {} findings", findings.len());
+                    return Ok(findings);
+                }
+                Err(e) => {
+                    // Invalid regex, surface as analysis error
+                    return Err(astgrep_core::AnalysisError::pattern_match_error(format!("Invalid regex: {}", e)));
+                }
+            }
+        }
+
+        // 2) Simple patterns (with or without metavariables): scan full source and emit one finding per occurrence
+        if let PatternType::Simple(ref pattern_str) = &pattern.pattern_type {
+            let spans = self.find_pattern_spans_in_source(&pattern_str, &context.source_code, context.language);
+            println!("🔍 Pattern matching found {} spans", spans.len());
+
+            // Optional: deduplicate identical spans
+            use std::collections::HashSet;
+            let mut seen: HashSet<(usize, usize)> = HashSet::new();
+
+            for (start_byte, end_byte) in spans {
+                if !seen.insert((start_byte, end_byte)) { continue; }
+                let (start_line, start_col) = Self::byte_index_to_line_col(&context.source_code, start_byte);
+                let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
+
+                let location = Location::new(
+                    std::path::PathBuf::from(&context.file_path),
+                    start_line,
+                    start_col,
+                    end_line,
+                    end_col,
+                );
+
+                // Extract matched text for message context (best-effort)
+                let matched_text = &context.source_code[start_byte..end_byte.min(context.source_code.len())];
+
+                let finding = Finding::new(
+                    rule.id.clone(),
+                    if !rule.description.is_empty() { rule.description.clone() } else { format!("Match: {}", matched_text) },
+                    rule.severity,
+                    rule.confidence,
+                    location,
+                )
+                .with_metadata("pattern".to_string(), pattern_str.clone());
+
+                let finding = if let Some(ref fix) = rule.fix { finding.with_fix(fix.clone()) } else { finding };
+                findings.push(finding);
+            }
+
+            println!("🔍 Pattern execution complete. Generated {} findings", findings.len());
+            return Ok(findings);
+        }
+
+        // 3) pattern-either: handle Regex and Simple alternatives on full source (including metavariables)
+        if let PatternType::Either(ref subs) = &pattern.pattern_type {
+            use std::collections::HashSet;
+            let mut seen: HashSet<(usize, usize)> = HashSet::new();
+
+            for sub in subs {
+                match &sub.pattern_type {
+                    PatternType::Regex(r) => {
+                        if let Ok(re) = Regex::new(r) {
+                            for m in re.find_iter(&context.source_code) {
+                                let start_byte = m.start();
+                                let end_byte = m.end();
+                                if !seen.insert((start_byte, end_byte)) { continue; }
+                                let (start_line, start_col) = Self::byte_index_to_line_col(&context.source_code, start_byte);
+                                let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
+                                let location = Location::new(
+                                    std::path::PathBuf::from(&context.file_path),
+                                    start_line,
+                                    start_col,
+                                    end_line,
+                                    end_col,
+                                );
+                                let matched_text = &context.source_code[start_byte..end_byte.min(context.source_code.len())];
+                                let mut finding = Finding::new(
+                                    rule.id.clone(),
+                                    if !rule.description.is_empty() { rule.description.clone() } else { format!("Match: {}", matched_text) },
+                                    rule.severity,
+                                    rule.confidence,
+                                    location,
+                                );
+                                finding = finding.with_metadata("pattern".to_string(), r.clone());
+                                if let Some(ref fix) = rule.fix { finding = finding.with_fix(fix.clone()); }
+                                findings.push(finding);
+                            }
+                        }
+                    }
+                    PatternType::Simple(s) => {
+                        let spans = self.find_pattern_spans_in_source(s, &context.source_code, context.language);
+                        println!("DEBUG either: simple pattern '{}' produced {} spans", s, spans.len());
+                        for (start_byte, end_byte) in spans {
+                            if !seen.insert((start_byte, end_byte)) { continue; }
+                            let (start_line, start_col) = Self::byte_index_to_line_col(&context.source_code, start_byte);
+                            let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
+                            let location = Location::new(
+                                std::path::PathBuf::from(&context.file_path),
+                                start_line,
+                                start_col,
+                                end_line,
+                                end_col,
+                            );
+                            let matched_text = &context.source_code[start_byte..end_byte.min(context.source_code.len())];
+                            let mut finding = Finding::new(
+                                rule.id.clone(),
+                                if !rule.description.is_empty() { rule.description.clone() } else { format!("Match: {}", matched_text) },
+                                rule.severity,
+                                rule.confidence,
+                                location,
+                            );
+                            finding = finding.with_metadata("pattern".to_string(), s.clone());
+                            if let Some(ref fix) = rule.fix { finding = finding.with_fix(fix.clone()); }
+                            findings.push(finding);
+                        }
+                    }
+                    _ => {}
                 }
             }
             println!("🔍 pattern-either execution complete. Generated {} findings", findings.len());
@@ -448,45 +522,76 @@ impl RuleExecutionEngine {
         Ok(matches)
     }
 
-    /// Tokenize a string, preserving operators and punctuation as separate tokens
+    /// Tokenize a string, preserving operators and punctuation as separate tokens.
+    /// Note: recognizes "..." as a single Ellipsis token in patterns and text.
     fn tokenize(&self, s: &str) -> Vec<String> {
-        let mut tokens: Vec<String> = Vec::new();
-        let mut current = String::new();
-        for ch in s.chars() {
-            match ch {
-                '+' | '-' | '*' | '/' | '%' | '=' | '<' | '>' | '!' |
-                '&' | '|' | '^' | '~' | '?' | ':' | ';' | ',' | '.' |
-                '(' | ')' | '[' | ']' | '{' | '}' => {
-                    if !current.is_empty() { tokens.push(std::mem::take(&mut current)); }
-                    tokens.push(ch.to_string());
-                }
-                ' ' | '\t' | '\n' | '\r' => {
-                    if !current.is_empty() { tokens.push(std::mem::take(&mut current)); }
-                }
-                _ => current.push(ch),
+        self.tokenize_spanned(s).into_iter().map(|(t, _, _)| t).collect()
+    }
+    /// Tokenize a pattern string with Semgrep-compatible post-processing.
+    /// Specifically, coalesce `$ ...` into a single ellipsis token `...` to support `$...` syntax.
+    fn tokenize_pattern(&self, s: &str) -> Vec<String> {
+        let mut tokens = self.tokenize(s);
+        if tokens.is_empty() { return tokens; }
+        let mut coalesced: Vec<String> = Vec::with_capacity(tokens.len());
+        let mut idx = 0usize;
+        while idx < tokens.len() {
+            if tokens[idx] == "$" && idx + 1 < tokens.len() && tokens[idx + 1] == "..." {
+                coalesced.push("...".to_string());
+                idx += 2;
+            } else {
+                coalesced.push(std::mem::take(&mut tokens[idx]));
+                idx += 1;
             }
         }
-        if !current.is_empty() { tokens.push(current); }
-        tokens
+        coalesced
     }
 
+
     /// Tokenize a string and return tokens with their byte spans (start, end)
+    /// Note: recognizes "..." as a single Ellipsis token.
     fn tokenize_spanned(&self, s: &str) -> Vec<(String, usize, usize)> {
+        use std::iter::Peekable;
         let mut tokens: Vec<(String, usize, usize)> = Vec::new();
         let mut current = String::new();
         let mut current_start: Option<usize> = None;
         let mut last_end: usize = 0;
-        for (i, ch) in s.char_indices() {
+        let mut it: Peekable<std::str::CharIndices<'_>> = s.char_indices().peekable();
+        while let Some((i, ch)) = it.next() {
             let ch_end = i + ch.len_utf8();
             match ch {
                 '+' | '-' | '*' | '/' | '%' | '=' | '<' | '>' | '!' |
-                '&' | '|' | '^' | '~' | '?' | ':' | ';' | ',' | '.' |
-                '(' | ')' | '[' | ']' | '{' | '}' => {
+                '&' | '|' | '^' | '~' | '?' | ':' | ';' | ',' |
+                '(' | ')' | '[' | ']' | '{' | '}' | '.' => {
+                    // flush current ident
                     if !current.is_empty() {
                         tokens.push((std::mem::take(&mut current), current_start.unwrap_or(i), i));
                         current_start = None;
                     }
-                    tokens.push((ch.to_string(), i, ch_end));
+                    // special case: ellipsis
+                    if ch == '.' {
+                        // check next two chars form "..."
+                        let mut consumed_two = false;
+                        if let Some(&(i2, ch2)) = it.peek() {
+                            if ch2 == '.' {
+                                // consume second '.'
+                                let _ = it.next();
+                                if let Some(&(i3, ch3)) = it.peek() {
+                                    if ch3 == '.' {
+                                        // consume third '.' and push ellipsis token
+                                        let _ = it.next();
+                                        tokens.push(("...".to_string(), i, i + 3));
+                                        last_end = i + 3;
+                                        consumed_two = true;
+                                    }
+                                }
+                            }
+                        }
+                        if consumed_two { continue; }
+                        // not an ellipsis, just a single dot
+                        tokens.push((".".to_string(), i, ch_end));
+                    } else {
+                        tokens.push((ch.to_string(), i, ch_end));
+                    }
                 }
                 ' ' | '\t' | '\n' | '\r' => {
                     if !current.is_empty() {
@@ -516,8 +621,68 @@ impl RuleExecutionEngine {
         while i < pattern_tokens.len() {
             if j >= text_tokens.len() { return None; }
             let p_tok = &pattern_tokens[i];
-            if p_tok.starts_with('$') {
-                let next_lit_idx = (i + 1..pattern_tokens.len()).find(|&k| !pattern_tokens[k].starts_with('$'));
+            if case_insensitive { println!("TRACE try_match: i={}, j={}, p_tok='{}', text='{}'", i, j, p_tok, text_tokens[j].0); }
+
+            // Treat "$ ..." (a dollar immediately followed by ellipsis token) as a pure ellipsis (no binding),
+            // to be Semgrep-compatible with `$...` syntax commonly used in SQL patterns.
+            let is_dollar_ellipsis = p_tok == "$"
+                && (i + 1) < pattern_tokens.len()
+                && pattern_tokens[i + 1] == "...";
+
+            // Ellipsis: match variable-length sequence (including empty) until next anchor
+            if p_tok == "..." || is_dollar_ellipsis {
+                if case_insensitive { println!("TRACE ellipsis encountered at i={}, j={}, is_dollar_ellipsis={}", i, j, is_dollar_ellipsis); }
+                // When consuming `$ ...`, advance pattern by 2 tokens; otherwise by 1
+                if is_dollar_ellipsis { i += 1; } // so the common handling below will also `i += 1` at the end
+                // find next anchor that is neither metavariable nor ellipsis
+                let next_anchor_idx = (i + 1..pattern_tokens.len())
+                    .find(|&k| pattern_tokens[k] != "..." && !pattern_tokens[k].starts_with('$'));
+                match next_anchor_idx {
+                    None => {
+                        if case_insensitive { println!("TRACE ellipsis to end: returning len={}", text_tokens.len()); }
+                        // Ellipsis at end: matches the rest (including empty)
+                        return Some(text_tokens.len());
+                    }
+                    Some(k) => {
+                        let next_lit = &pattern_tokens[k];
+                        if case_insensitive { println!("TRACE ellipsis next anchor literal='{}' (k={})", next_lit, k); }
+                        // Balanced delimiters for common closers
+                        let mut set_pos: Option<usize> = None;
+                        if next_lit == ")" || next_lit == "]" || next_lit == "}" {
+                            let (open, close) = if next_lit == ")" { ("(", ")") } else if next_lit == "]" { ("[", "]") } else { ("{", "}") };
+                            let mut depth: i32 = 1; // we assume the corresponding opener was matched just before
+                            let mut pos = j;
+                            while pos < text_tokens.len() {
+                                let tok = &text_tokens[pos].0;
+                                if tok == open { depth += 1; } else if tok == close { depth -= 1; }
+                                if depth == 0 { set_pos = Some(pos); break; }
+                                pos += 1;
+                            }
+                            if let Some(end_pos) = set_pos {
+                                if case_insensitive { println!("TRACE ellipsis matched to close at pos={}", end_pos); }
+                                // Allow empty between open and close (end_pos == j)
+                                i += 1; j = end_pos; continue;
+                            } else { return None; }
+                        } else {
+                            // general case: scan to next literal (nearest/shortest)
+                            let mut pos = j; let mut found = None;
+                            while pos < text_tokens.len() {
+                                let tt = &text_tokens[pos].0;
+                                let matched = if case_insensitive { tt.eq_ignore_ascii_case(next_lit) } else { tt == next_lit };
+                                if matched { found = Some(pos); break; }
+                                pos += 1;
+                            }
+                            if let Some(end_pos) = found {
+                                if case_insensitive { println!("TRACE ellipsis skipped to anchor at pos={}", end_pos); }
+                                // empty allowed (end_pos == j)
+                                i += 1; j = end_pos; continue;
+                            } else { return None; }
+                        }
+                    }
+                }
+            } else if p_tok.starts_with('$') {
+                // Handle normal metavariables like `$T1`, `$SUBQUERY`. Do NOT conflate with `$ ...` which is handled above.
+                let next_lit_idx = (i + 1..pattern_tokens.len()).find(|&k| pattern_tokens[k] != "..." && !pattern_tokens[k].starts_with('$'));
                 match next_lit_idx {
                     None => {
                         let capture: Vec<String> = text_tokens[j..].iter().map(|t| t.0.clone()).collect();
@@ -569,18 +734,94 @@ impl RuleExecutionEngine {
 
     /// Find spans (byte start, byte end) of matches in the given source
     fn find_pattern_spans_in_source(&self, pattern: &str, source: &str, language: astgrep_core::Language) -> Vec<(usize, usize)> {
-        let mut pattern_tokens = self.tokenize(pattern);
-        if pattern_tokens.last() == Some(&";".to_string()) { pattern_tokens.pop(); }
-        let text_tokens = self.tokenize_spanned(source);
-        let mut spans = Vec::new();
-        let case_insensitive = matches!(language, astgrep_core::Language::Sql);
-        for start in 0..text_tokens.len() {
-            if let Some(end_idx) = self.try_match_tokens(&pattern_tokens, &text_tokens, start, case_insensitive) {
-                let start_byte = text_tokens[start].1;
-                let end_byte = if end_idx == 0 { 0 } else { text_tokens[end_idx - 1].2 };
-                spans.push((start_byte, end_byte));
+        // Preprocess: make `$...` Semgrep form equivalent to `...` before tokenization
+        let preprocessed = pattern.replace("$...", "...");
+        println!("DEBUG find_pattern_spans_in_source: pattern='{}', preprocessed='{}', lang={:?}", pattern, preprocessed, language);
+        let mut pattern_tokens = self.tokenize_pattern(&preprocessed);
+        println!("DEBUG pattern_tokens={:?}", pattern_tokens);
+        if pattern_tokens.last() == Some(&";".to_string()) {
+            // For SQL patterns, keep explicit trailing semicolon as an anchor to prevent
+            // trailing ellipsis from spanning to end-of-file across statements.
+            if !matches!(language, astgrep_core::Language::Sql) {
+                pattern_tokens.pop();
             }
         }
+        // Coalesce `$ ...` into a single ellipsis token to be Semgrep-compatible with `$...`
+        let mut coalesced: Vec<String> = Vec::with_capacity(pattern_tokens.len());
+        let mut idx = 0usize;
+        while idx < pattern_tokens.len() {
+            if pattern_tokens[idx] == "$" && idx + 1 < pattern_tokens.len() && pattern_tokens[idx + 1] == "..." {
+                coalesced.push("...".to_string());
+                idx += 2;
+            } else {
+                coalesced.push(pattern_tokens[idx].clone());
+                idx += 1;
+            }
+        }
+        pattern_tokens = coalesced;
+        println!("DEBUG coalesced_pattern_tokens={:?}", pattern_tokens);
+
+        // Determine first literal anchor (the first token that is neither ellipsis nor metavariable)
+        let first_anchor: Option<String> = pattern_tokens
+            .iter()
+            .find(|t| t.as_str() != "..." && !t.starts_with('$'))
+            .cloned();
+
+        let text_tokens = self.tokenize_spanned(source);
+        println!("DEBUG text_tokens (first 40)={:?}", text_tokens.iter().take(40).map(|t| &t.0).collect::<Vec<_>>());
+        let mut spans = Vec::new();
+        let case_insensitive = matches!(language, astgrep_core::Language::Sql);
+
+        // Helper: run matching in a token window [win_start, win_end) and push absolute byte spans
+        let mut match_in_window = |win_start: usize, win_end: usize| {
+            let window = &text_tokens[win_start..win_end];
+            for rel_start in 0..window.len() {
+                // Optional optimization: require the first literal to match at start to avoid mid-span starts
+                if let Some(ref anchor) = first_anchor {
+                    let tok = &window[rel_start].0;
+                    let lit_ok = if case_insensitive { tok.eq_ignore_ascii_case(anchor) } else { tok == anchor };
+                    if !lit_ok { continue; }
+                }
+                // Java safety: avoid starting a match in the middle of a qualified name (e.g., System.out.println)
+                if matches!(language, astgrep_core::Language::Java) {
+                    if let Some(first_lit) = pattern_tokens.iter().find(|t| !t.starts_with('$')) {
+                        let is_ident = first_lit.chars().all(|c| c.is_alphanumeric() || c == '_');
+                        if is_ident && rel_start + win_start > 0 && text_tokens[rel_start + win_start - 1].0 == "." {
+                            continue;
+                        }
+                    }
+                }
+                if let Some(rel_end) = self.try_match_tokens(&pattern_tokens, window, rel_start, case_insensitive) {
+                    if rel_end == 0 { continue; }
+                    let abs_start_idx = win_start + rel_start;
+                    let abs_end_idx_exclusive = win_start + rel_end;
+                    let start_byte = text_tokens[abs_start_idx].1;
+                    let end_byte = text_tokens[abs_end_idx_exclusive - 1].2;
+                    spans.push((start_byte, end_byte));
+                }
+            }
+        };
+
+        // If SQL, by default constrain matching within single statements (semicolon delimited)
+        if matches!(language, astgrep_core::Language::Sql) {
+            // Default ON. Later this can be gated by CLI/YAML options via RuleContext if needed.
+            let mut stmt_start = 0usize;
+            for i in 0..text_tokens.len() {
+                if text_tokens[i].0 == ";" {
+                    // Include semicolon in the window to allow patterns that anchor on ';'
+                    match_in_window(stmt_start, i + 1);
+                    stmt_start = i + 1;
+                }
+            }
+            // Also handle trailing tail without semicolon (best effort)
+            if stmt_start < text_tokens.len() {
+                match_in_window(stmt_start, text_tokens.len());
+            }
+        } else {
+            // Non-SQL: match across whole token stream
+            match_in_window(0, text_tokens.len());
+        }
+
         spans
     }
 
@@ -610,7 +851,7 @@ impl RuleExecutionEngine {
         println!("🔍 Node text: '{}'", text);
 
         // Tokenize pattern and text
-        let mut pattern_tokens = self.tokenize(pattern);
+        let mut pattern_tokens = self.tokenize_pattern(pattern);
         let text_tokens = self.tokenize(text);
 
         println!("🔍 Pattern tokens: {:?}", pattern_tokens);
@@ -638,9 +879,63 @@ impl RuleExecutionEngine {
                     return false;
                 }
                 let p_tok = &pattern_tokens[i];
-                if p_tok.starts_with('$') {
-                    // 查找下一个字面量（非 $ 开头）
-                    let next_lit_idx = (i + 1..pattern_tokens.len()).find(|&k| !pattern_tokens[k].starts_with('$'));
+
+                // 兼容 Semgrep `$...` 语法：把 `$` 紧跟 `...` 视为纯省略号（不产生绑定）
+                let is_dollar_ellipsis = p_tok == "$"
+                    && (i + 1) < pattern_tokens.len()
+                    && pattern_tokens[i + 1] == "...";
+
+                if p_tok == "..." || is_dollar_ellipsis {
+                    if is_dollar_ellipsis { i += 1; }
+                    // Ellipsis：可变长跳过（允许 0 个），直到下一个锚点（既不是元变量也不是省略号）
+                    let next_anchor_idx = (i + 1..pattern_tokens.len())
+                        .find(|&k| pattern_tokens[k] != "..." && !pattern_tokens[k].starts_with('$'));
+                    match next_anchor_idx {
+                        None => {
+                            // 末尾省略号：匹配到文本末尾（允许 0 个）
+                            return true;
+                        }
+                        Some(k) => {
+                            let next_lit = &pattern_tokens[k];
+                            if next_lit == ")" || next_lit == "]" || next_lit == "}" {
+                                let (open, close) = if next_lit == ")" { ("(", ")") } else if next_lit == "]" { ("[", "]") } else { ("{", "}") };
+                                let mut depth: i32 = 1;
+                                let mut pos = j;
+                                while pos < text_tokens.len() {
+                                    let tok = &text_tokens[pos];
+                                    if tok == open { depth += 1; }
+                                    else if tok == close { depth -= 1; }
+                                    if depth == 0 { break; }
+                                    pos += 1;
+                                }
+                                if pos < text_tokens.len() {
+                                    // 允许空匹配：pos 可以等于 j
+                                    i += 1;
+                                    j = pos; // 不消耗 next_lit
+                                    continue;
+                                } else { return false; }
+                            } else {
+                                let mut pos = j;
+                                let mut found_k: Option<usize> = None;
+                                while pos < text_tokens.len() {
+                                    let matched = if case_insensitive { text_tokens[pos].eq_ignore_ascii_case(next_lit) } else { &text_tokens[pos] == next_lit };
+                                    if matched { found_k = Some(pos); break; }
+                                    pos += 1;
+                                }
+                                if let Some(end_pos) = found_k {
+                                    // 允许空匹配
+                                    i += 1;
+                                    j = end_pos; // 不消耗 next_lit
+                                    continue;
+                                } else {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                } else if p_tok.starts_with('$') {
+                    // 查找下一个字面量（非 $ / 非 ...）
+                    let next_lit_idx = (i + 1..pattern_tokens.len()).find(|&k| pattern_tokens[k] != "..." && !pattern_tokens[k].starts_with('$'));
                     match next_lit_idx {
                         None => {
                             // $META 在 pattern 末尾：捕获到文本末尾（至少 1 个 token）
@@ -724,6 +1019,15 @@ impl RuleExecutionEngine {
 
         // 从所有起点尝试
         for start in 0..text_tokens.len() {
+            // Java safety: avoid starting a match in the middle of a qualified name (e.g., System.out.println)
+            if matches!(language, astgrep_core::Language::Java) {
+                if let Some(first_lit) = pattern_tokens.iter().find(|t| !t.starts_with('$')) {
+                    let is_ident = first_lit.chars().all(|c| c.is_alphanumeric() || c == '_');
+                    if is_ident && start > 0 && text_tokens[start - 1] == "." {
+                        continue;
+                    }
+                }
+            }
             if try_match_from(start) {
                 println!("🔍 Match successful starting at token index {}", start);
                 return true;
@@ -994,4 +1298,228 @@ mod tests {
         // Note: This test might be flaky due to timing, but demonstrates the concept
         assert_eq!(result.rule_id, "test-rule");
     }
+    #[test]
+    fn test_sql_select_star_pattern_either_dedup() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "sql-avoid-select-star".to_string(),
+            "Avoid SELECT *".to_string(),
+            "Detects usage of SELECT *".to_string(),
+            Severity::Warning,
+            Confidence::Medium,
+            vec![Language::Sql],
+        )
+        .add_pattern(Pattern::either(vec![
+            Pattern::simple("SELECT * FROM users".to_string()),
+            Pattern::simple("select * from users".to_string()),
+        ]));
+
+        let sql = "SELECT * FROM users;\n\nSELECT id, name FROM users;\n\nselect * from users;\n";
+        // AST content is not used for simple-literal path; reuse existing helper
+        let ast = create_test_ast();
+        let context = RuleContext::new("test.sql".to_string(), Language::Sql, sql.to_string());
+
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        // Expect exactly two findings (two SELECT * occurrences), not four
+        assert_eq!(result.findings.len(), 2);
+    }
+
+    #[test]
+    fn test_sql_regex_cte_single_block() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "sql.detect-any-cte".to_string(),
+            "Detect CTE".to_string(),
+            "发现 CTE 用法（WITH 子句）".to_string(),
+            Severity::Info,
+            Confidence::Medium,
+            vec![Language::Sql],
+        )
+        .add_pattern(Pattern::regex("(?is)\\bwith\\s+\\w+\\s*as\\s*\\(".to_string()));
+
+        let sql = "WITH my_cte AS (\n  SELECT one, two\n  FROM my_table\n)\nSELECT *\nFROM my_cte;\n";
+        let ast = create_test_ast();
+        let context = RuleContext::new("test.sql".to_string(), Language::Sql, sql.to_string());
+
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.findings.len(), 1);
+    }
+
+    #[test]
+    fn test_java_out_println_does_not_match_system_qualified() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "java-out-println".to_string(),
+            "Java out.println".to_string(),
+            "Detect out.println".to_string(),
+            Severity::Warning,
+            Confidence::Medium,
+            vec![Language::Java],
+        ).add_pattern(Pattern::simple("out.println($INPUT)".to_string()));
+        // AST node simulates System.out.println(...)
+        let ast = create_test_ast();
+        let context = RuleContext::new(
+            "Demo.java".to_string(),
+            Language::Java,
+            "class Demo { void f(){ System.out.println(\"x\"); } }".to_string(),
+        );
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.findings.len(), 0);
+    }
+
+    #[test]
+    fn test_java_out_println_matches_plain_out() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "java-out-println-2".to_string(),
+            "Java out.println".to_string(),
+            "Detect out.println".to_string(),
+            Severity::Warning,
+            Confidence::Medium,
+            vec![Language::Java],
+        ).add_pattern(Pattern::simple("out.println($INPUT)".to_string()));
+        // AST node simulates out.println(...)
+        let ast = AstBuilder::call_expression(
+            AstBuilder::property_access("out", "println"),
+            vec![AstBuilder::string_literal("Hello")],
+        ).with_text("out.println(\"Hello\");".to_string());
+        let context = RuleContext::new(
+            "Demo.java".to_string(),
+            Language::Java,
+            "out.println(\"Hello\");".to_string(),
+        );
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.findings.len(), 1);
+    }
+
+    #[test]
+    fn test_java_simple_with_metavar_multiple_occurrences() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "java-writer-write".to_string(),
+            "Detect writer.write".to_string(),
+            "检测到可能未进行XSS防护的用户输入输出".to_string(),
+            Severity::Error,
+            Confidence::Medium,
+            vec![Language::Java],
+        ).add_pattern(Pattern::simple("response.getWriter().write($INPUT)".to_string()));
+
+        let java_code = "String userInput = request.getParameter(\"name\");\n\
+response.getWriter().write(userInput);\n\
+String userInput2 = request.getParameter(\"title\");\n\
+response.getWriter().write(\"<div>\" + userInput2 + \"</div>\");\n\
+String scriptParam = request.getParameter(\"x\");\n\
+response.getWriter().write(\"<script>var data = '\" + scriptParam + \"';</script>\");\n";
+        let ast = create_test_ast();
+        let context = RuleContext::new(
+            "Xss.java".to_string(),
+            Language::Java,
+            java_code.to_string(),
+        );
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.findings.len(), 3);
+    }
+
+    #[test]
+    fn test_java_either_with_metavar_multiple_occurrences() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "java-writer-either".to_string(),
+            "Detect unsafe outputs".to_string(),
+            "检测到可能未进行XSS防护的用户输入输出".to_string(),
+            Severity::Error,
+            Confidence::Medium,
+            vec![Language::Java],
+        ).add_pattern(Pattern::either(vec![
+            Pattern::simple("response.getWriter().write($INPUT)".to_string()),
+            Pattern::simple("response.getWriter().print($INPUT)".to_string()),
+            Pattern::simple("response.getWriter().println($INPUT)".to_string()),
+        ]));
+
+        let java_code = "String userInput = request.getParameter(\"name\");\n\
+response.getWriter().write(userInput);\n\
+String userInput2 = request.getParameter(\"title\");\n\
+response.getWriter().write(\"<div>\" + userInput2 + \"</div>\");\n\
+String scriptParam = request.getParameter(\"x\");\n\
+response.getWriter().write(\"<script>var data = '\" + scriptParam + \"';</script>\");\n";
+        let ast = create_test_ast();
+        let context = RuleContext::new(
+            "Xss.java".to_string(),
+            Language::Java,
+            java_code.to_string(),
+        );
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.findings.len(), 3);
+    }
+
+        #[test]
+        fn test_java_ellipsis_call_arguments() {
+            let mut engine = RuleExecutionEngine::new();
+            let rule = Rule::new(
+                "java-ellipsis-call".to_string(),
+                "Ellipsis call args".to_string(),
+                "支持 ... 匹配任意个实参".to_string(),
+                Severity::Info,
+                Confidence::Medium,
+                vec![Language::Java],
+            ).add_pattern(Pattern::simple("System.out.println(...)".to_string()));
+
+            let java_code = "class D{ void f(){ System.out.println(); System.out.println(\"x\"); } }";
+            let ast = create_test_ast();
+            let context = RuleContext::new("Demo.java".to_string(), Language::Java, java_code.to_string());
+            let result = engine.execute_rule(&rule, &ast, &context);
+            assert!(result.is_success());
+            // 两处调用都应命中
+            assert_eq!(result.findings.len(), 2);
+        }
+
+        #[test]
+        fn test_java_ellipsis_block_bodies() {
+            let mut engine = RuleExecutionEngine::new();
+            let rule = Rule::new(
+                "java-ellipsis-block".to_string(),
+                "Ellipsis in blocks".to_string(),
+                "支持在块体内使用 ...".to_string(),
+                Severity::Info,
+                Confidence::Medium,
+                vec![Language::Java],
+            ).add_pattern(Pattern::simple("try { ... } catch (Exception e) { ... }".to_string()));
+
+            let java_code = "class D{ void f(){ try { a(); b(); } catch (Exception e) { handle(); } } }";
+            let ast = create_test_ast();
+            let context = RuleContext::new("Demo.java".to_string(), Language::Java, java_code.to_string());
+            let result = engine.execute_rule(&rule, &ast, &context);
+            assert!(result.is_success());
+            assert_eq!(result.findings.len(), 1);
+        }
+
+        #[test]
+        fn test_ellipsis_sequence_across_statements() {
+            let mut engine = RuleExecutionEngine::new();
+            let rule = Rule::new(
+                "ellipsis-seq".to_string(),
+                "Ellipsis sequence".to_string(),
+                "A ... B 序列匹配".to_string(),
+                Severity::Info,
+                Confidence::Medium,
+                vec![Language::Java],
+            ).add_pattern(Pattern::simple("A ... B".to_string()));
+
+            let java_code = "class D{ void f(){ A(); X(); Y(); B(); } }";
+            let ast = create_test_ast();
+            let context = RuleContext::new("Demo.java".to_string(), Language::Java, java_code.to_string());
+            let result = engine.execute_rule(&rule, &ast, &context);
+            assert!(result.is_success());
+            assert_eq!(result.findings.len(), 1);
+        }
+
+
 }
+
+

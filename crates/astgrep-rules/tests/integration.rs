@@ -33,6 +33,8 @@ fn test_complete_rule_execution() {
         ],
         dataflow: None,
         fix: Some("Use prepared statements".to_string()),
+        fix_regex: None,
+        paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
     };
@@ -84,6 +86,8 @@ fn test_basic_rule_execution() {
         ],
         dataflow: None,
         fix: Some("Use prepared statements".to_string()),
+        fix_regex: None,
+        paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
     };
@@ -130,6 +134,8 @@ fn test_rule_validation() {
         ],
         dataflow: None,
         fix: None,
+        fix_regex: None,
+        paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
     };
@@ -171,6 +177,8 @@ fn test_rule_engine_configuration() {
         ],
         dataflow: None,
         fix: None,
+        fix_regex: None,
+        paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
     };
@@ -215,6 +223,8 @@ fn test_simple_performance() {
         ],
         dataflow: None,
         fix: None,
+        fix_regex: None,
+        paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
     };
@@ -265,6 +275,8 @@ fn test_error_handling() {
         patterns: vec![],
         dataflow: None,
         fix: None,
+        fix_regex: None,
+        paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
     };
@@ -307,6 +319,8 @@ fn test_multiple_rules() {
             ],
             dataflow: None,
             fix: None,
+            fix_regex: None,
+            paths: None,
             metadata: std::collections::HashMap::new(),
             enabled: true,
         };

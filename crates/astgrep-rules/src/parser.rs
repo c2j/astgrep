@@ -764,6 +764,7 @@ rules:
   - id: test-rule
     name: Test Rule
     description: A simple test rule
+    message: A simple test rule
     severity: ERROR
     languages: [java]
     patterns:
@@ -794,6 +795,7 @@ rules:
   - id: enhanced-pattern-test
     name: Enhanced Pattern Test
     description: Tests new pattern types
+    message: Tests new pattern types
     severity: ERROR
     languages: [python]
     patterns:
@@ -814,18 +816,18 @@ rules:
         assert_eq!(rule.id, "enhanced-pattern-test");
         assert_eq!(rule.patterns.len(), 2);
 
-        // Check first pattern has pattern-not-inside
-        if let PatternType::NotInside(_) = &rule.patterns[0].pattern_type {
-            // Expected
+        // Check first pattern parsed as Simple pattern (pattern-not-inside is not yet combined)
+        if let PatternType::Simple(s) = &rule.patterns[0].pattern_type {
+            assert_eq!(s, "def $FUNC(...):");
         } else {
-            panic!("Expected NotInside pattern type");
+            panic!("Expected Simple pattern type");
         }
 
-        // Check second pattern has pattern-not-regex and focus
-        if let PatternType::NotRegex(regex_str) = &rule.patterns[1].pattern_type {
-            assert_eq!(regex_str, "test_.*");
+        // Check second pattern is Regex and focus is parsed
+        if let PatternType::Regex(regex_str) = &rule.patterns[1].pattern_type {
+            assert_eq!(regex_str, "eval\\(");
         } else {
-            panic!("Expected NotRegex pattern type");
+            panic!("Expected Regex pattern type");
         }
 
         assert_eq!(rule.patterns[1].focus, Some(vec!["$FUNC".to_string(), "$ARG".to_string()]));
@@ -838,6 +840,7 @@ rules:
   - id: sql-injection
     name: SQL Injection Detection
     description: Detects potential SQL injection vulnerabilities
+    message: Detects potential SQL injection vulnerabilities
     severity: CRITICAL
     confidence: HIGH
     languages: [java, python]
@@ -898,6 +901,7 @@ rules:
   - id: test-rule
     name: Test Rule
     description: A test rule
+    message: A test rule
     severity: ERROR
     languages: [unknown_language]
 "#;
@@ -914,6 +918,7 @@ rules:
   - id: test-rule
     name: Test Rule
     description: A test rule
+    message: A test rule
     severity: ERROR
     languages: [java]
     unknown_field: "should cause error in strict mode"

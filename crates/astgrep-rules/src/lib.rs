@@ -173,6 +173,7 @@ rules:
   - id: test-rule
     name: Test Rule
     description: A test rule
+    message: A test rule
     severity: ERROR
     languages: [java]
     patterns:
@@ -211,6 +212,7 @@ rules:
   - id: java-rule
     name: Java Rule
     description: A Java rule
+    message: A Java rule
     severity: ERROR
     languages: [java]
     patterns:
@@ -218,6 +220,7 @@ rules:
   - id: python-rule
     name: Python Rule
     description: A Python rule
+    message: A Python rule
     severity: WARNING
     languages: [python]
     patterns:
@@ -225,6 +228,7 @@ rules:
   - id: multi-rule
     name: Multi Language Rule
     description: A multi-language rule
+    message: A multi-language rule
     severity: INFO
     languages: [java, python]
     patterns:
@@ -252,6 +256,7 @@ rules:
   - id: test-rule
     name: Test Rule
     description: A test rule
+    message: A test rule
     severity: ERROR
     languages: [java]
     patterns:
@@ -274,6 +279,7 @@ rules:
   - id: ""  # Invalid empty ID
     name: Test Rule
     description: A test rule
+    message: A test rule
     severity: ERROR
     languages: [java]
 "#;

@@ -100,7 +100,7 @@ pub async fn run_enhanced(config: EnhancedAnalysisConfig, output_file: Option<Pa
 
 async fn collect_target_files(config: &EnhancedAnalysisConfig) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    
+
     for target in &config.target_paths {
         if target.is_file() {
             files.push(target.clone());
@@ -110,7 +110,7 @@ async fn collect_target_files(config: &EnhancedAnalysisConfig) -> Result<Vec<Pat
             warn!("Target path does not exist: {}", target.display());
         }
     }
-    
+
     Ok(files)
 }
 
@@ -137,7 +137,7 @@ fn collect_files_from_directory(
 
 fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool {
     let path_str = path.to_string_lossy();
-    
+
     // Check include patterns
     if !config.include_patterns.is_empty() {
         let included = config.include_patterns.iter().any(|pattern| {
@@ -147,14 +147,14 @@ fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool 
             return false;
         }
     }
-    
+
     // Check exclude patterns
     for pattern in &config.exclude_patterns {
         if glob_match(pattern, &path_str) {
             return false;
         }
     }
-    
+
     // Check if file extension matches supported languages
     if let Some(extension) = path.extension() {
         let ext_str = extension.to_string_lossy().to_lowercase();
@@ -216,12 +216,11 @@ fn analyze_file_simple(
 
     // Load rules if any are specified
     if !config.rule_files.is_empty() {
-        // For now, we'll implement a basic pattern matching approach
-        // In a real implementation, this would use the rule engine
-        let (file_findings, rules_count) = analyze_with_basic_patterns(file_path, &source_code, language, config)?;
+        // Use shared astgrep RuleEngine to ensure consistent behavior across CLI/GUI/Web
+        let (file_findings, rules_count) = analyze_with_rule_engine(file_path, &source_code, language, config)?;
         findings.extend(file_findings);
-        // Only increment rules_executed once per file, not per rule
-        if rules_count > 0 && stats.rules_executed == 0 {
+        // Record executed rules count once
+        if stats.rules_executed == 0 {
             stats.rules_executed = rules_count;
         }
     } else {
@@ -308,6 +307,115 @@ fn load_rules_from_directory_recursive(dir_path: &PathBuf, target_language: Lang
     Ok(rules)
 }
 
+
+/// Analyze a file using the shared astgrep RuleEngine (same semantics as GUI/Web)
+fn analyze_with_rule_engine(
+    file_path: &PathBuf,
+    source_code: &str,
+    language: Language,
+    config: &EnhancedAnalysisConfig,
+) -> Result<(Vec<Finding>, usize)> {
+    use astgrep_parser::LanguageParserRegistry;
+    use astgrep_rules::{RuleContext, RuleEngine};
+    use std::path::Path;
+
+    // 1) Load rules into the shared engine
+    let mut engine = RuleEngine::new();
+    let rules_count = load_rules_into_engine_from_paths(&config.rule_files, &mut engine)?;
+    if rules_count == 0 {
+        return Ok((Vec::new(), 0));
+    }
+
+    // 2) Build AST once per file
+    let registry = LanguageParserRegistry::new();
+    let parser = match registry.get_parser(language) {
+        Some(p) => p,
+        None => return Ok((Vec::new(), rules_count)),
+    };
+    let ast = parser.parse(source_code, Path::new(file_path))?;
+
+    // 3) Execute rules with unified context
+    let context = RuleContext::new(
+        file_path.to_string_lossy().to_string(),
+        language,
+        source_code.to_string(),
+    );
+
+    let core_findings = engine.analyze(ast.as_ref(), &context)?;
+
+    // 4) Convert to CLI Finding shape
+    let mut findings = Vec::with_capacity(core_findings.len());
+    for f in core_findings {
+        findings.push(Finding {
+            rule_id: f.rule_id,
+            message: f.message,
+            severity: f.severity,
+            confidence: f.confidence,
+            location: Location {
+                file: f.location.file,
+                start_line: f.location.start_line,
+                start_column: f.location.start_column,
+                end_line: f.location.end_line,
+                end_column: f.location.end_column,
+            },
+            fix: f.fix_suggestion,
+        });
+    }
+
+    Ok((findings, rules_count))
+}
+
+/// Recursively load all YAML rules into the shared RuleEngine
+fn load_rules_into_engine_from_paths(
+    rule_paths: &[PathBuf],
+    engine: &mut astgrep_rules::RuleEngine,
+) -> Result<usize> {
+    use std::fs;
+
+    fn is_yaml(path: &std::path::Path) -> bool {
+        path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml")
+    }
+
+    fn load_from_dir(dir: &std::path::Path, engine: &mut astgrep_rules::RuleEngine) -> anyhow::Result<usize> {
+        let mut loaded = 0usize;
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                loaded += load_from_dir(&path, engine)?;
+            } else if is_yaml(&path) {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    match engine.load_rules_from_yaml(&content) {
+                        Ok(n) => { loaded += n; },
+                        Err(e) => {
+                            tracing::warn!("Failed to load rules from {:?}: {}", path, e);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(loaded)
+    }
+
+    let mut total = 0usize;
+    for rule_path in rule_paths {
+        if rule_path.is_file() {
+            if is_yaml(rule_path) {
+                if let Ok(content) = std::fs::read_to_string(rule_path) {
+                    match engine.load_rules_from_yaml(&content) {
+                        Ok(n) => { total += n; },
+                        Err(e) => tracing::warn!("Failed to load rules from {:?}: {}", rule_path, e),
+                    }
+                }
+            }
+        } else if rule_path.is_dir() {
+            total += load_from_dir(rule_path, engine)?;
+        }
+    }
+
+    Ok(total)
+}
+
 /// Apply a single rule to source code
 fn apply_rule_to_source(rule: &ParsedRule, file_path: &PathBuf, source_code: &str) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
@@ -365,6 +473,15 @@ fn apply_rule_to_source(rule: &ParsedRule, file_path: &PathBuf, source_code: &st
                     }
                     return Ok(findings);
                 }
+                }
+            }
+        }
+
+        // Try enhanced matching once per rule to preserve grouping semantics (e.g., pattern-either)
+        if let Ok(language) = determine_language(file_path) {
+            if let Ok(enhanced_findings) = apply_enhanced_pattern_matching(rule, file_path, source_code, language) {
+                if !enhanced_findings.is_empty() {
+                    return Ok(enhanced_findings);
                 }
             }
         }
@@ -529,6 +646,11 @@ fn apply_enhanced_pattern_matching(
             let matches = matcher.find_matches(&semgrep_pattern, &ast)?;
 
             for match_result in matches {
+                // Extract precise location from the matched AST node
+                let (sl, sc, el, ec) = match match_result.node.location() {
+                    Some((sl, sc, el, ec)) => (sl, sc, el, ec),
+                    None => (1, 1, 1, 1),
+                };
                 let finding = Finding {
                     rule_id: rule.id.clone(),
                     message: rule.message.clone(),
@@ -536,10 +658,10 @@ fn apply_enhanced_pattern_matching(
                     confidence: Confidence::High,
                     location: Location {
                         file: file_path.clone(),
-                        start_line: 1, // TODO: Extract from match_result
-                        start_column: 1,
-                        end_line: 1,
-                        end_column: 1,
+                        start_line: sl,
+                        start_column: sc,
+                        end_line: el,
+                        end_column: ec,
                     },
                     fix: rule.fix.clone(),
                 };
@@ -553,21 +675,12 @@ fn apply_enhanced_pattern_matching(
 
 /// Convert ParsedRule to YAML format for enhanced parsing
 fn convert_parsed_rule_to_yaml(rule: &ParsedRule) -> Result<String> {
-    let mut yaml = format!(
-        "rules:\n  - id: {}\n    message: {}\n    name: {}\n    description: {}\n    severity: {:?}\n    languages: [",
-        rule.id, rule.message, rule.message, rule.message, rule.severity
-    );
-
-    for (i, lang) in rule.languages.iter().enumerate() {
-        if i > 0 { yaml.push_str(", "); }
-        yaml.push_str(&format!("{:?}", lang).to_lowercase());
-    }
-    yaml.push_str("]\n    patterns:\n");
-
-    for pattern in &rule.patterns {
-        yaml.push_str(&format!("      - pattern: \"{}\"\n", pattern.replace("\"", "\\\"")));
-    }
-
+    // Preserve original rule YAML structure to keep semantics (e.g., pattern-either)
+    let mut top = serde_yaml::Mapping::new();
+    let mut rules_seq = serde_yaml::Sequence::new();
+    rules_seq.push(rule.raw_rule_value.clone());
+    top.insert(serde_yaml::Value::String("rules".to_string()), serde_yaml::Value::Sequence(rules_seq));
+    let yaml = serde_yaml::to_string(&serde_yaml::Value::Mapping(top))?;
     Ok(yaml)
 }
 
@@ -1228,6 +1341,8 @@ struct ParsedRule {
     languages: Vec<Language>,
     patterns: Vec<String>,
     fix: Option<String>,
+    // Preserve the original YAML value to maintain semantics like pattern-either
+    raw_rule_value: serde_yaml::Value,
 }
 
 /// Parse Semgrep-style YAML rules
@@ -1331,6 +1446,7 @@ fn parse_single_rule(rule_value: &serde_yaml::Value, target_language: Language, 
         languages,
         patterns,
         fix,
+        raw_rule_value: rule_value.clone(),
     })
 }
 
@@ -2059,14 +2175,14 @@ fn apply_filters(findings: &[Finding], config: &EnhancedAnalysisConfig) -> Vec<F
                     return false;
                 }
             }
-            
+
             // Apply confidence filter
             if let Some(min_confidence) = config.confidence_filter {
                 if finding.confidence < min_confidence {
                     return false;
                 }
             }
-            
+
             true
         })
         .cloned()
@@ -2109,7 +2225,7 @@ fn generate_json_output(
     profiler: Option<&PerformanceProfiler>,
 ) -> Result<String> {
     use serde_json::json;
-    
+
     let mut output = json!({
         "findings": findings,
         "summary": {
@@ -2119,15 +2235,15 @@ fn generate_json_output(
             "analysis_time_ms": total_time.as_millis(),
         }
     });
-    
+
     if config.include_metrics {
         output["statistics"] = json!(stats);
-        
+
         if let Some(profiler) = profiler {
             output["performance"] = json!(profiler.get_metrics());
         }
     }
-    
+
     Ok(serde_json::to_string_pretty(&output)?)
 }
 
@@ -2139,22 +2255,22 @@ fn generate_text_output(
     profiler: Option<&PerformanceProfiler>,
 ) -> Result<String> {
     let mut output = String::new();
-    
+
     output.push_str("=== astgrep Analysis Results ===\n\n");
-    
+
     if findings.is_empty() {
         output.push_str("✅ No issues found!\n\n");
     } else {
         output.push_str(&format!("Found {} issue(s):\n\n", findings.len()));
-        
+
         for (i, finding) in findings.iter().enumerate() {
             output.push_str(&format!("{}. {} ({})\n", i + 1, finding.message, finding.rule_id));
-            output.push_str(&format!("   File: {}:{}:{}\n", 
-                finding.location.file.display(), 
-                finding.location.start_line, 
+            output.push_str(&format!("   File: {}:{}:{}\n",
+                finding.location.file.display(),
+                finding.location.start_line,
                 finding.location.start_column
             ));
-            output.push_str(&format!("   Severity: {:?}, Confidence: {:?}\n", 
+            output.push_str(&format!("   Severity: {:?}, Confidence: {:?}\n",
                 finding.severity, finding.confidence
             ));
             if let Some(ref fix) = finding.fix {
@@ -2163,23 +2279,23 @@ fn generate_text_output(
             output.push_str("\n");
         }
     }
-    
+
     // Summary
     output.push_str("=== Summary ===\n");
     output.push_str(&format!("Files analyzed: {}\n", stats.files_analyzed));
     output.push_str(&format!("Rules executed: {}\n", stats.rules_executed));
     output.push_str(&format!("Analysis time: {:?}\n", total_time));
-    
+
     if config.include_metrics {
         output.push_str(&format!("Parse errors: {}\n", stats.parse_errors));
         output.push_str(&format!("Analysis errors: {}\n", stats.analysis_errors));
-        
+
         if let Some(profiler) = profiler {
             output.push_str("\n=== Performance Metrics ===\n");
             output.push_str(&profiler.get_metrics().generate_report());
         }
     }
-    
+
     Ok(output)
 }
 
@@ -2191,7 +2307,7 @@ fn generate_sarif_output(
 ) -> Result<String> {
     // SARIF (Static Analysis Results Interchange Format) output
     use serde_json::json;
-    
+
     let sarif = json!({
         "version": "2.1.0",
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
@@ -2232,7 +2348,7 @@ fn generate_sarif_output(
             }).collect::<Vec<_>>()
         }]
     });
-    
+
     Ok(serde_json::to_string_pretty(&sarif)?)
 }
 
@@ -2243,7 +2359,7 @@ fn generate_html_output(
     total_time: std::time::Duration,
 ) -> Result<String> {
     let mut html = String::new();
-    
+
     html.push_str("<!DOCTYPE html>\n<html>\n<head>\n");
     html.push_str("<title>astgrep Analysis Report</title>\n");
     html.push_str("<style>\n");
@@ -2254,18 +2370,18 @@ fn generate_html_output(
     html.push_str(".info { border-left: 5px solid #2196f3; }\n");
     html.push_str("</style>\n");
     html.push_str("</head>\n<body>\n");
-    
+
     html.push_str("<h1>astgrep Analysis Report</h1>\n");
     html.push_str(&format!("<p>Generated on: {}</p>\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
-    
+
     html.push_str("<h2>Summary</h2>\n");
     html.push_str(&format!("<p>Total findings: {}</p>\n", findings.len()));
     html.push_str(&format!("<p>Files analyzed: {}</p>\n", stats.files_analyzed));
     html.push_str(&format!("<p>Analysis time: {:?}</p>\n", total_time));
-    
+
     if !findings.is_empty() {
         html.push_str("<h2>Findings</h2>\n");
-        
+
         for finding in findings {
             let severity_class = match finding.severity {
                 Severity::Critical => "error",
@@ -2273,28 +2389,28 @@ fn generate_html_output(
                 Severity::Warning => "warning",
                 Severity::Info => "info",
             };
-            
+
             html.push_str(&format!("<div class=\"finding {}\">\n", severity_class));
             html.push_str(&format!("<h3>{}</h3>\n", finding.message));
             html.push_str(&format!("<p><strong>Rule:</strong> {}</p>\n", finding.rule_id));
-            html.push_str(&format!("<p><strong>File:</strong> {}:{}:{}</p>\n", 
-                finding.location.file.display(), 
-                finding.location.start_line, 
+            html.push_str(&format!("<p><strong>File:</strong> {}:{}:{}</p>\n",
+                finding.location.file.display(),
+                finding.location.start_line,
                 finding.location.start_column
             ));
             html.push_str(&format!("<p><strong>Severity:</strong> {:?}</p>\n", finding.severity));
             html.push_str(&format!("<p><strong>Confidence:</strong> {:?}</p>\n", finding.confidence));
-            
+
             if let Some(ref fix) = finding.fix {
                 html.push_str(&format!("<p><strong>Fix:</strong> {}</p>\n", fix));
             }
-            
+
             html.push_str("</div>\n");
         }
     }
-    
+
     html.push_str("</body>\n</html>\n");
-    
+
     Ok(html)
 }
 
@@ -2305,18 +2421,18 @@ fn generate_markdown_output(
     total_time: std::time::Duration,
 ) -> Result<String> {
     let mut md = String::new();
-    
+
     md.push_str("# astgrep Analysis Report\n\n");
     md.push_str(&format!("**Generated:** {}\n\n", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
-    
+
     md.push_str("## Summary\n\n");
     md.push_str(&format!("- **Total findings:** {}\n", findings.len()));
     md.push_str(&format!("- **Files analyzed:** {}\n", stats.files_analyzed));
     md.push_str(&format!("- **Analysis time:** {:?}\n\n", total_time));
-    
+
     if !findings.is_empty() {
         md.push_str("## Findings\n\n");
-        
+
         for (i, finding) in findings.iter().enumerate() {
             let severity_emoji = match finding.severity {
                 Severity::Critical => "🔴",
@@ -2324,25 +2440,25 @@ fn generate_markdown_output(
                 Severity::Warning => "🟡",
                 Severity::Info => "🔵",
             };
-            
+
             md.push_str(&format!("### {} {}. {}\n\n", severity_emoji, i + 1, finding.message));
             md.push_str(&format!("- **Rule:** `{}`\n", finding.rule_id));
-            md.push_str(&format!("- **File:** `{}:{}:{}`\n", 
-                finding.location.file.display(), 
-                finding.location.start_line, 
+            md.push_str(&format!("- **File:** `{}:{}:{}`\n",
+                finding.location.file.display(),
+                finding.location.start_line,
                 finding.location.start_column
             ));
             md.push_str(&format!("- **Severity:** {:?}\n", finding.severity));
             md.push_str(&format!("- **Confidence:** {:?}\n", finding.confidence));
-            
+
             if let Some(ref fix) = finding.fix {
                 md.push_str(&format!("- **Fix:** {}\n", fix));
             }
-            
+
             md.push_str("\n");
         }
     }
-    
+
     Ok(md)
 }
 

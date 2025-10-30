@@ -15,6 +15,12 @@ tree-sitter-java.workspace = true
 tree-sitter-bash.workspace = true
 # tree-sitter-sql.workspace = true
 regex = "1.0"
+tree-sitter-sequel = { version = "0.3.11", optional = true }
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[features]
+default = ["sql-tree-sitter"]
+sql-tree-sitter = ["dep:tree-sitter-sequel"]
+php = []

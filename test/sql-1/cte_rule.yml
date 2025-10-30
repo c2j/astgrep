@@ -1,0 +1,11 @@
+rules:
+  - id: sql.detect-any-cte
+    languages: [sql]
+    severity: INFO
+    message: |
+      发现 CTE 用法（WITH 子句）。
+      如业务允许可忽略；若需强制改写为子查询或临时表，请把本规则 severity 提至 ERROR。
+    patterns:
+      - pattern-regex: |
+          (?is)\bwith\s+\w+\s*as\s*\(
+

@@ -1,5 +1,5 @@
 //! Rule validation
-//! 
+//!
 //! This module provides functionality to validate rules for correctness and consistency.
 
 use crate::types::*;
@@ -76,9 +76,9 @@ impl RuleValidator {
             return Err(AnalysisError::rule_validation_error("Rule ID cannot be empty"));
         }
 
-        if !rule.id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        if !rule.id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
             return Err(AnalysisError::rule_validation_error(
-                "Rule ID can only contain alphanumeric characters, hyphens, and underscores"
+                "Rule ID can only contain alphanumeric characters, hyphens, underscores, and dots"
             ));
         }
 
@@ -153,7 +153,7 @@ impl RuleValidator {
     fn validate_metavariables(&self, pattern: &str, pattern_index: usize) -> Result<()> {
         let mut metavars = HashSet::new();
         let mut chars = pattern.chars().peekable();
-        
+
         while let Some(ch) = chars.next() {
             if ch == '$' {
                 let mut metavar = String::new();
@@ -164,7 +164,7 @@ impl RuleValidator {
                         break;
                     }
                 }
-                
+
                 if !metavar.is_empty() {
                     metavars.insert(metavar);
                 }
@@ -384,7 +384,7 @@ impl RuleValidator {
     /// Validate rule IDs for uniqueness
     fn validate_rule_ids(&self, rules: &[Rule]) -> Result<()> {
         let mut seen_ids = HashSet::new();
-        
+
         for rule in rules {
             if seen_ids.contains(&rule.id) {
                 return Err(AnalysisError::rule_validation_error(format!(
@@ -431,7 +431,7 @@ mod tests {
     fn test_validate_valid_rule() {
         let validator = RuleValidator::new();
         let rule = create_valid_rule();
-        
+
         assert!(validator.validate_rule(&rule).is_ok());
     }
 
@@ -440,7 +440,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
         rule.id = String::new();
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -449,7 +449,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
         rule.id = "invalid@id".to_string();
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -458,7 +458,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
         rule.name = String::new();
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -467,7 +467,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
         rule.name = "a".repeat(101);
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -476,7 +476,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
         rule.description = String::new();
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -485,7 +485,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
         rule.languages = Vec::new();
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -503,12 +503,12 @@ mod tests {
     fn test_validate_invalid_metavariable_regex() {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
-        
+
         let metavar_pattern = MetavariablePattern::new(
             "$VAR".to_string(),
             vec!["pattern".to_string()],
         ).with_regex("[invalid regex".to_string());
-        
+
         let pattern = Pattern::simple("test($VAR)".to_string());
         rule.patterns = vec![Pattern {
             pattern_type: pattern.pattern_type,
@@ -516,7 +516,7 @@ mod tests {
             conditions: Vec::new(),
             focus: None,
         }];
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -525,7 +525,7 @@ mod tests {
         let validator = RuleValidator::new();
         let rule1 = create_valid_rule();
         let rule2 = create_valid_rule(); // Same ID
-        
+
         assert!(validator.validate_rules(&[rule1, rule2]).is_err());
     }
 
@@ -533,10 +533,10 @@ mod tests {
     fn test_validate_dataflow_empty_sources() {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
-        
+
         let dataflow = DataFlowSpec::new(Vec::new(), vec!["sink".to_string()]);
         rule.dataflow = Some(dataflow);
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -544,13 +544,13 @@ mod tests {
     fn test_validate_dataflow_zero_max_depth() {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
-        
+
         let dataflow = DataFlowSpec::new(
             vec!["source".to_string()],
             vec!["sink".to_string()],
         ).with_max_depth(0);
         rule.dataflow = Some(dataflow);
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
 
@@ -570,7 +570,25 @@ mod tests {
 
         let mut rule = create_valid_rule();
         rule.id = "forbidden-rule".to_string();
-        
+
         assert!(validator.validate_rule(&rule).is_err());
     }
+    #[test]
+    fn test_validate_rule_id_with_dot() {
+        let validator = RuleValidator::new();
+        let rule = Rule::new(
+            "sql.detect-any-cte".to_string(),
+            "Detect CTE".to_string(),
+            "发现 CTE 用法（WITH 子句）".to_string(),
+            Severity::Info,
+            Confidence::Medium,
+            vec![Language::Sql],
+        )
+        .add_pattern(Pattern::regex("WITH\\s+\\w+\\s+AS\\s*\\(".to_string()));
+
+        assert!(validator.validate_rule(&rule).is_ok());
+    }
+
 }
+
+
