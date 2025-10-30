@@ -509,7 +509,7 @@ console.log('The square of ${number} is ${square}');
 
 
     <script>
-        const API_BASE = 'http://127.0.0.1:8080/api/v1';
+        const API_BASE = '/api/v1';
         let currentFormat = 'json';
         let currentMode = 'normal';
         let sortKey = 'line';

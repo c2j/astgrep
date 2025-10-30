@@ -86,7 +86,11 @@ impl RuleParser {
         let fix = self.get_optional_string_field(rule_obj, "fix");
         let fix_regex = self.parse_fix_regex(rule_obj, index)?;
         let paths = self.parse_paths(rule_obj, index)?;
-        let metadata = self.parse_metadata(rule_obj, index)?;
+        let mut metadata = self.parse_metadata(rule_obj, index)?;
+        // Parse optional options block and merge into metadata (stringified)
+        if let Some(opts) = self.parse_options(rule_obj, index)? {
+            for (k, v) in opts { metadata.insert(k, v); }
+        }
         let enabled = self.get_optional_bool_field(rule_obj, "enabled").unwrap_or(true);
 
         let mut rule = Rule::new(id, name, description, severity, confidence, languages);
@@ -99,6 +103,35 @@ impl RuleParser {
         rule.enabled = enabled;
 
         Ok(rule)
+    }
+
+    /// Parse optional options block; currently recognizes sql_statement_boundary
+    fn parse_options(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Option<HashMap<String, String>>> {
+        let options_value = obj.get(&Value::String("options".to_string()));
+        if options_value.is_none() { return Ok(None); }
+        let options_obj = options_value
+            .unwrap()
+            .as_mapping()
+            .ok_or_else(|| AnalysisError::parse_error("'options' must be an object".to_string()))?;
+        let mut options = HashMap::new();
+        if let Some(val) = options_obj.get(&Value::String("sql_statement_boundary".to_string())) {
+            // Accept boolean or string "on"/"off" and stringify to "true"/"false"
+            let str_val = if let Some(b) = val.as_bool() {
+                b.to_string()
+            } else if let Some(s) = val.as_str() {
+                match s.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" | "yes" => "true".to_string(),
+                    "off" | "false" | "0" | "no" => "false".to_string(),
+                    _ => s.to_string(),
+                }
+            } else {
+                // Unsupported type: ignore this option instead of forcing a string
+                // so only boolean or string values are accepted
+                return Ok(Some(options));
+            };
+            options.insert("sql_statement_boundary".to_string(), str_val);
+        }
+        Ok(Some(options))
     }
 
     /// Get a required string field

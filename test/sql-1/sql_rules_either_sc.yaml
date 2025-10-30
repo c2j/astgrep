@@ -12,7 +12,8 @@ rules:
          SELECT /*+ SET_VAR(optimizer_switch = 'semijoin=off') */ $... FROM $T1 WHERE $COL IN ($SUBQUERY) $... ORDER BY $...;
    message: |
      SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。
-     请重点关注性能测试情况，如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */
+   fix: |
+     如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */
    languages: [sql]
    severity: WARNING
 
@@ -24,7 +25,8 @@ rules:
          SELECT /*+ SET_VAR(optimizer_switch = 'semijoin=off') */ $... FROM $T WHERE EXISTS (SELECT $... FROM $T2 WHERE EXISTS ($...))
    message: |
      SQL语句包含两重及以上EXISTS嵌套查询，迁移后可能出现性能问题。
-     请重点关注性能测试情况，如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */
+   fix: |
+     如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */  
    languages: [sql]
    severity: WARNING
 

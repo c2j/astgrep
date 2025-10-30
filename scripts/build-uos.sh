@@ -22,5 +22,6 @@ docker create --name astgrep-container astgrep-linux-builder
 docker cp astgrep-container:/output/astgrep dist/linux/
 docker cp astgrep-container:/output/astgrep-cli dist/linux/
 docker cp astgrep-container:/output/astgrep-web dist/linux/
+docker cp astgrep-container:/output/astgrep-web-server dist/linux/
 docker cp astgrep-container:/output/astgrep-gui dist/linux/
 docker rm astgrep-container

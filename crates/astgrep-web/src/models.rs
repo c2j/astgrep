@@ -28,10 +28,10 @@ pub struct AnalyzeRequest {
 pub struct AnalyzeFileRequest {
     /// File name
     pub filename: String,
-    
+
     /// File content (base64 encoded)
     pub content: String,
-    
+
     /// Programming language (optional, auto-detected if not specified)
     pub language: Option<String>,
 
@@ -48,10 +48,10 @@ pub struct AnalyzeFileRequest {
 pub struct AnalyzeArchiveRequest {
     /// Archive content (base64 encoded)
     pub archive: String,
-    
+
     /// Archive format (zip, tar, tar.gz)
     pub format: String,
-    
+
     /// Languages to analyze (optional, auto-detected if not specified)
     pub languages: Option<Vec<String>>,
 
@@ -61,10 +61,10 @@ pub struct AnalyzeArchiveRequest {
 
     /// File patterns to include
     pub include_patterns: Option<Vec<String>>,
-    
+
     /// File patterns to exclude
     pub exclude_patterns: Option<Vec<String>>,
-    
+
     /// Analysis options
     pub options: Option<AnalysisOptions>,
 }
@@ -101,6 +101,11 @@ pub struct AnalysisOptions {
 
     /// Analysis mode (normal, pro, turbo)
     pub mode: Option<String>,
+
+    /// SQL: constrain simple matching within single statements (semicolon delimited)
+    /// YAML 'options.sql_statement_boundary' in rules overrides this per-rule.
+    pub sql_statement_boundary: Option<bool>,
+
 }
 
 /// Analysis response
@@ -108,19 +113,19 @@ pub struct AnalysisOptions {
 pub struct AnalysisResponse {
     /// Job ID for tracking
     pub job_id: Uuid,
-    
+
     /// Analysis status
     pub status: JobStatus,
-    
+
     /// Analysis results (if completed)
     pub results: Option<AnalysisResults>,
-    
+
     /// Error message (if failed)
     pub error: Option<String>,
-    
+
     /// Job creation timestamp
     pub created_at: DateTime<Utc>,
-    
+
     /// Job completion timestamp
     pub completed_at: Option<DateTime<Utc>>,
 }
@@ -180,19 +185,19 @@ pub struct Finding {
 pub struct Location {
     /// File path
     pub file: String,
-    
+
     /// Start line number (1-based)
     pub start_line: usize,
-    
+
     /// Start column number (1-based)
     pub start_column: usize,
-    
+
     /// End line number (1-based)
     pub end_line: usize,
-    
+
     /// End column number (1-based)
     pub end_column: usize,
-    
+
     /// Code snippet (optional)
     pub snippet: Option<String>,
 }
@@ -202,19 +207,19 @@ pub struct Location {
 pub struct AnalysisSummary {
     /// Total number of findings
     pub total_findings: usize,
-    
+
     /// Findings by severity
     pub findings_by_severity: HashMap<String, usize>,
-    
+
     /// Findings by confidence
     pub findings_by_confidence: HashMap<String, usize>,
-    
+
     /// Number of files analyzed
     pub files_analyzed: usize,
-    
+
     /// Number of rules executed
     pub rules_executed: usize,
-    
+
     /// Analysis duration in milliseconds
     pub duration_ms: u64,
 }
@@ -224,16 +229,16 @@ pub struct AnalysisSummary {
 pub struct PerformanceMetrics {
     /// Total analysis time
     pub total_time_ms: u64,
-    
+
     /// Time spent parsing
     pub parse_time_ms: u64,
-    
+
     /// Time spent in rule execution
     pub rule_execution_time_ms: u64,
-    
+
     /// Memory usage in bytes
     pub memory_usage_bytes: u64,
-    
+
     /// CPU usage percentage
     pub cpu_usage_percent: f64,
 }
@@ -247,16 +252,16 @@ pub enum JobStatus {
 
     /// Job is queued for processing
     Queued,
-    
+
     /// Job is currently being processed
     Running,
-    
+
     /// Job completed successfully
     Completed,
-    
+
     /// Job failed with an error
     Failed,
-    
+
     /// Job was cancelled
     Cancelled,
 }
@@ -266,28 +271,28 @@ pub enum JobStatus {
 pub struct Job {
     /// Unique job identifier
     pub id: Uuid,
-    
+
     /// Job status
     pub status: JobStatus,
-    
+
     /// Job type
     pub job_type: String,
-    
+
     /// Job creation timestamp
     pub created_at: DateTime<Utc>,
-    
+
     /// Job start timestamp
     pub started_at: Option<DateTime<Utc>>,
-    
+
     /// Job completion timestamp
     pub completed_at: Option<DateTime<Utc>>,
-    
+
     /// Progress percentage (0-100)
     pub progress: u8,
-    
+
     /// Error message (if failed)
     pub error: Option<String>,
-    
+
     /// Job metadata
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -297,31 +302,31 @@ pub struct Job {
 pub struct RuleInfo {
     /// Rule identifier
     pub id: String,
-    
+
     /// Rule name
     pub name: String,
-    
+
     /// Rule description
     pub description: String,
-    
+
     /// Supported languages
     pub languages: Vec<String>,
-    
+
     /// Rule severity
     pub severity: String,
-    
+
     /// Rule confidence
     pub confidence: String,
-    
+
     /// Rule category
     pub category: Option<String>,
-    
+
     /// Rule tags
     pub tags: Vec<String>,
-    
+
     /// Whether the rule is enabled
     pub enabled: bool,
-    
+
     /// Rule metadata
     pub metadata: HashMap<String, String>,
 }
@@ -331,10 +336,10 @@ pub struct RuleInfo {
 pub struct ValidateRulesRequest {
     /// Rules content (YAML format)
     pub rules: String,
-    
+
     /// Language to validate against (optional)
     pub language: Option<String>,
-    
+
     /// Enable performance checking
     pub check_performance: Option<bool>,
 }
@@ -344,16 +349,16 @@ pub struct ValidateRulesRequest {
 pub struct ValidateRulesResponse {
     /// Whether validation passed
     pub valid: bool,
-    
+
     /// Validation errors
     pub errors: Vec<String>,
-    
+
     /// Validation warnings
     pub warnings: Vec<String>,
-    
+
     /// Number of rules validated
     pub rules_count: usize,
-    
+
     /// Performance metrics (if requested)
     pub performance: Option<RulePerformanceMetrics>,
 }
@@ -363,10 +368,10 @@ pub struct ValidateRulesResponse {
 pub struct RulePerformanceMetrics {
     /// Rule loading time in milliseconds
     pub load_time_ms: u64,
-    
+
     /// Average rule complexity
     pub average_complexity: f64,
-    
+
     /// Estimated memory usage in bytes
     pub memory_usage_bytes: u64,
 }
@@ -376,16 +381,16 @@ pub struct RulePerformanceMetrics {
 pub struct HealthResponse {
     /// Service status
     pub status: String,
-    
+
     /// Service version
     pub version: String,
-    
+
     /// Uptime in seconds
     pub uptime_seconds: u64,
-    
+
     /// System information
     pub system: SystemInfo,
-    
+
     /// Service dependencies status
     pub dependencies: HashMap<String, DependencyStatus>,
 }
@@ -395,13 +400,13 @@ pub struct HealthResponse {
 pub struct SystemInfo {
     /// Available memory in bytes
     pub available_memory_bytes: u64,
-    
+
     /// CPU usage percentage
     pub cpu_usage_percent: f64,
-    
+
     /// Disk usage percentage
     pub disk_usage_percent: f64,
-    
+
     /// Number of active jobs
     pub active_jobs: usize,
 }
@@ -411,10 +416,10 @@ pub struct SystemInfo {
 pub struct DependencyStatus {
     /// Whether the dependency is healthy
     pub healthy: bool,
-    
+
     /// Response time in milliseconds
     pub response_time_ms: Option<u64>,
-    
+
     /// Error message (if unhealthy)
     pub error: Option<String>,
 }
@@ -424,16 +429,16 @@ pub struct DependencyStatus {
 pub struct VersionInfo {
     /// Service version
     pub version: String,
-    
+
     /// Build timestamp
     pub build_timestamp: String,
-    
+
     /// Git commit hash
     pub git_commit: String,
-    
+
     /// Rust version used for compilation
     pub rust_version: String,
-    
+
     /// Supported features
     pub features: Vec<String>,
 }
@@ -451,6 +456,8 @@ impl Default for AnalysisOptions {
             include_metrics: Some(false),
             output_format: Some("json".to_string()),
             mode: Some("normal".to_string()),
+            // Default ON for SQL statement boundary; YAML can override per-rule
+            sql_statement_boundary: Some(true),
         }
     }
 }

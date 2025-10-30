@@ -190,6 +190,26 @@ impl RuleExecutionEngine {
             findings,
             start_time.elapsed().as_millis() as u64,
         )
+
+    }
+
+
+    /// Determine effective SQL statement boundary option with precedence: YAML > CLI > default(on)
+    fn effective_sql_stmt_boundary(rule: &Rule, ctx: &RuleContext) -> bool {
+        fn parse_bool_like(s: &str) -> Option<bool> {
+            match s.to_ascii_lowercase().as_str() {
+                "true" | "on" | "yes" | "1" => Some(true),
+                "false" | "off" | "no" | "0" => Some(false),
+                _ => None,
+            }
+        }
+        if let Some(v) = rule.get_metadata("sql_statement_boundary").and_then(|s| parse_bool_like(s)) {
+            return v;
+        }
+        if let Some(v) = ctx.get_data("sql_statement_boundary").and_then(|s| parse_bool_like(s)) {
+            return v;
+        }
+        true // default ON
     }
 
     /// Execute pattern matching
@@ -247,7 +267,10 @@ impl RuleExecutionEngine {
 
         // 2) Simple patterns (with or without metavariables): scan full source and emit one finding per occurrence
         if let PatternType::Simple(ref pattern_str) = &pattern.pattern_type {
-            let spans = self.find_pattern_spans_in_source(&pattern_str, &context.source_code, context.language);
+            let seg_by_stmt = if matches!(context.language, astgrep_core::Language::Sql) {
+                Self::effective_sql_stmt_boundary(rule, context)
+            } else { false };
+            let spans = self.find_pattern_spans_in_source(&pattern_str, &context.source_code, context.language, seg_by_stmt);
             println!("🔍 Pattern matching found {} spans", spans.len());
 
             // Optional: deduplicate identical spans
@@ -324,7 +347,10 @@ impl RuleExecutionEngine {
                         }
                     }
                     PatternType::Simple(s) => {
-                        let spans = self.find_pattern_spans_in_source(s, &context.source_code, context.language);
+                        let seg_by_stmt = if matches!(context.language, astgrep_core::Language::Sql) {
+                            Self::effective_sql_stmt_boundary(rule, context)
+                        } else { false };
+                        let spans = self.find_pattern_spans_in_source(s, &context.source_code, context.language, seg_by_stmt);
                         println!("DEBUG either: simple pattern '{}' produced {} spans", s, spans.len());
                         for (start_byte, end_byte) in spans {
                             if !seen.insert((start_byte, end_byte)) { continue; }
@@ -733,7 +759,7 @@ impl RuleExecutionEngine {
     }
 
     /// Find spans (byte start, byte end) of matches in the given source
-    fn find_pattern_spans_in_source(&self, pattern: &str, source: &str, language: astgrep_core::Language) -> Vec<(usize, usize)> {
+    fn find_pattern_spans_in_source(&self, pattern: &str, source: &str, language: astgrep_core::Language, sql_stmt_boundary: bool) -> Vec<(usize, usize)> {
         // Preprocess: make `$...` Semgrep form equivalent to `...` before tokenization
         let preprocessed = pattern.replace("$...", "...");
         println!("DEBUG find_pattern_spans_in_source: pattern='{}', preprocessed='{}', lang={:?}", pattern, preprocessed, language);
@@ -762,10 +788,10 @@ impl RuleExecutionEngine {
         println!("DEBUG coalesced_pattern_tokens={:?}", pattern_tokens);
 
         // Determine first literal anchor (the first token that is neither ellipsis nor metavariable)
-        let first_anchor: Option<String> = pattern_tokens
+        let first_anchor_idx: Option<usize> = pattern_tokens
             .iter()
-            .find(|t| t.as_str() != "..." && !t.starts_with('$'))
-            .cloned();
+            .position(|t| t.as_str() != "..." && !t.starts_with('$'));
+        let first_anchor: Option<String> = first_anchor_idx.map(|idx| pattern_tokens[idx].clone());
 
         let text_tokens = self.tokenize_spanned(source);
         println!("DEBUG text_tokens (first 40)={:?}", text_tokens.iter().take(40).map(|t| &t.0).collect::<Vec<_>>());
@@ -775,36 +801,60 @@ impl RuleExecutionEngine {
         // Helper: run matching in a token window [win_start, win_end) and push absolute byte spans
         let mut match_in_window = |win_start: usize, win_end: usize| {
             let window = &text_tokens[win_start..win_end];
-            for rel_start in 0..window.len() {
-                // Optional optimization: require the first literal to match at start to avoid mid-span starts
-                if let Some(ref anchor) = first_anchor {
-                    let tok = &window[rel_start].0;
-                    let lit_ok = if case_insensitive { tok.eq_ignore_ascii_case(anchor) } else { tok == anchor };
-                    if !lit_ok { continue; }
-                }
-                // Java safety: avoid starting a match in the middle of a qualified name (e.g., System.out.println)
-                if matches!(language, astgrep_core::Language::Java) {
-                    if let Some(first_lit) = pattern_tokens.iter().find(|t| !t.starts_with('$')) {
-                        let is_ident = first_lit.chars().all(|c| c.is_alphanumeric() || c == '_');
-                        if is_ident && rel_start + win_start > 0 && text_tokens[rel_start + win_start - 1].0 == "." {
-                            continue;
+            match (first_anchor_idx, first_anchor.as_ref()) {
+                (Some(anchor_idx), Some(anchor_tok)) => {
+                    // Scan by anchor occurrences and back-compute the candidate start so that anchor aligns with its index in the pattern
+                    for pos in 0..window.len() {
+                        let tok = &window[pos].0;
+                        let lit_ok = if case_insensitive { tok.eq_ignore_ascii_case(anchor_tok) } else { tok == anchor_tok };
+                        if !lit_ok { continue; }
+                        if pos < anchor_idx { continue; }
+                        let rel_start = pos - anchor_idx;
+                        // Java safety: avoid starting a match in the middle of a qualified name (e.g., System.out.println)
+                        if matches!(language, astgrep_core::Language::Java) {
+                            if let Some(first_lit) = pattern_tokens.iter().find(|t| !t.starts_with('$')) {
+                                let is_ident = first_lit.chars().all(|c| c.is_alphanumeric() || c == '_');
+                                if is_ident && rel_start + win_start > 0 && text_tokens[rel_start + win_start - 1].0 == "." {
+                                    continue;
+                                }
+                            }
+                        }
+                        if let Some(rel_end) = self.try_match_tokens(&pattern_tokens, window, rel_start, case_insensitive) {
+                            if rel_end == 0 { continue; }
+                            let abs_start_idx = win_start + rel_start;
+                            let abs_end_idx_exclusive = win_start + rel_end;
+                            let start_byte = text_tokens[abs_start_idx].1;
+                            let end_byte = text_tokens[abs_end_idx_exclusive - 1].2;
+                            spans.push((start_byte, end_byte));
                         }
                     }
                 }
-                if let Some(rel_end) = self.try_match_tokens(&pattern_tokens, window, rel_start, case_insensitive) {
-                    if rel_end == 0 { continue; }
-                    let abs_start_idx = win_start + rel_start;
-                    let abs_end_idx_exclusive = win_start + rel_end;
-                    let start_byte = text_tokens[abs_start_idx].1;
-                    let end_byte = text_tokens[abs_end_idx_exclusive - 1].2;
-                    spans.push((start_byte, end_byte));
+                _ => {
+                    // No literal anchor: fall back to trying every position
+                    for rel_start in 0..window.len() {
+                        if matches!(language, astgrep_core::Language::Java) {
+                            if let Some(first_lit) = pattern_tokens.iter().find(|t| !t.starts_with('$')) {
+                                let is_ident = first_lit.chars().all(|c| c.is_alphanumeric() || c == '_');
+                                if is_ident && rel_start + win_start > 0 && text_tokens[rel_start + win_start - 1].0 == "." {
+                                    continue;
+                                }
+                            }
+                        }
+                        if let Some(rel_end) = self.try_match_tokens(&pattern_tokens, window, rel_start, case_insensitive) {
+                            if rel_end == 0 { continue; }
+                            let abs_start_idx = win_start + rel_start;
+                            let abs_end_idx_exclusive = win_start + rel_end;
+                            let start_byte = text_tokens[abs_start_idx].1;
+                            let end_byte = text_tokens[abs_end_idx_exclusive - 1].2;
+                            spans.push((start_byte, end_byte));
+                        }
+                    }
                 }
             }
         };
 
-        // If SQL, by default constrain matching within single statements (semicolon delimited)
-        if matches!(language, astgrep_core::Language::Sql) {
-            // Default ON. Later this can be gated by CLI/YAML options via RuleContext if needed.
+        // If SQL and boundary option is enabled, constrain matching within single statements; else scan whole stream
+        if matches!(language, astgrep_core::Language::Sql) && sql_stmt_boundary {
             let mut stmt_start = 0usize;
             for i in 0..text_tokens.len() {
                 if text_tokens[i].0 == ";" {
@@ -818,7 +868,7 @@ impl RuleExecutionEngine {
                 match_in_window(stmt_start, text_tokens.len());
             }
         } else {
-            // Non-SQL: match across whole token stream
+            // Non-SQL or boundary disabled: match across whole token stream
             match_in_window(0, text_tokens.len());
         }
 

@@ -1,0 +1,10 @@
+rules:
+  - id: test-cross-statement-exists-orderby
+    message: "Test cross-statement matching for WHERE EXISTS + ORDER BY"
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [sql]
+    patterns:
+      - pattern: |
+          SELECT $... FROM $T1 WHERE EXISTS ($SUBQUERY) $... ORDER BY $...
+

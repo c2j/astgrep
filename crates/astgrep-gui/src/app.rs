@@ -999,11 +999,13 @@ impl CrGuiApp {
 
 
         // Create rule context
-        let context = RuleContext::new(
+        let mut context = RuleContext::new(
             file_path.to_string_lossy().to_string(),
             language,
             source_code.to_string(),
         );
+        // GUI: default to ON; YAML can override per-rule in engine
+        context = context.add_data("sql_statement_boundary".to_string(), "true".to_string());
 
         // Execute rules using the real rule engine
         let rule_results = self.rule_engine.execute_rules(&*ast, &context)
@@ -1173,11 +1175,13 @@ impl CrGuiApp {
             .map_err(|e| anyhow::anyhow!("Failed to parse source code: {}", e))?;
         if cancel.load(Ordering::Relaxed) { return Ok(None); }
 
-        let context = RuleContext::new(
+        let mut context = RuleContext::new(
             file_path.to_string_lossy().to_string(),
             language,
             source_code.to_string(),
         );
+        // GUI: default to ON; YAML can override per-rule in engine
+        context = context.add_data("sql_statement_boundary".to_string(), "true".to_string());
         let rule_results = rule_engine.execute_rules(&*ast, &context)
             .map_err(|e| anyhow::anyhow!("Failed to execute rules: {}", e))?;
         if cancel.load(Ordering::Relaxed) { return Ok(None); }

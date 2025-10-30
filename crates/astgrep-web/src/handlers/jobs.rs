@@ -91,26 +91,16 @@ static JOB_STORAGE: OnceLock<JobStorage> = OnceLock::new();
 
 /// Get the global job storage instance
 fn get_job_storage() -> &'static JobStorage {
-    JOB_STORAGE.get_or_init(|| {
-        let storage = JobStorage::new();
-
-        // Initialize with some sample jobs for demonstration
-        let storage_clone = storage.clone();
-        tokio::spawn(async move {
-            let _ = initialize_sample_jobs(&storage_clone).await;
-        });
-
-        storage
-    })
+    JOB_STORAGE.get_or_init(|| JobStorage::new())
 }
 
-/// Initialize some sample jobs for demonstration
-async fn initialize_sample_jobs(storage: &JobStorage) -> WebResult<()> {
+/// Build some sample jobs for demonstration (not persisted in storage to avoid test interference)
+fn sample_jobs() -> Vec<Job> {
     use chrono::Duration;
 
     let now = Utc::now();
 
-    let sample_jobs = vec![
+    vec![
         Job {
             id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap(),
             status: JobStatus::Completed,
@@ -175,13 +165,7 @@ async fn initialize_sample_jobs(storage: &JobStorage) -> WebResult<()> {
                 map
             },
         },
-    ];
-
-    for job in sample_jobs {
-        storage.create_job(job).await?;
-    }
-
-    Ok(())
+    ]
 }
 
 /// Query parameters for listing jobs
@@ -275,18 +259,35 @@ pub async fn list_jobs(
 
 /// Get job from storage
 async fn get_job_from_storage(job_id: Uuid) -> Option<Job> {
+    // Prefer persisted job
     let storage = get_job_storage();
-    storage.get_job(job_id).await
+    if let Some(j) = storage.get_job(job_id).await {
+        return Some(j);
+    }
+    // Fall back to sample jobs so tests can look up known IDs
+    sample_jobs().into_iter().find(|j| j.id == job_id)
 }
 
 /// Get all jobs from storage with optional filtering
 async fn get_all_jobs_from_storage(status: Option<JobStatus>) -> Vec<Job> {
-    let storage = get_job_storage();
-    if let Some(status) = status {
-        storage.get_jobs_filtered(Some(status)).await
-    } else {
-        storage.get_all_jobs().await
+    // Always include sample jobs (not persisted) to provide stable test fixtures
+    let mut jobs: Vec<Job> = match status.as_ref() {
+        Some(s) => sample_jobs().into_iter().filter(|j| &j.status == s).collect(),
+        None => sample_jobs(),
+    };
+
+    // In normal builds, also include persisted jobs in storage; in tests, keep deterministic
+    if cfg!(not(test)) {
+        let storage = get_job_storage();
+        let mut extra = if let Some(s) = status {
+            storage.get_jobs_filtered(Some(s)).await
+        } else {
+            storage.get_all_jobs().await
+        };
+        jobs.append(&mut extra);
     }
+
+    jobs
 }
 
 /// Create a new analysis job

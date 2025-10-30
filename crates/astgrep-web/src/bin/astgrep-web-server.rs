@@ -210,3 +210,4 @@ mod tests {
         assert_eq!(loaded_config.bind_address.port(), 8080);
     }
 }
+

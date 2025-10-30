@@ -329,13 +329,17 @@ async fn perform_code_analysis(
         load_default_rules_for_language(&mut rule_engine, language, config).await?;
     }
 
-    // Create rule context
-    let context = RuleContext {
-        file_path: dummy_path.to_string_lossy().to_string(),
+    // Create rule context and pass CLI-level equivalent option from request if provided
+    let mut context = RuleContext::new(
+        dummy_path.to_string_lossy().to_string(),
         language,
-        source_code: request.code.clone(),
-        custom_data: HashMap::new(),
-    };
+        request.code.clone(),
+    );
+    if let Some(ref options) = request.options {
+        if let Some(flag) = options.sql_statement_boundary {
+            context = context.add_data("sql_statement_boundary".to_string(), flag.to_string());
+        }
+    }
 
     // Execute analysis with enhanced capabilities
     let mut findings = rule_engine.analyze(ast.as_ref(), &context)

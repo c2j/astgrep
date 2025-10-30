@@ -335,11 +335,15 @@ fn analyze_with_rule_engine(
     let ast = parser.parse(source_code, Path::new(file_path))?;
 
     // 3) Execute rules with unified context
-    let context = RuleContext::new(
+    let mut context = RuleContext::new(
         file_path.to_string_lossy().to_string(),
         language,
         source_code.to_string(),
     );
+    // Pass CLI level sql_statement_boundary (if provided) into context; per-rule YAML can override in engine
+    if let Some(flag) = config.sql_statement_boundary {
+        context = context.add_data("sql_statement_boundary".to_string(), flag.to_string());
+    }
 
     let core_findings = engine.analyze(ast.as_ref(), &context)?;
 

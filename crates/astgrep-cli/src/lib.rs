@@ -118,6 +118,10 @@ pub enum Commands {
         /// Enable compatibility mode with external tools (e.g., "semgrep")
         #[arg(long)]
         compatible: Option<String>,
+
+        /// SQL: constrain simple matching within single statements (semicolon delimited). YAML 'options.sql_statement_boundary' overrides this.
+        #[arg(long = "sql-statement-boundary", value_enum, default_value = "on")]
+        sql_statement_boundary: OnOffCli,
     },
 
     /// Validate rule files for syntax and semantic correctness
@@ -214,6 +218,12 @@ pub enum Commands {
 }
 
 #[derive(Clone, ValueEnum)]
+pub enum OnOffCli {
+    On,
+    Off,
+}
+
+#[derive(Clone, ValueEnum)]
 pub enum OutputFormatCli {
     /// Human-readable text format
     Text,
@@ -290,6 +300,7 @@ pub async fn run() -> Result<()> {
             no_parallel,
             max_threads,
             compatible,
+            sql_statement_boundary,
         } => {
             info!("Starting code analysis");
 
@@ -318,6 +329,7 @@ pub async fn run() -> Result<()> {
                 max_threads.or(if cli.threads > 0 { Some(cli.threads) } else { None }),
                 cli.profile,
                 compatible,
+                Some(matches!(sql_statement_boundary, OnOffCli::On)),
             )?;
 
             commands::analyze_enhanced::run_enhanced(config, output).await
@@ -406,6 +418,7 @@ fn build_enhanced_analysis_config(
     max_threads: Option<usize>,
     profile: bool,
     compatible: Option<String>,
+    sql_statement_boundary: Option<bool>,
 ) -> Result<EnhancedAnalysisConfig> {
     let target_paths = if targets.is_empty() {
         vec![PathBuf::from(".")]
@@ -460,6 +473,7 @@ fn build_enhanced_analysis_config(
         max_threads,
         enable_profiling: profile,
         compatible_mode: compatible,
+        sql_statement_boundary,
     })
 }
 
@@ -573,6 +587,7 @@ pub struct EnhancedAnalysisConfig {
     pub max_threads: Option<usize>,
     pub enable_profiling: bool,
     pub compatible_mode: Option<String>,
+    pub sql_statement_boundary: Option<bool>,
 }
 
 #[cfg(test)]

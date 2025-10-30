@@ -259,4 +259,5 @@ RUN mkdir -p /output
 RUN cp target/x86_64-unknown-linux-gnu/release/astgrep /output/
 RUN cp target/x86_64-unknown-linux-gnu/release/astgrep-cli /output/
 RUN cp target/x86_64-unknown-linux-gnu/release/astgrep-web /output/
+RUN cp target/x86_64-unknown-linux-gnu/release/astgrep-web-server /output/
 RUN cp target/x86_64-unknown-linux-gnu/release/astgrep-gui /output/
