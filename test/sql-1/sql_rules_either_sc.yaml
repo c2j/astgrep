@@ -15,6 +15,9 @@ rules:
    fix: |
      如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */
    languages: [sql]
+   metadata:
+     preprocess: embedded-sql
+     preprocess.from: "java,xml"
    severity: WARNING
 
  - id: sql-performance-issue-nested-exists
@@ -28,5 +31,21 @@ rules:
    fix: |
      如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */  
    languages: [sql]
+   metadata:
+     preprocess: embedded-sql
+     preprocess.from: "java,xml"
    severity: WARNING
 
+ - id: sql-avoid-select-star
+   name: Avoid SELECT *
+   description: Detects usage of SELECT *
+   message: Avoid SELECT *; specify columns explicitly
+   severity: WARNING
+   languages:
+    - sql
+   pattern-either:
+    - pattern: SELECT * FROM $TABLE
+    - pattern: select * from $TABLE
+   metadata:
+      preprocess: embedded-sql
+      preprocess.from: "java,xml"

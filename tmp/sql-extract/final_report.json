@@ -1,0 +1,100 @@
+{
+  "findings": [
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "file": "test/sql-1/mybatis_sample/selects.xml",
+        "start_line": 1,
+        "end_line": 1,
+        "start_column": 1,
+        "end_column": 120
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING",
+      "extracted_from": "tmp/sql-extract/extracted_00002.sql",
+      "context": "<select>",
+      "normalized_sql": "SELECT * FROM t1 WHERE EXISTS ( SELECT 1 FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1 ) AND t1.id > 1 ORDER BY t1.id;"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "file": "test/sql-1/mybatis_sample/selects.xml",
+        "start_line": 1,
+        "end_line": 1,
+        "start_column": 1,
+        "end_column": 120
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING",
+      "extracted_from": "tmp/sql-extract/extracted_00002.sql",
+      "context": "<select>",
+      "normalized_sql": "SELECT * FROM t1 WHERE EXISTS ( SELECT 1 FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1 ) AND t1.id > 1 ORDER BY t1.id;"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "file": "test/sql-1/mybatis_sample/selects.xml",
+        "start_line": 1,
+        "end_line": 1,
+        "start_column": 1,
+        "end_column": 120
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING",
+      "extracted_from": "tmp/sql-extract/extracted_00003.sql",
+      "context": "<select>",
+      "normalized_sql": "SELECT * FROM T0 WHERE a IN ( SELECT b FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1 ) ORDER BY t1.id;"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "file": "test/sql-1/mybatis_sample/selects.xml",
+        "start_line": 1,
+        "end_line": 1,
+        "start_column": 1,
+        "end_column": 120
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING",
+      "extracted_from": "tmp/sql-extract/extracted_00003.sql",
+      "context": "<select>",
+      "normalized_sql": "SELECT * FROM T0 WHERE a IN ( SELECT b FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1 ) ORDER BY t1.id;"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "file": "test/sql-1/java_sample/Sample.java",
+        "start_line": 10,
+        "end_line": 10,
+        "start_column": 1,
+        "end_column": 120
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING",
+      "extracted_from": "tmp/sql-extract/extracted_00001.sql",
+      "context": "@Select",
+      "normalized_sql": "SELECT * FROM t1 WHERE a IN (SELECT b FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1) ORDER BY t1.id;"
+    }
+  ],
+  "summary": {
+    "analysis_time_ms": 17,
+    "files_analyzed": 3,
+    "rules_executed": 2,
+    "total_findings": 5
+  },
+  "extraction": {
+    "snippets": 3,
+    "sources_scanned": 2,
+    "tmp_dir": "tmp/sql-extract"
+  }
+}

@@ -13,6 +13,8 @@
 - [Semgrep 兼容性](#semgrep-兼容性)
 - [最佳实践](#最佳实践)
 
+- [嵌入式 SQL 预处理器](#嵌入式-sql-预处理器)
+
 ---
 
 ## 规则基础
@@ -424,6 +426,99 @@ metadata:
 ```
 
 ---
+## 嵌入式 SQL 预处理器
+
+当 SQL 语句嵌入在 Java 源码或 MyBatis XML 中时，你可以在规则 YAML 中通过 metadata 启用“预处理器”。预处理器会在分析前从宿主语言中提取 SQL、进行轻量归一化，然后用 SQL 语义匹配器执行规则，并将命中回填到原文件位置。
+
+### 何时使用
+- 你已有适用于 .sql 文件的 SQL 规则，想让它们同样适用于 Java 注解/字符串中的 SQL 或 MyBatis XML 中的 SQL
+- 希望在一个规则里保持“语言为 sql”的语义模式匹配，而不去写语言相关（java/xml）的字符串/标签匹配
+
+### 启用方式（YAML）
+
+在 SQL 规则的 `metadata` 中声明预处理器：
+
+```yaml
+rules:
+  - id: sql-performance-issue-where-exists-in-with-orderby
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              SELECT $... FROM $T1 WHERE  EXISTS ($SUBQUERY) $... ORDER BY $...;
+          - pattern: |
+              SELECT $... FROM $T1 WHERE  $COL IN ($SUBQUERY) $... ORDER BY $...;
+    message: "WHERE EXISTS/IN + ORDER BY 可能导致迁移后退化"
+    severity: WARNING
+    metadata:
+      preprocess: embedded-sql          # 启用嵌入式 SQL 预处理
+      preprocess.from: "java,xml"       # 指定来源：java、xml（逗号分隔，大小写不敏感）
+```
+
+说明：
+- `languages: [sql]` 仍然表示“使用 SQL 语义匹配器跑本规则”
+- `metadata.preprocess=embedded-sql` 告诉引擎：当输入文件是 Java/XML 时，先做 SQL 抽取与归一化
+- `metadata.preprocess.from` 用于选择来源宿主语言。仅当目标文件语言在此集合内时才执行本规则
+
+### 典型示例
+
+避免 `SELECT *` 的规则，同时在 Java 与 MyBatis XML 上生效：
+
+```yaml
+rules:
+  - id: sql-avoid-select-star
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: SELECT * FROM $TABLE
+          - pattern: select * from $TABLE
+    message: "避免 SELECT *；应明确列名"
+    severity: WARNING
+    metadata:
+      preprocess: embedded-sql
+      preprocess.from: "java,xml"
+```
+
+### 提取与归一化规则
+
+当前内置的嵌入式 SQL 提取与归一化（后续可扩展）：
+- Java：
+  - 注解：`@Select("...")`、（可按需扩展：`@Query("...")`, `@SelectProvider(...)` 等）
+  - JDBC/JPA 常见调用（按需扩展）：`prepareStatement("...")`、`executeQuery("...")`、`createNativeQuery("...")` 等
+  - 处理字符串字面量；复杂拼接/变量替换目前以占位符方式归一化（后续可增强）
+- MyBatis XML：
+  - 标签：`<select>...</select>`（可按需扩展 `<insert>/<update>/<delete>/<sql>`）
+  - 占位符归一化：`#{param}` → `1`（值类占位），`${param}` → `T0`（标识符类占位）
+- 通用归一化：
+  - 去除多余空白、标准化分号收尾（便于与 SQL 模式匹配）
+
+命中位置映射：
+- 每段提取的 SQL 都保留来源文件路径与起始近似行号；命中后会回填到原文件的大致行列范围（后续可提升精度）
+
+### 使用方式（命令行）
+
+假设你已有带 `metadata.preprocess` 的 SQL 规则配置 `rules.yaml`：
+
+```bash
+# 在 XML 文件上执行：
+astgrep analyze --language xml --config rules.yaml path/to/mapper.xml
+
+# 在 Java 文件上执行：
+astgrep analyze --language java --config rules.yaml path/to/Dao.java
+```
+
+只要规则里声明了 `metadata.preprocess: embedded-sql` 且 `preprocess.from` 包含对应宿主语言，上述命令就会：
+1) 先从文件中提取 SQL → 归一化
+2) 用 SQL 语义匹配器执行规则
+3) 将命中回填到原 Java/XML 文件
+
+### 已知限制与扩展方向
+
+- Java 复杂 SQL 构造（StringBuilder/format/concat/条件拼接/方法返回等）当前以占位处理，后续可增强数据流/拼接还原
+- MyBatis 动态 SQL（`<if>/<where>/<trim>/<foreach>/<choose>`）目前做弱归一化，适合结构性匹配；可逐步加入“骨架级展开”
+- 支持来源可扩展：除 `java`、`xml` 外，未来可加入 `kotlin`、`scala`、`typescript` 等
+- 行列精度：当前定位至片段起始行，后续可结合片段内偏移提高精度
+
 
 ## Semgrep 兼容性
 
@@ -502,7 +597,7 @@ astgrep 提供了一些 Semgrep 没有的特性：
    # Semgrep
    pattern-where-python: |
      int($TIME) > 5000
-   
+
    # astgrep（推荐）
    metavariable-comparison:
      metavariable: '$TIME'
@@ -513,7 +608,7 @@ astgrep 提供了一些 Semgrep 没有的特性：
    ```bash
    # 验证规则语法
    astgrep validate your-rule.yaml
-   
+
    # 测试规则
    astgrep analyze --rules your-rule.yaml test-file.java
    ```
@@ -590,7 +685,7 @@ patterns:
 # ✅ 高效的模式
 patterns:
   - pattern: 'eval($INPUT)'  # 简单直接
-  
+
 # ❌ 低效的模式
 patterns:
   - pattern-regex: '.*eval.*'  # 过于宽泛

@@ -1,0 +1,20 @@
+{
+  "tmp/sql-extract/extracted_00001.sql": {
+    "source_file": "test/sql-1/java_sample/Sample.java",
+    "approx_start_line": 10,
+    "context": "@Select",
+    "normalized_sql": "SELECT * FROM t1 WHERE a IN (SELECT b FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1) ORDER BY t1.id;"
+  },
+  "tmp/sql-extract/extracted_00002.sql": {
+    "source_file": "test/sql-1/mybatis_sample/selects.xml",
+    "approx_start_line": 1,
+    "context": "<select>",
+    "normalized_sql": "SELECT * FROM t1 WHERE EXISTS ( SELECT 1 FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1 ) AND t1.id > 1 ORDER BY t1.id;"
+  },
+  "tmp/sql-extract/extracted_00003.sql": {
+    "source_file": "test/sql-1/mybatis_sample/selects.xml",
+    "approx_start_line": 1,
+    "context": "<select>",
+    "normalized_sql": "SELECT * FROM T0 WHERE a IN ( SELECT b FROM t2 WHERE t2.c1=t1.c1 AND t2.c2=1 ) ORDER BY t1.id;"
+  }
+}

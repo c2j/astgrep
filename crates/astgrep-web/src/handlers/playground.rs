@@ -5,7 +5,7 @@ use crate::WebResult;
 
 /// Interactive playground endpoint
 pub async fn playground() -> WebResult<Html<String>> {
-    let html = r#"<!DOCTYPE html>
+    let base = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -334,7 +334,19 @@ pub async fn playground() -> WebResult<Html<String>> {
             .left-panel { flex: 0 0 auto; border-right: none; border-bottom: 1px solid #e0e0e0; }
             .right-panel { flex: 1; }
         }
-    </style>
+
+	        /* Markdown styles */
+	        .markdown-body { font-size: 14px; line-height: 1.7; color: #24292e; }
+	        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin: 16px 0 8px; font-weight: 700; }
+	        .markdown-body h1 { font-size: 1.6em; }
+	        .markdown-body h2 { font-size: 1.4em; }
+	        .markdown-body h3 { font-size: 1.2em; }
+	        .markdown-body p { margin: 8px 0; }
+	        .markdown-body ul { padding-left: 20px; margin: 8px 0; }
+	        .markdown-body li { margin: 4px 0; }
+	        .markdown-body pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow: auto; border: 1px solid #e1e4e8; }
+	        .markdown-body code { background: #f6f8fa; padding: 2px 4px; border-radius: 3px; }
+	    </style>
 </head>
 <body>
     <div class="container">
@@ -486,17 +498,9 @@ console.log('The square of ${number} is ${square}');
 
                     <!-- Docs Tab -->
                     <div id="docs-tab" class="tab-content">
-                        <h3 style="margin-bottom: 12px;">API Documentation</h3>
-                        <p style="font-size: 12px; line-height: 1.6; color: #666;">
-                            <strong>POST /api/v1/analyze</strong><br>
-                            Analyze code snippet for security issues.<br><br>
-                            <strong>Request:</strong><br>
-                            <code style="background: #f0f0f0; padding: 4px; border-radius: 3px;">
-                            { "code": "...", "language": "javascript" }
-                            </code><br><br>
-                            <strong>Response:</strong><br>
-                            Returns findings with severity, confidence, and location.
-                        </p>
+                        <div id="guide-container" style="height: 100%; max-width: 100%; overflow: auto;">
+                            <div id="guide-content" class="markdown-body"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -509,6 +513,85 @@ console.log('The square of ${number} is ${square}');
 
 
     <script>
+        const GUIDE_MD = __GUIDE_MD__;
+        // Minimal offline Markdown renderer (headings, lists, paragraphs, code blocks, inline code)
+        function renderMarkdownBasic(md) {
+            const lines = md.split('\n');
+            let html = '';
+            let inCode = false;
+            let codeLang = '';
+            let codeBuf = [];
+            let listOpen = false;
+            let para = '';
+
+            function escapeHtml(s) {
+                return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+            }
+            function escapeInline(s) {
+                s = escapeHtml(s);
+                return s.replace(/`([^`]+)`/g, '<code>$1</code>');
+            }
+            function flushParagraph() {
+                const t = para.trim();
+                if (t) html += '<p>' + escapeInline(t) + '</p>';
+                para = '';
+            }
+            function closeList() { if (listOpen) { html += '</ul>'; listOpen = false; } }
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                // Fenced code blocks
+                if (line.startsWith('```')) {
+                    closeList();
+                    if (para.trim()) flushParagraph();
+                    if (inCode) {
+                        const codeHtml = escapeHtml(codeBuf.join('\n'));
+                        html += '<pre><code>' + codeHtml + '</code></pre>';
+                        inCode = false; codeBuf = []; codeLang = '';
+                    } else {
+                        codeLang = line.slice(3).trim();
+                        inCode = true;
+                    }
+                    continue;
+                }
+                if (inCode) { codeBuf.push(line); continue; }
+
+                // Headings
+                const h = line.match(/^(#{1,6})\s+(.*)$/);
+                if (h) {
+                    closeList();
+                    if (para.trim()) flushParagraph();
+                    const lvl = h[1].length; const text = h[2];
+                    html += `<h${lvl}>${escapeInline(text)}</h${lvl}>`;
+                    continue;
+                }
+
+                // Lists
+                const lm = line.match(/^\s*-\s+(.*)$/);
+                if (lm) {
+                    if (para.trim()) flushParagraph();
+                    if (!listOpen) { html += '<ul>'; listOpen = true; }
+                    html += '<li>' + escapeInline(lm[1]) + '</li>';
+                    continue;
+                }
+
+                // Blank line => paragraph break
+                if (line.trim() === '') {
+                    closeList();
+                    if (para.trim()) flushParagraph();
+                    continue;
+                }
+
+                // Paragraph accumulation
+                para += (para ? ' ' : '') + line.trim();
+            }
+
+            // Flush rest
+            closeList();
+            if (para.trim()) flushParagraph();
+            return html;
+        }
         const API_BASE = '/api/v1';
         let currentFormat = 'json';
         let currentMode = 'normal';
@@ -1245,11 +1328,20 @@ console.log('The square of ${number} is ${square}');
                 analyzeCode(null);
             }
         });
+    document.addEventListener('DOMContentLoaded', function() {
+        const guideEl = document.getElementById('guide-content');
+        if (guideEl) {
+            guideEl.innerHTML = renderMarkdownBasic(GUIDE_MD);
+        }
+    });
     </script>
 </body>
 </html>"#;
 
-    Ok(Html(html.to_string()))
+    let guide_md = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/astgrep-Guide.md"));
+    let guide_md_json = serde_json::to_string(guide_md).unwrap_or_else(|_| "\"\"".to_string());
+    let html = base.replace("__GUIDE_MD__", &guide_md_json);
+    Ok(Html(html))
 }
 
 #[cfg(test)]

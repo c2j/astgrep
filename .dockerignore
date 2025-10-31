@@ -94,7 +94,7 @@ $RECYCLE.BIN/
 # Documentation and non-essential files
 README.md
 *.md
-docs/
+#docs/
 documentation/
 requirement/
 

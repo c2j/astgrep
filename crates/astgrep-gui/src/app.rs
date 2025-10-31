@@ -14,6 +14,134 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 
 
+fn md_flush_paragraph(ui: &mut egui::Ui, para_buf: &mut String) {
+    use egui::RichText;
+    if !para_buf.trim().is_empty() {
+        ui.label(RichText::new(para_buf.trim().to_string()).size(14.0));
+        ui.add_space(6.0);
+        para_buf.clear();
+    }
+}
+
+fn render_markdown_simple(ui: &mut egui::Ui, md: &str) {
+    use egui::RichText;
+
+    let mut in_code = false;
+    let mut code_lang = String::new();
+    let mut code_buf = String::new();
+    let mut para_buf = String::new();
+
+
+    for line in md.lines() {
+        if line.starts_with("```") {
+            if in_code {
+                // flush code block
+                let mut code = code_buf.clone();
+                let rows = code.matches('\n').count().max(3) + 2;
+                ui.group(|ui| {
+                    if !code_lang.is_empty() {
+                        ui.label(RichText::new(&code_lang).monospace().color(egui::Color32::DARK_GRAY));
+                    }
+                    ui.add(
+                        egui::TextEdit::multiline(&mut code)
+                            .code_editor()
+                            .desired_rows(rows)
+                            .desired_width(f32::INFINITY)
+                            .interactive(false),
+                    );
+                });
+                ui.add_space(8.0);
+                code_buf.clear();
+                code_lang.clear();
+                in_code = false;
+            } else {
+                code_lang = line.trim_start_matches("```").trim().to_string();
+                in_code = true;
+            }
+            continue;
+        }
+
+        if in_code {
+            code_buf.push_str(line);
+            code_buf.push('\n');
+            continue;
+        }
+
+        // Headings
+        if let Some(rest) = line.strip_prefix("### ") {
+            md_flush_paragraph(ui, &mut para_buf);
+            ui.label(RichText::new(rest).strong().size(16.0));
+            ui.add_space(6.0);
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("## ") {
+            md_flush_paragraph(ui, &mut para_buf);
+            ui.label(RichText::new(rest).strong().size(18.0));
+            ui.add_space(8.0);
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("# ") {
+            md_flush_paragraph(ui, &mut para_buf);
+            ui.label(RichText::new(rest).strong().size(20.0));
+            ui.add_space(10.0);
+            continue;
+        }
+
+        // Lists
+        if let Some(rest) = line.strip_prefix("- ") {
+            md_flush_paragraph(ui, &mut para_buf);
+            ui.horizontal(|ui| {
+                ui.label("\u{2022}");
+                ui.label(RichText::new(rest).size(14.0));
+            });
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("* ") {
+            md_flush_paragraph(ui, &mut para_buf);
+            ui.horizontal(|ui| {
+                ui.label("\u{2022}");
+                ui.label(RichText::new(rest).size(14.0));
+            });
+            continue;
+        }
+
+        // Blank line => paragraph break
+        if line.trim().is_empty() {
+            md_flush_paragraph(ui, &mut para_buf);
+            continue;
+        }
+
+        // Paragraph accumulation
+        if !para_buf.is_empty() {
+            para_buf.push(' ');
+        }
+        para_buf.push_str(line.trim_end());
+    }
+
+    // Flush any remaining buffers
+    if in_code {
+        let mut code = code_buf.clone();
+        let rows = code.matches('\n').count().max(3) + 2;
+        ui.group(|ui| {
+            if !code_lang.is_empty() {
+                ui.label(RichText::new(&code_lang).monospace().color(egui::Color32::DARK_GRAY));
+            }
+            ui.add(
+                egui::TextEdit::multiline(&mut code)
+                    .code_editor()
+                    .desired_rows(rows)
+                    .desired_width(f32::INFINITY)
+                    .interactive(false),
+            );
+        });
+        ui.add_space(8.0);
+    }
+    if !para_buf.trim().is_empty() {
+        ui.label(RichText::new(para_buf.trim().to_string()).size(14.0));
+    }
+}
+
+
 /// Main application state
 pub struct CrGuiApp {
     /// Rule editor component
@@ -839,7 +967,7 @@ impl CrGuiApp {
         }
     }
 
-    fn show_docs_view(&self, ui: &mut egui::Ui) {
+    fn show_docs_view(&mut self, ui: &mut egui::Ui) {
         ui.heading("astgrep Documentation");
         ui.separator();
 
@@ -853,8 +981,6 @@ impl CrGuiApp {
             ui.label("3. Click 'Run' or press Ctrl+Enter to analyze");
             ui.label("4. View results in the 'Matches' section below");
 
-
-
             ui.add_space(10.0);
             ui.heading("Keyboard Shortcuts");
             ui.label("• Ctrl+Enter: Run analysis");
@@ -864,7 +990,51 @@ impl CrGuiApp {
             ui.add_space(10.0);
             ui.heading("Resources");
             ui.hyperlink_to("GitHub Repository", "https://github.com/c2j/astgrep");
-            ui.hyperlink_to("Rule Writing Guide", "https://github.com/c2j/astgrep/blob/main/docs/astgrep-Guide.md");
+            ui.hyperlink_to("Rule Writing Guide (GitHub)", "https://github.com/c2j/astgrep/blob/main/docs/astgrep-Guide.md");
+            ui.hyperlink_to("预处理器语法（直达）", "https://github.com/c2j/astgrep/blob/main/docs/astgrep-Guide.md#嵌入式-sql-预处理器");
+
+            ui.add_space(10.0);
+            ui.heading("Embedded Guide");
+            ui.colored_label(egui::Color32::GRAY, "The full astgrep-Guide.md is embedded below for quick reference.");
+
+            // 快捷按钮：复制预处理器示例到规则编辑器
+            ui.horizontal(|ui| {
+                if ui.button("复制“预处理器示例”到规则编辑器").clicked() {
+                    let current = self.rule_editor.get_content().to_string();
+                    let example_rule_indented = r#"  - id: sql-avoid-select-star
+    languages: [sql]
+    patterns:
+      - pattern-either:
+          - pattern: SELECT * FROM $TABLE
+          - pattern: select * from $TABLE
+    message: \"避免 SELECT *；应明确列名\"
+    severity: WARNING
+    metadata:
+      preprocess: embedded-sql
+      preprocess.from: \"java,xml\"
+"#;
+                    let new_content = if current.trim().is_empty() {
+                        format!("rules:\n{}", example_rule_indented)
+                    } else if current.contains("\nrules:") || current.trim_start().starts_with("rules:") {
+                        format!("{}\n# --- Embedded SQL preprocessor example ---\n{}", current, example_rule_indented)
+                    } else {
+                        format!("{}\n\nrules:\n{}", current, example_rule_indented)
+                    };
+                    self.rule_editor.set_content(&new_content);
+                    self.status_bar.set_status("已复制预处理器示例到规则编辑器");
+                }
+            });
+
+            let guide_md = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/astgrep-Guide.md"));
+            let avail = ui.available_size();
+            ui.allocate_ui(egui::vec2(avail.x, avail.y), |ui| {
+                egui::ScrollArea::both()
+                    .id_source("guide_scroll_full")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        render_markdown_simple(ui, guide_md);
+                    });
+            });
         });
     }
 
@@ -878,6 +1048,9 @@ impl CrGuiApp {
 
         // Get current rule from rule editor
         let rule_content = self.rule_editor.get_content().to_string();
+
+
+
 
         if source_code.trim().is_empty() {
             println!("⚠️ No source code to analyze");

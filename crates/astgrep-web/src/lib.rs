@@ -51,7 +51,7 @@ pub fn create_app(config: Arc<WebConfig>) -> Router {
     let api_routes = Router::new()
         .route("/analyze", post(handlers::analyze::analyze_code))
         .route("/analyze/sarif", post(handlers::analyze::analyze_code_sarif))
-        .route("/analyze/file", post(handlers::analyze::analyze_file))
+        .route("/analyze/file", post(handlers::analyze::analyze_file_flexible))
         .route("/analyze/archive", post(handlers::analyze::analyze_archive))
         .route("/jobs/:id", get(handlers::jobs::get_job_status))
         .route("/jobs", get(handlers::jobs::list_jobs))
@@ -66,6 +66,7 @@ pub fn create_app(config: Arc<WebConfig>) -> Router {
         .nest("/api/v1", api_routes)
         .route("/", get(handlers::root::root))
         .route("/docs", get(handlers::docs::api_docs))
+        .route("/docs/guide", get(handlers::docs::rule_guide))
         .route("/playground", get(handlers::playground::playground))
         .layer(middleware_stack)
         .with_state(config);

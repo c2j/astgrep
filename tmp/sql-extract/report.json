@@ -1,0 +1,80 @@
+{
+  "findings": [
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "end_column": 111,
+        "end_line": 2,
+        "file": "tmp/sql-extract/extracted_00002.sql",
+        "start_column": 66,
+        "start_line": 1
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "end_column": 111,
+        "end_line": 2,
+        "file": "tmp/sql-extract/extracted_00002.sql",
+        "start_column": 1,
+        "start_line": 2
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "end_column": 95,
+        "end_line": 2,
+        "file": "tmp/sql-extract/extracted_00003.sql",
+        "start_column": 66,
+        "start_line": 1
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "end_column": 95,
+        "end_line": 2,
+        "file": "tmp/sql-extract/extracted_00003.sql",
+        "start_column": 1,
+        "start_line": 2
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": "如需优化可添加hint: /*+ SET_VAR(optimizer_switch = 'semijoin=off') */\n",
+      "location": {
+        "end_column": 93,
+        "end_line": 2,
+        "file": "tmp/sql-extract/extracted_00001.sql",
+        "start_column": 1,
+        "start_line": 2
+      },
+      "message": "SQL语句包含WHERE EXISTS/IN子查询和ORDER BY排序，迁移后可能出现性能问题。\n",
+      "rule_id": "sql-performance-issue-where-exists-in-with-orderby",
+      "severity": "WARNING"
+    }
+  ],
+  "summary": {
+    "analysis_time_ms": 17,
+    "files_analyzed": 3,
+    "rules_executed": 2,
+    "total_findings": 5
+  }
+}
