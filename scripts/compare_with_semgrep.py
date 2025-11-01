@@ -209,6 +209,8 @@ def main():
             passed_tests += 1
         else:
             print("❌ FAIL: Results differ!")
+            print(" ".join(["./target/debug/astgrep", "analyze", "--compatible", "semgrep", "--format", "text", "--config", config_path, target_path]))
+            print(" ".join(["semgrep", "--config", config_path, target_path]))
             failed_tests.append(comparison)
             
             for diff in comparison.differences:
@@ -242,3 +244,11 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
+
+
+"""
+#python3 scripts/compare_with_semgrep.py --test-dir tests/sql
+python3 scripts/compare_with_semgrep.py --test-dir tests/java
+python3 scripts/compare_with_semgrep.py --test-dir tests/taint_maturity
+python3 scripts/compare_with_semgrep.py --test-dir tests/advanced_patterns
+"""

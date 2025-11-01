@@ -573,6 +573,19 @@ impl eframe::App for CrGuiApp {
                     AnalysisMessage::Finished(gen, findings) => {
                         if gen == self.analysis_gen {
                             let mut findings = findings;
+                            // Semgrep-compatible display start adjustment for single-line matches
+                            {
+                                let lines: Vec<&str> = self.code_editor.get_content().lines().collect();
+                                for f in findings.iter_mut() {
+                                    if f.location.start_line == f.location.end_line {
+                                        let disp = compute_display_start_line_from_lines(&lines, f.location.start_line, 20);
+                                        if disp < f.location.start_line {
+                                            f.location.start_line = disp;
+                                            f.location.start_column = 1;
+                                        }
+                                    }
+                                }
+                            }
                             findings.sort_by(|a, b| {
                                 a.location.start_line
                                     .cmp(&b.location.start_line)
@@ -1095,6 +1108,19 @@ impl CrGuiApp {
             Ok(findings) => {
                 println!("📊 Analysis completed with {} findings", findings.len());
                 let mut findings = findings;
+                // Semgrep-compatible display start adjustment for single-line matches (sync path)
+                {
+                    let lines: Vec<&str> = source_code.lines().collect();
+                    for f in findings.iter_mut() {
+                        if f.location.start_line == f.location.end_line {
+                            let disp = compute_display_start_line_from_lines(&lines, f.location.start_line, 20);
+                            if disp < f.location.start_line {
+                                f.location.start_line = disp;
+                                f.location.start_column = 1;
+                            }
+                        }
+                    }
+                }
                 findings.sort_by(|a, b| {
                     a.location.start_line
                         .cmp(&b.location.start_line)
@@ -1666,3 +1692,36 @@ impl CrGuiApp {
 
 
 }
+
+// --- Semgrep-compatible display utilities (shared behavior with CLI/Web) ---
+fn compute_display_start_line_from_lines(lines: &[&str], current_line: usize, max_lookback: usize) -> usize {
+    if current_line <= 1 { return 1; }
+    let mut balance: isize = 0; // closes - opens while walking upwards
+    let mut prev_semi_line: Option<usize> = None;
+    let mut looked: usize = 0;
+    for k in (1..=current_line).rev() {
+        if looked >= max_lookback { break; }
+        let s = *lines.get(k - 1).unwrap_or(&"");
+        let closes = s.matches(')').count() + s.matches('}').count() + s.matches(']').count();
+        let opens = s.matches('(').count() + s.matches('{').count() + s.matches('[').count();
+        balance += closes as isize;
+        balance -= opens as isize;
+        if k < current_line && balance == 0 && s.contains(';') {
+            prev_semi_line = Some(k);
+            break;
+        }
+        looked += 1;
+    }
+    let mut start = match prev_semi_line { Some(ln) => ln.saturating_add(1), None => current_line };
+    while start < current_line {
+        let line_text = *lines.get(start - 1).unwrap_or(&"");
+        if is_comment_or_blank(line_text) { start += 1; } else { break; }
+    }
+    if start > current_line { current_line } else { start }
+}
+
+fn is_comment_or_blank(s: &str) -> bool {
+    let t = s.trim();
+    t.is_empty() || t.starts_with("//") || t.starts_with("/*") || t.starts_with('*') || t.starts_with("*/")
+}
+

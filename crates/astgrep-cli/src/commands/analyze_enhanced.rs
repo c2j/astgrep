@@ -216,12 +216,23 @@ fn analyze_file_simple(
 
     // Load rules if any are specified
     if !config.rule_files.is_empty() {
-        // Use shared astgrep RuleEngine to ensure consistent behavior across CLI/GUI/Web
+        // First try the shared RuleEngine path
         let (file_findings, rules_count) = analyze_with_rule_engine(file_path, &source_code, language, config)?;
-        findings.extend(file_findings);
-        // Record executed rules count once
-        if stats.rules_executed == 0 {
-            stats.rules_executed = rules_count;
+
+        // If RuleEngine failed to load any rules (e.g., Semgrep taint-mode YAML not supported yet),
+        // fall back to the basic patterns path which includes a simplified taint analysis.
+        if rules_count == 0 {
+            tracing::info!("RuleEngine loaded 0 rules for {:?}; falling back to basic pattern analysis for compatibility", file_path);
+            let (fb_findings, fb_rules_count) = analyze_with_basic_patterns(file_path, &source_code, language, config)?;
+            findings.extend(fb_findings);
+            if stats.rules_executed == 0 {
+                stats.rules_executed = fb_rules_count;
+            }
+        } else {
+            findings.extend(file_findings);
+            if stats.rules_executed == 0 {
+                stats.rules_executed = rules_count;
+            }
         }
     } else {
         // No rules specified - no findings
@@ -241,7 +252,7 @@ fn analyze_with_basic_patterns(
     let mut findings = Vec::new();
 
     // Load rules from the specified rule files/directories
-    let rules = load_rules_for_language(&config.rule_files, language)?;
+    let rules = load_rules_for_language(&config.rule_files, language, config.rule_id_prefix.unwrap_or(true))?;
 
     if rules.is_empty() {
         info!("No rules found for language {:?}", language);
@@ -261,16 +272,16 @@ fn analyze_with_basic_patterns(
 }
 
 /// Load rules from rule files/directories for a specific language
-fn load_rules_for_language(rule_paths: &[PathBuf], language: Language) -> Result<Vec<ParsedRule>> {
+fn load_rules_for_language(rule_paths: &[PathBuf], language: Language, with_prefix: bool) -> Result<Vec<ParsedRule>> {
     let mut rules = Vec::new();
 
     for rule_path in rule_paths {
         if rule_path.is_file() {
-            if let Ok(file_rules) = load_rules_from_file(rule_path, language) {
+            if let Ok(file_rules) = load_rules_from_file(rule_path, language, with_prefix) {
                 rules.extend(file_rules);
             }
         } else if rule_path.is_dir() {
-            if let Ok(dir_rules) = load_rules_from_directory_recursive(rule_path, language) {
+            if let Ok(dir_rules) = load_rules_from_directory_recursive(rule_path, language, with_prefix) {
                 rules.extend(dir_rules);
             }
         }
@@ -280,24 +291,24 @@ fn load_rules_for_language(rule_paths: &[PathBuf], language: Language) -> Result
 }
 
 /// Load rules from a single YAML file
-fn load_rules_from_file(file_path: &PathBuf, target_language: Language) -> Result<Vec<ParsedRule>> {
+fn load_rules_from_file(file_path: &PathBuf, target_language: Language, with_prefix: bool) -> Result<Vec<ParsedRule>> {
     let content = std::fs::read_to_string(file_path)?;
-    parse_semgrep_rules(&content, target_language, Some(file_path))
+    parse_semgrep_rules(&content, target_language, Some(file_path), with_prefix)
 }
 
 /// Recursively load rules from a directory
-fn load_rules_from_directory_recursive(dir_path: &PathBuf, target_language: Language) -> Result<Vec<ParsedRule>> {
+fn load_rules_from_directory_recursive(dir_path: &PathBuf, target_language: Language, with_prefix: bool) -> Result<Vec<ParsedRule>> {
     let mut rules = Vec::new();
 
     if let Ok(entries) = std::fs::read_dir(dir_path) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Ok(subdir_rules) = load_rules_from_directory_recursive(&path, target_language) {
+                if let Ok(subdir_rules) = load_rules_from_directory_recursive(&path, target_language, with_prefix) {
                     rules.extend(subdir_rules);
                 }
             } else if path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml") {
-                if let Ok(file_rules) = load_rules_from_file(&path, target_language) {
+                if let Ok(file_rules) = load_rules_from_file(&path, target_language, with_prefix) {
                     rules.extend(file_rules);
                 }
             }
@@ -458,11 +469,17 @@ fn analyze_with_rule_engine(
         }
     }
 
-    // 4) Convert to CLI Finding shape
+    // 4) Convert to CLI Finding shape, optionally normalizing rule IDs to namespaced form (directory prefix)
+    let use_prefix = config.rule_id_prefix.unwrap_or(true);
+    let id_map = if use_prefix { Some(build_rule_id_prefix_map(&config.rule_files, language)) } else { None };
     let mut findings = Vec::with_capacity(all_findings_core.len());
     for f in all_findings_core {
+        let mapped_id = match &id_map {
+            Some(m) => m.get(&f.rule_id).cloned().unwrap_or_else(|| f.rule_id.clone()),
+            None => f.rule_id.clone(),
+        };
         findings.push(Finding {
-            rule_id: f.rule_id,
+            rule_id: mapped_id,
             message: f.message,
             severity: f.severity,
             confidence: f.confidence,
@@ -532,6 +549,80 @@ fn load_rules_into_engine_from_paths(
 
     Ok(total)
 }
+/// Build a mapping from base rule IDs (from YAML) to namespaced IDs (directory.prefix + id)
+fn build_rule_id_prefix_map(rule_paths: &[PathBuf], target_language: Language) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::Path;
+
+    fn is_yaml(path: &Path) -> bool {
+        path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml")
+    }
+
+    fn process_file(path: &Path, target_language: Language, map: &mut HashMap<String, String>) {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(yaml_value) = serde_yaml::from_str::<serde_yaml::Value>(&content) {
+                if let Some(yaml_rules) = yaml_value.get("rules").and_then(|r| r.as_sequence()) {
+                    for rule_value in yaml_rules {
+                        let base_id = rule_value.get("id").and_then(|v| v.as_str());
+                        // Language filter if languages specified; otherwise accept
+                        let applies = rule_value
+                            .get("languages")
+                            .and_then(|v| v.as_sequence())
+                            .map(|langs| {
+                                langs.iter()
+                                    .filter_map(|l| l.as_str())
+                                    .filter_map(|l| Language::from_str(l))
+                                    .any(|l| l == target_language)
+                            })
+                            .unwrap_or(true);
+                        if let (Some(bid), true) = (base_id, applies) {
+                            let dir_path = path.parent()
+                                .map(|p| p.to_string_lossy())
+                                .unwrap_or_else(|| std::borrow::Cow::Borrowed(""));
+                            let path_prefix = dir_path
+                                .strip_prefix("./")
+                                .unwrap_or(&dir_path)
+                                .replace('/', ".");
+                            let namespaced = if path_prefix.is_empty() {
+                                bid.to_string()
+                            } else {
+                                format!("{}.{}", path_prefix, bid)
+                            };
+                            map.insert(bid.to_string(), namespaced);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn process_dir(dir: &Path, target_language: Language, map: &mut HashMap<String, String>) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    process_dir(&path, target_language, map);
+                } else if is_yaml(&path) {
+                    process_file(&path, target_language, map);
+                }
+            }
+        }
+    }
+
+    let mut map = HashMap::new();
+    for rule_path in rule_paths {
+        if rule_path.is_file() {
+            if is_yaml(rule_path) {
+                process_file(rule_path, target_language, &mut map);
+            }
+        } else if rule_path.is_dir() {
+            process_dir(rule_path, target_language, &mut map);
+        }
+    }
+    map
+}
+
 
 /// Apply a single rule to source code
 fn apply_rule_to_source(rule: &ParsedRule, file_path: &PathBuf, source_code: &str) -> Result<Vec<Finding>> {
@@ -1465,14 +1556,14 @@ struct ParsedRule {
 }
 
 /// Parse Semgrep-style YAML rules
-fn parse_semgrep_rules(content: &str, target_language: Language, file_path: Option<&PathBuf>) -> Result<Vec<ParsedRule>> {
+fn parse_semgrep_rules(content: &str, target_language: Language, file_path: Option<&PathBuf>, with_prefix: bool) -> Result<Vec<ParsedRule>> {
     let mut rules = Vec::new();
 
     // Try to parse as YAML
     if let Ok(yaml_value) = serde_yaml::from_str::<serde_yaml::Value>(content) {
         if let Some(yaml_rules) = yaml_value.get("rules").and_then(|r| r.as_sequence()) {
             for rule_value in yaml_rules {
-                if let Ok(rule) = parse_single_rule(rule_value, target_language, file_path) {
+                if let Ok(rule) = parse_single_rule(rule_value, target_language, file_path, with_prefix) {
                     rules.push(rule);
                 }
             }
@@ -1483,28 +1574,31 @@ fn parse_semgrep_rules(content: &str, target_language: Language, file_path: Opti
 }
 
 /// Parse a single rule from YAML
-fn parse_single_rule(rule_value: &serde_yaml::Value, target_language: Language, file_path: Option<&PathBuf>) -> Result<ParsedRule> {
+fn parse_single_rule(rule_value: &serde_yaml::Value, target_language: Language, file_path: Option<&PathBuf>, with_prefix: bool) -> Result<ParsedRule> {
     let base_id = rule_value.get("id")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown-rule");
 
-    // Generate semgrep-compatible rule ID with path prefix
-    let id = if let Some(path) = file_path {
-        // Convert path to semgrep-style ID prefix (exclude filename, only use directory path)
-        let path_str = path.to_string_lossy();
-        let dir_path = path.parent()
-            .map(|p| p.to_string_lossy())
-            .unwrap_or_else(|| std::borrow::Cow::Borrowed(""));
+    // Generate semgrep-compatible rule ID, optionally with path prefix
+    let id = if with_prefix {
+        if let Some(path) = file_path {
+            // Convert path to semgrep-style ID prefix (exclude filename, only use directory path)
+            let dir_path = path.parent()
+                .map(|p| p.to_string_lossy())
+                .unwrap_or_else(|| std::borrow::Cow::Borrowed(""));
 
-        let path_prefix = dir_path
-            .strip_prefix("./")
-            .unwrap_or(&dir_path)
-            .replace('/', ".");
+            let path_prefix = dir_path
+                .strip_prefix("./")
+                .unwrap_or(&dir_path)
+                .replace('/', ".");
 
-        if path_prefix.is_empty() {
-            base_id.to_string()
+            if path_prefix.is_empty() {
+                base_id.to_string()
+            } else {
+                format!("{}.{}", path_prefix, base_id)
+            }
         } else {
-            format!("{}.{}", path_prefix, base_id)
+            base_id.to_string()
         }
     } else {
         base_id.to_string()
@@ -2432,7 +2526,16 @@ fn generate_enhanced_output(
     // Check for compatibility mode
     if let Some(ref compatible_mode) = config.compatible_mode {
         match compatible_mode.to_lowercase().as_str() {
-            "semgrep" => return generate_semgrep_compatible_output(findings, stats, config, total_time),
+            // If user explicitly requests JSON/SARIF/etc., honor that even in semgrep-compatible mode
+            "semgrep" => {
+                return match config.output_format {
+                    OutputFormat::Json => generate_json_output(findings, stats, config, total_time, profiler),
+                    OutputFormat::Sarif => generate_sarif_output(findings, stats, config, total_time),
+                    OutputFormat::Xml => generate_text_output(findings, stats, config, total_time, profiler), // XML not implemented
+                    OutputFormat::Yaml => generate_text_output(findings, stats, config, total_time, profiler), // YAML not implemented
+                    OutputFormat::Text => generate_semgrep_compatible_output(findings, stats, config, total_time),
+                };
+            }
             _ => {
                 warn!("Unknown compatibility mode: {}, falling back to default output", compatible_mode);
             }
@@ -2457,8 +2560,24 @@ fn generate_json_output(
 ) -> Result<String> {
     use serde_json::json;
 
+    // Adjust single-line matches to include Semgrep-style display start line in JSON as well
+    let mut adjusted: Vec<Finding> = Vec::with_capacity(findings.len());
+    for f in findings {
+        let mut g = f.clone();
+        if g.location.start_line == g.location.end_line {
+            if let Some(lines) = load_file_lines(g.location.file.as_path()) {
+                let disp = compute_display_start_line(&lines, g.location.start_line, 20);
+                if disp < g.location.start_line {
+                    g.location.start_line = disp;
+                    g.location.start_column = 1; // align JSON to snippet start
+                }
+            }
+        }
+        adjusted.push(g);
+    }
+
     let mut output = json!({
-        "findings": findings,
+        "findings": adjusted,
         "summary": {
             "total_findings": findings.len(),
             "files_analyzed": stats.files_analyzed,
@@ -2768,6 +2887,18 @@ fn generate_semgrep_compatible_output(
 
         for (file_path, rules_map) in findings_by_file_and_rule {
             writeln!(&mut output, "    {}", file_path)?;
+            // Preload file lines to allow multi-line snippet reconstruction similar to Semgrep
+            let file_lines = load_file_lines(std::path::Path::new(&file_path));
+
+            // Determine dynamic width for line numbers like Semgrep does (based on max end_line in this file)
+            let max_line_in_file = rules_map
+                .iter()
+                .flat_map(|(_rule, rfs)| rfs.iter())
+                .map(|f| usize::max(f.location.start_line, f.location.end_line))
+                .max()
+                .unwrap_or(1);
+            let ln_width: usize = max_line_in_file.to_string().len();
+            let sep_prefix = " ".repeat(11 + ln_width.saturating_sub(1));
 
             for (rule_id, mut rule_findings) in rules_map {
                 // Sort findings by line number
@@ -2779,14 +2910,53 @@ fn generate_semgrep_compatible_output(
                 writeln!(&mut output, "          {}", first_finding.message.trim())?;
                 writeln!(&mut output)?;
 
-                // Display all findings for this rule
+                // Display all findings for this rule (Semgrep-style):
+                // - If the engine returns a multi-line range, print all lines in the range
+                // - If it's a single-line match, heuristically expand upward to the start of the statement
                 for (i, finding) in rule_findings.iter().enumerate() {
-                    writeln!(&mut output, "           {}┆ {}", finding.location.start_line,
-                            get_source_line(&finding.location.file, finding.location.start_line).unwrap_or_else(|| "<source unavailable>".to_string()))?;
+                    let start = finding.location.start_line;
+                    let end = finding.location.end_line.max(start);
+
+                    let display_start = if end == start {
+                        if let Some(ref lines) = file_lines {
+                            compute_display_start_line(lines, start, 20)
+                        } else {
+                            start
+                        }
+                    } else {
+                        start
+                    };
+
+                    // Collect snippet lines to compute minimal common indentation (Semgrep-style)
+                    let mut snippet_lines: Vec<(usize, String)> = Vec::new();
+                    for ln in display_start..=end {
+                        let text = get_source_line(&finding.location.file, ln)
+                            .unwrap_or_else(|| "<source unavailable>".to_string());
+                        snippet_lines.push((ln, text));
+                    }
+                    let min_indent = snippet_lines
+                        .iter()
+                        .filter_map(|(_, s)| {
+                            let trimmed_end = s.trim_end();
+                            if trimmed_end.is_empty() { None } else { Some(leading_ws_width(trimmed_end)) }
+                        })
+                        .min()
+                        .unwrap_or(0);
+
+                    for (ln, s) in snippet_lines.into_iter() {
+                        let trimmed = trim_leading_ws_by(&s, min_indent);
+                        writeln!(
+                            &mut output,
+                            "           {:>width$}┆ {}",
+                            ln,
+                            trimmed,
+                            width = ln_width
+                        )?;
+                    }
 
                     // Add separator between findings (except for the last one)
                     if rule_findings.len() > 1 && i < rule_findings.len() - 1 {
-                        writeln!(&mut output, "            ⋮┆----------------------------------------")?;
+                        writeln!(&mut output, "{}⋮┆----------------------------------------", sep_prefix)?;
                     }
                 }
                 writeln!(&mut output)?;
@@ -2816,7 +2986,7 @@ fn generate_semgrep_compatible_output(
     Ok(output)
 }
 
-/// Helper function to get source line from file
+/// Helper function to get source line from file (preserve indentation)
 fn get_source_line(file_path: &std::path::Path, line_number: usize) -> Option<String> {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
@@ -2826,9 +2996,91 @@ fn get_source_line(file_path: &std::path::Path, line_number: usize) -> Option<St
 
     for (current_line, line) in reader.lines().enumerate() {
         if current_line + 1 == line_number {
-            return line.ok().map(|l| l.trim().to_string());
+            return line.ok();
         }
     }
 
     None
+}
+
+fn leading_ws_width(s: &str) -> usize {
+    s.bytes().take_while(|b| *b == b' ' || *b == b'\t').count()
+}
+
+fn trim_leading_ws_by(s: &str, n: usize) -> String {
+    let mut count = 0usize;
+    let mut idx = 0usize;
+    for (i, b) in s.bytes().enumerate() {
+        if (b == b' ' || b == b'\t') && count < n {
+            count += 1;
+            idx = i + 1; // consume this whitespace byte
+        } else {
+            idx = i; // first non-whitespace byte (or we've consumed enough)
+            break;
+        }
+    }
+    s.get(idx..).unwrap_or("").to_string()
+}
+
+/// Load all lines from a file (preserve indentation)
+fn load_file_lines(file_path: &std::path::Path) -> Option<Vec<String>> {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+    let file = File::open(file_path).ok()?;
+    let reader = BufReader::new(file);
+    Some(reader.lines().map(|l| l.unwrap_or_default()).collect())
+}
+
+fn is_comment_or_blank(s: &str) -> bool {
+    let t = s.trim();
+    t.is_empty() || t.starts_with("//") || t.starts_with("/*") || t.starts_with("*") || t.starts_with("*/")
+}
+
+/// Heuristically compute the start line of the full statement for display when the match is single-line.
+/// Strategy (language-agnostic but tuned for ;-terminated languages like Java/JS/C#/PHP):
+/// - Walk upwards tracking bracket/paren balance from the focus line
+/// - Ignore semicolons while inside unmatched brackets/parentheses (e.g., within an inner block)
+/// - When balance is zero, the previous ';' marks the end of the preceding statement
+/// - Start from the next line; then skip blank/comment-only lines
+/// - Cap lookback to avoid large spans
+fn compute_display_start_line(lines: &[String], current_line: usize, max_lookback: usize) -> usize {
+    if current_line <= 1 { return 1; }
+
+    let mut balance: isize = 0; // positive => need opens below; negative => there are unmatched opens above
+    let mut prev_semi_line: Option<usize> = None; // 1-based
+    let mut looked: usize = 0;
+
+    for k in (1..=current_line).rev() {
+        if looked >= max_lookback { break; }
+        let s = lines.get(k - 1).map(|x| x.as_str()).unwrap_or("");
+
+        let closes = (s.matches(')').count() + s.matches('}').count() + s.matches(']').count()) as isize;
+        let opens = (s.matches('(').count() + s.matches('{').count() + s.matches('[').count()) as isize;
+        balance += closes;
+        balance -= opens;
+
+        // only consider a previous ';' when we're not inside an unmatched block/paren context
+        if k < current_line && balance == 0 && s.contains(';') {
+            prev_semi_line = Some(k);
+            break;
+        }
+        looked += 1;
+    }
+
+    let mut start = match prev_semi_line {
+        Some(ln) => ln.saturating_add(1), // start after previous ';'
+        None => current_line,
+    };
+
+    // Skip leading comments/blank lines between start and current_line
+    while start < current_line {
+        let line_text = lines.get(start - 1).map(|s| s.as_str()).unwrap_or("");
+        if is_comment_or_blank(line_text) {
+            start += 1;
+        } else {
+            break;
+        }
+    }
+
+    if start > current_line { current_line } else { start }
 }

@@ -1,5 +1,5 @@
 //! YAML rule parser
-//! 
+//!
 //! This module provides functionality to parse rules from YAML format.
 
 use crate::types::*;
@@ -174,7 +174,7 @@ impl RuleParser {
     fn parse_confidence(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Confidence> {
         let confidence_str = self.get_optional_string_field(obj, "confidence")
             .unwrap_or_else(|| "MEDIUM".to_string());
-        
+
         match confidence_str.to_uppercase().as_str() {
             "LOW" => Ok(Confidence::Low),
             "MEDIUM" => Ok(Confidence::Medium),
@@ -201,10 +201,10 @@ impl RuleParser {
             let lang_str = lang_value
                 .as_str()
                 .ok_or_else(|| AnalysisError::parse_error(format!("Rule {} language must be a string", index)))?;
-            
+
             let language = Language::from_str(lang_str)
                 .ok_or_else(|| AnalysisError::parse_error(format!("Rule {} unknown language: {}", index, lang_str)))?;
-            
+
             languages.push(language);
         }
 
@@ -243,19 +243,116 @@ impl RuleParser {
         Ok(Vec::new())
     }
 
-    /// Parse patterns array
+    /// Parse patterns array (Semgrep-compatible AND semantics with inline constraints)
     fn parse_patterns_array(&self, patterns_value: &Value, index: usize) -> Result<Vec<Pattern>> {
         let patterns_array = patterns_value
             .as_sequence()
             .ok_or_else(|| AnalysisError::parse_error(format!("Rule {} 'patterns' must be an array", index)))?;
 
-        let mut patterns = Vec::new();
+        let mut parsed: Vec<Pattern> = Vec::new();
+        let mut current: Option<Pattern> = None;
+
+        // Helper to decide if an object contains any base pattern keys
+        let has_base_pattern_keys = |obj: &serde_yaml::Mapping| -> bool {
+            [
+                "pattern",
+                "pattern-inside",
+                "pattern-not-inside",
+                "pattern-not",
+                "pattern-regex",
+                "pattern-not-regex",
+                "pattern-either",
+                "patterns",
+                "pattern-all",
+                "pattern-any",
+            ]
+            .iter()
+            .any(|k| obj.contains_key(&Value::String(k.to_string())))
+        };
+
+        // Helper to decide if an object is purely a constraint/focus attachment
+        let has_constraint_keys = |obj: &serde_yaml::Mapping| -> bool {
+            [
+                "metavariable-regex",
+                "metavariable-comparison",
+                "metavariable-name",
+                "metavariable-analysis",
+                "metavariable-pattern",
+                "focus",
+                "focus-metavariable",
+            ]
+            .iter()
+            .any(|k| obj.contains_key(&Value::String(k.to_string())))
+        };
+
         for (pattern_index, pattern_value) in patterns_array.iter().enumerate() {
-            let pattern = self.parse_single_pattern(pattern_value, index, pattern_index)?;
-            patterns.push(pattern);
+            // Constraint-only entries should attach to the most recent base pattern
+            if let Some(obj) = pattern_value.as_mapping() {
+                let is_base = has_base_pattern_keys(obj);
+                let is_constraint = has_constraint_keys(obj) && !is_base;
+
+                if is_constraint {
+                    let p = current.as_mut().ok_or_else(|| AnalysisError::parse_error(format!(
+                        "Rule {} pattern {} has a constraint but no preceding pattern",
+                        index, pattern_index
+                    )))?;
+
+                    // Attach known constraints/focus fields
+                    if let Some(v) = obj.get(&Value::String("metavariable-regex".to_string())) {
+                        let mr = self.parse_metavariable_regex(v, index, pattern_index)?;
+                        p.conditions.push(Condition::MetavariableRegex(mr));
+                    }
+                    if let Some(v) = obj.get(&Value::String("metavariable-comparison".to_string())) {
+                        let mc = self.parse_metavariable_comparison(v, index, pattern_index)?;
+                        p.conditions.push(Condition::MetavariableComparison(mc));
+                    }
+                    if let Some(v) = obj.get(&Value::String("metavariable-name".to_string())) {
+                        let mn = self.parse_metavariable_name(v, index, pattern_index)?;
+                        p.conditions.push(Condition::MetavariableName(mn));
+                    }
+                    if let Some(v) = obj.get(&Value::String("metavariable-analysis".to_string())) {
+                        let ma = self.parse_metavariable_analysis(v, index, pattern_index)?;
+                        p.conditions.push(Condition::MetavariableAnalysis(ma));
+                    }
+                    if let Some(v) = obj.get(&Value::String("metavariable-pattern".to_string())) {
+                        let mp = self.parse_metavariable_pattern(v, index, pattern_index)?;
+                        p.metavariable_pattern = Some(mp);
+                    }
+                    if let Some(fv) = obj.get(&Value::String("focus".to_string())) {
+                        if let Some(fs) = fv.as_str() {
+                            p.focus = Some(vec![fs.to_string()]);
+                        }
+                    }
+                    if let Some(fmv) = obj.get(&Value::String("focus-metavariable".to_string())) {
+                        if let Some(fs) = fmv.as_str() {
+                            p.focus = Some(vec![fs.to_string()]);
+                        } else if let Some(arr) = fmv.as_sequence() {
+                            let mut focus_vars = Vec::new();
+                            for item in arr {
+                                if let Some(s) = item.as_str() { focus_vars.push(s.to_string()); }
+                            }
+                            if !focus_vars.is_empty() { p.focus = Some(focus_vars); }
+                        }
+                    }
+
+                    // Go to next entry
+                    continue;
+                }
+            }
+
+            // Start a new base pattern: push the previous one if any
+            if let Some(prev) = current.take() {
+                parsed.push(prev);
+            }
+            let new_pat = self.parse_single_pattern(pattern_value, index, pattern_index)?;
+            current = Some(new_pat);
         }
 
-        Ok(patterns)
+        if let Some(last) = current.take() {
+            parsed.push(last);
+        }
+
+        Ok(parsed)
     }
 
     /// Parse pattern-either (OR logic)
@@ -309,6 +406,14 @@ impl RuleParser {
             } else {
                 Pattern::either(either_patterns)
             }
+        } else if let Some(patterns_value) = pattern_obj.get(&Value::String("patterns".to_string())) {
+            // Handle nested patterns (AND logic) inside pattern-either branches
+            let nested_patterns = self.parse_patterns_array(patterns_value, rule_index)?;
+            if nested_patterns.len() == 1 {
+                nested_patterns.into_iter().next().unwrap()
+            } else {
+                Pattern::all(nested_patterns)
+            }
         } else if let Some(pattern_all_value) = pattern_obj.get(&Value::String("pattern-all".to_string())) {
             // Handle pattern-all
             let all_patterns = self.parse_pattern_all(pattern_all_value, rule_index)?;
@@ -342,6 +447,12 @@ impl RuleParser {
         if let Some(metavar_regex_value) = pattern_obj.get(&Value::String("metavariable-regex".to_string())) {
             let metavar_regex = self.parse_metavariable_regex(metavar_regex_value, rule_index, pattern_index)?;
             pattern.conditions.push(Condition::MetavariableRegex(metavar_regex));
+        }
+
+        // Parse optional metavariable-comparison
+        if let Some(metavar_comp_value) = pattern_obj.get(&Value::String("metavariable-comparison".to_string())) {
+            let metavar_comp = self.parse_metavariable_comparison(metavar_comp_value, rule_index, pattern_index)?;
+            pattern.conditions.push(Condition::MetavariableComparison(metavar_comp));
         }
 
         // Parse optional metavariable-name
@@ -383,7 +494,7 @@ impl RuleParser {
         Ok(pattern)
     }
 
-    /// Parse metavariable pattern
+    /// Parse metavariable pattern (supports nested constraints inside patterns list)
     fn parse_metavariable_pattern(&self, value: &Value, rule_index: usize, pattern_index: usize) -> Result<MetavariablePattern> {
         let metavar_obj = value
             .as_mapping()
@@ -393,7 +504,7 @@ impl RuleParser {
             )))?;
 
         let metavariable = self.get_string_field(metavar_obj, "metavariable", rule_index)?;
-        
+
         let patterns_value = metavar_obj
             .get(&Value::String("patterns".to_string()))
             .ok_or_else(|| AnalysisError::parse_error(format!(
@@ -408,22 +519,51 @@ impl RuleParser {
                 rule_index, pattern_index
             )))?;
 
-        let mut patterns = Vec::new();
-        for pattern_value in patterns_array {
-            let pattern_str = pattern_value
-                .as_str()
-                .ok_or_else(|| AnalysisError::parse_error(format!(
-                    "Rule {} pattern {} metavariable pattern must be a string",
-                    rule_index, pattern_index
-                )))?;
-            patterns.push(pattern_str.to_string());
+        let mut patterns: Vec<String> = Vec::new();
+        let mut nested_regex: Option<String> = None;
+
+        for item in patterns_array {
+            if let Some(s) = item.as_str() {
+                patterns.push(s.to_string());
+                continue;
+            }
+            if let Some(obj) = item.as_mapping() {
+                // Support { pattern: "..." } entries
+                if let Some(pv) = obj.get(&Value::String("pattern".to_string())) {
+                    if let Some(ps) = pv.as_str() { patterns.push(ps.to_string()); }
+                }
+                // Support nested pattern-either with simple pattern arms
+                if let Some(pe) = obj.get(&Value::String("pattern-either".to_string())) {
+                    if let Some(arms) = pe.as_sequence() {
+                        for arm in arms {
+                            if let Some(arm_obj) = arm.as_mapping() {
+                                if let Some(pv) = arm_obj.get(&Value::String("pattern".to_string())) {
+                                    if let Some(ps) = pv.as_str() { patterns.push(ps.to_string()); }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Support { metavariable-regex: {...} } inside the nested list
+                if let Some(mvr) = obj.get(&Value::String("metavariable-regex".to_string())) {
+                    let mr = self.parse_metavariable_regex(mvr, rule_index, pattern_index)?;
+                    if nested_regex.is_none() { nested_regex = Some(mr.regex); }
+                }
+                continue;
+            }
+            return Err(AnalysisError::parse_error(format!(
+                "Rule {} pattern {} metavariable pattern entries must be strings or objects",
+                rule_index, pattern_index
+            )));
         }
 
         let mut metavar_pattern = MetavariablePattern::with_patterns(metavariable, patterns);
 
-        // Parse optional regex
+        // Parse optional regex at top-level, fallback to nested regex if present
         if let Some(regex) = self.get_optional_string_field(metavar_obj, "regex") {
             metavar_pattern.regex = Some(regex);
+        } else if let Some(r) = nested_regex {
+            metavar_pattern.regex = Some(r);
         }
 
         // Parse optional type constraint
@@ -435,6 +575,7 @@ impl RuleParser {
         if let Some(name_constraint) = self.get_optional_string_field(metavar_obj, "name") {
             metavar_pattern.name_constraint = Some(name_constraint);
         }
+
 
         // Parse optional analysis
         if let Some(analysis_value) = metavar_obj.get(&Value::String("analysis".to_string())) {
@@ -473,6 +614,25 @@ impl RuleParser {
         let name_pattern = self.get_string_field(metavar_obj, "name", rule_index)?;
 
         Ok(MetavariableName::new(metavariable, name_pattern))
+    }
+
+    /// Parse metavariable comparison (Semgrep-compatible; stores raw Python-like expr)
+    fn parse_metavariable_comparison(&self, value: &Value, rule_index: usize, pattern_index: usize) -> Result<MetavariableComparison> {
+        let metavar_obj = value
+            .as_mapping()
+            .ok_or_else(|| AnalysisError::parse_error(format!(
+                "Rule {} pattern {} metavariable-comparison must be an object",
+                rule_index, pattern_index
+            )))?;
+
+        let metavariable = self.get_string_field(metavar_obj, "metavariable", rule_index)?;
+        let comparison_expr = self.get_string_field(metavar_obj, "comparison", rule_index)?;
+
+        Ok(MetavariableComparison::new(
+            metavariable,
+            astgrep_core::ComparisonOperator::PythonExpression(comparison_expr),
+            String::new(),
+        ))
     }
 
     /// Parse metavariable analysis
@@ -606,7 +766,7 @@ impl RuleParser {
     /// Parse dataflow field
     fn parse_dataflow(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Option<DataFlowSpec>> {
         let dataflow_value = obj.get(&Value::String("dataflow".to_string()));
-        
+
         if dataflow_value.is_none() {
             return Ok(None);
         }
@@ -755,7 +915,7 @@ impl RuleParser {
     /// Parse metadata field
     fn parse_metadata(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<HashMap<String, String>> {
         let metadata_value = obj.get(&Value::String("metadata".to_string()));
-        
+
         if metadata_value.is_none() {
             return Ok(HashMap::new());
         }
@@ -806,7 +966,7 @@ rules:
 
         let parser = RuleParser::new();
         let rules = parser.parse_yaml(yaml).unwrap();
-        
+
         assert_eq!(rules.len(), 1);
         let rule = &rules[0];
         assert_eq!(rule.id, "test-rule");
@@ -901,7 +1061,7 @@ rules:
 
         let parser = RuleParser::new();
         let rules = parser.parse_yaml(yaml).unwrap();
-        
+
         assert_eq!(rules.len(), 1);
         let rule = &rules[0];
         assert_eq!(rule.id, "sql-injection");

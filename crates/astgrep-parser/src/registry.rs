@@ -143,7 +143,12 @@ impl ParserFactory {
         match language {
             Language::Java => Ok(Box::new(crate::java::JavaParser::new())),
             Language::JavaScript => Ok(Box::new(crate::javascript::JavaScriptParser::new())),
-            Language::Python => Ok(Box::new(crate::python::PythonParser::new())),
+            Language::Python => {
+                match crate::tree_sitter_language::TreeSitterLanguageParser::new(Language::Python) {
+                    Ok(ts) => Ok(Box::new(ts)),
+                    Err(_) => Ok(Box::new(crate::python::PythonParser::new())),
+                }
+            },
             Language::Sql => Ok(Box::new(crate::sql::SqlParser::new())),
             Language::Bash => Ok(Box::new(crate::bash::BashParser::new())),
             Language::Php => Ok(Box::new(crate::php::PhpParser::new())),

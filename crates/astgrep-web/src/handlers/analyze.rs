@@ -690,25 +690,44 @@ async fn perform_code_analysis(
 
     let duration = start_time.elapsed();
 
-    // Convert findings to web model format
-    let web_findings: Vec<Finding> = findings.into_iter().map(|f| Finding {
-        rule_id: f.rule_id,
-        message: f.message,
-        severity: f.severity.as_str().to_lowercase(),
-        confidence: f.confidence.as_str().to_lowercase(),
-        location: Location {
-            file: f.location.file.to_string_lossy().to_string(),
-            start_line: f.location.start_line,
-            start_column: f.location.start_column,
-            end_line: f.location.end_line,
-            end_column: f.location.end_column,
-            snippet: None, // astgrep_core::Location doesn't have snippet field
-        },
-        fix: f.fix_suggestion,
-        metadata: Some(f.metadata.into_iter().map(|(k, v)| (k, serde_json::Value::String(v))).collect()),
-        metavariable_bindings: None, // Will be populated by dataflow analysis
-        constraint_matches: None, // Will be populated by constraint analysis
-        taint_flow: None, // Will be populated by taint analysis
+    // Convert findings to web model format (Semgrep-aligned display ranges + dedented snippet)
+    let code_lines: Vec<&str> = request.code.lines().collect();
+    let web_findings: Vec<Finding> = findings.into_iter().map(|mut f| {
+        // Compute display start for single-line matches
+        let mut start_line = f.location.start_line;
+        let mut start_col = f.location.start_column;
+        let end_line = f.location.end_line;
+        let end_col = f.location.end_column;
+
+        if start_line == end_line {
+            let disp = compute_display_start_line_from_lines(&code_lines, start_line, 20);
+            if disp < start_line {
+                start_line = disp;
+                start_col = 1;
+            }
+        }
+        // Build snippet from display-start to end (dedented)
+        let snippet = build_dedented_snippet(&code_lines, start_line, end_line);
+
+        Finding {
+            rule_id: f.rule_id,
+            message: f.message,
+            severity: f.severity.as_str().to_lowercase(),
+            confidence: f.confidence.as_str().to_lowercase(),
+            location: Location {
+                file: f.location.file.to_string_lossy().to_string(),
+                start_line,
+                start_column: start_col,
+                end_line,
+                end_column: end_col,
+                snippet,
+            },
+            fix: f.fix_suggestion,
+            metadata: Some(f.metadata.into_iter().map(|(k, v)| (k, serde_json::Value::String(v))).collect()),
+            metavariable_bindings: None, // Will be populated by dataflow analysis
+            constraint_matches: None, // Will be populated by constraint analysis
+            taint_flow: None, // Will be populated by taint analysis
+        }
     }).collect();
 
     // Create summary
@@ -1641,8 +1660,81 @@ fn detect_language_from_filename(filename: &str) -> String {
     }
 }
 
+
+// --- Semgrep-compatible display utilities (duplicated from CLI for consistency) ---
+fn compute_display_start_line_from_lines(lines: &[&str], current_line: usize, max_lookback: usize) -> usize {
+    if current_line <= 1 { return 1; }
+    let mut balance: isize = 0; // closes - opens seen so far when walking upwards
+    let mut prev_semi_line: Option<usize> = None; // 1-based line index
+    let mut looked: usize = 0;
+    for k in (1..=current_line).rev() {
+        if looked >= max_lookback { break; }
+        let s = *lines.get(k - 1).unwrap_or(&"");
+        let closes = s.matches(')').count() + s.matches('}').count() + s.matches(']').count();
+        let opens = s.matches('(').count() + s.matches('{').count() + s.matches('[').count();
+        balance += closes as isize;
+        balance -= opens as isize;
+        if k < current_line && balance == 0 && s.contains(';') {
+            prev_semi_line = Some(k);
+            break;
+        }
+        looked += 1;
+    }
+    let mut start = match prev_semi_line { Some(ln) => ln.saturating_add(1), None => current_line };
+    while start < current_line {
+        let line_text = *lines.get(start - 1).unwrap_or(&"");
+        if is_comment_or_blank(line_text) { start += 1; } else { break; }
+    }
+    if start > current_line { current_line } else { start }
+}
+
+fn is_comment_or_blank(s: &str) -> bool {
+    let t = s.trim();
+    t.is_empty() || t.starts_with("//") || t.starts_with("/*") || t.starts_with('*') || t.starts_with("*/")
+}
+
+fn leading_ws_width(s: &str) -> usize {
+    s.bytes().take_while(|b| *b == b' ' || *b == b'\t').count()
+}
+
+fn trim_leading_ws_by<'a>(s: &'a str, mut n: usize) -> &'a str {
+    let mut idx = 0usize;
+    for (i, b) in s.bytes().enumerate() {
+        if (b == b' ' || b == b'\t') && n > 0 {
+            n -= 1;
+            idx = i + 1;
+        } else {
+            idx = i;
+            break;
+        }
+    }
+    &s[idx..]
+}
+
+fn build_dedented_snippet(lines: &[&str], start_line: usize, end_line: usize) -> Option<String> {
+    if start_line == 0 || end_line == 0 || start_line > end_line { return None; }
+    let start_idx = start_line.saturating_sub(1);
+    let end_idx = end_line.saturating_sub(1);
+    let mut slice: Vec<&str> = Vec::new();
+    for i in start_idx..=end_idx {
+        if let Some(&line) = lines.get(i) { slice.push(line); }
+    }
+    if slice.is_empty() { return None; }
+    let min_indent = slice.iter()
+        .map(|s| s.trim_end())
+        .filter(|t| !t.is_empty())
+        .map(|t| leading_ws_width(t))
+        .min()
+        .unwrap_or(0);
+    let dedented: Vec<String> = slice.iter().map(|s| trim_leading_ws_by(s, min_indent).to_string()).collect();
+    Some(dedented.join("\n"))
+}
+
 #[cfg(test)]
 mod tests {
+
+
+
     use super::*;
     use crate::models::AnalysisOptions;
 

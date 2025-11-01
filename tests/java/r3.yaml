@@ -3,5 +3,5 @@ rules:
     languages: [java]
     message: "自主线程"
     patterns:
-      - pattern: '$thread.start()'
+      - pattern: $T.start()
     severity: ERROR

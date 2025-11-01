@@ -488,23 +488,94 @@ impl AdvancedRuleExecutor {
         }
     }
 
-    /// Simplified Python expression evaluation
+    /// Simplified Python-like expression evaluation for metavariable-comparison
+    /// Supports common forms used in tests: re.match(..., str($X)), int($X) OP N, len(str($X)) OP N, type($X).__name__ == "str"
     fn evaluate_python_expression(&self, value: &str, expr: &str) -> Result<bool> {
-        // This is a simplified implementation
-        // In a full implementation, you would use a Python interpreter
+        let e = expr.trim();
 
-        // Handle some common patterns
-        if expr.contains("len(") {
-            if let Some(len_expr) = expr.strip_prefix("len(").and_then(|s| s.strip_suffix(")")) {
-                if len_expr.trim() == "$VAR" {
-                    // Extract the comparison from the full expression
-                    // This is very simplified - a real implementation would parse the full expression
-                    return Ok(value.len() > 0);
+        // 1) re.match(r"...", str($X))
+        if let Ok(re_capt) = regex::Regex::new(r#"(?i)^re\.match\(\s*r?[\"']([^\"']+)[\"']\s*,\s*str\(\s*\$\w+\s*\)\s*\)\s*$"#) {
+            if let Some(caps) = re_capt.captures(e) {
+                let pat = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                if let Ok(rexp) = regex::Regex::new(pat) {
+                    return Ok(rexp.is_match(value));
+                } else {
+                    return Ok(false);
                 }
             }
         }
 
-        // For now, just return true for unsupported expressions
+        // Helper: numeric compare
+        fn cmp_num(lhs: f64, op: &str, rhs: f64) -> bool {
+            match op {
+                "==" => lhs == rhs,
+                "!=" => lhs != rhs,
+                ">=" => lhs >= rhs,
+                "<=" => lhs <= rhs,
+                ">" => lhs > rhs,
+                "<" => lhs < rhs,
+                _ => false,
+            }
+        }
+
+        // Parse numeric value from string representation
+        fn parse_num(s: &str) -> Option<f64> {
+            let t = s.trim().replace('_', "");
+            t.parse::<f64>().ok()
+        }
+
+        // 2) int($X) OP N
+        if let Ok(int_re) = regex::Regex::new(r#"(?i)^int\(\s*\$\w+\s*\)\s*(==|!=|>=|<=|>|<)\s*(-?\d+)\s*$"#) {
+            if let Some(caps) = int_re.captures(e) {
+                let op = caps.get(1).unwrap().as_str();
+                let rhs: f64 = caps.get(2).unwrap().as_str().parse::<f64>().unwrap_or(0.0);
+                let lhs: f64 = parse_num(value).unwrap_or(0.0);
+                return Ok(cmp_num(lhs, op, rhs));
+            }
+        }
+
+        // 3) len(str($X)) OP N
+        if let Ok(len_re) = regex::Regex::new(r#"(?i)^len\(\s*str\(\s*\$\w+\s*\)\s*\)\s*(==|!=|>=|<=|>|<)\s*(\d+)\s*$"#) {
+            if let Some(caps) = len_re.captures(e) {
+                let op = caps.get(1).unwrap().as_str();
+                let rhs: f64 = caps.get(2).unwrap().as_str().parse::<f64>().unwrap_or(0.0);
+                // remove simple quotes around value
+                let mut s = value.trim().to_string();
+                if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
+                    s = s[1..s.len().saturating_sub(1)].to_string();
+                }
+                let lhs = s.chars().count() as f64;
+                return Ok(cmp_num(lhs, op, rhs));
+            }
+        }
+
+        // 4) type($X).__name__ == "str" | "int" | "float" | "bool"
+        if let Ok(type_re) = regex::Regex::new(r#"(?i)^type\(\s*\$\w+\s*\)\.__name__\s*==\s*[\"']([A-Za-z_][A-Za-z0-9_]*)[\"']\s*$"#) {
+            if let Some(caps) = type_re.captures(e) {
+                let ty = caps.get(1).unwrap().as_str().to_ascii_lowercase();
+                let val = value.trim();
+                let res = match ty.as_str() {
+                    "str" | "string" => (val.starts_with('"') && val.ends_with('"')) || (val.starts_with('\'') && val.ends_with('\'')),
+                    "int" | "integer" => val.parse::<i64>().is_ok(),
+                    "float" => val.parse::<f64>().is_ok() && val.contains('.'),
+                    "bool" => matches!(val, "True" | "False" | "true" | "false"),
+                    _ => false,
+                };
+                return Ok(res);
+            }
+        }
+
+        // 5) Fallback simple numeric: $X OP N
+        if let Ok(simple) = regex::Regex::new(r#"^\s*\$\w+\s*(==|!=|>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*$"#) {
+            if let Some(caps) = simple.captures(e) {
+                let op = caps.get(1).unwrap().as_str();
+                let rhs = caps.get(2).unwrap().as_str().parse::<f64>().unwrap_or(0.0);
+                let lhs = parse_num(value).unwrap_or(0.0);
+                return Ok(cmp_num(lhs, op, rhs));
+            }
+        }
+
+        // Unsupported expressions default to true to avoid over-filtering in compatibility mode
         Ok(true)
     }
 

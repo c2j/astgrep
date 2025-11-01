@@ -255,10 +255,17 @@ impl RuleValidator {
                     )));
                 }
                 if metavar_comp.value.is_empty() {
-                    return Err(AnalysisError::rule_validation_error(format!(
-                        "Pattern {} condition {} value cannot be empty",
-                        pattern_index, condition_index
-                    )));
+                    // Allow empty value when using PythonExpression operator;
+                    // the expression is stored in the operator payload
+                    match &metavar_comp.operator {
+                        astgrep_core::ComparisonOperator::PythonExpression(_) => { /* ok */ }
+                        _ => {
+                            return Err(AnalysisError::rule_validation_error(format!(
+                                "Pattern {} condition {} value cannot be empty",
+                                pattern_index, condition_index
+                            )));
+                        }
+                    }
                 }
             }
             Condition::NodeType(node_type) => {

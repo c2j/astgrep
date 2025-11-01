@@ -15,6 +15,8 @@ pub mod php;
 pub mod php_optimizer;
 pub mod csharp;
 pub mod tree_sitter_parser;
+pub mod tree_sitter_language;
+
 pub mod c;
 pub mod c_simple;
 pub mod ruby;
@@ -113,7 +115,11 @@ impl LanguageParserRegistry {
     fn register_default_parsers(&mut self) {
         self.register_parser(Language::Java, Box::new(java::JavaParser::new()));
         self.register_parser(Language::JavaScript, Box::new(javascript::JavaScriptParser::new()));
-        self.register_parser(Language::Python, Box::new(python::PythonParser::new()));
+        // Prefer Tree-sitter for Python when available; fallback to simple adapter.
+        match crate::tree_sitter_language::TreeSitterLanguageParser::new(Language::Python) {
+            Ok(ts) => self.register_parser(Language::Python, Box::new(ts)),
+            Err(_) => self.register_parser(Language::Python, Box::new(python::PythonParser::new())),
+        }
         self.register_parser(Language::Sql, Box::new(sql::SqlParser::new()));
         self.register_parser(Language::Bash, Box::new(bash::BashParser::new()));
         self.register_parser(Language::Php, Box::new(php::PhpParser::new()));
