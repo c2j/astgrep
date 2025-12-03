@@ -357,6 +357,7 @@ impl TreeSitterParser {
             "update_statement" => NodeType::UpdateStatement,
             "delete_statement" => NodeType::DeleteStatement,
             "create_statement" => NodeType::CreateStatement,
+            "create_sequence" => NodeType::CreateSequenceStatement,
             "drop_statement" => NodeType::DropStatement,
             "alter_statement" => NodeType::AlterStatement,
             // SQL clauses map to a generic SqlExpression container

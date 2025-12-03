@@ -361,6 +361,11 @@ impl AstBuilder {
         UniversalNode::new(NodeType::CreateViewStatement)
     }
 
+    /// Create a CREATE SEQUENCE statement
+    pub fn create_sequence_statement() -> UniversalNode {
+        UniversalNode::new(NodeType::CreateSequenceStatement)
+    }
+
     /// Create a DROP statement
     pub fn drop_statement() -> UniversalNode {
         UniversalNode::new(NodeType::DropStatement)

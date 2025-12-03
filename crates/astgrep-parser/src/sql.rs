@@ -188,6 +188,8 @@ impl SqlAdapter {
             self.parse_create_index(source)
         } else if upper_source.contains("CREATE VIEW ") {
             self.parse_create_view(source)
+        } else if upper_source.contains("CREATE SEQUENCE ") {
+            self.parse_create_sequence(source)
         } else {
             Ok(AstBuilder::create_statement("unknown")
                 .with_text(source.to_string()))
@@ -231,6 +233,41 @@ impl SqlAdapter {
     fn parse_create_view(&self, source: &str) -> Result<UniversalNode> {
         Ok(AstBuilder::create_view_statement()
             .with_text(source.to_string()))
+    }
+
+    /// Parse CREATE SEQUENCE statement
+    fn parse_create_sequence(&self, source: &str) -> Result<UniversalNode> {
+        let mut sequence_node = AstBuilder::create_sequence_statement();
+
+        // Extract sequence name
+        if let Some(after_sequence) = source.to_uppercase().find("CREATE SEQUENCE ") {
+            let after_create = &source[after_sequence + 17..]; // Skip "CREATE SEQUENCE "
+
+            // Extract sequence name (first word after SEQUENCE)
+            let sequence_name = if let Some(space_pos) = after_create.trim().find(' ') {
+                after_create[..space_pos].trim().to_string()
+            } else {
+                after_create.trim().to_string()
+            };
+
+            sequence_node = sequence_node.with_sequence_name(sequence_name);
+
+            // Extract options (everything after the sequence name)
+            let options_part = if let Some(space_pos) = after_create.trim().find(' ') {
+                after_create[space_pos..].trim().to_string()
+            } else {
+                String::new()
+            };
+
+            // Check for CYCLE option
+            let has_cycle = options_part.to_uppercase().contains("CYCLE");
+
+            // Add options as attribute for pattern matching
+            sequence_node = sequence_node.with_attribute("options".to_string(), options_part)
+                .with_attribute("has_cycle".to_string(), has_cycle.to_string());
+        }
+
+        Ok(sequence_node.with_text(source.to_string()))
     }
 
     /// Parse DROP statement
