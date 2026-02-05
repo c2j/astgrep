@@ -6,13 +6,27 @@ use astgrep_core::{AnalysisConfig, Language, OutputFormat, Severity, Confidence}
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+mod backup;
 mod commands;
-mod profiler;
+mod dependencies;
+mod output;
+mod profiling;
+mod progress;
+pub mod services;
 mod tree_sitter_analyzer;
+pub mod utils;
+pub mod validation;
+pub mod verification;
 pub mod vscode_integration;
 
+pub use backup::*;
 pub use commands::*;
-pub use profiler::*;
+pub use dependencies::*;
+pub use output::*;
+pub use profiling::*;
+pub use progress::*;
+pub use validation::*;
+pub use verification::*;
 pub use vscode_integration::*;
 
 /// astgrep: Multi-language Static Code Analysis Tool
@@ -215,6 +229,41 @@ pub enum Commands {
 
     /// Show version information (deprecated, use --version)
     Version,
+
+    /// Migrate and reorganize test directory structure
+    Migrate {
+        /// Migration subcommand
+        #[command(subcommand)]
+        action: crate::commands::migrate::MigrationAction,
+
+        /// Enable verbose logging
+        #[arg(short, long, global = true)]
+        verbose: bool,
+
+        /// Enable dry run mode
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Output format
+        #[arg(short = 'f', long, default_value = "human")]
+        format: String,
+
+        /// Configuration file
+        #[arg(short = 'c', long)]
+        config: Option<PathBuf>,
+
+        /// Enable progress reporting
+        #[arg(long)]
+        progress: bool,
+
+        /// Create backups
+        #[arg(long)]
+        backup: bool,
+
+        /// Number of threads
+        #[arg(short = 'j', long, default_value = "4")]
+        threads: usize,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -371,6 +420,22 @@ pub async fn run() -> Result<()> {
         Commands::Version => {
             warn!("'version' command is deprecated, use '--version' flag instead");
             commands::version::run().await
+        }
+        Commands::Migrate { action, verbose, dry_run, format, config, progress, backup, threads } => {
+            info!("Starting migration operations");
+
+            let migrate_command = crate::commands::migrate::MigrateCommand {
+                action,
+                verbose: verbose || cli.verbose,
+                dry_run,
+                format,
+                config,
+                progress,
+                backup,
+                threads: if threads > 0 { threads } else { cli.threads },
+            };
+
+            crate::commands::migrate::run(migrate_command).await
         }
     }
 }

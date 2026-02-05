@@ -172,6 +172,9 @@ fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool 
                 Language::Kotlin => ext_str == "kt" || ext_str == "kts",
                 Language::Swift => ext_str == "swift",
                 Language::Xml => ext_str == "xml" || ext_str == "xsd" || ext_str == "xsl" || ext_str == "xslt" || ext_str == "svg" || ext_str == "pom",
+                Language::Go => ext_str == "go",
+                Language::Rust => ext_str == "rs",
+                Language::Perl => ext_str == "pl" || ext_str == "pm",
             }
         })
     } else {
@@ -211,8 +214,14 @@ fn analyze_file_simple(
         return Ok(());
     }
 
-    // Read file content
-    let source_code = std::fs::read_to_string(file_path)?;
+    // Read file content with lossy UTF-8 conversion to handle invalid UTF-8 files
+    let source_code = match std::fs::read(file_path) {
+        Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
+        Err(e) => {
+            warn!("Failed to read file {}: {}", file_path.display(), e);
+            return Ok(());
+        }
+    };
 
     // Load rules if any are specified
     if !config.rule_files.is_empty() {
@@ -281,7 +290,8 @@ fn load_rules_for_language(rule_paths: &[PathBuf], language: Language) -> Result
 
 /// Load rules from a single YAML file
 fn load_rules_from_file(file_path: &PathBuf, target_language: Language) -> Result<Vec<ParsedRule>> {
-    let content = std::fs::read_to_string(file_path)?;
+    let bytes = std::fs::read(file_path)?;
+    let content = String::from_utf8_lossy(&bytes);
     parse_semgrep_rules(&content, target_language, Some(file_path))
 }
 
@@ -2371,6 +2381,9 @@ fn get_basic_security_patterns(language: Language) -> Vec<BasicPattern> {
         Language::Kotlin => vec![],
         Language::Swift => vec![],
         Language::Xml => vec![],
+        Language::Go => vec![],
+        Language::Rust => vec![],
+        Language::Perl => vec![],
     }
 }
 
@@ -2390,6 +2403,9 @@ fn determine_language(file_path: &PathBuf) -> Result<Language> {
             "kt" | "kts" => Ok(Language::Kotlin),
             "swift" => Ok(Language::Swift),
             "xml" | "xsd" | "xsl" | "xslt" | "svg" | "pom" => Ok(Language::Xml),
+            "go" => Ok(Language::Go),
+            "rs" => Ok(Language::Rust),
+            "pl" | "pm" => Ok(Language::Perl),
             _ => Err(anyhow::anyhow!("Unsupported file extension: {}", ext_str)),
         }
     } else {
@@ -2471,7 +2487,7 @@ fn generate_json_output(
         output["statistics"] = json!(stats);
 
         if let Some(profiler) = profiler {
-            output["performance"] = json!(profiler.get_metrics());
+            output["performance"] = json!(profiler.get_metrics_snapshot());
         }
     }
 
@@ -2523,7 +2539,7 @@ fn generate_text_output(
 
         if let Some(profiler) = profiler {
             output.push_str("\n=== Performance Metrics ===\n");
-            output.push_str(&profiler.get_metrics().generate_report());
+            output.push_str(&serde_json::to_string_pretty(&profiler.get_metrics_snapshot()).unwrap_or_default());
         }
     }
 

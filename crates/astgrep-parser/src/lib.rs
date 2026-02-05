@@ -21,6 +21,7 @@ pub mod ruby;
 pub mod kotlin;
 pub mod swift;
 pub mod xml;
+pub mod script_discovery;
 
 pub use registry::*;
 pub use adapters::*;

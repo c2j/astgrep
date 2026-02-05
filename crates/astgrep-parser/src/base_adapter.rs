@@ -28,13 +28,13 @@ impl BaseAdapter {
                 vec!["java".to_string()],
             ),
             Language::JavaScript => (
-                "JavaScript Adapter", 
+                "JavaScript Adapter",
                 "Adapter for parsing JavaScript source code",
                 vec!["js".to_string(), "jsx".to_string(), "mjs".to_string()],
             ),
             Language::Python => (
                 "Python Adapter",
-                "Adapter for parsing Python source code", 
+                "Adapter for parsing Python source code",
                 vec!["py".to_string(), "pyw".to_string()],
             ),
             Language::Php => (
@@ -48,7 +48,7 @@ impl BaseAdapter {
                 vec!["sql".to_string()],
             ),
             Language::Bash => (
-                "Bash Adapter", 
+                "Bash Adapter",
                 "Adapter for parsing Bash shell scripts",
                 vec!["sh".to_string(), "bash".to_string()],
             ),
@@ -81,6 +81,21 @@ impl BaseAdapter {
                 "XML Adapter",
                 "Adapter for parsing XML documents",
                 vec!["xml".to_string(), "xsd".to_string(), "xsl".to_string(), "xslt".to_string(), "svg".to_string(), "pom".to_string()],
+            ),
+            Language::Go => (
+                "Go Adapter",
+                "Adapter for parsing Go source code",
+                vec!["go".to_string()],
+            ),
+            Language::Rust => (
+                "Rust Adapter",
+                "Adapter for parsing Rust source code",
+                vec!["rs".to_string()],
+            ),
+            Language::Perl => (
+                "Perl Adapter",
+                "Adapter for parsing Perl source code",
+                vec!["pl".to_string(), "pm".to_string()],
             ),
         };
 
@@ -149,6 +164,12 @@ impl BaseAdapter {
             }
             Language::Xml => {
                 self.parse_xml_style(source, &mut root)?;
+            }
+            Language::Go | Language::Rust => {
+                self.parse_c_style_language(source, &mut root)?;
+            }
+            Language::Perl => {
+                self.parse_python_style(source, &mut root)?;
             }
         }
 

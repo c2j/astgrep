@@ -20,6 +20,9 @@ pub enum Language {
     Kotlin,
     Swift,
     Xml,
+    Go,
+    Rust,
+    Perl,
 }
 
 impl Language {
@@ -38,6 +41,9 @@ impl Language {
             Language::Kotlin => &[".kt", ".kts"],
             Language::Swift => &[".swift"],
             Language::Xml => &[".xml", ".xsd", ".xsl", ".xslt", ".svg", ".pom"],
+            Language::Go => &[".go"],
+            Language::Rust => &[".rs"],
+            Language::Perl => &[".pl", ".pm", ".t", ".pod"],
         }
     }
 
@@ -56,6 +62,9 @@ impl Language {
             Language::Kotlin => "kotlin",
             Language::Swift => "swift",
             Language::Xml => "xml",
+            Language::Go => "go",
+            Language::Rust => "rust",
+            Language::Perl => "perl",
         }
     }
 
@@ -74,6 +83,9 @@ impl Language {
             "kotlin" | "kt" => Some(Language::Kotlin),
             "swift" => Some(Language::Swift),
             "xml" => Some(Language::Xml),
+            "go" => Some(Language::Go),
+            "rust" | "rs" => Some(Language::Rust),
+            "perl" | "pl" => Some(Language::Perl),
             _ => None,
         }
     }

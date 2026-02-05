@@ -116,6 +116,9 @@ fn show_language_info(lang_str: &str) -> Result<()> {
         Language::Kotlin => println!("Kotlin support is basic"),
         Language::Swift => println!("Swift support is basic"),
         Language::Xml => println!("XML support is basic"),
+        Language::Go => println!("Go support is basic"),
+        Language::Rust => println!("Rust support is basic"),
+        Language::Perl => println!("Perl support is basic"),
     }
 
     Ok(())
@@ -170,6 +173,18 @@ fn get_language_details(language: &Language) -> (Vec<&'static str>, &'static str
         Language::Xml => (
             vec![".xml", ".xsd", ".xsl", ".xslt", ".svg", ".pom"],
             "Extensible Markup Language for data representation"
+        ),
+        Language::Go => (
+            vec![".go"],
+            "Compiled programming language for concurrent systems"
+        ),
+        Language::Rust => (
+            vec![".rs"],
+            "Systems programming language focused on safety and performance"
+        ),
+        Language::Perl => (
+            vec![".pl", ".pm", ".t"],
+            "High-level dynamic programming language"
         ),
     }
 }

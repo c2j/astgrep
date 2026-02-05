@@ -153,6 +153,15 @@ impl ParserFactory {
             Language::Kotlin => Ok(Box::new(crate::kotlin::KotlinParser::new())),
             Language::Swift => Ok(Box::new(crate::swift::SwiftParser::new())),
             Language::Xml => Ok(Box::new(crate::xml::XmlParser::new())),
+            Language::Go => Err(astgrep_core::AnalysisError::parse_error(
+                "Go parser not yet implemented".to_string()
+            )),
+            Language::Rust => Err(astgrep_core::AnalysisError::parse_error(
+                "Rust parser not yet implemented".to_string()
+            )),
+            Language::Perl => Err(astgrep_core::AnalysisError::parse_error(
+                "Perl parser not yet implemented".to_string()
+            )),
         }
     }
 
@@ -236,6 +245,24 @@ impl ParserFactory {
                 strict_mode: false,
             },
             Language::Xml => ParserConfig {
+                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
+                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
+                enable_recovery: true,
+                strict_mode: false,
+            },
+            Language::Go => ParserConfig {
+                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
+                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
+                enable_recovery: true,
+                strict_mode: false,
+            },
+            Language::Rust => ParserConfig {
+                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
+                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
+                enable_recovery: true,
+                strict_mode: false,
+            },
+            Language::Perl => ParserConfig {
                 timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
                 max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
                 enable_recovery: true,

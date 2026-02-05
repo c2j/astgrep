@@ -43,6 +43,9 @@ fn get_language_description(language: Language) -> &'static str {
         Language::Kotlin => "Kotlin - modern programming language for the JVM",
         Language::Swift => "Swift - modern programming language for Apple platforms",
         Language::Xml => "XML - extensible markup language for data representation and configuration",
+        Language::Go => "Go - compiled programming language for concurrent systems",
+        Language::Rust => "Rust - systems programming language focused on safety and performance",
+        Language::Perl => "Perl - high-level dynamic programming language",
     }
 }
 

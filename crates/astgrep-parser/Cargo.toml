@@ -16,6 +16,13 @@ tree-sitter-bash.workspace = true
 # tree-sitter-sql.workspace = true
 regex = "1.0"
 tree-sitter-sequel = { version = "0.3.11", optional = true }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+glob.workspace = true
+walkdir.workspace = true
+sha2.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tempfile = "3.8"

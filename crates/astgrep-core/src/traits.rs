@@ -36,6 +36,9 @@ pub trait LanguageParser: Send + Sync {
             Language::Kotlin => &["kt", "kts"],
             Language::Swift => &["swift"],
             Language::Xml => &["xml", "xsd", "xsl", "xslt", "svg", "pom"],
+            Language::Go => &["go"],
+            Language::Rust => &["rs"],
+            Language::Perl => &["pl", "pm", "t", "pod"],
         }
     }
 
@@ -68,7 +71,7 @@ pub trait AstNode: Send + Sync {
     fn text(&self) -> Option<&str>;
 
     /// Get an attribute value by key
-    fn get_attribute(&self, key: &str) -> Option<&str> {
+    fn get_attribute(&self, _key: &str) -> Option<&str> {
         None // Default implementation
     }
 

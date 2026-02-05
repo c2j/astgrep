@@ -284,7 +284,7 @@ rules:
     confidence: High
     languages: [java]
     patterns:
-      - "SELECT * FROM"
+      - "executeQuery("
     message: "Potential SQL injection vulnerability detected"
     fix: "Use PreparedStatement with parameterized queries"
 
@@ -295,7 +295,7 @@ rules:
     confidence: Medium
     languages: [java]
     patterns:
-      - "admin123"
+      - "authenticate("
     message: "Hardcoded password detected"
     fix: "Use environment variables or secure configuration"
 "#.to_string()

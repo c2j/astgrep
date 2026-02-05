@@ -37,3 +37,17 @@ results.*
 
 dist/
 __pycache__/
+
+# Migration artifacts
+/newtest/
+/migration-backups/
+migration_*.log
+migration_state.json
+
+# Environment files
+.env.local
+.env.migration
+
+# Migration temporary files
+*.migration.tmp
+rsync_*.log

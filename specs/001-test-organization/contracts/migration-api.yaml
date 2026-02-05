@@ -1,0 +1,578 @@
+openapi: 3.0.3
+info:
+  title: ASTGreP Test Directory Migration API
+  description: API for managing test directory reorganization and migration operations
+  version: 1.0.0
+  contact:
+    name: ASTGreP Development Team
+    email: dev@astgrep.org
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+paths:
+  /migration:
+    get:
+      summary: List migration assets
+      description: Retrieve all test assets available for migration with current status
+      operationId: listMigrationAssets
+      parameters:
+        - name: category
+          in: query
+          description: Filter by functional category
+          schema:
+            type: string
+            enum: [validation, performance, compatibility, benchmarking, security, quality, integration, parsing, pattern-matching, rule-definition]
+        - name: language
+          in: query
+          description: Filter by programming language
+          schema:
+            type: string
+            enum: [python, javascript, typescript, java, c, cpp, rust, bash, sql, xml, json, yaml, go, ruby, php, swift, kotlin, scala, dart]
+        - name: status
+          in: query
+          description: Filter by migration status
+          schema:
+            type: string
+            enum: [pending, in-progress, migrated, verified, failed, skipped]
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 1000
+        - name: offset
+          in: query
+          description: Number of results to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Successful retrieval of migration assets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TestAsset'
+                  total:
+                    type: integer
+                    description: Total number of assets matching filters
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Start migration process
+      description: Begin migration of test assets to new directory structure
+      operationId: startMigration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                asset_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: List of asset IDs to migrate
+                  minItems: 1
+                dry_run:
+                  type: boolean
+                  default: false
+                  description: Perform dry run without actual file operations
+                validate_dependencies:
+                  type: boolean
+                  default: true
+                  description: Validate dependencies before migration
+                preserve_timestamps:
+                  type: boolean
+                  default: true
+                  description: Preserve original file timestamps
+                create_backups:
+                  type: boolean
+                  default: false
+                  description: Create backup of original files
+              required:
+                - asset_ids
+      responses:
+        '202':
+          description: Migration process started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  migration_id:
+                    type: string
+                    description: Unique identifier for this migration batch
+                  status:
+                    type: string
+                    enum: [started, queued]
+                  estimated_duration:
+                    type: integer
+                    description: Estimated completion time in seconds
+                  asset_count:
+                    type: integer
+                    description: Number of assets being migrated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Migration already in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /migration/{migration_id}:
+    get:
+      summary: Get migration status
+      description: Retrieve detailed status of a specific migration operation
+      operationId: getMigrationStatus
+      parameters:
+        - name: migration_id
+          in: path
+          required: true
+          description: Migration operation identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Migration status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Cancel migration
+      description: Cancel an in-progress migration operation
+      operationId: cancelMigration
+      parameters:
+        - name: migration_id
+          in: path
+          required: true
+          description: Migration operation identifier
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Migration cancelled successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Migration cannot be cancelled (already completed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /assets/{asset_id}:
+    get:
+      summary: Get asset details
+      description: Retrieve detailed information about a specific test asset
+      operationId: getAssetDetails
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          description: Test asset identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Asset details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestAsset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /validation:
+    post:
+      summary: Validate migration plan
+      description: Validate migration plan for potential issues before execution
+      operationId: validateMigrationPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                asset_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: List of asset IDs to validate
+                  minItems: 1
+                validation_level:
+                  type: string
+                  enum: [basic, comprehensive, strict]
+                  default: comprehensive
+                  description: Level of validation to perform
+                check_dependencies:
+                  type: boolean
+                  default: true
+                  description: Validate asset dependencies
+                check_disk_space:
+                  type: boolean
+                  default: true
+                  description: Verify sufficient disk space
+              required:
+                - asset_ids
+      responses:
+        '200':
+          description: Validation completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation_id:
+                    type: string
+                    description: Unique identifier for validation results
+                  status:
+                    type: string
+                    enum: [passed, warnings, failed]
+                  issues:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationIssue'
+                  recommendations:
+                    type: array
+                    items:
+                      type: string
+                    description: Recommendations for addressing issues
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /validation/{validation_id}:
+    get:
+      summary: Get validation results
+      description: Retrieve detailed results of a validation operation
+      operationId: getValidationResults
+      parameters:
+        - name: validation_id
+          in: path
+          required: true
+          description: Validation operation identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Validation results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validation_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [passed, warnings, failed]
+                  created_at:
+                    type: string
+                    format: date-time
+                  completed_at:
+                    type: string
+                    format: date-time
+                  assets_validated:
+                    type: integer
+                  issues:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationIssue'
+                  detailed_report:
+                    type: string
+                    description: Detailed validation report in markdown format
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    TestAsset:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique asset identifier
+        name:
+          type: string
+          description: Human-readable asset name
+        type:
+          type: string
+          enum: [script, test_case, fixture, rule_definition, report]
+          description: Asset type classification
+        current_path:
+          type: string
+          description: Current file system location
+        target_path:
+          type: string
+          description: Planned destination in new structure
+        language:
+          type: string
+          enum: [python, javascript, typescript, java, c, cpp, rust, bash, sql, xml, json, yaml, go, ruby, php, swift, kotlin, scala, dart, other]
+          description: Associated programming language
+        category:
+          type: string
+          enum: [validation, performance, compatibility, benchmarking, security, quality, integration, parsing, pattern-matching, rule-definition]
+          description: Functional classification
+        status:
+          type: string
+          enum: [pending, in-progress, migrated, verified, failed, skipped]
+          description: Current migration status
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: List of dependent asset IDs
+        metadata:
+          type: object
+          description: Additional asset-specific metadata
+          properties:
+            file_size:
+              type: integer
+              description: File size in bytes
+            created_at:
+              type: string
+              format: date-time
+            modified_at:
+              type: string
+              format: date-time
+            executable:
+              type: boolean
+            platforms:
+              type: array
+              items:
+                type: string
+                enum: [Linux, MacOS, Windows, All]
+        validation_status:
+          $ref: '#/components/schemas/ValidationStatus'
+      required:
+        - id
+        - name
+        - type
+        - current_path
+        - target_path
+        - category
+        - status
+
+    MigrationStatus:
+      type: object
+      properties:
+        migration_id:
+          type: string
+          description: Unique migration identifier
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+          description: Current migration status
+        progress:
+          type: object
+          properties:
+            total_assets:
+              type: integer
+            completed_assets:
+              type: integer
+            failed_assets:
+              type: integer
+            percentage_complete:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 100
+        started_at:
+          type: string
+          format: date-time
+        estimated_completion:
+          type: string
+          format: date-time
+        current_asset:
+          type: string
+          description: Currently processing asset ID
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/MigrationError'
+        metrics:
+          type: object
+          properties:
+            files_migrated:
+              type: integer
+            bytes_transferred:
+              type: integer
+            average_speed:
+              type: number
+              format: float
+              description: Average transfer speed in MB/s
+      required:
+        - migration_id
+        - status
+
+    ValidationIssue:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [info, warning, error, critical]
+          description: Issue severity level
+        asset_id:
+          type: string
+          description: Affected asset ID
+        issue_type:
+          type: string
+          enum: [path_conflict, dependency_error, permission_error, disk_space, platform_compatibility, naming_convention]
+          description: Type of validation issue
+        message:
+          type: string
+          description: Human-readable issue description
+        suggestion:
+          type: string
+          description: Suggested resolution
+        code:
+          type: string
+          description: Internal error code for reference
+      required:
+        - severity
+        - issue_type
+        - message
+
+    MigrationError:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          description: Asset that failed to migrate
+        error_type:
+          type: string
+          enum: [file_not_found, permission_denied, disk_full, path_conflict, dependency_error, validation_error]
+          description: Type of migration error
+        message:
+          type: string
+          description: Detailed error message
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+        retry_count:
+          type: integer
+          description: Number of retry attempts
+        recoverable:
+          type: boolean
+          description: Whether the error is recoverable
+      required:
+        - error_type
+        - message
+        - timestamp
+
+    ValidationStatus:
+      type: object
+      properties:
+        last_validated:
+          type: string
+          format: date-time
+        validation_id:
+          type: string
+        status:
+          type: string
+          enum: [passed, warnings, failed]
+        issue_count:
+          type: integer
+        last_issue_severity:
+          type: string
+          enum: [info, warning, error, critical]
+
+    Pagination:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_next:
+          type: boolean
+        has_previous:
+          type: boolean
+        total_count:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error category
+        message:
+          type: string
+          description: Detailed error message
+        code:
+          type: string
+          description: Application-specific error code
+        timestamp:
+          type: string
+          format: date-time
+      required:
+        - error
+        - message
+        - timestamp
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []

@@ -235,6 +235,9 @@ pub mod utils {
             Language::Kotlin => false, // TODO: Add Kotlin keywords
             Language::Swift => false, // TODO: Add Swift keywords
             Language::Xml => false, // XML doesn't have keywords in the traditional sense
+            Language::Go => false, // TODO: Add Go keywords
+            Language::Rust => false, // TODO: Add Rust keywords
+            Language::Perl => false, // TODO: Add Perl keywords
         }
     }
 

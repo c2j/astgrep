@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(target/release/astgrep analyze --config=/tmp/test_rule_ast_based.yaml /tmp/test_sequence_with_cycle.sql)",
+      "Bash(target/release/astgrep analyze --config=/tmp/test_rule_complete.yaml /tmp/comprehensive_test.sql)",
+      "Bash(target/release/astgrep analyze --config=/tmp/test_rule_complete.yaml /tmp/test_sequence_with_cycle.sql)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
