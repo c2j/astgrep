@@ -424,6 +424,8 @@ pub struct RuleContext {
     pub language: Language,
     pub source_code: String,
     pub custom_data: HashMap<String, String>,
+    /// Enable constant propagation analysis
+    pub enable_constant_propagation: bool,
 }
 
 impl RuleContext {
@@ -434,6 +436,7 @@ impl RuleContext {
             language,
             source_code,
             custom_data: HashMap::new(),
+            enable_constant_propagation: true, // Default to true
         }
     }
 
@@ -446,6 +449,12 @@ impl RuleContext {
     /// Get custom data
     pub fn get_data(&self, key: &str) -> Option<&String> {
         self.custom_data.get(key)
+    }
+
+    /// Set constant propagation enable flag
+    pub fn with_constant_propagation(mut self, enabled: bool) -> Self {
+        self.enable_constant_propagation = enabled;
+        self
     }
 }
 

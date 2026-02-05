@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use astgrep_core::{Language, OutputFormat, Severity, Confidence};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
 use tracing::{info, warn};
@@ -347,6 +348,49 @@ fn analyze_with_rule_engine(
         if let Some(flag) = config.sql_statement_boundary {
             context = context.add_data("sql_statement_boundary".to_string(), flag.to_string());
         }
+
+        // Perform constant propagation analysis if enabled
+        // Use tree-sitter parser for better AST quality if available
+        let constant_values = if config.enable_constant_propagation {
+            use astgrep_dataflow::ConstantPropagator;
+            use astgrep_parser::tree_sitter_parser::TreeSitterParser;
+            
+            let mut propagator = ConstantPropagator::new();
+            
+            // Try to use tree-sitter for better AST
+            let constants_result = if let Ok(mut ts_parser) = TreeSitterParser::new() {
+                if let Ok(Some(tree)) = ts_parser.parse(source_code, language) {
+                    if let Ok(ts_ast) = ts_parser.tree_to_universal_ast(&tree, source_code) {
+                        propagator.analyze_ast(&ts_ast)
+                    } else {
+                        propagator.analyze_ast(ast.as_ref())
+                    }
+                } else {
+                    propagator.analyze_ast(ast.as_ref())
+                }
+            } else {
+                propagator.analyze_ast(ast.as_ref())
+            };
+            
+            match constants_result {
+                Ok(constants) => {
+                    if !constants.is_empty() {
+                        tracing::info!("Constant propagation found {} constants", constants.len());
+                        // Set constants in the engine's executor
+                        engine.configure_executor().set_constant_values(constants.clone());
+                        constants
+                    } else {
+                        HashMap::new()
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Constant propagation analysis failed: {}", e);
+                    HashMap::new()
+                }
+            }
+        } else {
+            HashMap::new()
+        };
 
         all_findings_core = engine.analyze(ast.as_ref(), &context)?;
     } else {

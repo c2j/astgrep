@@ -20,6 +20,9 @@ Thumbs.db
 # Test artifacts
 /test-results/
 /coverage/
+/tests/validation_reports
+/tests/scripts/tests/validation_reports
+/tmp
 
 # Benchmark results
 /target/criterion/

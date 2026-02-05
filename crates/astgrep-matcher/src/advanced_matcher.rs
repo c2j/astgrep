@@ -11,6 +11,7 @@ use astgrep_core::{MetavariableAnalysis, EntropyAnalysis, TypeAnalysis, Complexi
 // Note: These types are defined in cr_rules but we'll use them through cr_core for now
 use std::collections::HashMap;
 use regex::Regex;
+use astgrep_dataflow::ConstantValue;
 
 /// Advanced pattern matcher with full semgrep support
 pub struct AdvancedSemgrepMatcher {
@@ -18,6 +19,8 @@ pub struct AdvancedSemgrepMatcher {
     metavar_manager: MetavarManager,
     debug_mode: bool,
     max_depth: Option<usize>,
+    /// Constant propagation values: variable name -> constant value
+    constant_values: HashMap<String, ConstantValue>,
 }
 
 
@@ -30,7 +33,19 @@ impl AdvancedSemgrepMatcher {
             metavar_manager: MetavarManager::new(),
             debug_mode: false,
             max_depth: None,
+            constant_values: HashMap::new(),
         }
+    }
+
+    /// Set constant propagation values
+    pub fn with_constant_values(mut self, constants: HashMap<String, ConstantValue>) -> Self {
+        self.constant_values = constants;
+        self
+    }
+
+    /// Set constant propagation values (mutable)
+    pub fn set_constant_values(&mut self, constants: HashMap<String, ConstantValue>) {
+        self.constant_values = constants;
     }
 
     /// Enable debug mode
@@ -255,10 +270,33 @@ impl AdvancedSemgrepMatcher {
         }
     }
 
-    /// Match literal text
+    /// Match literal text with constant propagation support
     fn match_literal(&self, literal: &str, node: &dyn AstNode) -> Result<bool> {
         if let Some(text) = node.text() {
-            Ok(text.contains(literal))
+            // Direct match
+            if text.contains(literal) {
+                return Ok(true);
+            }
+            
+            // Constant propagation: if node is an identifier, check if it has a constant value
+            if node.node_type() == "identifier" {
+                if let Some(constant_value) = self.constant_values.get(text) {
+                    // Check if the constant value matches the literal
+                    let constant_str = match constant_value {
+                        ConstantValue::Integer(i) => i.to_string(),
+                        ConstantValue::String(s) => s.clone(),
+                        ConstantValue::Boolean(b) => b.to_string(),
+                        ConstantValue::Null => "null".to_string(),
+                        ConstantValue::Unknown => return Ok(false),
+                    };
+                    
+                    if constant_str == literal {
+                        return Ok(true);
+                    }
+                }
+            }
+            
+            Ok(false)
         } else {
             Ok(false)
         }

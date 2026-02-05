@@ -34,6 +34,7 @@ impl AdvancedRuleExecutor {
         ast: &dyn AstNode,
         language: Language,
         file_path: Option<&Path>,
+        enable_constant_propagation: bool,
     ) -> Result<ComprehensiveAnalysisResult> {
         let start_time = std::time::Instant::now();
         
@@ -45,6 +46,29 @@ impl AdvancedRuleExecutor {
         if applicable_rules.is_empty() {
             return Ok(ComprehensiveAnalysisResult::empty(start_time.elapsed()));
         }
+
+        // Perform constant propagation analysis if enabled
+        let constant_values = if enable_constant_propagation {
+            use astgrep_dataflow::ConstantPropagator;
+            let mut propagator = ConstantPropagator::new();
+            match propagator.analyze_ast(ast) {
+                Ok(values) => {
+                    if !values.is_empty() {
+                        tracing::info!("Constant propagation found {} constants", values.len());
+                    }
+                    values
+                }
+                Err(e) => {
+                    tracing::warn!("Constant propagation analysis failed: {}", e);
+                    HashMap::new()
+                }
+            }
+        } else {
+            HashMap::new()
+        };
+
+        // Set constant values in the pattern matcher
+        self.pattern_matcher.set_constant_values(constant_values);
 
         // Perform data flow analysis if needed
         let dataflow_analysis = if applicable_rules.iter().any(|r| r.requires_dataflow()) {

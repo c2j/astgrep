@@ -16,6 +16,8 @@ pub struct RuleExecutionEngine {
     max_execution_time_ms: Option<u64>,
     cache_enabled: bool,
     execution_cache: HashMap<String, Vec<Finding>>,
+    /// Constant propagation values: variable name -> constant value
+    constant_values: HashMap<String, astgrep_dataflow::ConstantValue>,
 }
 
 impl RuleExecutionEngine {
@@ -26,7 +28,13 @@ impl RuleExecutionEngine {
             max_execution_time_ms: Some(30000), // 30 seconds default
             cache_enabled: false,
             execution_cache: HashMap::new(),
+            constant_values: HashMap::new(),
         }
+    }
+
+    /// Set constant propagation values
+    pub fn set_constant_values(&mut self, constants: HashMap<String, astgrep_dataflow::ConstantValue>) {
+        self.constant_values = constants;
     }
 
     /// Enable or disable parallel execution
@@ -750,8 +758,37 @@ impl RuleExecutionEngine {
                     }
                 }
             } else {
-                let matched = if case_insensitive { text_tokens[j].0.eq_ignore_ascii_case(p_tok) } else { &text_tokens[j].0 == p_tok };
-                if !matched { return None; }
+                // Check direct match
+                let direct_match = if case_insensitive { 
+                    text_tokens[j].0.eq_ignore_ascii_case(p_tok) 
+                } else { 
+                    &text_tokens[j].0 == p_tok 
+                };
+                
+                // Check constant propagation: if pattern token is a literal and text token is an identifier
+                let constant_prop_match = if !p_tok.starts_with('$') && !self.constant_values.is_empty() {
+                    // Check if text token is an identifier that has a constant value matching the pattern token
+                    if let Some(constant_value) = self.constant_values.get(&text_tokens[j].0) {
+                        let constant_str = match constant_value {
+                            astgrep_dataflow::ConstantValue::Integer(i) => i.to_string(),
+                            astgrep_dataflow::ConstantValue::String(s) => s.clone(),
+                            astgrep_dataflow::ConstantValue::Boolean(b) => b.to_string(),
+                            astgrep_dataflow::ConstantValue::Null => "null".to_string(),
+                            astgrep_dataflow::ConstantValue::Unknown => String::new(),
+                        };
+                        if case_insensitive {
+                            constant_str.eq_ignore_ascii_case(p_tok)
+                        } else {
+                            constant_str == *p_tok
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                
+                if !direct_match && !constant_prop_match { return None; }
                 i += 1; j += 1;
             }
         }

@@ -181,7 +181,8 @@ impl RuleExecutionExample {
             &rules,
             &ast,
             Language::Java,
-            Some(Path::new("example.java"))
+            Some(Path::new("example.java")),
+            true, // Enable constant propagation
         )?;
 
         // Display comprehensive results

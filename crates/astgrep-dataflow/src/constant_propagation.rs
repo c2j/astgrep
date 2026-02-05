@@ -9,7 +9,7 @@ use astgrep_core::Result;
 use std::collections::{HashMap, HashSet};
 
 /// Represents a constant value in the program
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ConstantValue {
     /// String constant
     String(String),
@@ -148,6 +148,96 @@ impl ConstantPropagator {
     /// Get constant value for a node
     pub fn get_node_constant(&self, node_id: NodeId) -> Option<&ConstantValue> {
         self.node_constants.get(&node_id)
+    }
+
+    /// Analyze AST directly to extract constants
+    /// This is a simplified version that works without a full symbol table
+    pub fn analyze_ast(&mut self, ast: &dyn astgrep_core::AstNode) -> crate::Result<HashMap<String, ConstantValue>> {
+        self.constants.clear();
+        self.node_constants.clear();
+        self.reassigned.clear();
+
+        // Walk the AST to find field declarations with constant initializers
+        self.visit_node_for_constants(ast)?;
+
+        Ok(self.constants.clone())
+    }
+
+    /// Visit AST node to extract constant field declarations
+    fn visit_node_for_constants(
+        &mut self,
+        node: &dyn astgrep_core::AstNode,
+    ) -> crate::Result<()> {
+        // Debug: print node type and child count
+        eprintln!(
+            "DEBUG CP: Visiting node type: {}, child_count: {}",
+            node.node_type(),
+            node.child_count()
+        );
+
+        // Check if this is a field declaration or variable declaration with an initializer
+        // Tree-sitter uses different node types: "field_declaration" for Java, "variable_declaration" for others
+        let is_field_or_var = node.node_type() == "field_declaration" 
+            || node.node_type() == "variable_declaration"
+            || node.node_type() == "declaration_statement";
+        
+        if is_field_or_var {
+            eprintln!("DEBUG CP: Found potential field/variable declaration: {}", node.node_type());
+            
+            // Print children for debugging
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    eprintln!("  Child {}: {} - text: {:?}", i, child.node_type(), child.text());
+                }
+            }
+            
+            // For tree-sitter AST, look for variable_declaration children
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.node_type() == "variable_declaration" {
+                        // Check if it has private modifier by looking at the text
+                        let is_private = node.text().map(|t| t.contains("private")).unwrap_or(false);
+                        
+                        if is_private {
+                            eprintln!("DEBUG CP: Found private variable declaration");
+                            
+                            // Find the identifier and initializer in the variable_declaration
+                            let mut var_name = None;
+                            let mut init_value = None;
+                            
+                            for j in 0..child.child_count() {
+                                if let Some(grandchild) = child.child(j) {
+                                    eprintln!("    Grandchild {}: {} - text: {:?}", j, grandchild.node_type(), grandchild.text());
+                                    
+                                    if grandchild.node_type() == "identifier" {
+                                        var_name = grandchild.text().map(|t| t.to_string());
+                                    }
+                                    
+                                    // Look for literal (tree-sitter uses "literal" for numbers)
+                                    if grandchild.node_type() == "literal" || grandchild.node_type() == "decimal_integer_literal" {
+                                        init_value = grandchild.text().and_then(|t| t.parse::<i64>().ok());
+                                    }
+                                }
+                            }
+                            
+                            if let (Some(name), Some(value)) = (var_name, init_value) {
+                                eprintln!("DEBUG CP: Found constant: {} = {}", name, value);
+                                self.constants.insert(name, ConstantValue::Integer(value));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recursively visit children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                self.visit_node_for_constants(child)?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Check if a variable is constant

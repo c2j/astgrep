@@ -41,6 +41,7 @@ pub struct DataFlowAnalyzer {
     sink_detector: SinkDetector,
     sanitizer_detector: SanitizerDetector,
     taint_tracker: TaintTracker,
+    constant_propagator: ConstantPropagator,
 }
 
 impl DataFlowAnalyzer {
@@ -52,6 +53,7 @@ impl DataFlowAnalyzer {
             sink_detector: SinkDetector::new(),
             sanitizer_detector: SanitizerDetector::new(),
             taint_tracker: TaintTracker::new(),
+            constant_propagator: ConstantPropagator::new(),
         }
     }
 
@@ -68,12 +70,16 @@ impl DataFlowAnalyzer {
         // Perform taint analysis
         let taint_flows = self.taint_tracker.track_taint(&self.graph, &sources, &sinks, &sanitizers)?;
 
+        // Perform constant propagation analysis
+        let constant_values = self.constant_propagator.analyze_ast(ast)?;
+
         Ok(DataFlowAnalysis {
             graph: self.graph.clone(),
             sources,
             sinks,
             sanitizers,
             taint_flows,
+            constant_values,
         })
     }
 
@@ -165,6 +171,7 @@ pub struct DataFlowAnalysis {
     pub sinks: Vec<Sink>,
     pub sanitizers: Vec<Sanitizer>,
     pub taint_flows: Vec<TaintFlow>,
+    pub constant_values: HashMap<String, ConstantValue>,
 }
 
 impl DataFlowAnalysis {
