@@ -100,16 +100,7 @@ impl TreeSitterParser {
             parsers.insert(Language::Java, parser);
         }
 
-        // Initialize PHP parser (if available)
-        #[cfg(feature = "php")]
-        {
-            let mut parser = Parser::new();
-            if let Ok(php_lang) = tree_sitter_php::language() {
-                if parser.set_language(php_lang).is_ok() {
-                    parsers.insert(Language::PHP, parser);
-                }
-            }
-        }
+
 
         // Initialize SQL parser via tree-sitter-sequel when feature enabled
         #[cfg(feature = "sql-tree-sitter")]

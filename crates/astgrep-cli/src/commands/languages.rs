@@ -13,7 +13,6 @@ pub async fn run() -> Result<()> {
         Language::Java,
         Language::JavaScript,
         Language::Python,
-        Language::Php,
         Language::Sql,
         Language::Bash,
     ];
@@ -36,16 +35,7 @@ fn get_language_description(language: Language) -> &'static str {
         Language::Python => "Python - high-level, interpreted programming language",
         Language::Sql => "SQL - structured query language for database operations",
         Language::Bash => "Bash/Shell - command-line scripting language for Unix-like systems",
-        Language::Php => "PHP - server-side scripting language for web development",
-        Language::CSharp => "C# - object-oriented programming language by Microsoft",
-        Language::C => "C - low-level programming language",
-        Language::Ruby => "Ruby - dynamic, object-oriented programming language",
-        Language::Kotlin => "Kotlin - modern programming language for the JVM",
-        Language::Swift => "Swift - modern programming language for Apple platforms",
         Language::Xml => "XML - extensible markup language for data representation and configuration",
-        Language::Go => "Go - compiled programming language for concurrent systems",
-        Language::Rust => "Rust - systems programming language focused on safety and performance",
-        Language::Perl => "Perl - high-level dynamic programming language",
     }
 }
 

@@ -109,16 +109,7 @@ fn show_language_info(lang_str: &str) -> Result<()> {
         Language::Python => show_python_info(),
         Language::Sql => show_sql_info(),
         Language::Bash => show_bash_info(),
-        Language::Php => println!("PHP support is basic"),
-        Language::CSharp => println!("C# support is basic"),
-        Language::C => println!("C support is basic"),
-        Language::Ruby => println!("Ruby support is basic"),
-        Language::Kotlin => println!("Kotlin support is basic"),
-        Language::Swift => println!("Swift support is basic"),
         Language::Xml => println!("XML support is basic"),
-        Language::Go => println!("Go support is basic"),
-        Language::Rust => println!("Rust support is basic"),
-        Language::Perl => println!("Perl support is basic"),
     }
 
     Ok(())
@@ -146,45 +137,9 @@ fn get_language_details(language: &Language) -> (Vec<&'static str>, &'static str
             vec![".sh", ".bash"],
             "Unix shell scripting language"
         ),
-        Language::Php => (
-            vec![".php"],
-            "Server-side scripting language"
-        ),
-        Language::CSharp => (
-            vec![".cs"],
-            "Object-oriented programming language by Microsoft"
-        ),
-        Language::C => (
-            vec![".c", ".h"],
-            "Low-level programming language"
-        ),
-        Language::Ruby => (
-            vec![".rb"],
-            "Dynamic, object-oriented programming language"
-        ),
-        Language::Kotlin => (
-            vec![".kt"],
-            "Modern programming language for the JVM"
-        ),
-        Language::Swift => (
-            vec![".swift"],
-            "Modern programming language for Apple platforms"
-        ),
         Language::Xml => (
             vec![".xml", ".xsd", ".xsl", ".xslt", ".svg", ".pom"],
             "Extensible Markup Language for data representation"
-        ),
-        Language::Go => (
-            vec![".go"],
-            "Compiled programming language for concurrent systems"
-        ),
-        Language::Rust => (
-            vec![".rs"],
-            "Systems programming language focused on safety and performance"
-        ),
-        Language::Perl => (
-            vec![".pl", ".pm", ".t"],
-            "High-level dynamic programming language"
         ),
     }
 }

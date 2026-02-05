@@ -11,15 +11,7 @@ pub mod javascript_optimizer;
 pub mod python;
 pub mod sql;
 pub mod bash;
-pub mod php;
-pub mod php_optimizer;
-pub mod csharp;
 pub mod tree_sitter_parser;
-pub mod c;
-pub mod c_simple;
-pub mod ruby;
-pub mod kotlin;
-pub mod swift;
 pub mod xml;
 pub mod script_discovery;
 
@@ -82,12 +74,6 @@ impl LanguageParserRegistry {
                 "py" | "pyw" => Ok(Language::Python),
                 "sql" | "ddl" | "dml" => Ok(Language::Sql),
                 "sh" | "bash" | "zsh" => Ok(Language::Bash),
-                "php" | "phtml" | "php3" | "php4" | "php5" => Ok(Language::Php),
-                "cs" | "csx" => Ok(Language::CSharp),
-                "c" | "h" => Ok(Language::C),
-                "rb" | "rbw" | "rake" | "gemspec" => Ok(Language::Ruby),
-                "kt" | "kts" => Ok(Language::Kotlin),
-                "swift" => Ok(Language::Swift),
                 _ => Err(astgrep_core::AnalysisError::unsupported_language(format!(
                     "Unsupported file extension: {}",
                     extension
@@ -117,12 +103,6 @@ impl LanguageParserRegistry {
         self.register_parser(Language::Python, Box::new(python::PythonParser::new()));
         self.register_parser(Language::Sql, Box::new(sql::SqlParser::new()));
         self.register_parser(Language::Bash, Box::new(bash::BashParser::new()));
-        self.register_parser(Language::Php, Box::new(php::PhpParser::new()));
-        self.register_parser(Language::CSharp, Box::new(csharp::CSharpParser::new()));
-        self.register_parser(Language::C, Box::new(c::CParser::new()));
-        self.register_parser(Language::Ruby, Box::new(ruby::RubyParser::new()));
-        self.register_parser(Language::Kotlin, Box::new(kotlin::KotlinParser::new()));
-        self.register_parser(Language::Swift, Box::new(swift::SwiftParser::new()));
     }
 }
 

@@ -548,8 +548,6 @@ impl LanguageMapping {
             ("kt".to_string(), "kotlin".to_string()),
             ("kts".to_string(), "kotlin".to_string()),
             ("swift".to_string(), "swift".to_string()),
-            ("go".to_string(), "go".to_string()),
-            ("rs".to_string(), "rust".to_string()),
             ("xml".to_string(), "xml".to_string()),
             ("xsd".to_string(), "xml".to_string()),
         ]);

@@ -165,16 +165,8 @@ fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool 
                 Language::Python => ext_str == "py",
                 Language::Sql => ext_str == "sql",
                 Language::Bash => ext_str == "sh" || ext_str == "bash",
-                Language::Php => ext_str == "php",
-                Language::CSharp => ext_str == "cs",
-                Language::C => ext_str == "c" || ext_str == "h",
-                Language::Ruby => ext_str == "rb" || ext_str == "rbw",
-                Language::Kotlin => ext_str == "kt" || ext_str == "kts",
-                Language::Swift => ext_str == "swift",
+
                 Language::Xml => ext_str == "xml" || ext_str == "xsd" || ext_str == "xsl" || ext_str == "xslt" || ext_str == "svg" || ext_str == "pom",
-                Language::Go => ext_str == "go",
-                Language::Rust => ext_str == "rs",
-                Language::Perl => ext_str == "pl" || ext_str == "pm",
             }
         })
     } else {
@@ -2374,16 +2366,8 @@ fn get_basic_security_patterns(language: Language) -> Vec<BasicPattern> {
                 fix: Some("Validate and sanitize input".to_string()),
             },
         ],
-        Language::Php => vec![],
-        Language::CSharp => vec![],
-        Language::C => vec![],
-        Language::Ruby => vec![],
-        Language::Kotlin => vec![],
-        Language::Swift => vec![],
+
         Language::Xml => vec![],
-        Language::Go => vec![],
-        Language::Rust => vec![],
-        Language::Perl => vec![],
     }
 }
 
@@ -2396,16 +2380,8 @@ fn determine_language(file_path: &PathBuf) -> Result<Language> {
             "py" => Ok(Language::Python),
             "sql" => Ok(Language::Sql),
             "sh" | "bash" => Ok(Language::Bash),
-            "php" | "phtml" | "php3" | "php4" | "php5" => Ok(Language::Php),
-            "cs" | "csx" => Ok(Language::CSharp),
-            "c" | "h" => Ok(Language::C),
-            "rb" | "rbw" => Ok(Language::Ruby),
-            "kt" | "kts" => Ok(Language::Kotlin),
-            "swift" => Ok(Language::Swift),
+
             "xml" | "xsd" | "xsl" | "xslt" | "svg" | "pom" => Ok(Language::Xml),
-            "go" => Ok(Language::Go),
-            "rs" => Ok(Language::Rust),
-            "pl" | "pm" => Ok(Language::Perl),
             _ => Err(anyhow::anyhow!("Unsupported file extension: {}", ext_str)),
         }
     } else {

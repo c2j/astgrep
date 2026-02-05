@@ -199,14 +199,8 @@ pub mod languages {
         Language::Java,
         Language::JavaScript,
         Language::Python,
-        Language::Php,
         Language::Sql,
         Language::Bash,
-        Language::CSharp,
-        Language::C,
-        Language::Ruby,
-        Language::Kotlin,
-        Language::Swift,
         Language::Xml,
     ];
 

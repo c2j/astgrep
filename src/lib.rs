@@ -31,7 +31,6 @@ pub use astgrep_matcher::{
 };
 
 pub use astgrep_parser::{
-    php_optimizer::PhpOptimizer,
     javascript_optimizer::JavaScriptOptimizer,
     LanguageParserRegistry,
     tree_sitter_parser::TreeSitterParser
@@ -56,7 +55,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// - Advanced pattern matching with Semgrep-compatible syntax
 /// - Precise expression matching with configurable algorithms
 /// - Enhanced taint analysis with field and context sensitivity
-/// - Language-specific optimizations for PHP, JavaScript, Java, Python, and more
+/// - Language-specific optimizations for JavaScript, Java, Python, and more
 /// - Rule engine with validation and execution capabilities
 /// 
 /// # Examples
@@ -117,7 +116,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// ## Language-Specific Optimizations
 /// 
 /// Specialized handling for different languages:
-/// - PHP: Superglobal detection, framework analysis
+
 /// - JavaScript: DOM API detection, async pattern analysis
 /// - Java: Annotation processing, reflection analysis
 /// - Python: Dynamic feature detection
@@ -202,7 +201,6 @@ mod tests {
 
     #[test]
     fn test_language_optimizers() {
-        let _php_optimizer = PhpOptimizer::new();
         let _js_optimizer = JavaScriptOptimizer::new();
         // Test that we can create optimizers
         assert!(true);

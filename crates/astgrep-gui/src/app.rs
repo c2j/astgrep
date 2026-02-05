@@ -419,49 +419,6 @@ rules:
                 self.rule_editor.set_content(rule);
                 self.code_editor.set_content(code);
             }
-            "go" => {
-                let rule = r#"rules:
-  - id: go-avoid-fmt-println
-    name: "Avoid fmt.Println"
-    description: "Detects usage of fmt.Println"
-    message: "Avoid fmt.Println in production"
-    severity: WARNING
-    languages: [go]
-    pattern: fmt.Println($MSG)
-"#;
-                let code = r#"package main
-import "fmt"
-func main() {
-  // should match
-  fmt.Println("debug", 123)
-
-  // good
-  log.Println("ok")
-}
-"#;
-                self.rule_editor.set_content(rule);
-                self.code_editor.set_content(code);
-            }
-            "rust" => {
-                let rule = r#"rules:
-  - id: rs-avoid-println
-    name: "Avoid println!"
-    description: "Detects usage of println! macro"
-    message: "Avoid println! in production"
-    severity: WARNING
-    languages: [rust]
-    pattern: println!($MSG)
-"#;
-                let code = r#"fn main() {
-    // should match
-    println!("debug: {}", 42);
-    // good
-    log::info!("ok");
-}
-"#;
-                self.rule_editor.set_content(rule);
-                self.code_editor.set_content(code);
-            }
             "php" => {
                 let rule = r#"rules:
   - id: php-avoid-echo

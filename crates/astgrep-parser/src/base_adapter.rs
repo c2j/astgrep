@@ -37,11 +37,6 @@ impl BaseAdapter {
                 "Adapter for parsing Python source code",
                 vec!["py".to_string(), "pyw".to_string()],
             ),
-            Language::Php => (
-                "PHP Adapter",
-                "Adapter for parsing PHP source code",
-                vec!["php".to_string(), "phtml".to_string()],
-            ),
             Language::Sql => (
                 "SQL Adapter",
                 "Adapter for parsing SQL source code",
@@ -52,50 +47,10 @@ impl BaseAdapter {
                 "Adapter for parsing Bash shell scripts",
                 vec!["sh".to_string(), "bash".to_string()],
             ),
-            Language::CSharp => (
-                "C# Adapter",
-                "Adapter for parsing C# source code",
-                vec!["cs".to_string()],
-            ),
-            Language::C => (
-                "C Adapter",
-                "Adapter for parsing C source code",
-                vec!["c".to_string(), "h".to_string()],
-            ),
-            Language::Ruby => (
-                "Ruby Adapter",
-                "Adapter for parsing Ruby source code",
-                vec!["rb".to_string(), "rbw".to_string()],
-            ),
-            Language::Kotlin => (
-                "Kotlin Adapter",
-                "Adapter for parsing Kotlin source code",
-                vec!["kt".to_string(), "kts".to_string()],
-            ),
-            Language::Swift => (
-                "Swift Adapter",
-                "Adapter for parsing Swift source code",
-                vec!["swift".to_string()],
-            ),
             Language::Xml => (
                 "XML Adapter",
                 "Adapter for parsing XML documents",
                 vec!["xml".to_string(), "xsd".to_string(), "xsl".to_string(), "xslt".to_string(), "svg".to_string(), "pom".to_string()],
-            ),
-            Language::Go => (
-                "Go Adapter",
-                "Adapter for parsing Go source code",
-                vec!["go".to_string()],
-            ),
-            Language::Rust => (
-                "Rust Adapter",
-                "Adapter for parsing Rust source code",
-                vec!["rs".to_string()],
-            ),
-            Language::Perl => (
-                "Perl Adapter",
-                "Adapter for parsing Perl source code",
-                vec!["pl".to_string(), "pm".to_string()],
             ),
         };
 
@@ -141,7 +96,7 @@ impl BaseAdapter {
 
         // Add basic parsing based on language patterns
         match self.language {
-            Language::Java | Language::CSharp | Language::C | Language::Kotlin => {
+            Language::Java => {
                 self.parse_c_style_language(source, &mut root)?;
             }
             Language::JavaScript => {
@@ -150,26 +105,15 @@ impl BaseAdapter {
             Language::Python => {
                 self.parse_python_style(source, &mut root)?;
             }
-            Language::Php => {
-                self.parse_php_style(source, &mut root)?;
-            }
+
             Language::Sql => {
                 self.parse_sql_style(source, &mut root)?;
             }
             Language::Bash => {
                 self.parse_bash_style(source, &mut root)?;
             }
-            Language::Ruby | Language::Swift => {
-                self.parse_c_style_language(source, &mut root)?;
-            }
             Language::Xml => {
                 self.parse_xml_style(source, &mut root)?;
-            }
-            Language::Go | Language::Rust => {
-                self.parse_c_style_language(source, &mut root)?;
-            }
-            Language::Perl => {
-                self.parse_python_style(source, &mut root)?;
             }
         }
 
@@ -344,8 +288,7 @@ impl BaseAdapter {
     /// Parse variable declarations
     fn parse_variable_declaration(&self, line: &str, line_num: usize) -> Option<UniversalNode> {
         let keywords = match self.language {
-            Language::Java | Language::CSharp => vec!["int", "String", "var", "final"],
-            Language::C => vec!["int", "char", "float", "double", "void"],
+            Language::Java => vec!["int", "String", "var", "final"],
             _ => vec![],
         };
 

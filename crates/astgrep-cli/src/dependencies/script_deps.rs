@@ -370,7 +370,6 @@ impl ScriptDependencyResolver {
                 "sh" | "bash" => "bash".to_string(),
                 "py" => "python".to_string(),
                 "js" | "ts" => "javascript".to_string(),
-                "pl" => "perl".to_string(),
                 "rb" => "ruby".to_string(),
                 _ => "unknown".to_string(),
             }

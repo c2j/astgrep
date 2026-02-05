@@ -496,11 +496,8 @@ fn build_enhanced_analysis_config(
             Language::Java,
             Language::JavaScript,
             Language::Python,
-            Language::Php,
             Language::Sql,
             Language::Bash,
-            Language::CSharp,
-            Language::C,
         ]
     } else {
         let mut parsed = Vec::new();
@@ -596,40 +593,37 @@ fn build_analysis_config(
             Language::Java,
             Language::JavaScript,
             Language::Python,
-            Language::Php,
-            Language::Sql,
-            Language::Bash,
-            Language::CSharp,
-            Language::C,
-        ]
-    } else {
-        let mut parsed = Vec::new();
-        for lang_str in languages {
-            match Language::from_str(&lang_str) {
-                Some(lang) => parsed.push(lang),
-                None => {
-                    warn!("Unknown language: {}, skipping", lang_str);
-                }
+        Language::Sql,
+        Language::Bash,
+    ]
+} else {
+    let mut parsed = Vec::new();
+    for lang_str in languages {
+        match Language::from_str(&lang_str) {
+            Some(lang) => parsed.push(lang),
+            None => {
+                warn!("Unknown language: {}, skipping", lang_str);
             }
         }
-        if parsed.is_empty() {
-            return Err(anyhow::anyhow!("No valid languages specified"));
-        }
-        parsed
-    };
+    }
+    if parsed.is_empty() {
+        return Err(anyhow::anyhow!("No valid languages specified"));
+    }
+    parsed
+};
 
-    let output_format = OutputFormat::from_str(&format)
-        .ok_or_else(|| anyhow::anyhow!("Unknown output format: {}", format))?;
+let output_format = OutputFormat::from_str(&format)
+    .ok_or_else(|| anyhow::anyhow!("Unknown output format: {}", format))?;
 
-    Ok(AnalysisConfig {
-        target_paths,
-        exclude_patterns: exclude,
-        languages: parsed_languages,
-        rule_files: rules,
-        output_format,
-        parallel,
-        max_threads,
-    })
+Ok(AnalysisConfig {
+    target_paths,
+    exclude_patterns: exclude,
+    languages: parsed_languages,
+    rule_files: rules,
+    output_format,
+    parallel,
+    max_threads,
+})
 }
 
 /// Enhanced analysis configuration with additional options

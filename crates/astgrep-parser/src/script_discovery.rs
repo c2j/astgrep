@@ -50,12 +50,9 @@ impl Default for DiscoveryConfig {
                 "*.bash".to_string(),
                 "*.zsh".to_string(),
                 "*.py".to_string(),
-                "*.pl".to_string(),
                 "*.rb".to_string(),
                 "*.js".to_string(),
                 "*.ts".to_string(),
-                "*.go".to_string(),
-                "*.rs".to_string(),
                 "*.java".to_string(),
                 "*.php".to_string(),
                 "*.bat".to_string(),
@@ -436,13 +433,6 @@ impl ScriptDiscovery {
             Some(Language::Python)
         } else if shebang.contains("node") {
             Some(Language::JavaScript)
-        } else if shebang.contains("ruby") {
-            Some(Language::Ruby)
-        } else if shebang.contains("php") {
-            Some(Language::Php)
-        } else if shebang.contains("perl") {
-            // Note: Perl not directly supported in Language enum, might need extension
-            None
         } else {
             None
         }
@@ -456,12 +446,7 @@ impl ScriptDiscovery {
                 "js" | "jsx" => Some(Language::JavaScript),
                 "ts" | "tsx" => Some(Language::JavaScript),
                 "sh" | "bash" | "zsh" => Some(Language::Bash),
-                "php" => Some(Language::Php),
-                "rb" => Some(Language::Ruby),
-                "go" => Some(Language::Go),
-                "rs" => Some(Language::Rust),
                 "java" => Some(Language::Java),
-                "pl" => Some(Language::Perl),
                 _ => None,
             }
         } else {
@@ -475,15 +460,15 @@ impl ScriptDiscovery {
 
         // Default platforms based on language
         match language {
-            Some(Language::Bash) | Some(Language::Python) | Some(Language::Ruby) | Some(Language::Go) |
-            Some(Language::Rust) | Some(Language::Java) | Some(Language::Php) | Some(Language::JavaScript) => {
+            Some(Language::Bash) | Some(Language::Python) |
+            Some(Language::Java) | Some(Language::JavaScript) => {
                 platforms.push("Linux".to_string());
                 platforms.push("macOS".to_string());
 
                 // Windows support for certain languages
                 match language {
-                    Some(Language::Python) | Some(Language::Ruby) | Some(Language::Go) | Some(Language::Rust) |
-                    Some(Language::Java) | Some(Language::Php) | Some(Language::JavaScript) => {
+                    Some(Language::Python) |
+                    Some(Language::Java) | Some(Language::JavaScript) => {
                         platforms.push("Windows".to_string());
                     }
                     _ => {}

@@ -323,7 +323,6 @@ async fn validate_script_dependencies(
         ("python", which::which("python3").or_else(|_| which::which("python"))),
         ("python3", which::which("python3")),
         ("node", which::which("node")),
-        ("perl", which::which("perl")),
     ];
 
     for (dep_name, which_result) in dependency_checks {

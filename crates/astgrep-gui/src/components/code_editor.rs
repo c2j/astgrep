@@ -114,8 +114,6 @@ impl CodeEditor {
                         ui.selectable_value(&mut self.language, "python".to_string(), "Python");
                         ui.selectable_value(&mut self.language, "sql".to_string(), "SQL");
                         ui.selectable_value(&mut self.language, "xml".to_string(), "XML");
-                        ui.selectable_value(&mut self.language, "go".to_string(), "Go");
-                        ui.selectable_value(&mut self.language, "rust".to_string(), "Rust");
                         ui.selectable_value(&mut self.language, "php".to_string(), "PHP");
                     });
 
@@ -693,7 +691,7 @@ impl CodeEditor {
     fn open_file(&mut self) {
         // Use rfd to open file dialog
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Source Files", &["java", "js", "py", "go", "rs", "php", "sql", "xml"])
+            .add_filter("Source Files", &["java", "js", "py", "php", "sql", "xml"])
             .add_filter("All Files", &["*"])
             .pick_file()
         {
@@ -708,8 +706,6 @@ impl CodeEditor {
                         "py" => self.language = "python".to_string(),
                         "sql" => self.language = "sql".to_string(),
                         "xml" => self.language = "xml".to_string(),
-                        "go" => self.language = "go".to_string(),
-                        "rs" => self.language = "rust".to_string(),
                         "php" => self.language = "php".to_string(),
                         _ => {}
                     }
@@ -721,7 +717,7 @@ impl CodeEditor {
     fn save_file(&self) {
         // Use rfd to save file dialog
         if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Source Files", &["java", "js", "py", "go", "rs", "php", "sql", "xml"])
+            .add_filter("Source Files", &["java", "js", "py", "php", "sql", "xml"])
             .add_filter("All Files", &["*"])
             .save_file()
         {
