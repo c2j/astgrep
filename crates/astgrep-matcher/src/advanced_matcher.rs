@@ -664,7 +664,82 @@ impl AdvancedSemgrepMatcher {
             }
         }
 
+        // Handle bit OR operations like "$X | 1 == 1"
+        // Parse expressions like "$VAR | 1 == 1" or "$VAR | 1 == 3"
+        if expr.contains('|') && expr.contains("==") && !expr.contains("||") {
+            // Try to parse the expression
+            // Format: $VAR | N == M
+            let parts: Vec<&str> = expr.split("==").collect();
+            if parts.len() == 2 {
+                let left_side = parts[0].trim();
+                let expected_result = parts[1].trim();
+
+                // Parse the bit operation: $VAR | N
+                if left_side.contains('|') {
+                    let bit_parts: Vec<&str> = left_side.split('|').collect();
+                    if bit_parts.len() == 2 {
+                        let var_part = bit_parts[0].trim();
+                        let mask_part = bit_parts[1].trim();
+
+                        eprintln!("DEBUG bitor: var_part='{}', mask_part='{}', expected='{}'", var_part, mask_part, expected_result);
+
+                        // Check if this is the metavariable we're evaluating
+                        if var_part.starts_with("$") {
+                            // Parse the mask value
+                            if let Ok(mask) = mask_part.parse::<i64>() {
+                                // Parse the expected result
+                                if let Ok(expected) = expected_result.parse::<i64>() {
+                                    // Parse the actual value
+                                    if let Ok(val) = value.parse::<i64>() {
+                                        let result = val | mask;
+                                        eprintln!("DEBUG bitor: val={}, mask={}, result={}, expected={}", val, mask, result, expected);
+                                        return Ok(result == expected);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Handle bit NOT operations like "~ $X == -1"
+        // Python: ~x = -(x + 1)
+        if expr.contains('~') && expr.contains("==") {
+            // Format: ~$VAR == N or ~ $VAR == N
+            let parts: Vec<&str> = expr.split("==").collect();
+            if parts.len() == 2 {
+                let left_side = parts[0].trim();
+                let expected_result = parts[1].trim();
+                
+                // Remove the ~ operator and get the variable part
+                // Handle both "~$VAR" and "~ $VAR"
+                let var_part = if left_side.starts_with("~") {
+                    left_side[1..].trim()
+                } else {
+                    left_side
+                };
+                
+                eprintln!("DEBUG bitnot: var_part='{}', expected='{}'", var_part, expected_result);
+                
+                // Check if this is the metavariable we're evaluating
+                if var_part.starts_with("$") {
+                    // Parse the expected result
+                    if let Ok(expected) = expected_result.parse::<i64>() {
+                        // Parse the actual value
+                        if let Ok(val) = value.parse::<i64>() {
+                            // Python's ~ operator: ~x = -(x + 1)
+                            let result = -(val + 1);
+                            eprintln!("DEBUG bitnot: val={}, result={}, expected={}", val, result, expected);
+                            return Ok(result == expected);
+                        }
+                    }
+                }
+            }
+        }
+
         // For now, just return true for unsupported expressions
+        eprintln!("DEBUG: Expression '{}' not handled, returning true", expr);
         Ok(true)
     }
 
