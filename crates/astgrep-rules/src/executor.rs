@@ -224,6 +224,15 @@ impl AdvancedRuleExecutor {
         // Find pattern matches using the advanced matcher
         let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
 
+        // If no matches found and we have type constraints with symbolic propagation,
+        // try to find matches using symbolic propagation
+        let matches = if matches.is_empty() && !type_constraints.is_empty() && self.symbolic_propagator.is_some() {
+            eprintln!("DEBUG: No direct matches found, attempting symbolic propagation matching");
+            self.find_matches_via_symbolic_propagation(&semgrep_pattern, ast, &type_constraints)?
+        } else {
+            matches
+        };
+
         // Heuristic de-dup: keep only smallest, non-overlapping spans to avoid repeated matches
         let mut mm: Vec<((usize, usize), usize, usize, usize, usize, SemgrepMatchResult)> = matches
             .into_iter()
@@ -1791,6 +1800,7 @@ impl AdvancedRuleExecutor {
 
         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
             // Check if pattern contains typed metavariable syntax: "($TYPE $VAR)"
+            // where both TYPE and VAR are metavariables (start with $)
             let typed_metavar_regex = regex::Regex::new(r"\(\$(\w+)\s+\$(\w+)\)").unwrap();
 
             if let Some(captures) = typed_metavar_regex.captures(pattern_str) {
@@ -1834,6 +1844,39 @@ impl AdvancedRuleExecutor {
 
                 return (new_pattern, type_constraints);
             }
+
+            // Check for inline typed metavariable syntax: "(Type $VAR)"
+            // where Type is a literal type name and VAR is a metavariable
+            let inline_typed_regex = regex::Regex::new(r"\((\w+)\s+\$(\w+)\)").unwrap();
+
+            if let Some(captures) = inline_typed_regex.captures(pattern_str) {
+                let type_name = captures.get(1).unwrap().as_str();
+                let value_var = captures.get(2).unwrap().as_str();
+                let full_match = captures.get(0).unwrap();
+
+                eprintln!(
+                    "DEBUG: Found inline typed metavariable syntax: type={}, value_var=${}",
+                    type_name, value_var
+                );
+
+                // Add type constraint directly from the pattern
+                type_constraints.push((value_var.to_string(), type_name.to_string()));
+
+                // Replace "(Type $VAR)" with "$VAR" in the pattern
+                let new_pattern_str =
+                    pattern_str.replacen(full_match.as_str(), &format!("${}", value_var), 1);
+                eprintln!(
+                    "DEBUG: Transformed pattern from '{}' to '{}'",
+                    pattern_str, new_pattern_str
+                );
+
+                let mut new_pattern = Pattern::simple(new_pattern_str);
+                new_pattern.conditions = pattern.conditions.clone();
+                new_pattern.focus = pattern.focus.clone();
+                new_pattern.metavariable_pattern = pattern.metavariable_pattern.clone();
+
+                return (new_pattern, type_constraints);
+            }
         }
 
         // No transformation needed, return original
@@ -1841,6 +1884,8 @@ impl AdvancedRuleExecutor {
     }
 
     /// Check if a variable's type matches the expected type
+    /// Also uses symbolic propagation to track if the variable comes from a method call
+    /// on an object of the expected type
     fn check_variable_type(&self, var_value: &str, expected_type: &str, full_source: &str) -> bool {
         // Build import map for name resolution
         let import_map = self.build_import_map(full_source);
@@ -1899,8 +1944,396 @@ impl AdvancedRuleExecutor {
             }
         }
         
+        // Pattern 3: Use symbolic propagation to check if variable comes from expected type
+        // This handles cases like: ZipEntry c = ...; name = c.getName(); (ZipEntry $X).getName()
+        eprintln!("DEBUG check_variable_type: Checking {} against expected type {}, symbolic_propagator is {}", 
+                 var_value, expected_type, 
+                 if self.symbolic_propagator.is_some() { "Some" } else { "None" });
+        if let Some(ref propagator) = self.symbolic_propagator {
+            eprintln!("DEBUG: Attempting symbolic propagation check for {} -> {}", var_value, expected_type);
+            eprintln!("DEBUG: Symbolic state variables: {:?}", propagator.state().variables.keys().collect::<Vec<_>>());
+            if self.check_type_via_symbolic_propagation(var_value, expected_type, propagator, full_source) {
+                return true;
+            }
+        }
+        
         // If we can't determine the type, be permissive
         eprintln!("DEBUG: Could not determine type for {}, allowing match", var_value);
         true
+    }
+    
+    /// Check if a variable's origin traces back to an object of the expected type
+    /// using symbolic propagation
+    fn check_type_via_symbolic_propagation(
+        &self,
+        var_value: &str,
+        expected_type: &str,
+        propagator: &astgrep_dataflow::SymbolicPropagator,
+        full_source: &str,
+    ) -> bool {
+        use astgrep_dataflow::SymbolicValue;
+        
+        eprintln!("DEBUG: Checking symbolic propagation for {} with expected type {}", 
+                 var_value, expected_type);
+        
+        // Get the symbolic value for this variable
+        let state = propagator.state();
+        if let Some(symbolic_value) = state.get(var_value) {
+            eprintln!("DEBUG: Found symbolic value for {}: {:?}", var_value, symbolic_value);
+            
+            // Get the root variable of this symbolic value
+            if let Some(root_var) = symbolic_value.root_variable() {
+                eprintln!("DEBUG: Root variable for {} is {}", var_value, root_var);
+                
+                // Check if the root variable is of the expected type
+                // Look for variable declaration: "ExpectedType root_var = ..."
+                let var_pattern = format!(r"{}\s+{}\s*[=;]", regex::escape(expected_type), regex::escape(root_var));
+                if let Ok(regex) = regex::Regex::new(&var_pattern) {
+                    if regex.is_match(full_source) {
+                        eprintln!("DEBUG: Found {} declared as {} via symbolic propagation", 
+                                 root_var, expected_type);
+                        return true;
+                    }
+                }
+                
+                // Also check with import resolution
+                let import_map = self.build_import_map(full_source);
+                
+                // Try to find declaration of the root variable
+                let decl_pattern = format!(r"(\w+)\s+{}\s*[=;]", regex::escape(root_var));
+                if let Ok(regex) = regex::Regex::new(&decl_pattern) {
+                    if let Some(captures) = regex.captures(full_source) {
+                        if let Some(type_match) = captures.get(1) {
+                            let actual_type = type_match.as_str();
+                            eprintln!("DEBUG: Root variable {} has type {}", root_var, actual_type);
+                            
+                            // Check if it matches expected type
+                            if actual_type == expected_type {
+                                return true;
+                            }
+                            
+                            // Check with import resolution
+                            if let Some(resolved) = self.resolve_type_with_imports(actual_type, &import_map) {
+                                if resolved == expected_type || resolved.ends_with(&format!(".{}", expected_type)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also check aliases of the variable
+        let aliases = propagator.state().get_all_aliases(var_value);
+        eprintln!("DEBUG: Aliases for {}: {:?}", var_value, aliases);
+        
+        for alias in aliases {
+            // Check if any alias is of the expected type
+            let alias_pattern = format!(r"{}\s+{}\s*[=;]", regex::escape(expected_type), regex::escape(&alias));
+            if let Ok(regex) = regex::Regex::new(&alias_pattern) {
+                if regex.is_match(full_source) {
+                    eprintln!("DEBUG: Found alias {} of type {} via symbolic propagation", 
+                             alias, expected_type);
+                    return true;
+                }
+            }
+            
+            // Check the alias's symbolic value
+            if let Some(alias_symbolic) = state.get(&alias) {
+                if let Some(root_var) = alias_symbolic.root_variable() {
+                    let decl_pattern = format!(r"{}\s+{}\s*[=;]", regex::escape(expected_type), regex::escape(root_var));
+                    if let Ok(regex) = regex::Regex::new(&decl_pattern) {
+                        if regex.is_match(full_source) {
+                            eprintln!("DEBUG: Found root variable {} of type {} via alias symbolic propagation", 
+                                     root_var, expected_type);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        eprintln!("DEBUG: Symbolic propagation did not confirm type {} for {}", 
+                 expected_type, var_value);
+        false
+    }
+    
+    /// Find pattern matches using symbolic propagation
+    /// This is used when direct pattern matching fails but symbolic propagation
+    /// might reveal matches through variable tracking
+    fn find_matches_via_symbolic_propagation(
+        &self,
+        pattern: &astgrep_core::SemgrepPattern,
+        ast: &dyn AstNode,
+        type_constraints: &[(String, String)],
+    ) -> Result<Vec<astgrep_core::SemgrepMatchResult>> {
+        use astgrep_core::SemgrepMatchResult;
+        
+        eprintln!("DEBUG: Searching for symbolic propagation matches with {} type constraints", 
+                 type_constraints.len());
+        
+        let mut matches = Vec::new();
+        
+        // Get the symbolic propagator
+        let propagator = match self.symbolic_propagator {
+            Some(ref p) => p,
+            None => return Ok(matches),
+        };
+        
+        // Extract pattern info - we expect if statement patterns with method calls
+        let pattern_str = match &pattern.pattern_type {
+            astgrep_core::PatternType::Simple(s) => s.as_str(),
+            _ => return Ok(matches),
+        };
+        
+        // Check if this is an if statement pattern with getName().contains()
+        if !pattern_str.contains("if") || !pattern_str.contains("getName") || !pattern_str.contains("contains") {
+            return Ok(matches);
+        }
+        
+        // Get full source code from AST
+        let full_source = ast.text().unwrap_or("").to_string();
+        
+        // Find all if statements in the AST
+        self.find_if_statements_with_symbolic_match(ast, pattern_str, type_constraints, propagator, &full_source, &mut matches)?;
+        
+        eprintln!("DEBUG: Symbolic propagation found {} matches", matches.len());
+        Ok(matches)
+    }
+    
+    /// Find if statements that match via symbolic propagation
+    fn find_if_statements_with_symbolic_match(
+        &self,
+        node: &dyn AstNode,
+        pattern_str: &str,
+        type_constraints: &[(String, String)],
+        propagator: &astgrep_dataflow::SymbolicPropagator,
+        full_source: &str,
+        matches: &mut Vec<astgrep_core::SemgrepMatchResult>,
+    ) -> Result<()> {
+        // Check if this is an if_statement
+        if node.node_type() == "if_statement" {
+            eprintln!("DEBUG: Checking if_statement for symbolic match: {}", 
+                     node.text().unwrap_or("").lines().next().unwrap_or(""));
+            
+            // Check if this if statement matches via symbolic propagation
+            if let Some(match_result) = self.check_if_statement_symbolic_match(
+                node, pattern_str, type_constraints, propagator, full_source
+            )? {
+                eprintln!("DEBUG: Found symbolic match for if_statement");
+                matches.push(match_result);
+            }
+        }
+        
+        // Recursively check children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                self.find_if_statements_with_symbolic_match(
+                    child, pattern_str, type_constraints, propagator, full_source, matches
+                )?;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Check if an if statement matches the pattern via symbolic propagation
+    fn check_if_statement_symbolic_match(
+        &self,
+        if_node: &dyn AstNode,
+        pattern_str: &str,
+        type_constraints: &[(String, String)],
+        propagator: &astgrep_dataflow::SymbolicPropagator,
+        full_source: &str,
+    ) -> Result<Option<astgrep_core::SemgrepMatchResult>> {
+        use astgrep_core::SemgrepMatchResult;
+        use std::collections::HashMap;
+
+        // Extract condition from if statement
+        // Look for condition like "(b1 && b2)" or "(name == null)"
+        let condition_text = self.extract_if_condition(if_node);
+        eprintln!("DEBUG: If condition: {:?}", condition_text);
+
+        if condition_text.is_none() {
+            return Ok(None);
+        }
+        let condition = condition_text.unwrap();
+
+        // For each type constraint, check if condition variables involve that type
+        let mut bindings = HashMap::new();
+
+        for (var_name, expected_type) in type_constraints {
+            eprintln!("DEBUG: Checking if condition '{}' involves variable '${}' of type '{}'",
+                     condition, var_name, expected_type);
+
+            // Extract variables used in condition (e.g., "b1 && b2" -> ["b1", "b2"])
+            let condition_vars = self.extract_variables_from_condition(&condition);
+            eprintln!("DEBUG: Variables in condition: {:?}", condition_vars);
+
+            for cond_var in condition_vars {
+                // Check if this variable traces back to expected type via symbolic propagation
+                // AND ensure it involves a contains() call
+                if self.check_variable_type_via_symbolic_propagation(
+                    &cond_var, expected_type, propagator, &full_source
+                ) && self.variable_involves_contains(
+                    &cond_var, &full_source
+                ) {
+                    eprintln!("DEBUG: Variable '{}' matches type '{}' via symbolic propagation and involves contains()",
+                             cond_var, expected_type);
+                    // Bind the pattern variable to this condition variable
+                    bindings.insert(var_name.clone(), cond_var);
+                }
+            }
+        }
+
+        // If we found bindings for all type constraints, create a match result
+        if bindings.len() == type_constraints.len() {
+            eprintln!("DEBUG: Creating symbolic match result with bindings: {:?}", bindings);
+            Ok(Some(SemgrepMatchResult::new(if_node.clone_node(), bindings)))
+        } else {
+            eprintln!("DEBUG: Not all type constraints satisfied. Found {} of {} bindings",
+                     bindings.len(), type_constraints.len());
+            Ok(None)
+        }
+    }
+
+    /// Extract the condition text from an if statement node
+    fn extract_if_condition(&self, if_node: &dyn AstNode) -> Option<String> {
+        // The condition is typically child 1 (child 0 is "if", child 1 is condition, child 2 is body)
+        if if_node.child_count() >= 2 {
+            if let Some(condition_node) = if_node.child(1) {
+                return condition_node.text().map(|s| s.to_string());
+            }
+        }
+        None
+    }
+    
+    /// Extract variable names from a condition string
+    fn extract_variables_from_condition(&self, condition: &str) -> Vec<String> {
+        // Simple regex to find identifier-like tokens
+        let re = regex::Regex::new(r"\b([a-zA-Z_]\w*)\b").unwrap();
+        re.captures_iter(condition)
+            .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
+            .filter(|name| {
+                // Filter out keywords
+                !matches!(name.as_str(), "if" | "else" | "while" | "for" | "return" | "true" | "false" | "null")
+            })
+            .collect()
+    }
+    
+    /// Check if a variable's type matches expected type using symbolic propagation
+    fn check_variable_type_via_symbolic_propagation(
+        &self,
+        var_value: &str,
+        expected_type: &str,
+        propagator: &astgrep_dataflow::SymbolicPropagator,
+        full_source: &str,
+    ) -> bool {
+        use astgrep_dataflow::SymbolicValue;
+        
+        eprintln!("DEBUG check_var_type_sym: Checking if '{}' traces to type '{}'", var_value, expected_type);
+        
+        // Get the symbolic value for this variable
+        let state = propagator.state();
+        
+        // Direct check: is this variable of the expected type?
+        if let Some(symbolic_value) = state.get(var_value) {
+            eprintln!("DEBUG: Found symbolic value for {}: {:?}", var_value, symbolic_value);
+            
+            // Get the root variable
+            if let Some(root_var) = symbolic_value.root_variable() {
+                eprintln!("DEBUG: Root variable is {}", root_var);
+                
+                // Check if root variable is of expected type
+                let var_pattern = format!(r"{}\s+{}\s*[=;]", regex::escape(expected_type), regex::escape(root_var));
+                if let Ok(regex) = regex::Regex::new(&var_pattern) {
+                    if regex.is_match(full_source) {
+                        eprintln!("DEBUG: Found direct type match for {}", root_var);
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // Check if this variable is defined using the expected type
+        // Look for patterns like "Type var = ..." or "boolean var = Type.method()"
+        let decl_pattern = format!(r"\w+\s+{}\s*=\s*[^;]*", regex::escape(var_value));
+        if let Ok(regex) = regex::Regex::new(&decl_pattern) {
+            if let Some(cap) = regex.captures(full_source) {
+                let decl = cap.get(0).map(|m| m.as_str()).unwrap_or("");
+                eprintln!("DEBUG: Found declaration for {}: {}", var_value, decl);
+                
+                // Check if declaration involves the expected type
+                // For example: "boolean b1 = !name.contains(...)" where name comes from ZipEntry
+                if decl.contains("contains") || decl.contains("getName") {
+                    // Extract the source variable (e.g., "name" from "name.contains")
+                    if let Some(source_var) = self.extract_source_variable_from_declaration(decl) {
+                        eprintln!("DEBUG: Source variable in declaration: {}", source_var);
+                        
+                        // Check if source variable traces to expected type
+                        if let Some(symbolic_value) = state.get(&source_var) {
+                            if let Some(root_var) = symbolic_value.root_variable() {
+                                let type_pattern = format!(r"{}\s+{}\s*[=;]", 
+                                    regex::escape(expected_type), regex::escape(root_var));
+                                if let Ok(regex) = regex::Regex::new(&type_pattern) {
+                                    if regex.is_match(full_source) {
+                                        eprintln!("DEBUG: Source variable {} traces to type {}", 
+                                                 root_var, expected_type);
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check aliases
+        let aliases = propagator.state().get_all_aliases(var_value);
+        for alias in aliases {
+            if let Some(alias_symbolic) = state.get(&alias) {
+                if let Some(root_var) = alias_symbolic.root_variable() {
+                    let type_pattern = format!(r"{}\s+{}\s*[=;]", 
+                        regex::escape(expected_type), regex::escape(root_var));
+                    if let Ok(regex) = regex::Regex::new(&type_pattern) {
+                        if regex.is_match(full_source) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        false
+    }
+    
+    /// Check if a variable's declaration involves a contains() call
+    fn variable_involves_contains(&self, var_name: &str, full_source: &str) -> bool {
+        // Look for the variable declaration in the source
+        let decl_pattern = format!(r"\w+\s+{}\s*=\s*[^;]*", regex::escape(var_name));
+        if let Ok(regex) = regex::Regex::new(&decl_pattern) {
+            if let Some(cap) = regex.captures(full_source) {
+                let decl = cap.get(0).map(|m| m.as_str()).unwrap_or("");
+                eprintln!("DEBUG: Checking if declaration for '{}' involves contains(): {}", var_name, decl);
+                // Check if the declaration contains a contains() call
+                return decl.contains(".contains(");
+            }
+        }
+        false
+    }
+
+    /// Extract the source variable from a declaration like "boolean b1 = !name.contains(...)"
+    fn extract_source_variable_from_declaration(
+        &self,
+        decl: &str,
+    ) -> Option<String> {
+        // Look for patterns like "name.contains" or "obj.method"
+        let re = regex::Regex::new(r"(\w+)\.(?:getName|contains)").unwrap();
+        let result: Option<String> = re.captures_iter(decl)
+            .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
+            .next();
+        result
     }
 }

@@ -124,7 +124,7 @@ impl RuleParser {
         Ok(rule)
     }
 
-    /// Parse optional options block; currently recognizes sql_statement_boundary
+    /// Parse optional options block; currently recognizes sql_statement_boundary and symbolic_propagation
     fn parse_options(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Option<HashMap<String, String>>> {
         let options_value = obj.get(&Value::String("options".to_string()));
         if options_value.is_none() { return Ok(None); }
@@ -133,6 +133,8 @@ impl RuleParser {
             .as_mapping()
             .ok_or_else(|| AnalysisError::parse_error("'options' must be an object".to_string()))?;
         let mut options = HashMap::new();
+        
+        // Parse sql_statement_boundary option
         if let Some(val) = options_obj.get(&Value::String("sql_statement_boundary".to_string())) {
             // Accept boolean or string "on"/"off" and stringify to "true"/"false"
             let str_val = if let Some(b) = val.as_bool() {
@@ -150,6 +152,23 @@ impl RuleParser {
             };
             options.insert("sql_statement_boundary".to_string(), str_val);
         }
+        
+        // Parse symbolic_propagation option
+        if let Some(val) = options_obj.get(&Value::String("symbolic_propagation".to_string())) {
+            let str_val = if let Some(b) = val.as_bool() {
+                b.to_string()
+            } else if let Some(s) = val.as_str() {
+                match s.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" | "yes" => "true".to_string(),
+                    "off" | "false" | "0" | "no" => "false".to_string(),
+                    _ => s.to_string(),
+                }
+            } else {
+                return Ok(Some(options));
+            };
+            options.insert("symbolic_propagation".to_string(), str_val);
+        }
+        
         Ok(Some(options))
     }
 

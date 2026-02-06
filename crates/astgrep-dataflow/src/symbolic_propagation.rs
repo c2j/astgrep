@@ -14,6 +14,35 @@
 use astgrep_core::{AstNode, Result};
 use std::collections::{HashMap, HashSet};
 
+fn is_operator_node(node_type: &str, node_text: Option<&str>) -> bool {
+    // Check by known operator types
+    if matches!(node_type,
+        "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "++" | "--" |
+        "+" | "-" | "*" | "/" | "%" |
+        "==" | "!=" | "<" | ">" | "<=" | ">=" |
+        "&&" | "||" | "!" | "&" | "|" | "^" | "~" |
+        "<<" | ">>" | ">>>" |
+        "assignment_operator" | "operator"
+    ) {
+        return true;
+    }
+
+    // Check by node text (handles cases where node_type is unknown)
+    if let Some(text) = node_text {
+        if text.len() <= 3 && matches!(text,
+            "=" | "+=" | "-=" | "*=" | "/=" | "%=" |
+            "+" | "-" | "*" | "/" | "%" |
+            "==" | "!=" | "<" | ">" | "<=" | ">=" |
+            "&&" | "||" | "!" | "&" | "|" | "^" | "~" |
+            "<<" | ">>" | ">>>"
+        ) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// A symbolic value representing the origin of data
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SymbolicValue {
@@ -368,14 +397,19 @@ impl SymbolicPropagator {
 
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                match child.node_type() {
+                let child_type = child.node_type();
+                let child_text = child.text();
+                match child_type {
                     "identifier" => {
                         if left.is_none() {
-                            left = child.text().map(|s| s.to_string());
+                            left = child_text.map(|s| s.to_string());
                         }
                     }
                     _ => {
-                        if right.is_none() {
+                        // Skip operator nodes like "="
+                        if right.is_none() && !is_operator_node(child_type, child_text) {
+                            eprintln!("DEBUG analyze_assignment: Setting right from child {} (type={}, text='{}')",
+                                     i, child_type, child_text.unwrap_or(""));
                             right = Some(child.clone_node());
                         }
                     }
@@ -383,8 +417,10 @@ impl SymbolicPropagator {
             }
         }
 
-        if let (Some(var_name), Some(rhs)) = (left, right) {
-            let symbolic_value = self.node_to_symbolic_value(rhs.as_ref());
+        // Bind the left variable to the symbolic value of the right side
+        if let (Some(var_name), Some(right_node)) = (left, right) {
+            let symbolic_value = self.node_to_symbolic_value(right_node.as_ref());
+            eprintln!("DEBUG analyze_assignment: Binding '{}' to symbolic value: {:?}", var_name, symbolic_value);
             self.state.bind(var_name, symbolic_value);
         }
 
@@ -420,8 +456,28 @@ impl SymbolicPropagator {
     fn node_to_symbolic_value(
         &self, node: &dyn AstNode
     ) -> SymbolicValue {
-        // Convert to dyn AstNode and delegate
-        self.extract_field_access_dyn(node)
+        let node_type = node.node_type();
+        let node_text = node.text();
+        eprintln!("DEBUG node_to_symbolic_value: node_type={}, text={:?}", node_type, node_text);
+
+        match node_type {
+            "method_invocation" | "call_expression" => {
+                eprintln!("DEBUG: Extracting as method call");
+                let result = self.extract_method_call_dyn(node);
+                eprintln!("DEBUG: Method call result: {:?}", result);
+                result
+            },
+            "field_access" => self.extract_field_access_dyn(node),
+            _ => {
+                // For other nodes, try to extract as method call or field access
+                let method_result = self.extract_method_call_dyn(node);
+                if !matches!(method_result, SymbolicValue::Unknown) {
+                    method_result
+                } else {
+                    self.extract_field_access_dyn(node)
+                }
+            }
+        }
     }
 
     /// Helper to extract method call from any AstNode reference
@@ -485,26 +541,36 @@ impl SymbolicPropagator {
         let mut base = None;
         let mut method = None;
 
+        eprintln!("DEBUG extract_method_call_dyn: node_type={}, child_count={}", node.node_type(), node.child_count());
+
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                match child.node_type() {
+                let child_type = child.node_type();
+                let child_text = child.text();
+                eprintln!("DEBUG extract_method_call_dyn: child {} type={}, text={:?}", i, child_type, child_text);
+
+                match child_type {
                     "identifier" => {
                         if base.is_none() {
-                            base = child.text().map(|s| SymbolicValue::variable(&s));
+                            base = child_text.map(|s| SymbolicValue::variable(&s));
+                            eprintln!("DEBUG: Set base to {:?}", base);
                         } else if method.is_none() {
-                            method = child.text().map(|s| s.to_string());
+                            method = child_text.map(|s| s.to_string());
+                            eprintln!("DEBUG: Set method to {:?}", method);
                         }
                     }
                     "field_access" => {
                         base = Some(self.extract_field_access_dyn(child));
+                        eprintln!("DEBUG: Set base from field_access to {:?}", base);
                     }
                     _ => {
                         // Try to extract method name from text
-                        if let Some(text) = child.text() {
+                        if let Some(text) = child_text {
                             if text.contains("(") && method.is_none() {
                                 let parts: Vec<&str> = text.split('(').collect();
                                 if !parts.is_empty() {
                                     method = Some(parts[0].to_string());
+                                    eprintln!("DEBUG: Set method from text to {:?}", method);
                                 }
                             }
                         }
@@ -512,6 +578,8 @@ impl SymbolicPropagator {
                 }
             }
         }
+
+        eprintln!("DEBUG extract_method_call_dyn: Final base={:?}, method={:?}", base, method);
 
         if let (Some(base), Some(method)) = (base, method) {
             SymbolicValue::method_call(base, &method)

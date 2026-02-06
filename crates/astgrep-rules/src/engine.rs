@@ -297,16 +297,21 @@ impl RuleExecutionEngine {
 
         // 2) Simple patterns (with or without metavariables): scan full source and emit one finding per occurrence
         if let PatternType::Simple(ref pattern_str) = &pattern.pattern_type {
-            // If pattern has conditions (like metavariable-comparison), use AdvancedRuleExecutor
-            if !pattern.conditions.is_empty() {
-                println!("🔍 Pattern has {} conditions, using AdvancedRuleExecutor", pattern.conditions.len());
+            // If pattern has conditions (like metavariable-comparison) or requires symbolic propagation, use AdvancedRuleExecutor
+            let requires_advanced = !pattern.conditions.is_empty() || rule.requires_symbolic_propagation();
+            if requires_advanced {
+                if rule.requires_symbolic_propagation() {
+                    println!("🔍 Pattern requires symbolic propagation, using AdvancedRuleExecutor");
+                } else {
+                    println!("🔍 Pattern has {} conditions, using AdvancedRuleExecutor", pattern.conditions.len());
+                }
                 use crate::executor::AdvancedRuleExecutor;
                 let mut advanced_executor = AdvancedRuleExecutor::new();
-                
+
                 // Create a rule with just this pattern
                 let mut single_pattern_rule = rule.clone();
                 single_pattern_rule.patterns = vec![pattern.clone()];
-                
+
                 // Execute using advanced executor with constant propagation enabled
                 let file_path = std::path::Path::new(&context.file_path);
                 let result = advanced_executor.execute_comprehensive_analysis(
@@ -316,11 +321,11 @@ impl RuleExecutionEngine {
                     Some(file_path),
                     true, // enable constant propagation
                 )?;
-                
+
                 println!("🔍 AdvancedRuleExecutor found {} findings", result.findings.len());
                 return Ok(result.findings);
             }
-            
+
             let seg_by_stmt = if matches!(context.language, astgrep_core::Language::Sql) {
                 Self::effective_sql_stmt_boundary(rule, context)
             } else { false };

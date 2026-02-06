@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月 6日 星期五 17时05分35秒 CST
+Generated on: 2026年 2月 7日 星期六 00时30分02秒 CST
 
 ## Test Summary
 
@@ -30,13 +30,13 @@ Generated on: 2026年 2月 6日 星期五 17时05分35秒 CST
 | metavar_comparison_bitor |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitxor |  | 1 | 1 | ✅ MATCH |
 | metavar_name_imported_entity_java |  | 2 | 2 | ✅ MATCH |
-| metavar_type_not_java |  | 1 | 2 | ❌ DIFFER |
+| metavar_type_not_java |  | 1 | 1 | ✅ MATCH |
 | metavar_type_str_eq_java |  | 2 | 2 | ✅ MATCH |
-| metavariable_name_resolution |  | 1 | 00 | ❌ DIFFER |
+| metavariable_name_resolution |  | 1 | 1 | ✅ MATCH |
 | misc_name_and_neg |  | 00 | 00 | ✅ MATCH |
-| naming_class_attribute |  | 2 | 00 | ❌ DIFFER |
-| non_irrelevant_rule |  | 1 | 00 | ❌ DIFFER |
-| sym_prop_class_attr | taint | 2 | 00 | ❌ DIFFER |
+| naming_class_attribute |  | 2 | 2 | ✅ MATCH |
+| non_irrelevant_rule |  | 1 | 1 | ✅ MATCH |
+| sym_prop_class_attr | taint | 2 | 2 | ✅ MATCH |
 | sym_prop_deep |  | 1 | 00 | ❌ DIFFER |
 | sym_prop_merge1 |  | 2 | 00 | ❌ DIFFER |
 | sym_prop_merge2 |  | 1 | 00 | ❌ DIFFER |
@@ -57,15 +57,15 @@ Generated on: 2026年 2月 6日 星期五 17时05分35秒 CST
 | taint_propagator_lambda | taint | 4 | 00 | ❌ DIFFER |
 | taint_propagator4 | taint | 1 | 00 | ❌ DIFFER |
 | taint_this1 | taint | 3 | 00 | ❌ DIFFER |
-| tainted-file-path | taint | 1 | 1 | ✅ MATCH |
+| tainted-file-path | taint | 1 | 00 | ❌ DIFFER |
 | typed_metavar_not |  | 00 | 00 | ✅ MATCH |
 
 ### Summary Statistics
 
-- **Matching results**: 14 tests
-- **Differing results**: 24 tests
+- **Matching results**: 18 tests
+- **Differing results**: 20 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 36%
+- **Compatibility rate**: 47%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月 6日 星期五 17时06分47秒 CST
+**Report Generated**: 2026年 2月 7日 星期六 00时31分36秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development
