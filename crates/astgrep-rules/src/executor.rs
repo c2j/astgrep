@@ -16,6 +16,8 @@ pub struct AdvancedRuleExecutor {
     pattern_matcher: AdvancedSemgrepMatcher,
     dataflow_analyzer: DataFlowAnalyzer,
     execution_stats: ExecutionStatistics,
+    /// Constant propagator for variable value tracking
+    constant_propagator: Option<astgrep_dataflow::ConstantPropagator>,
 }
 
 impl AdvancedRuleExecutor {
@@ -25,6 +27,7 @@ impl AdvancedRuleExecutor {
             pattern_matcher: AdvancedSemgrepMatcher::new(),
             dataflow_analyzer: DataFlowAnalyzer::new(),
             execution_stats: ExecutionStatistics::new(),
+            constant_propagator: None,
         }
     }
 
@@ -49,7 +52,7 @@ impl AdvancedRuleExecutor {
         }
 
         // Perform constant propagation analysis if enabled
-        let constant_values = if enable_constant_propagation {
+        self.constant_propagator = if enable_constant_propagation {
             use astgrep_dataflow::ConstantPropagator;
             let mut propagator = ConstantPropagator::new();
             match propagator.analyze_ast(ast) {
@@ -57,19 +60,22 @@ impl AdvancedRuleExecutor {
                     if !values.is_empty() {
                         tracing::info!("Constant propagation found {} constants", values.len());
                     }
-                    values
+                    // Set constant values in the pattern matcher
+                    eprintln!("DEBUG: Setting {} constant values in pattern matcher", values.len());
+                    for (k, v) in &values {
+                        eprintln!("DEBUG: Constant {} = {:?}", k, v);
+                    }
+                    self.pattern_matcher.set_constant_values(values);
+                    Some(propagator)
                 }
                 Err(e) => {
                     tracing::warn!("Constant propagation analysis failed: {}", e);
-                    HashMap::new()
+                    None
                 }
             }
         } else {
-            HashMap::new()
+            None
         };
-
-        // Set constant values in the pattern matcher
-        self.pattern_matcher.set_constant_values(constant_values);
 
         // Perform data flow analysis if needed
         let dataflow_analysis = if applicable_rules.iter().any(|r| r.requires_dataflow()) {
@@ -175,6 +181,10 @@ impl AdvancedRuleExecutor {
 
         // Find pattern matches using the advanced matcher
         let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+        eprintln!("DEBUG execute_pattern_analysis: found {} matches", matches.len());
+        for (i, m) in matches.iter().enumerate() {
+            eprintln!("DEBUG match {}: bindings={:?}", i, m.bindings);
+        }
 
         // Heuristic de-dup: keep only smallest, non-overlapping spans to avoid repeated matches
         let mut mm: Vec<((usize, usize), usize, usize, usize, usize, SemgrepMatchResult)> = matches
@@ -285,9 +295,36 @@ impl AdvancedRuleExecutor {
             }
             Condition::MetavariableComparison(metavar_comp) => {
                 // Check if metavariable exists and satisfies comparison
+                eprintln!("DEBUG evaluate_condition: MetavariableComparison for '{}', bindings: {:?}", 
+                         metavar_comp.metavariable, match_result.bindings.keys().collect::<Vec<_>>());
                 if let Some(metavar_value) = match_result.bindings.get(&metavar_comp.metavariable) {
-                    self.evaluate_comparison(metavar_value, &metavar_comp.operator, &metavar_comp.value)
+                    eprintln!("DEBUG: Found value '{}' for metavariable '{}'", metavar_value, metavar_comp.metavariable);
+                    
+                    // Try to resolve the variable to its constant value using constant propagation
+                    let resolved_value = if let Some(ref propagator) = self.constant_propagator {
+                        // Get the location of the matched node
+                        if let Some((start_line, start_col, _, _)) = match_result.node.location() {
+                            use astgrep_dataflow::SourceLocation;
+                            let location = SourceLocation::new(start_line, start_col);
+                            
+                            // Try to get the constant value at this location
+                            if let Some(constant) = propagator.get_variable_value_at_location(metavar_value, location) {
+                                let constant_str = constant.to_string_value().unwrap_or_else(|| metavar_value.clone());
+                                eprintln!("DEBUG: Resolved variable '{}' to constant '{}' at {:?}", metavar_value, constant_str, location);
+                                constant_str
+                            } else {
+                                metavar_value.clone()
+                            }
+                        } else {
+                            metavar_value.clone()
+                        }
+                    } else {
+                        metavar_value.clone()
+                    };
+                    
+                    self.evaluate_comparison(&resolved_value, &metavar_comp.operator, &metavar_comp.value)
                 } else {
+                    eprintln!("DEBUG: Metavariable '{}' not found in bindings", metavar_comp.metavariable);
                     Ok(false)
                 }
             }
@@ -526,6 +563,8 @@ impl AdvancedRuleExecutor {
     fn evaluate_python_expression(&self, value: &str, expr: &str) -> Result<bool> {
         // This is a simplified implementation
         // In a full implementation, you would use a Python interpreter
+        
+        eprintln!("DEBUG evaluate_python_expression: value='{}', expr='{}'", value, expr);
 
         // Handle some common patterns
         if expr.contains("len(") {
@@ -538,7 +577,61 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        // Handle bit operations like "$X & 1 == 1"
+        // Parse expressions like "$VAR & 1 == 1" or "$VAR & 1 == 0"
+        if expr.contains('&') && expr.contains("==") {
+            // Try to parse the expression
+            // Format: $VAR & N == M
+            let parts: Vec<&str> = expr.split("==").collect();
+            if parts.len() == 2 {
+                let left_side = parts[0].trim();
+                let expected_result = parts[1].trim();
+                
+                // Parse the bit operation: $VAR & N
+                if left_side.contains('&') {
+                    let bit_parts: Vec<&str> = left_side.split('&').collect();
+                    if bit_parts.len() == 2 {
+                        let var_part = bit_parts[0].trim();
+                        let mask_part = bit_parts[1].trim();
+                        
+                        eprintln!("DEBUG: var_part='{}', mask_part='{}', expected='{}'", var_part, mask_part, expected_result);
+                        
+                        // Check if this is the metavariable we're evaluating
+                        if var_part.starts_with("$") {
+                            // Parse the mask value
+                            if let Ok(mask) = mask_part.parse::<i64>() {
+                                // Parse the expected result
+                                if let Ok(expected) = expected_result.parse::<i64>() {
+                                    // Parse the actual value
+                                    if let Ok(val) = value.parse::<i64>() {
+                                        let result = val & mask;
+                                        eprintln!("DEBUG: val={}, mask={}, result={}, expected={}", val, mask, result, expected);
+                                        return Ok(result == expected);
+                                    } else {
+                                        eprintln!("DEBUG: Failed to parse value '{}' as i64", value);
+                                    }
+                                } else {
+                                    eprintln!("DEBUG: Failed to parse expected '{}' as i64", expected_result);
+                                }
+                            } else {
+                                eprintln!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
+                            }
+                        } else {
+                            eprintln!("DEBUG: var_part '{}' doesn't start with $", var_part);
+                        }
+                    } else {
+                        eprintln!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
+                    }
+                } else {
+                    eprintln!("DEBUG: left_side '{}' doesn't contain &", left_side);
+                }
+            } else {
+                eprintln!("DEBUG: parts.len() = {}, expected 2", parts.len());
+            }
+        }
+
         // For now, just return true for unsupported expressions
+        eprintln!("DEBUG: Expression '{}' not handled, returning true", expr);
         Ok(true)
     }
 
@@ -1136,12 +1229,78 @@ impl AdvancedRuleExecutor {
             }
         };
 
+        // Convert conditions
+        let conditions: Vec<astgrep_core::Condition> = pattern.conditions.iter()
+            .map(|cond| self.convert_condition_to_core(cond))
+            .collect::<Result<Vec<_>>>()?;
+
         Ok(SemgrepPattern {
             pattern_type: core_pattern_type,
             metavariable_pattern: None, // TODO: Convert metavariable patterns
-            conditions: Vec::new(), // TODO: Convert conditions
+            conditions,
             focus: pattern.focus.clone(),
         })
+    }
+
+    /// Convert astgrep_rules::Condition to astgrep_core::Condition
+    fn convert_condition_to_core(&self, condition: &Condition) -> Result<astgrep_core::Condition> {
+        use astgrep_core::{Condition as CoreCondition, MetavariableComparison as CoreMetavariableComparison, ComparisonOperator as CoreComparisonOperator};
+        use astgrep_core::{MetavariableRegex as CoreMetavariableRegex, MetavariableName as CoreMetavariableName, MetavariableAnalysisCondition as CoreMetavariableAnalysisCondition};
+
+        match condition {
+            Condition::MetavariableRegex(metavar_regex) => {
+                // Convert MetavariableRegex to core Condition
+                let core_regex = CoreMetavariableRegex {
+                    metavariable: metavar_regex.metavariable.clone(),
+                    regex: metavar_regex.regex.clone(),
+                };
+                Ok(CoreCondition::MetavariableRegex(core_regex))
+            }
+            Condition::MetavariableComparison(metavar_comp) => {
+                // Convert MetavariableComparison to core Condition
+                let core_comp = CoreMetavariableComparison {
+                    metavariable: metavar_comp.metavariable.clone(),
+                    operator: match &metavar_comp.operator {
+                        ComparisonOperator::Equals => CoreComparisonOperator::Equals,
+                        ComparisonOperator::NotEquals => CoreComparisonOperator::NotEquals,
+                        ComparisonOperator::Contains => CoreComparisonOperator::Contains,
+                        ComparisonOperator::StartsWith => CoreComparisonOperator::StartsWith,
+                        ComparisonOperator::EndsWith => CoreComparisonOperator::EndsWith,
+                        ComparisonOperator::Matches => CoreComparisonOperator::Matches,
+                        ComparisonOperator::GreaterThan => CoreComparisonOperator::GreaterThan,
+                        ComparisonOperator::LessThan => CoreComparisonOperator::LessThan,
+                        ComparisonOperator::PythonExpression(expr) => CoreComparisonOperator::PythonExpression(expr.clone()),
+                    },
+                    value: metavar_comp.value.clone(),
+                };
+                Ok(CoreCondition::MetavariableComparison(core_comp))
+            }
+            Condition::MetavariableName(metavar_name) => {
+                // Convert MetavariableName to core Condition
+                let core_name = CoreMetavariableName {
+                    metavariable: metavar_name.metavariable.clone(),
+                    name_pattern: metavar_name.name_pattern.clone(),
+                };
+                Ok(CoreCondition::MetavariableName(core_name))
+            }
+            Condition::MetavariableAnalysis(metavar_analysis) => {
+                // Convert MetavariableAnalysis to core Condition
+                let core_analysis = CoreMetavariableAnalysisCondition {
+                    metavariable: metavar_analysis.metavariable.clone(),
+                    analysis: metavar_analysis.analysis.clone(),
+                };
+                Ok(CoreCondition::MetavariableAnalysis(core_analysis))
+            }
+            Condition::NodeType(node_type) => {
+                Ok(CoreCondition::NodeType(node_type.clone()))
+            }
+            Condition::NodeAttribute(attr_name, attr_value) => {
+                Ok(CoreCondition::NodeAttribute(attr_name.clone(), attr_value.clone()))
+            }
+            Condition::Custom(custom) => {
+                Ok(CoreCondition::Custom(custom.clone()))
+            }
+        }
     }
 }
 

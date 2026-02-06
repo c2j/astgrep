@@ -3,7 +3,7 @@
 //! This module provides functionality to parse rules from YAML format.
 
 use crate::types::*;
-use astgrep_core::{AnalysisError, Confidence, Language, Result, Severity};
+use astgrep_core::{AnalysisError, Confidence, Language, Result, Severity, ComparisonOperator};
 use astgrep_core::{MetavariableAnalysis, EntropyAnalysis, TypeAnalysis, ComplexityAnalysis};
 use serde_yaml::Value;
 use std::collections::HashMap;
@@ -268,13 +268,56 @@ impl RuleParser {
             .as_sequence()
             .ok_or_else(|| AnalysisError::parse_error(format!("Rule {} 'patterns' must be an array", index)))?;
 
-        let mut patterns = Vec::new();
+        let mut patterns: Vec<Pattern> = Vec::new();
         for (pattern_index, pattern_value) in patterns_array.iter().enumerate() {
+            // Check if this is a metavariable-comparison (not a pattern, but a condition)
+            if let Some(mapping) = pattern_value.as_mapping() {
+                if mapping.contains_key(&Value::String("metavariable-comparison".to_string())) {
+                    // This is a metavariable-comparison condition, parse it and add to the last pattern
+                    if let Some(last_pattern) = patterns.last_mut() {
+                        if let Some(metavar_comp_value) = mapping.get(&Value::String("metavariable-comparison".to_string())) {
+                            let metavar_comp = self.parse_metavariable_comparison(metavar_comp_value, index, pattern_index)?;
+                            last_pattern.conditions.push(Condition::MetavariableComparison(metavar_comp));
+                        }
+                    }
+                    continue;
+                }
+            }
+            
             let pattern = self.parse_single_pattern(pattern_value, index, pattern_index)?;
             patterns.push(pattern);
         }
 
         Ok(patterns)
+    }
+    
+    /// Parse metavariable comparison
+    fn parse_metavariable_comparison(&self, value: &Value, rule_index: usize, pattern_index: usize) -> Result<MetavariableComparison> {
+        let metavar_obj = value
+            .as_mapping()
+            .ok_or_else(|| AnalysisError::parse_error(format!(
+                "Rule {} pattern {} metavariable-comparison must be an object",
+                rule_index, pattern_index
+            )))?;
+        
+        let metavariable = self.get_string_field(metavar_obj, "metavariable", rule_index)?;
+        let comparison = self.get_string_field(metavar_obj, "comparison", rule_index)?;
+        
+        // Remove $ prefix from metavariable name if present (bindings don't include $)
+        let metavariable = if metavariable.starts_with('$') {
+            metavariable[1..].to_string()
+        } else {
+            metavariable
+        };
+        
+        // Parse the comparison expression and create appropriate operator
+        // For now, store the full expression as a PythonExpression
+        let operator = ComparisonOperator::PythonExpression(comparison);
+        
+        // The value field is not used when we have a PythonExpression, but we need to provide something
+        let value = String::new();
+        
+        Ok(MetavariableComparison::new(metavariable, operator, value))
     }
 
     /// Parse pattern-either (OR logic)

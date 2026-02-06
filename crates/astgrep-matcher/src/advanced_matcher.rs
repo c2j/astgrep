@@ -87,19 +87,28 @@ impl AdvancedSemgrepMatcher {
 
         // First, recurse into children
         let mut subtree_has_match = false;
+        eprintln!("DEBUG: Recursing into {} children of node type: {}", node.child_count(), node.node_type());
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
+                eprintln!("DEBUG: Processing child {} of type: {}", i, child.node_type());
                 if self.find_matches_recursive(pattern, child, matches, depth + 1)? {
                     subtree_has_match = true;
+                    eprintln!("DEBUG: Child {} matched!", i);
                 }
+            } else {
+                eprintln!("DEBUG: Child {} is None", i);
             }
         }
 
         // Try to match at current node only if no descendant produced a match
         if !subtree_has_match {
             let snapshot = self.metavar_manager.snapshot();
+            eprintln!("DEBUG: Trying to match at node type: {}, text: {:?}", 
+                     node.node_type(), 
+                     node.text().map(|t| &t[..t.len().min(50)]));
             if self.matches_pattern(pattern, node)? {
                 let bindings = self.metavar_manager.get_binding_values();
+                eprintln!("DEBUG: Match found at node type: {}, bindings: {:?}", node.node_type(), bindings);
                 matches.push(SemgrepMatchResult::new(node.clone_node(), bindings));
                 self.metavar_manager.restore(snapshot);
                 return Ok(true);
@@ -326,15 +335,163 @@ impl AdvancedSemgrepMatcher {
         Ok(node.node_type() == expected_type)
     }
 
-    /// Match sequence of patterns
+    /// Match sequence of patterns against a node's children
+    /// This handles patterns like "return $X;" by matching against the node's child sequence
     fn match_sequence(&mut self, patterns: &[ParsedPattern], node: &dyn AstNode, depth: usize) -> Result<bool> {
-        // For now, just check if all patterns match the current node
-        for pattern in patterns {
-            if !self.match_parsed_pattern(pattern, node, depth + 1)? {
+        // Check if this node type is appropriate for the pattern
+        let pattern_text = patterns.iter()
+            .map(|p| match p {
+                ParsedPattern::Literal(s) => s.clone(),
+                ParsedPattern::Metavariable(s) => format!("${}", s),
+                _ => "".to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        
+        // For patterns containing "return", only match at return_statement nodes
+        if pattern_text.to_lowercase().contains("return") {
+            let node_type = node.node_type();
+            if node_type != "return_statement" && !node_type.contains("return") {
+                // Try matching against children instead
+                for i in 0..node.child_count() {
+                    if let Some(child) = node.child(i) {
+                        let snapshot = self.metavar_manager.snapshot();
+                        if self.match_sequence(patterns, child, depth + 1)? {
+                            return Ok(true);
+                        }
+                        self.metavar_manager.restore(snapshot);
+                    }
+                }
                 return Ok(false);
             }
         }
+        
+        // Try to match against the current node's text
+        let node_text = node.text().unwrap_or("");
+        
+        // Try to match the pattern sequence against the node's text
+        if self.match_sequence_against_text(patterns, node_text, node, depth)? {
+            return Ok(true);
+        }
+        
+        // If no match at current node, try matching against children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                let snapshot = self.metavar_manager.snapshot();
+                if self.match_sequence(patterns, child, depth + 1)? {
+                    return Ok(true);
+                }
+                self.metavar_manager.restore(snapshot);
+            }
+        }
+        
+        Ok(false)
+    }
+    
+    /// Match a sequence of patterns against text
+    fn match_sequence_against_text(
+        &mut self, 
+        patterns: &[ParsedPattern], 
+        text: &str, 
+        node: &dyn AstNode,
+        _depth: usize
+    ) -> Result<bool> {
+        // Tokenize the text
+        let text_tokens = self.tokenize(text);
+        
+        // Try to find a matching position in the text tokens
+        for start_pos in 0..text_tokens.len() {
+            let snapshot = self.metavar_manager.snapshot();
+            if self.try_match_sequence_at_position(patterns, &text_tokens, start_pos, node)? {
+                return Ok(true);
+            }
+            self.metavar_manager.restore(snapshot);
+        }
+        
+        Ok(false)
+    }
+    
+    /// Try to match a pattern sequence starting at a specific position
+    fn try_match_sequence_at_position(
+        &mut self,
+        patterns: &[ParsedPattern],
+        text_tokens: &[String],
+        start_pos: usize,
+        node: &dyn AstNode,
+    ) -> Result<bool> {
+        let mut text_idx = start_pos;
+        
+        for pattern in patterns {
+            if text_idx >= text_tokens.len() {
+                return Ok(false);
+            }
+            
+            match pattern {
+                ParsedPattern::Literal(literal) => {
+                    // Literal must match exactly
+                    if text_tokens[text_idx] != *literal {
+                        return Ok(false);
+                    }
+                    text_idx += 1;
+                }
+                ParsedPattern::Metavariable(metavar) => {
+                    // Metavariable matches a single token
+                    let value = &text_tokens[text_idx];
+                    self.metavar_manager.bind(metavar.clone(), value.clone(), node)?;
+                    text_idx += 1;
+                }
+                ParsedPattern::EllipsisMetavariable(metavar) => {
+                    // Ellipsis matches until the next pattern matches
+                    // For simplicity, match a single token for now
+                    let value = &text_tokens[text_idx];
+                    self.metavar_manager.bind(metavar.clone(), value.clone(), node)?;
+                    text_idx += 1;
+                }
+                ParsedPattern::Wildcard => {
+                    // Wildcard matches any single token
+                    text_idx += 1;
+                }
+                _ => {
+                    // Other pattern types not supported in sequence matching yet
+                    return Ok(false);
+                }
+            }
+        }
+        
         Ok(true)
+    }
+    
+    /// Simple tokenizer for matching
+    fn tokenize(&self, text: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut current = String::new();
+        
+        for ch in text.chars() {
+            match ch {
+                ' ' | '\t' | '\n' | '\r' => {
+                    if !current.is_empty() {
+                        tokens.push(current.clone());
+                        current.clear();
+                    }
+                }
+                ';' | '(' | ')' | '{' | '}' | '[' | ']' | ',' | '.' => {
+                    if !current.is_empty() {
+                        tokens.push(current.clone());
+                        current.clear();
+                    }
+                    tokens.push(ch.to_string());
+                }
+                _ => {
+                    current.push(ch);
+                }
+            }
+        }
+        
+        if !current.is_empty() {
+            tokens.push(current);
+        }
+        
+        tokens
     }
 
     /// Match alternative patterns

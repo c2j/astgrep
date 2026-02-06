@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月 6日 星期五 09时01分53秒 CST
+Generated on: 2026年 2月 6日 星期五 11时49分50秒 CST
 
 ## Test Summary
 
@@ -21,14 +21,14 @@ Generated on: 2026年 2月 6日 星期五 09时01分53秒 CST
 
 | Test File | Rule Type | Semgrep Matches | CR-SemService Matches | Status |
 |-----------|-----------|-----------------|----------------------|--------|
-| cp_private_class_attr |  | 1 | 2 | ❌ DIFFER |
+| cp_private_class_attr |  | 1 | 1 | ✅ MATCH |
 | cp_private_class_attr1 |  | 00 | 00 | ✅ MATCH |
-| cp_private_class_attr2 |  | 1 | 00 | ❌ DIFFER |
-| cp_private_class_attr3 |  | 1 | 00 | ❌ DIFFER |
-| metavar_comparison_bitand |  | 1 | 00 | ❌ DIFFER |
-| metavar_comparison_bitnot |  | 1 | 00 | ❌ DIFFER |
-| metavar_comparison_bitor |  | 1 | 00 | ❌ DIFFER |
-| metavar_comparison_bitxor |  | 1 | 00 | ❌ DIFFER |
+| cp_private_class_attr2 |  | 1 | 1 | ✅ MATCH |
+| cp_private_class_attr3 |  | 1 | 1 | ✅ MATCH |
+| metavar_comparison_bitand |  | 1 | 1 | ✅ MATCH |
+| metavar_comparison_bitnot |  | 1 | 2 | ❌ DIFFER |
+| metavar_comparison_bitor |  | 1 | 2 | ❌ DIFFER |
+| metavar_comparison_bitxor |  | 1 | 2 | ❌ DIFFER |
 | metavar_name_imported_entity_java |  | 1 | 00 | ❌ DIFFER |
 | metavar_type_not_java |  | 1 | 00 | ❌ DIFFER |
 | metavar_type_str_eq_java |  | 1 | 00 | ❌ DIFFER |
@@ -62,10 +62,10 @@ Generated on: 2026年 2月 6日 星期五 09时01分53秒 CST
 
 ### Summary Statistics
 
-- **Matching results**: 5 tests
-- **Differing results**: 33 tests
+- **Matching results**: 9 tests
+- **Differing results**: 29 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 13%
+- **Compatibility rate**: 23%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月 6日 星期五 09时02分59秒 CST
+**Report Generated**: 2026年 2月 6日 星期五 11时50分55秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development
