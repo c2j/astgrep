@@ -1012,6 +1012,39 @@ impl RuleExecutionEngine {
                         }
                     }
                 }
+            } else if p_tok.starts_with("\"") && p_tok.ends_with("\"") && p_tok.len() >= 3 {
+                // Special case: quoted string containing a metavariable like "\"$RE\"
+                // This matches a string literal and binds the content to the metavariable
+                let inner = &p_tok[1..p_tok.len()-1]; // Remove outer quotes
+                if inner.starts_with('$') {
+                    let text_tok = &text_tokens[j].0;
+                    if text_tok.starts_with('"') && text_tok.ends_with('"') && text_tok.len() >= 2 {
+                        // This is a string literal, extract content and bind
+                        let content = &text_tok[1..text_tok.len()-1];
+                        // Store binding - the metavariable name includes the $ prefix
+                        if let Some(prev) = bindings.get(inner) {
+                            // Check consistency with previous binding
+                            if prev.len() != 1 || prev[0] != content {
+                                return None;
+                            }
+                        } else {
+                            bindings.insert(inner.to_string(), vec![content.to_string()]);
+                        }
+                        i += 1; j += 1; continue;
+                    } else {
+                        // Text token is not a string literal
+                        return None;
+                    }
+                } else {
+                    // Not a metavariable inside quotes, treat as regular literal
+                    let direct_match = if case_insensitive { 
+                        text_tokens[j].0.eq_ignore_ascii_case(p_tok) 
+                    } else { 
+                        &text_tokens[j].0 == p_tok 
+                    };
+                    if !direct_match { return None; }
+                    i += 1; j += 1; continue;
+                }
             } else {
                 // Check direct match
                 let direct_match = if case_insensitive { 

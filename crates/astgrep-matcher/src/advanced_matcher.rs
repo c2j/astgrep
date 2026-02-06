@@ -692,6 +692,55 @@ impl AdvancedSemgrepMatcher {
                     if *literal == "..." && text_tokens[text_idx].starts_with('"') {
                         // This is a string literal wildcard, match any string literal
                         text_idx += 1;
+                    } else if literal.starts_with('$') {
+                        // Special case: metavariable like "$RE"
+                        // This matches a string literal and binds the content (without quotes) to the metavariable
+                        let token = &text_tokens[text_idx];
+                        if token.starts_with('"') && token.ends_with('"') && token.len() >= 2 {
+                            // Extract content from string literal (remove surrounding quotes)
+                            let content = &token[1..token.len()-1];
+                            // Keep the $ prefix to match how metavariable-regex stores the name
+                            let metavar = literal;
+                            eprintln!("DEBUG try_match_sequence: binding string metavariable '{}' to content '{}'", metavar, content);
+                            if !self.metavar_manager.bind(metavar.to_string(), content.to_string(), node)? {
+                                eprintln!("DEBUG try_match_sequence: binding '{}' to '{}' failed - already bound to different value", metavar, content);
+                                return Ok(false);
+                            }
+                            eprintln!("DEBUG try_match_sequence: successfully bound string metavariable '{}' to '{}'", metavar, content);
+                            text_idx += 1;
+                        } else {
+                            // Token is not a string literal, so this doesn't match
+                            return Ok(false);
+                        }
+                    } else if literal.starts_with("\"") && literal.ends_with("\"") && literal.len() >= 3 {
+                        // Special case: quoted string containing a metavariable like "\"$RE\""
+                        // This happens when pattern "$X.sha1(\"$RE\")" is tokenized
+                        let inner = &literal[1..literal.len()-1]; // Remove outer quotes
+                        if inner.starts_with('$') {
+                            let token = &text_tokens[text_idx];
+                            if token.starts_with('"') && token.ends_with('"') && token.len() >= 2 {
+                                // Extract content from string literal (remove surrounding quotes)
+                                let content = &token[1..token.len()-1];
+                                // Use the inner metavariable name (with $ prefix)
+                                let metavar = inner;
+                                eprintln!("DEBUG try_match_sequence: binding quoted string metavariable '{}' to content '{}'", metavar, content);
+                                if !self.metavar_manager.bind(metavar.to_string(), content.to_string(), node)? {
+                                    eprintln!("DEBUG try_match_sequence: binding '{}' to '{}' failed - already bound to different value", metavar, content);
+                                    return Ok(false);
+                                }
+                                eprintln!("DEBUG try_match_sequence: successfully bound quoted string metavariable '{}' to '{}'", metavar, content);
+                                text_idx += 1;
+                            } else {
+                                // Token is not a string literal, so this doesn't match
+                                return Ok(false);
+                            }
+                        } else {
+                            // Not a metavariable inside quotes, treat as regular literal
+                            if text_tokens[text_idx] != *literal {
+                                return Ok(false);
+                            }
+                            text_idx += 1;
+                        }
                     } else if text_tokens[text_idx] != *literal {
                         // Literal must match exactly
                         return Ok(false);

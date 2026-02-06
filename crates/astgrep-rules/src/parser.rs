@@ -302,8 +302,17 @@ impl RuleParser {
                     }
                     continue;
                 }
+
+                // Check if this is a metavariable-regex (not a pattern, but a condition)
+                if mapping.contains_key(&Value::String("metavariable-regex".to_string())) {
+                    if let Some(metavar_regex_value) = mapping.get(&Value::String("metavariable-regex".to_string())) {
+                        let metavar_regex = self.parse_metavariable_regex(metavar_regex_value, index, pattern_index)?;
+                        conditions.push(Condition::MetavariableRegex(metavar_regex));
+                    }
+                    continue;
+                }
             }
-            
+
             let pattern = self.parse_single_pattern(pattern_value, index, pattern_index)?;
             
             // Separate positive and negative patterns
