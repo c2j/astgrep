@@ -427,12 +427,12 @@ fn analyze_with_rule_engine(
                 })
                 .filter(|r| r.languages.contains(&Language::Sql))
                 .filter(|r| {
-                    if let Some(pp) = r.metadata.get("preprocess") {
+                    if let Some(pp) = r.get_metadata_string("preprocess") {
                         pp == "embedded-sql"
                     } else { false }
                 })
                 .filter(|r| {
-                    if let Some(from) = r.metadata.get("preprocess.from") {
+                    if let Some(from) = r.get_metadata_string("preprocess.from") {
                         let from_l = from.to_ascii_lowercase();
                         (language == Language::Java && from_l.contains("java")) ||
                         (language == Language::Xml && from_l.contains("xml"))
@@ -487,7 +487,7 @@ fn analyze_with_rule_engine(
                                             ),
                                             metadata: {
                                                 let mut m = f.metadata;
-                                                if let Some(ctx) = sn.context.as_ref() { m.insert("embedded_context".to_string(), ctx.clone()); }
+                                                if let Some(ctx) = sn.context.as_ref() { m.insert("embedded_context".to_string(), serde_yaml::Value::String(ctx.clone())); }
                                                 m
                                             },
                                             fix_suggestion: f.fix_suggestion,

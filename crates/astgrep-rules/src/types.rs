@@ -4,7 +4,24 @@
 
 use astgrep_core::{Confidence, Finding, Language, Severity, MetavariableAnalysis, ComparisonOperator};
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use std::collections::HashMap;
+
+/// Rule execution mode
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RuleMode {
+    /// Standard pattern matching mode
+    Search,
+    /// Taint analysis mode (Semgrep compatible)
+    Taint,
+}
+
+impl Default for RuleMode {
+    fn default() -> Self {
+        RuleMode::Search
+    }
+}
 
 /// A complete rule definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,8 +37,11 @@ pub struct Rule {
     pub fix: Option<String>,
     pub fix_regex: Option<FixRegex>,
     pub paths: Option<PathsFilter>,
-    pub metadata: HashMap<String, String>,
+    pub metadata: HashMap<String, Value>,
     pub enabled: bool,
+    /// Rule execution mode (search or taint)
+    #[serde(default)]
+    pub mode: RuleMode,
 }
 
 impl Rule {
@@ -48,6 +68,7 @@ impl Rule {
             paths: None,
             metadata: HashMap::new(),
             enabled: true,
+            mode: RuleMode::Search,
         }
     }
 
@@ -64,7 +85,7 @@ impl Rule {
 
     /// Add metadata to this rule
     pub fn add_metadata(mut self, key: String, value: String) -> Self {
-        self.metadata.insert(key, value);
+        self.metadata.insert(key, Value::String(value));
         self
     }
 
@@ -87,8 +108,35 @@ impl Rule {
     }
 
     /// Get metadata value
-    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+    pub fn get_metadata(&self, key: &str) -> Option<&Value> {
         self.metadata.get(key)
+    }
+
+    /// Get metadata value as string (for backward compatibility)
+    pub fn get_metadata_string(&self, key: &str) -> Option<String> {
+        self.metadata.get(key).and_then(|v| {
+            match v {
+                Value::String(s) => Some(s.clone()),
+                Value::Sequence(arr) => {
+                    // Convert array to comma-separated string
+                    Some(arr.iter()
+                        .filter_map(|item| item.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "))
+                }
+                Value::Mapping(map) => {
+                    // Convert mapping to a simple representation
+                    Some(format!("{:?}", map))
+                }
+                Value::Number(n) => Some(n.to_string()),
+                Value::Bool(b) => Some(b.to_string()),
+                Value::Null => Some("null".to_string()),
+                Value::Tagged(tagged) => {
+                    // For tagged values, convert the inner value
+                    Some(format!("{:?}", tagged.value))
+                }
+            }
+        })
     }
 }
 

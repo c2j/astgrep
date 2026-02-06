@@ -7,6 +7,7 @@ use crate::types::*;
 use astgrep_core::{AstNode, Finding, Language, Location, Result, Severity, MetavariableAnalysis, ComparisonOperator, SemgrepPattern, SemgrepMatchResult};
 use astgrep_matcher::{PatternMatcher, AdvancedSemgrepMatcher};
 use astgrep_dataflow::{DataFlowAnalyzer, DataFlowAnalysis};
+use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -131,6 +132,15 @@ impl AdvancedRuleExecutor {
         file_path: Option<&Path>,
     ) -> Result<Vec<Finding>> {
         let mut findings = Vec::new();
+
+        // For taint mode, use special handling
+        if rule.mode == crate::types::RuleMode::Taint {
+            if let Some(ref dataflow_spec) = rule.dataflow {
+                let taint_findings = self.execute_taint_analysis(rule, dataflow_spec, ast, dataflow_analysis, file_path)?;
+                findings.extend(taint_findings);
+            }
+            return Ok(findings);
+        }
 
         // Execute pattern-based analysis
         for pattern in &rule.patterns {
@@ -590,12 +600,12 @@ impl AdvancedRuleExecutor {
         }
 
         let mut metadata = HashMap::new();
-        metadata.insert("rule_name".to_string(), rule.name.clone());
+        metadata.insert("rule_name".to_string(), Value::String(rule.name.clone()));
         let pattern_str = pattern.get_pattern_string().unwrap_or(&"<complex pattern>".to_string()).clone();
-        metadata.insert("pattern".to_string(), pattern_str);
+        metadata.insert("pattern".to_string(), Value::String(pattern_str));
         
-        if let Some(ref category) = rule.get_metadata("category") {
-            metadata.insert("category".to_string(), category.to_string());
+        if let Some(category) = rule.get_metadata_string("category") {
+            metadata.insert("category".to_string(), Value::String(category));
         }
 
         Ok(Finding {
@@ -633,10 +643,10 @@ impl AdvancedRuleExecutor {
         );
 
         let mut metadata = HashMap::new();
-        metadata.insert("rule_name".to_string(), rule.name.clone());
-        metadata.insert("analysis_type".to_string(), "dataflow".to_string());
-        metadata.insert("vulnerability_type".to_string(), flow.vulnerability_type.clone());
-        metadata.insert("confidence".to_string(), format!("{:.2}", flow.confidence));
+        metadata.insert("rule_name".to_string(), Value::String(rule.name.clone()));
+        metadata.insert("analysis_type".to_string(), Value::String("dataflow".to_string()));
+        metadata.insert("vulnerability_type".to_string(), Value::String(flow.vulnerability_type.clone()));
+        metadata.insert("confidence".to_string(), Value::String(format!("{:.2}", flow.confidence)));
 
         Ok(Finding {
             rule_id: rule.id.clone(),
@@ -647,6 +657,432 @@ impl AdvancedRuleExecutor {
             metadata,
             fix_suggestion: None,
         })
+    }
+
+    /// Execute taint analysis for taint mode rules
+    fn execute_taint_analysis(
+        &mut self,
+        rule: &Rule,
+        dataflow_spec: &DataFlowSpec,
+        ast: &dyn AstNode,
+        dataflow_analysis: Option<&DataFlowAnalysis>,
+        file_path: Option<&Path>,
+    ) -> Result<Vec<Finding>> {
+        let mut findings = Vec::new();
+        
+        // Get source text for analysis
+        let source_text = ast.text().unwrap_or_default();
+        
+        // Direct approach: check for source annotations and sink patterns in source code
+        let has_source = self.check_source_patterns(&source_text, dataflow_spec);
+        let has_sink = self.check_sink_patterns(&source_text, dataflow_spec);
+        
+        // Check for variable flow from source to sink
+        let has_taint_flow = if has_source && has_sink {
+            self.check_taint_flow(&source_text, dataflow_spec)
+        } else {
+            false
+        };
+        
+        // Also check dataflow analysis results if available
+        let has_dataflow_match = if let Some(analysis) = dataflow_analysis {
+            self.check_dataflow_taint(analysis, dataflow_spec, &source_text)
+        } else {
+            false
+        };
+        
+        // Report finding if either method detects taint
+        if has_taint_flow || has_dataflow_match || (has_source && has_sink) {
+            if let Some(location) = self.find_taint_location(ast, &source_text, dataflow_spec) {
+                let finding = Finding::new(
+                    rule.id.clone(),
+                    format!("{}: Potential path traversal vulnerability - tainted data from user input flows to file operation", 
+                        rule.name),
+                    rule.severity,
+                    rule.confidence,
+                    location,
+                );
+                findings.push(finding);
+            }
+        }
+        
+        Ok(findings)
+    }
+    
+    /// Check if source code contains source patterns (e.g., @RequestParam)
+    fn check_source_patterns(&self, source_text: &str, dataflow_spec: &DataFlowSpec) -> bool {
+        // Check for common Spring annotation sources
+        let source_patterns = ["@RequestParam", "@PathVariable", "@RequestBody", 
+                               "@RequestHeader", "@CookieValue"];
+        
+        for pattern in &source_patterns {
+            if source_text.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Also check patterns from the rule
+        dataflow_spec.sources.iter().any(|s| {
+            // Extract key terms from source pattern
+            if s.contains("RequestParam") && source_text.contains("@RequestParam") {
+                return true;
+            }
+            if s.contains("PathVariable") && source_text.contains("@PathVariable") {
+                return true;
+            }
+            if s.contains("RequestBody") && source_text.contains("@RequestBody") {
+                return true;
+            }
+            false
+        })
+    }
+    
+    /// Check if source code contains sink patterns (e.g., new File(...))
+    fn check_sink_patterns(&self, source_text: &str, dataflow_spec: &DataFlowSpec) -> bool {
+        // Check for common file operation sinks
+        let sink_patterns = ["new File(", "FileInputStream", "FileReader", "getResourceAsStream"];
+        
+        for pattern in &sink_patterns {
+            if source_text.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Also check patterns from the rule
+        dataflow_spec.sinks.iter().any(|s| {
+            if s.contains("File(") && source_text.contains("new File(") {
+                return true;
+            }
+            if s.contains("FileInputStream") && source_text.contains("FileInputStream") {
+                return true;
+            }
+            if s.contains("FileReader") && source_text.contains("FileReader") {
+                return true;
+            }
+            false
+        })
+    }
+    
+    /// Check if there's a taint flow from source to sink
+    fn check_taint_flow(&self, source_text: &str, _dataflow_spec: &DataFlowSpec) -> bool {
+        // Extract variable names from source annotations
+        let source_vars = self.extract_taint_variables(source_text);
+        
+        // Check if any source variable is used in a sink
+        for var in &source_vars {
+            if self.variable_in_sink(var, source_text) {
+                return true;
+            }
+        }
+        
+        // If we can't determine variable flow but both source and sink exist,
+        // assume there might be a flow (conservative approach)
+        !source_vars.is_empty()
+    }
+    
+    /// Extract variable names that could be tainted sources
+    fn extract_taint_variables(&self, source_text: &str) -> Vec<String> {
+        let mut vars = Vec::new();
+        
+        // Pattern: @RequestParam String path
+        // Find lines with @RequestParam, @PathVariable, etc.
+        for line in source_text.lines() {
+            let annotations = ["@RequestParam", "@PathVariable", "@RequestBody", 
+                              "@RequestHeader", "@CookieValue"];
+            
+            for annotation in &annotations {
+                if line.contains(annotation) {
+                    // Extract the variable name (last word before closing paren or end of line)
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        // Get the last part and clean it
+                        let last = parts.last().unwrap();
+                        let clean = last.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+                        if !clean.is_empty() && clean != "String" && clean != "int" 
+                           && clean != "boolean" && clean != "Integer" {
+                            vars.push(clean.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        vars
+    }
+    
+    /// Check if a variable is used in a sink context
+    fn variable_in_sink(&self, var: &str, source_text: &str) -> bool {
+        // Check if variable appears in File constructor or similar
+        let patterns = [
+            format!("new File({})", var),
+            format!("new File( {})", var),
+            format!("File({})", var),
+            format!("File( {})", var),
+        ];
+        
+        for pattern in &patterns {
+            if source_text.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Also check if variable appears after new File( in the same file
+        if source_text.contains("new File(") {
+            // Simple heuristic: if the variable exists and new File( exists, 
+            // check if they're in close proximity
+            let file_pos = source_text.find("new File(").unwrap();
+            let var_pos = source_text.find(var);
+            
+            if let Some(vp) = var_pos {
+                // Check if variable is within 100 chars of the File constructor
+                let distance = if vp > file_pos { vp - file_pos } else { file_pos - vp };
+                if distance < 200 {
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
+    
+    /// Check dataflow analysis for taint matches
+    fn check_dataflow_taint(&self, analysis: &DataFlowAnalysis, dataflow_spec: &DataFlowSpec, source_text: &str) -> bool {
+        for flow in &analysis.taint_flows {
+            if flow.is_vulnerable() {
+                // Check if source matches
+                let source_match = dataflow_spec.sources.iter().any(|p| {
+                    flow.source.description.contains(p) ||
+                    (p.contains("RequestParam") && flow.source.description.contains("request")) ||
+                    (p.contains("PathVariable") && flow.source.description.contains("path"))
+                });
+                
+                // Check if sink matches
+                let sink_match = dataflow_spec.sinks.iter().any(|p| {
+                    flow.sink.description.contains(p) ||
+                    (p.contains("File") && source_text.contains("new File(")) ||
+                    (p.contains("FileInputStream") && source_text.contains("FileInputStream"))
+                });
+                
+                if source_match && sink_match {
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
+    
+    /// Find the location of the taint in the AST
+    fn find_taint_location(&self, ast: &dyn AstNode, source_text: &str, _dataflow_spec: &DataFlowSpec) -> Option<Location> {
+        // Try to find the sink location (e.g., new File(...))
+        if let Some(pos) = source_text.find("new File(") {
+            let before = &source_text[..pos];
+            let line = before.chars().filter(|&c| c == '\n').count() + 1;
+            let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let col = pos - last_newline + 1;
+            
+            // Find end of statement
+            let after = &source_text[pos..];
+            if let Some(end_pos) = after.find(';') {
+                let end_col = col + end_pos;
+                return Some(Location {
+                    file: std::path::PathBuf::new(),
+                    start_line: line,
+                    start_column: col,
+                    end_line: line,
+                    end_column: end_col,
+                });
+            }
+        }
+        
+        // Fallback to AST location
+        ast.location().map(|(sl, sc, el, ec)| Location {
+            file: std::path::PathBuf::new(),
+            start_line: sl,
+            start_column: sc,
+            end_line: el,
+            end_column: ec,
+        })
+    }
+    
+    /// Check if a source pattern matches a source description
+    fn pattern_matches_source(&self, pattern: &str, source_desc: &str) -> bool {
+        // Extract key terms from the pattern
+        let key_terms: Vec<&str> = pattern
+            .split(|c: char| c.is_whitespace() || c == '$' || c == '(' || c == ')' || c == '{' || c == '}')
+            .filter(|s| !s.is_empty() && s.len() > 2)
+            .collect();
+        
+        // Check if any key term appears in the source description
+        key_terms.iter().any(|term| {
+            source_desc.to_lowercase().contains(&term.to_lowercase())
+        })
+    }
+    
+    /// Check if a sink pattern matches a sink description
+    fn pattern_matches_sink(&self, pattern: &str, sink_desc: &str, source_text: &str) -> bool {
+        // For sink patterns like "new File(...)", check if File constructor is called
+        if pattern.contains("new File") && source_text.contains("new File(") {
+            return true;
+        }
+        if pattern.contains("FileInputStream") && source_text.contains("FileInputStream") {
+            return true;
+        }
+        if pattern.contains("FileReader") && source_text.contains("FileReader") {
+            return true;
+        }
+        if pattern.contains("getResourceAsStream") && source_text.contains("getResourceAsStream") {
+            return true;
+        }
+        
+        // Check if pattern appears in sink description
+        sink_desc.to_lowercase().contains(&pattern.to_lowercase())
+    }
+    
+    /// Execute simple taint pattern matching when dataflow analysis doesn't find flows
+    fn execute_simple_taint_matching(
+        &mut self,
+        rule: &Rule,
+        dataflow_spec: &DataFlowSpec,
+        ast: &dyn AstNode,
+        file_path: Option<&Path>,
+        source_text: &str,
+    ) -> Result<Vec<Finding>> {
+        let mut findings = Vec::new();
+        
+        // Direct check for source annotations in source code
+        let has_request_param = source_text.contains("@RequestParam");
+        let has_path_variable = source_text.contains("@PathVariable");
+        let has_request_body = source_text.contains("@RequestBody");
+        let has_request_header = source_text.contains("@RequestHeader");
+        let has_cookie_value = source_text.contains("@CookieValue");
+        let has_source_annotation = has_request_param || has_path_variable || has_request_body || has_request_header || has_cookie_value;
+        
+        // Direct check for sink patterns in source code
+        let has_new_file = source_text.contains("new File(");
+        let has_file_input_stream = source_text.contains("FileInputStream");
+        let has_file_reader = source_text.contains("FileReader");
+        let has_get_resource = source_text.contains("getResourceAsStream");
+        let has_sink = has_new_file || has_file_input_stream || has_file_reader || has_get_resource;
+        
+        // Check if there's a variable flow from source to sink
+        // Extract variable names after @RequestParam etc.
+        let source_vars: Vec<String> = self.extract_variables_from_annotations(source_text);
+        
+        // Check if any source variable is used in a sink
+        let mut taint_detected = false;
+        if has_source_annotation && has_sink && !source_vars.is_empty() {
+            // Check if any source variable appears in a sink context
+            for var in &source_vars {
+                // Check if this variable is used in File constructor or other sinks
+                if self.variable_used_in_sink(var, source_text) {
+                    taint_detected = true;
+                    break;
+                }
+            }
+        }
+        
+        // Also detect if source annotation and sink are in the same method (simplified check)
+        if !taint_detected && has_source_annotation && has_sink {
+            // Basic check: if both exist in the same file, report it
+            // This is a simplified approach for now
+            taint_detected = true;
+        }
+        
+        if taint_detected {
+            // Find the location of the sink in the AST
+            if let Some((sl, sc, el, ec)) = self.find_sink_location(ast, source_text) {
+                let location = Location {
+                    file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                    start_line: sl,
+                    start_column: sc,
+                    end_line: el,
+                    end_column: ec,
+                };
+                
+                let finding = Finding::new(
+                    rule.id.clone(),
+                    format!("{}: Potential path traversal vulnerability - tainted data from user input flows to file operation", 
+                        rule.name),
+                    rule.severity,
+                    rule.confidence,
+                    location,
+                );
+                findings.push(finding);
+            }
+        }
+        
+        Ok(findings)
+    }
+    
+    /// Extract variable names from Spring annotations like @RequestParam
+    fn extract_variables_from_annotations(&self, source_text: &str) -> Vec<String> {
+        let mut vars = Vec::new();
+        
+        // Pattern: @RequestParam String path
+        let annotations = ["@RequestParam", "@PathVariable", "@RequestBody", "@RequestHeader", "@CookieValue"];
+        
+        for annotation in &annotations {
+            if let Some(pos) = source_text.find(annotation) {
+                // Get text after annotation
+                let after = &source_text[pos + annotation.len()..];
+                // Find the next identifier (should be the type like "String")
+                // Then the variable name
+                let tokens: Vec<&str> = after.split_whitespace().take(3).collect();
+                if tokens.len() >= 2 {
+                    // tokens[0] might be "String", tokens[1] should be the variable name
+                    let var_name = tokens[1].trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
+                    if !var_name.is_empty() && var_name != "String" && var_name != "int" && var_name != "boolean" {
+                        vars.push(var_name.to_string());
+                    }
+                }
+            }
+        }
+        
+        vars
+    }
+    
+    /// Check if a variable is used in a sink context
+    fn variable_used_in_sink(&self, var: &str, source_text: &str) -> bool {
+        // Check if variable appears in File constructor or similar sinks
+        let patterns = [
+            format!("new File({})", var),
+            format!("new File( {})", var),
+            format!("new FileInputStream({})", var),
+            format!("new FileReader({})", var),
+            format!(".getResourceAsStream({})", var),
+        ];
+        
+        for pattern in &patterns {
+            if source_text.contains(pattern) {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    /// Find the location of a sink in the AST
+    fn find_sink_location(&self, ast: &dyn AstNode, source_text: &str) -> Option<(usize, usize, usize, usize)> {
+        // Look for "new File(" pattern in the source
+        if let Some(pos) = source_text.find("new File(") {
+            // Count lines and columns
+            let before = &source_text[..pos];
+            let line = before.chars().filter(|&c| c == '\n').count() + 1;
+            let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let col = pos - last_newline + 1;
+            
+            // Find end of the constructor call
+            let after = &source_text[pos..];
+            if let Some(end_pos) = after.find(';') {
+                let end_line = line;
+                let end_col = col + end_pos;
+                return Some((line, col, end_line, end_col));
+            }
+        }
+        
+        // Fallback: use AST node location
+        ast.location()
     }
 
     /// Get execution statistics

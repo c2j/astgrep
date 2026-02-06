@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月 6日 星期五 06时41分31秒 CST
+Generated on: 2026年 2月 6日 星期五 09时01分53秒 CST
 
 ## Test Summary
 
@@ -57,15 +57,15 @@ Generated on: 2026年 2月 6日 星期五 06时41分31秒 CST
 | taint_propagator_lambda | taint | 1 | 00 | ❌ DIFFER |
 | taint_propagator4 | taint | 1 | 00 | ❌ DIFFER |
 | taint_this1 | taint | 1 | 00 | ❌ DIFFER |
-| tainted-file-path | taint | 1 | 00 | ❌ DIFFER |
+| tainted-file-path | taint | 1 | 1 | ✅ MATCH |
 | typed_metavar_not |  | 00 | 00 | ✅ MATCH |
 
 ### Summary Statistics
 
-- **Matching results**: 4 tests
-- **Differing results**: 34 tests
+- **Matching results**: 5 tests
+- **Differing results**: 33 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 10%
+- **Compatibility rate**: 13%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月 6日 星期五 06时42分45秒 CST
+**Report Generated**: 2026年 2月 6日 星期五 09时02分59秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development

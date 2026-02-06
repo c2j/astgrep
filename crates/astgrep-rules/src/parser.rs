@@ -81,15 +81,33 @@ impl RuleParser {
 
         // Parse optional fields
         let confidence = self.parse_confidence(rule_obj, index).unwrap_or(Confidence::Medium);
-        let patterns = self.parse_patterns_or_pattern(rule_obj, index)?;
-        let dataflow = self.parse_dataflow(rule_obj, index)?;
+        let mode = self.parse_mode(rule_obj, index)?;
+        
+        // For taint mode, parse pattern-sources and pattern-sinks
+        let (patterns, dataflow) = if mode == RuleMode::Taint {
+            let sources = self.parse_pattern_sources(rule_obj, index)?;
+            let sinks = self.parse_pattern_sinks(rule_obj, index)?;
+            let sanitizers = self.parse_pattern_sanitizers(rule_obj, index).unwrap_or_default();
+            
+            if !sources.is_empty() && !sinks.is_empty() {
+                let dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
+                (Vec::new(), Some(dataflow))
+            } else {
+                (Vec::new(), None)
+            }
+        } else {
+            let patterns = self.parse_patterns_or_pattern(rule_obj, index)?;
+            let dataflow = self.parse_dataflow(rule_obj, index)?;
+            (patterns, dataflow)
+        };
+        
         let fix = self.get_optional_string_field(rule_obj, "fix");
         let fix_regex = self.parse_fix_regex(rule_obj, index)?;
         let paths = self.parse_paths(rule_obj, index)?;
         let mut metadata = self.parse_metadata(rule_obj, index)?;
-        // Parse optional options block and merge into metadata (stringified)
+        // Parse optional options block and merge into metadata (as YAML values)
         if let Some(opts) = self.parse_options(rule_obj, index)? {
-            for (k, v) in opts { metadata.insert(k, v); }
+            for (k, v) in opts { metadata.insert(k, Value::String(v)); }
         }
         let enabled = self.get_optional_bool_field(rule_obj, "enabled").unwrap_or(true);
 
@@ -101,6 +119,7 @@ impl RuleParser {
         rule.paths = paths;
         rule.metadata = metadata;
         rule.enabled = enabled;
+        rule.mode = mode;
 
         Ok(rule)
     }
@@ -753,7 +772,7 @@ impl RuleParser {
     }
 
     /// Parse metadata field
-    fn parse_metadata(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<HashMap<String, String>> {
+    fn parse_metadata(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<HashMap<String, Value>> {
         let metadata_value = obj.get(&Value::String("metadata".to_string()));
         
         if metadata_value.is_none() {
@@ -770,13 +789,198 @@ impl RuleParser {
             let key_str = key
                 .as_str()
                 .ok_or_else(|| AnalysisError::parse_error("metadata keys must be strings".to_string()))?;
-            let value_str = value
-                .as_str()
-                .ok_or_else(|| AnalysisError::parse_error("metadata values must be strings".to_string()))?;
-            metadata.insert(key_str.to_string(), value_str.to_string());
+            // Accept any YAML value type (string, array, object, etc.)
+            metadata.insert(key_str.to_string(), value.clone());
         }
 
         Ok(metadata)
+    }
+
+    /// Parse mode field (search or taint)
+    fn parse_mode(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<RuleMode> {
+        let mode_value = obj.get(&Value::String("mode".to_string()));
+        
+        if let Some(value) = mode_value {
+            if let Some(mode_str) = value.as_str() {
+                match mode_str.to_lowercase().as_str() {
+                    "taint" => Ok(RuleMode::Taint),
+                    "search" => Ok(RuleMode::Search),
+                    _ => Ok(RuleMode::Search), // Default to search for unknown modes
+                }
+            } else {
+                Ok(RuleMode::Search)
+            }
+        } else {
+            Ok(RuleMode::Search) // Default mode
+        }
+    }
+
+    /// Parse pattern-sources field for taint analysis
+    fn parse_pattern_sources(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Vec<String>> {
+        let sources_value = obj.get(&Value::String("pattern-sources".to_string()));
+        
+        if sources_value.is_none() {
+            return Ok(Vec::new());
+        }
+
+        let sources_array = sources_value
+            .unwrap()
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error(format!("Rule {} 'pattern-sources' must be an array", index)))?;
+
+        let mut sources = Vec::new();
+        for (i, source) in sources_array.iter().enumerate() {
+            // Extract pattern from source definition
+            if let Some(pattern_str) = self.extract_pattern_from_taint_def(source) {
+                sources.push(pattern_str);
+            } else {
+                // If we can't extract a simple pattern, store the YAML representation
+                sources.push(format!("source_{}", i));
+            }
+        }
+
+        Ok(sources)
+    }
+
+    /// Parse pattern-sinks field for taint analysis
+    fn parse_pattern_sinks(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Vec<String>> {
+        let sinks_value = obj.get(&Value::String("pattern-sinks".to_string()));
+        
+        if sinks_value.is_none() {
+            return Ok(Vec::new());
+        }
+
+        let sinks_array = sinks_value
+            .unwrap()
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error(format!("Rule {} 'pattern-sinks' must be an array", index)))?;
+
+        let mut sinks = Vec::new();
+        for (i, sink) in sinks_array.iter().enumerate() {
+            // Extract pattern from sink definition
+            if let Some(pattern_str) = self.extract_pattern_from_taint_def(sink) {
+                sinks.push(pattern_str);
+            } else {
+                // If we can't extract a simple pattern, store the YAML representation
+                sinks.push(format!("sink_{}", i));
+            }
+        }
+
+        Ok(sinks)
+    }
+
+    /// Parse pattern-sanitizers field for taint analysis
+    fn parse_pattern_sanitizers(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Vec<String>> {
+        let sanitizers_value = obj.get(&Value::String("pattern-sanitizers".to_string()));
+        
+        if sanitizers_value.is_none() {
+            return Ok(Vec::new());
+        }
+
+        let sanitizers_array = sanitizers_value
+            .unwrap()
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error("'pattern-sanitizers' must be an array".to_string()))?;
+
+        let mut sanitizers = Vec::new();
+        for sanitizer in sanitizers_array.iter() {
+            // Extract pattern from sanitizer definition
+            if let Some(pattern_str) = self.extract_pattern_from_taint_def(sanitizer) {
+                sanitizers.push(pattern_str);
+            }
+        }
+
+        Ok(sanitizers)
+    }
+
+    /// Extract pattern string from taint definition (source, sink, or sanitizer)
+    fn extract_pattern_from_taint_def(&self, value: &Value) -> Option<String> {
+        // If it's a simple string, return it
+        if let Some(s) = value.as_str() {
+            return Some(s.to_string());
+        }
+
+        // If it's an object, try to extract pattern
+        if let Some(mapping) = value.as_mapping() {
+            // Try "pattern" field first
+            if let Some(pattern) = mapping.get(&Value::String("pattern".to_string())) {
+                if let Some(s) = pattern.as_str() {
+                    // Simplify the pattern by removing complex Semgrep syntax
+                    return Some(self.simplify_semgrep_pattern(s));
+                }
+            }
+
+            // Try "pattern-either" field
+            if let Some(pattern_either) = mapping.get(&Value::String("pattern-either".to_string())) {
+                if let Some(arr) = pattern_either.as_sequence() {
+                    let patterns: Vec<String> = arr.iter()
+                        .filter_map(|v| self.extract_pattern_from_taint_def(v))
+                        .collect();
+                    if !patterns.is_empty() {
+                        return Some(patterns.join("|"));
+                    }
+                }
+            }
+
+            // Try "patterns" field (array of patterns) - extract just the pattern part
+            if let Some(patterns) = mapping.get(&Value::String("patterns".to_string())) {
+                if let Some(arr) = patterns.as_sequence() {
+                    // For patterns array, look for the actual pattern (not pattern-inside)
+                    for item in arr.iter() {
+                        if let Some(item_map) = item.as_mapping() {
+                            // Skip pattern-inside and other context patterns
+                            if item_map.contains_key(&Value::String("pattern-inside".to_string())) {
+                                continue;
+                            }
+                            if item_map.contains_key(&Value::String("metavariable-regex".to_string())) {
+                                continue;
+                            }
+                        }
+                        // Try to extract pattern from this item
+                        if let Some(pattern_str) = self.extract_pattern_from_taint_def(item) {
+                            return Some(pattern_str);
+                        }
+                    }
+                }
+            }
+
+            // Try "pattern-inside" field - simplify it
+            if let Some(pattern_inside) = mapping.get(&Value::String("pattern-inside".to_string())) {
+                if let Some(s) = pattern_inside.as_str() {
+                    // Extract just the variable part from complex pattern-inside
+                    let simplified = self.simplify_semgrep_pattern(s);
+                    if !simplified.is_empty() {
+                        return Some(simplified);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Simplify Semgrep pattern to basic pattern matcher format
+    fn simplify_semgrep_pattern(&self, pattern: &str) -> String {
+        let mut result = pattern.to_string();
+        
+        // Replace complex metavariable patterns with simple wildcards
+        // $METHODNAME(...) -> $FUNC(...)
+        result = regex::Regex::new(r"\$[A-Z][A-Z_0-9]*")
+            .map(|re| re.replace_all(&result, "$VAR").to_string())
+            .unwrap_or(result);
+        
+        // Replace @ annotations
+        result = regex::Regex::new(r"@\$[A-Z]+")
+            .map(|re| re.replace_all(&result, "").to_string())
+            .unwrap_or(result);
+        
+        // Simplify "..." to "*" or keep as is depending on context
+        // For now, keep "..." as it might be supported
+        
+        // Clean up extra whitespace
+        result = result.split_whitespace().collect::<Vec<_>>().join(" ");
+        
+        result
     }
 }
 

@@ -1,6 +1,7 @@
 //! Core types for astgrep
 
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -148,7 +149,7 @@ pub struct Finding {
     pub severity: Severity,
     pub confidence: Confidence,
     pub location: Location,
-    pub metadata: HashMap<String, String>,
+    pub metadata: HashMap<String, Value>,
     pub fix_suggestion: Option<String>,
 }
 
@@ -173,6 +174,12 @@ impl Finding {
 
     /// Add metadata to the finding
     pub fn with_metadata(mut self, key: String, value: String) -> Self {
+        self.metadata.insert(key, Value::String(value));
+        self
+    }
+
+    /// Add metadata with any YAML value type
+    pub fn with_metadata_value(mut self, key: String, value: Value) -> Self {
         self.metadata.insert(key, value);
         self
     }

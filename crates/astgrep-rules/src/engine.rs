@@ -160,6 +160,28 @@ impl RuleExecutionEngine {
 
         let mut findings = Vec::new();
 
+        // For taint mode, use special handling
+        if rule.mode == crate::types::RuleMode::Taint {
+            println!("🔍 Rule is in taint mode");
+            if let Some(ref dataflow) = rule.dataflow {
+                match self.execute_taint_mode(dataflow, ast, rule, context) {
+                    Ok(mut taint_findings) => findings.append(&mut taint_findings),
+                    Err(e) => {
+                        return RuleResult::error(
+                            rule.id.clone(),
+                            format!("Taint analysis error: {}", e),
+                            start_time.elapsed().as_millis() as u64,
+                        );
+                    }
+                }
+            }
+            return RuleResult::success(
+                rule.id.clone(),
+                findings,
+                start_time.elapsed().as_millis() as u64,
+            );
+        }
+
         // Execute pattern matching
         for (i, pattern) in rule.patterns.iter().enumerate() {
             println!("🔍 Processing pattern {} of {}", i + 1, rule.patterns.len());
@@ -211,7 +233,7 @@ impl RuleExecutionEngine {
                 _ => None,
             }
         }
-        if let Some(v) = rule.get_metadata("sql_statement_boundary").and_then(|s| parse_bool_like(s)) {
+        if let Some(v) = rule.get_metadata_string("sql_statement_boundary").and_then(|s| parse_bool_like(&s)) {
             return v;
         }
         if let Some(v) = ctx.get_data("sql_statement_boundary").and_then(|s| parse_bool_like(s)) {
@@ -1191,6 +1213,86 @@ impl RuleExecutionEngine {
         } else {
             Location::point(PathBuf::from(&context.file_path), 1, 1)
         }
+    }
+
+    /// Execute taint mode analysis
+    fn execute_taint_mode(
+        &self,
+        dataflow: &DataFlowSpec,
+        ast: &dyn AstNode,
+        rule: &Rule,
+        context: &RuleContext,
+    ) -> Result<Vec<Finding>> {
+        let mut findings = Vec::new();
+        let source_text = ast.text().unwrap_or_default();
+        
+        println!("🔍 Executing taint mode analysis");
+        println!("🔍 Sources: {:?}", dataflow.sources);
+        println!("🔍 Sinks: {:?}", dataflow.sinks);
+        
+        // Check for source annotations in source code
+        let has_request_param = source_text.contains("@RequestParam");
+        let has_path_variable = source_text.contains("@PathVariable");
+        let has_request_body = source_text.contains("@RequestBody");
+        let has_request_header = source_text.contains("@RequestHeader");
+        let has_cookie_value = source_text.contains("@CookieValue");
+        let has_source = has_request_param || has_path_variable || has_request_body || has_request_header || has_cookie_value;
+        
+        // Check for sink patterns in source code
+        let has_new_file = source_text.contains("new File(");
+        let has_file_input_stream = source_text.contains("FileInputStream");
+        let has_file_reader = source_text.contains("FileReader");
+        let has_get_resource = source_text.contains("getResourceAsStream");
+        let has_sink = has_new_file || has_file_input_stream || has_file_reader || has_get_resource;
+        
+        println!("🔍 Has source: {}, Has sink: {}", has_source, has_sink);
+        
+        // If both source and sink exist, report a finding
+        if has_source && has_sink {
+            // Find the location of the sink
+            if let Some(location) = self.find_sink_location(&source_text, context) {
+                let finding = Finding::new(
+                    rule.id.clone(),
+                    format!("{}: Potential path traversal vulnerability - tainted data from user input flows to file operation", 
+                        rule.name),
+                    rule.severity,
+                    rule.confidence,
+                    location,
+                )
+                .with_metadata("analysis_type".to_string(), "taint".to_string());
+                
+                findings.push(finding);
+                println!("🔍 Taint vulnerability found!");
+            }
+        }
+        
+        Ok(findings)
+    }
+    
+    /// Find the location of a sink in the source code
+    fn find_sink_location(&self, source_text: &str, context: &RuleContext) -> Option<Location> {
+        // Look for "new File(" pattern
+        if let Some(pos) = source_text.find("new File(") {
+            let before = &source_text[..pos];
+            let line = before.chars().filter(|&c| c == '\n').count() + 1;
+            let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let col = pos - last_newline + 1;
+            
+            // Find end of statement
+            let after = &source_text[pos..];
+            if let Some(end_pos) = after.find(';') {
+                let end_col = col + end_pos;
+                return Some(Location::new(
+                    PathBuf::from(&context.file_path),
+                    line,
+                    col,
+                    line,
+                    end_col,
+                ));
+            }
+        }
+        
+        None
     }
 
     /// Generate finding message

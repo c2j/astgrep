@@ -110,6 +110,13 @@ impl RuleValidator {
 
     /// Validate rule patterns
     fn validate_patterns(&self, rule: &Rule) -> Result<()> {
+        // Taint mode rules use pattern-sources and pattern-sinks instead of patterns/dataflow
+        if rule.mode == crate::types::RuleMode::Taint {
+            // For taint mode, we don't require patterns or dataflow
+            // The taint analysis is handled separately
+            return Ok(());
+        }
+
         if rule.patterns.is_empty() && rule.dataflow.is_none() {
             return Err(AnalysisError::rule_validation_error(
                 "Rule must have either patterns or dataflow specification"
@@ -347,18 +354,22 @@ impl RuleValidator {
                 return Err(AnalysisError::rule_validation_error("Metadata key cannot be empty"));
             }
 
-            if value.is_empty() {
-                return Err(AnalysisError::rule_validation_error(format!(
-                    "Metadata value for key '{}' cannot be empty", key
-                )));
-            }
+            // For string values, check if empty
+            if let Some(s) = value.as_str() {
+                if s.is_empty() {
+                    return Err(AnalysisError::rule_validation_error(format!(
+                        "Metadata value for key '{}' cannot be empty", key
+                    )));
+                }
 
-            // Validate specific metadata fields
-            if key == "cwe" && !value.starts_with("CWE-") {
-                return Err(AnalysisError::rule_validation_error(
-                    "CWE metadata should start with 'CWE-'"
-                ));
+                // Validate specific metadata fields for string values
+                if key == "cwe" && !s.starts_with("CWE-") {
+                    return Err(AnalysisError::rule_validation_error(
+                        "CWE metadata should start with 'CWE-'"
+                    ));
+                }
             }
+            // Arrays and objects are always valid (non-empty by definition when present)
         }
 
         Ok(())

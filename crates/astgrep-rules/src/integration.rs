@@ -5,6 +5,7 @@
 use crate::*;
 use astgrep_core::{AstNode, Language, Severity, Confidence};
 use astgrep_ast::{AstBuilder, UniversalNode};
+use serde_yaml::Value;
 use std::path::Path;
 
 /// Integration example for rule execution
@@ -36,12 +37,13 @@ impl RuleExecutionExample {
             paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
-                metadata.insert("category".to_string(), "security".to_string());
-                metadata.insert("cwe".to_string(), "89".to_string());
-                metadata.insert("owasp".to_string(), "A03:2021".to_string());
+                metadata.insert("category".to_string(), Value::String("security".to_string()));
+                metadata.insert("cwe".to_string(), Value::String("89".to_string()));
+                metadata.insert("owasp".to_string(), Value::String("A03:2021".to_string()));
                 metadata
             },
             enabled: true,
+            mode: crate::types::RuleMode::Search,
         }
     }
 
@@ -70,12 +72,13 @@ impl RuleExecutionExample {
             paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
-                metadata.insert("category".to_string(), "security".to_string());
-                metadata.insert("cwe".to_string(), "79".to_string());
-                metadata.insert("owasp".to_string(), "A03:2021".to_string());
+                metadata.insert("category".to_string(), Value::String("security".to_string()));
+                metadata.insert("cwe".to_string(), Value::String("79".to_string()));
+                metadata.insert("owasp".to_string(), Value::String("A03:2021".to_string()));
                 metadata
             },
             enabled: true,
+            mode: crate::types::RuleMode::Search,
         }
     }
 
@@ -141,7 +144,7 @@ impl RuleExecutionExample {
             if !finding.metadata.is_empty() {
                 println!("  Metadata:");
                 for (key, value) in &finding.metadata {
-                    println!("    {}: {}", key, value);
+                    println!("    {}: {:?}", key, value);
                 }
             }
         }
