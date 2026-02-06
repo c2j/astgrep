@@ -1180,9 +1180,12 @@ impl AdvancedRuleExecutor {
         let mut sources = Vec::new();
         
         for source_pattern_str in &dataflow_spec.sources {
+            // Normalize pattern: remove trailing semicolons for more flexible matching
+            let normalized_pattern = source_pattern_str.trim_end_matches(';').trim();
+            
             // Convert source pattern to SemgrepPattern
             let source_pattern = astgrep_core::SemgrepPattern {
-                pattern_type: astgrep_core::PatternType::Simple(source_pattern_str.clone()),
+                pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
                 metavariable_pattern: None,
                 conditions: Vec::new(),
                 focus: None,
@@ -1220,9 +1223,12 @@ impl AdvancedRuleExecutor {
         let mut sinks = Vec::new();
         
         for sink_pattern_str in &dataflow_spec.sinks {
+            // Normalize pattern: remove trailing semicolons for more flexible matching
+            let normalized_pattern = sink_pattern_str.trim_end_matches(';').trim();
+            
             // Convert sink pattern to SemgrepPattern
             let sink_pattern = astgrep_core::SemgrepPattern {
-                pattern_type: astgrep_core::PatternType::Simple(sink_pattern_str.clone()),
+                pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
                 metavariable_pattern: None,
                 conditions: Vec::new(),
                 focus: None,
@@ -1294,19 +1300,77 @@ impl AdvancedRuleExecutor {
         false
     }
     
-    /// Check if a variable flows to a sink
+    /// Check if a variable flows to a sink, using symbolic propagation for alias tracking
     fn is_variable_flowing_to_sink(
         &self,
         var_name: &str,
         sink_node: &dyn AstNode,
         _ast: &dyn AstNode
     ) -> bool {
-        // Check if the variable appears in the sink node
-        if self.node_uses_variables(sink_node, &[var_name.to_string()]) {
+        let sink_text = sink_node.text().unwrap_or_default();
+        
+        // Check if the source variable directly appears in the sink node
+        if sink_text.contains(var_name) {
             return true;
         }
         
+        // Use symbolic propagator to check for aliases
+        if let Some(ref propagator) = self.symbolic_propagator {
+            // Get all aliases of the source variable
+            let aliases = propagator.state().get_all_aliases(var_name);
+            
+            // Check if any alias appears in the sink
+            for alias in &aliases {
+                if sink_text.contains(alias) {
+                    return true;
+                }
+            }
+            
+            // Also check if the source variable is derived from any variable in the sink
+            // This handles cases like: dbf.newDocumentBuilder() where dbf is a field
+            if let Some(sink_var) = self.extract_receiver_from_sink(sink_node) {
+                // Check if sink_var is an alias of var_name
+                if propagator.state().is_alias(var_name, &sink_var) {
+                    return true;
+                }
+                // Check if sink_var equals var_name
+                if sink_var == var_name {
+                    return true;
+                }
+            }
+        }
+        
         false
+    }
+    
+    /// Extract the receiver variable from a sink node
+    /// For example, from "dbf.newDocumentBuilder()", extract "dbf"
+    fn extract_receiver_from_sink(&self, sink_node: &dyn AstNode) -> Option<String> {
+        let sink_text = sink_node.text().unwrap_or_default();
+        
+        // Pattern: receiver.methodName()
+        // Extract the receiver part before the first dot
+        if let Some(dot_pos) = sink_text.find('.') {
+            let receiver = sink_text[..dot_pos].trim();
+            if !receiver.is_empty() {
+                return Some(receiver.to_string());
+            }
+        }
+        
+        // Try AST-based extraction for method_invocation or call_expression
+        if sink_node.node_type() == "method_invocation" || sink_node.node_type() == "call_expression" {
+            for i in 0..sink_node.child_count() {
+                if let Some(child) = sink_node.child(i) {
+                    if child.node_type() == "identifier" || child.node_type() == "field_access" {
+                        if let Some(text) = child.text() {
+                            return Some(text.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
     }
     
     /// Check if a dataflow matches source and sink

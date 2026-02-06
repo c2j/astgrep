@@ -1558,31 +1558,84 @@ impl RuleExecutionEngine {
         println!("🔍 Sources: {:?}", dataflow.sources);
         println!("🔍 Sinks: {:?}", dataflow.sinks);
         
-        // Check for source annotations in source code
-        let has_request_param = source_text.contains("@RequestParam");
-        let has_path_variable = source_text.contains("@PathVariable");
-        let has_request_body = source_text.contains("@RequestBody");
-        let has_request_header = source_text.contains("@RequestHeader");
-        let has_cookie_value = source_text.contains("@CookieValue");
-        let has_source = has_request_param || has_path_variable || has_request_body || has_request_header || has_cookie_value;
+        // Check if any source pattern matches in the source code
+        let mut has_source = false;
+        let mut source_locations: Vec<(usize, usize)> = Vec::new();
         
-        // Check for sink patterns in source code
-        let has_new_file = source_text.contains("new File(");
-        let has_file_input_stream = source_text.contains("FileInputStream");
-        let has_file_reader = source_text.contains("FileReader");
-        let has_get_resource = source_text.contains("getResourceAsStream");
-        let has_sink = has_new_file || has_file_input_stream || has_file_reader || has_get_resource;
+        for source_pattern in &dataflow.sources {
+            // Normalize pattern: remove trailing semicolons for flexible matching
+            let normalized = source_pattern.trim_end_matches(';').trim();
+            
+            // Try exact match first
+            if source_text.contains(normalized) {
+                has_source = true;
+                // Find all occurrences
+                let mut start = 0;
+                while let Some(pos) = source_text[start..].find(normalized) {
+                    let absolute_pos = start + pos;
+                    let line = source_text[..absolute_pos].chars().filter(|&c| c == '\n').count() + 1;
+                    let last_newline = source_text[..absolute_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    let col = absolute_pos - last_newline + 1;
+                    source_locations.push((line, col));
+                    start = absolute_pos + normalized.len();
+                }
+            }
+        }
+        
+        // Check if any sink pattern matches in the source code
+        let mut has_sink = false;
+        let mut sink_locations: Vec<(usize, usize, usize, usize)> = Vec::new();
+        
+        for sink_pattern in &dataflow.sinks {
+            // Normalize pattern: remove trailing semicolons and handle metavariables
+            let normalized = sink_pattern
+                .trim_end_matches(';')
+                .trim()
+                .replace("$VAR.", "")  // Remove $VAR. prefix for simple text matching
+                .replace("$VAR", "");   // Remove standalone $VAR
+            
+            // Find sink pattern matches
+            if !normalized.is_empty() && source_text.contains(&normalized) {
+                has_sink = true;
+                // Find all occurrences and their locations
+                let mut start = 0;
+                while let Some(pos) = source_text[start..].find(&normalized) {
+                    let absolute_pos = start + pos;
+                    let line = source_text[..absolute_pos].chars().filter(|&c| c == '\n').count() + 1;
+                    let last_newline = source_text[..absolute_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    let col = absolute_pos - last_newline + 1;
+                    
+                    // Find end of statement for column range
+                    let after = &source_text[absolute_pos..];
+                    let end_col = if let Some(end_pos) = after.find(';') {
+                        col + end_pos
+                    } else {
+                        col + normalized.len()
+                    };
+                    
+                    sink_locations.push((line, col, line, end_col));
+                    start = absolute_pos + normalized.len();
+                }
+            }
+        }
         
         println!("🔍 Has source: {}, Has sink: {}", has_source, has_sink);
         
-        // If both source and sink exist, report a finding
+        // If both source and sink exist, report findings
         if has_source && has_sink {
-            // Find the location of the sink
-            if let Some(location) = self.find_sink_location(&source_text, context) {
+            // Create a finding for each sink location
+            for (line, col, end_line, end_col) in sink_locations {
+                let location = Location::new(
+                    PathBuf::from(&context.file_path),
+                    line,
+                    col,
+                    end_line,
+                    end_col,
+                );
+                
                 let finding = Finding::new(
                     rule.id.clone(),
-                    format!("{}: Potential path traversal vulnerability - tainted data from user input flows to file operation", 
-                        rule.name),
+                    format!("{}: {}", rule.name, rule.description),
                     rule.severity,
                     rule.confidence,
                     location,
@@ -1590,7 +1643,7 @@ impl RuleExecutionEngine {
                 .with_metadata("analysis_type".to_string(), "taint".to_string());
                 
                 findings.push(finding);
-                println!("🔍 Taint vulnerability found!");
+                println!("🔍 Taint vulnerability found at line {}!", line);
             }
         }
         

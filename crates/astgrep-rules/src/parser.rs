@@ -1158,9 +1158,10 @@ impl RuleParser {
         let mut result = pattern.to_string();
         
         // Replace complex metavariable patterns with simple wildcards
-        // $METHODNAME(...) -> $FUNC(...)
+        // $METHODNAME(...) -> $VAR(...)
+        // Use $$VAR to escape the $ in the replacement string (otherwise it's interpreted as capture group reference)
         result = regex::Regex::new(r"\$[A-Z][A-Z_0-9]*")
-            .map(|re| re.replace_all(&result, "$VAR").to_string())
+            .map(|re| re.replace_all(&result, "$$VAR").to_string())
             .unwrap_or(result);
         
         // Replace @ annotations
