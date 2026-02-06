@@ -364,7 +364,37 @@ impl RuleExecutionEngine {
             return Ok(findings);
         }
 
-        // 3) pattern-either: handle Regex and Simple alternatives on full source (including metavariables)
+        // 3) pattern-all: handle patterns with positive and negative constraints
+        if let PatternType::All(ref subs) = &pattern.pattern_type {
+            if subs.is_empty() {
+                return Ok(findings);
+            }
+
+            // Use AdvancedRuleExecutor for proper AST-based matching with conditions
+            // This handles all pattern types including Inside, Not, etc.
+            println!("🔍 Pattern has {} sub-patterns and {} conditions, using AdvancedRuleExecutor for All pattern", subs.len(), pattern.conditions.len());
+            use crate::executor::AdvancedRuleExecutor;
+            let mut advanced_executor = AdvancedRuleExecutor::new();
+            
+            // Create a rule with the combined pattern
+            let mut single_pattern_rule = rule.clone();
+            single_pattern_rule.patterns = vec![pattern.clone()];
+            
+            // Execute using advanced executor with constant propagation enabled
+            let file_path = std::path::Path::new(&context.file_path);
+            let result = advanced_executor.execute_comprehensive_analysis(
+                &[single_pattern_rule],
+                _ast,
+                context.language,
+                Some(file_path),
+                true, // enable constant propagation
+            )?;
+            
+            println!("🔍 AdvancedRuleExecutor found {} findings for All pattern", result.findings.len());
+            return Ok(result.findings);
+        }
+
+        // 4) pattern-either: handle Regex and Simple alternatives on full source (including metavariables)
         if let PatternType::Either(ref subs) = &pattern.pattern_type {
             use std::collections::HashSet;
             let mut seen: HashSet<(usize, usize)> = HashSet::new();
@@ -430,6 +460,41 @@ impl RuleExecutionEngine {
                             findings.push(finding);
                         }
                     }
+                    PatternType::All(_) => {
+                        // For complex patterns (like patterns with conditions), use AdvancedRuleExecutor
+                        println!("🔍 pattern-either: using AdvancedRuleExecutor for All pattern with conditions");
+                        use crate::executor::AdvancedRuleExecutor;
+                        let mut advanced_executor = AdvancedRuleExecutor::new();
+
+                        // Create a rule with just this sub-pattern
+                        let mut single_pattern_rule = rule.clone();
+                        single_pattern_rule.patterns = vec![sub.clone()];
+
+                        // Execute using advanced executor
+                        let file_path = std::path::Path::new(&context.file_path);
+                        if let Ok(result) = advanced_executor.execute_comprehensive_analysis(
+                            &[single_pattern_rule],
+                            _ast,
+                            context.language,
+                            Some(file_path),
+                            true,
+                        ) {
+                            println!("🔍 AdvancedRuleExecutor found {} findings for All sub-pattern", result.findings.len());
+                            for finding in result.findings {
+                                let start_line = finding.location.start_line;
+                                let start_col = finding.location.start_column;
+                                let end_line = finding.location.end_line;
+                                let end_col = finding.location.end_column;
+
+                                // Convert to byte positions for deduplication
+                                let start_byte = self.line_col_to_byte_index(&context.source_code, start_line, start_col);
+                                let end_byte = self.line_col_to_byte_index(&context.source_code, end_line, end_col);
+
+                                if !seen.insert((start_byte, end_byte)) { continue; }
+                                findings.push(finding);
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -440,7 +505,7 @@ impl RuleExecutionEngine {
         }
 
         // Fallback: no simple/regex pattern string available, use node-based matching (locations may be coarse)
-        let matches = self.find_pattern_matches(pattern, _ast, context.language)?;
+        let matches = self.find_pattern_matches(pattern, _ast, context.language, &context.source_code)?;
         println!("🔍 Fallback matching found {} matches", matches.len());
 
         // Keep only smallest, non-overlapping node spans
@@ -556,7 +621,7 @@ impl RuleExecutionEngine {
     }
 
     /// Find pattern matches in AST (simplified implementation)
-    fn find_pattern_matches(&self, pattern: &Pattern, ast: &dyn AstNode, language: astgrep_core::Language) -> Result<Vec<Box<dyn AstNode>>> {
+    fn find_pattern_matches(&self, pattern: &Pattern, ast: &dyn AstNode, language: astgrep_core::Language, source_code: &str) -> Result<Vec<Box<dyn AstNode>>> {
         let mut matches = Vec::new();
         let mut node_count = 0;
 
@@ -564,12 +629,90 @@ impl RuleExecutionEngine {
 
         // Handle different pattern types
         match &pattern.pattern_type {
+            crate::types::PatternType::All(sub_patterns) => {
+                println!("🔍 Processing All pattern with {} sub-patterns", sub_patterns.len());
+                if sub_patterns.is_empty() {
+                    return Ok(matches);
+                }
+                
+                // For All patterns, find matches that satisfy ALL sub-patterns
+                // Start with matches from the first (positive) pattern
+                let positive_matches = self.find_pattern_matches(&sub_patterns[0], ast, language, source_code)?;
+                println!("🔍 All pattern: first sub-pattern found {} matches", positive_matches.len());
+                
+                // Filter matches that also satisfy all other sub-patterns (negative constraints)
+                for pos_match in positive_matches {
+                    let pos_text = pos_match.text().unwrap_or("");
+                    let mut all_satisfied = true;
+                    
+                    // Check negative constraints (Not, NotRegex, etc.)
+                    for neg_pattern in &sub_patterns[1..] {
+                        match &neg_pattern.pattern_type {
+                            crate::types::PatternType::Not(inner) => {
+                                // This is a negative constraint - the node should NOT match this pattern
+                                println!("🔍 Checking Not pattern against: {}", pos_text);
+                                if let Some(neg_pattern_str) = inner.get_pattern_string() {
+                                    println!("🔍 Negative pattern: {}", neg_pattern_str);
+                                    if self.simple_pattern_match(neg_pattern_str, pos_text, language) {
+                                        // Node matches the negative pattern, so it's excluded
+                                        println!("🔍 EXCLUDED by pattern-not");
+                                        all_satisfied = false;
+                                        break;
+                                    } else {
+                                        println!("🔍 Not excluded (doesn't match negative pattern)");
+                                    }
+                                } else {
+                                    println!("🔍 No pattern string for negative pattern");
+                                }
+                                // Also check conditions on the Not pattern (e.g., metavariable-type)
+                                if !self.evaluate_conditions_on_match(&neg_pattern.conditions, pos_match.as_ref(), source_code) {
+                                    all_satisfied = false;
+                                    break;
+                                }
+                            }
+                            crate::types::PatternType::NotRegex(regex) => {
+                                // This is a negative regex constraint
+                                if let Ok(re) = regex::Regex::new(regex) {
+                                    if re.is_match(pos_text) {
+                                        all_satisfied = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            _ => {
+                                // For other pattern types, check if they match (positive constraint)
+                                let neg_matches = self.find_pattern_matches(neg_pattern, ast, language, source_code)?;
+                                if !neg_matches.iter().any(|m| m.text() == pos_match.text()) {
+                                    all_satisfied = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if all_satisfied {
+                        matches.push(pos_match);
+                    }
+                }
+                println!("🔍 All pattern: found {} matches after filtering sub-patterns", matches.len());
+                
+                // Also evaluate conditions on the outer pattern (e.g., metavariable-type)
+                if !pattern.conditions.is_empty() {
+                    println!("🔍 Evaluating {} conditions on outer pattern", pattern.conditions.len());
+                    matches.retain(|m| {
+                        let result = self.evaluate_conditions_on_match(&pattern.conditions, m.as_ref(), source_code);
+                        println!("🔍 Condition evaluation result: {}", result);
+                        result
+                    });
+                    println!("🔍 After condition evaluation: {} matches", matches.len());
+                }
+            }
             crate::types::PatternType::Either(sub_patterns) => {
                 println!("🔍 Processing Either pattern with {} sub-patterns", sub_patterns.len());
                 // For Either patterns, try each sub-pattern
                 for (i, sub_pattern) in sub_patterns.iter().enumerate() {
                     println!("🔍 Trying Either sub-pattern {}: {:?}", i + 1, sub_pattern);
-                    let sub_matches = self.find_pattern_matches(sub_pattern, ast, language)?;
+                    let sub_matches = self.find_pattern_matches(sub_pattern, ast, language, source_code)?;
                     println!("🔍 Either sub-pattern {} found {} matches", i + 1, sub_matches.len());
                     matches.extend(sub_matches);
                 }
@@ -600,6 +743,72 @@ impl RuleExecutionEngine {
 
         println!("🔍 AST traversal complete. Visited {} nodes, found {} matches", node_count, matches.len());
         Ok(matches)
+    }
+
+    /// Evaluate conditions (like metavariable-type) on a matched node
+    fn evaluate_conditions_on_match(
+        &self,
+        conditions: &[crate::types::Condition],
+        matched_node: &dyn astgrep_core::AstNode,
+        source_code: &str,
+    ) -> bool {
+        use crate::types::Condition;
+
+        for condition in conditions {
+            match condition {
+                Condition::MetavariableType(metavar_type) => {
+                    // Extract the variable name from the matched node's text
+                    if let Some(node_text) = matched_node.text() {
+                        // The node text should be something like "pWriter.println(...)"
+                        // Extract the variable name (the part before the first '.')
+                        if let Some(var_name) = node_text.split('.').next() {
+                            let var_name = var_name.trim();
+                            
+                            // Look for the variable declaration in the source code
+                            // Search for patterns like "Type varName = ...;" or "Type varName;"
+                            // Handles cases like: PrintWriter pWriter = response.getWriter();
+                            let decl_pattern = format!(r"(\w+)\s+{}\s*=[^;]*;", regex::escape(var_name));
+                            if let Ok(re) = regex::Regex::new(&decl_pattern) {
+                                let mut found_type: Option<String> = None;
+                                for cap in re.captures_iter(source_code) {
+                                    if let Some(type_match) = cap.get(1) {
+                                        found_type = Some(type_match.as_str().to_string());
+                                        break;
+                                    }
+                                }
+                                
+                                // Check if the found type matches the expected type
+                                match found_type {
+                                    Some(found) if found == metavar_type.var_type => {
+                                        // Type matches, allow
+                                        return true;
+                                    }
+                                    Some(_) => {
+                                        // Type doesn't match, reject
+                                        return false;
+                                    }
+                                    None => {
+                                        // Could not determine type, reject (conservative)
+                                        return false;
+                                    }
+                                }
+                            } else {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                _ => {
+                    // Other condition types not yet implemented for this path
+                    // For now, allow them to pass
+                }
+            }
+        }
+        true
     }
 
     /// Tokenize a string, preserving operators and punctuation as separate tokens.
@@ -814,7 +1023,7 @@ impl RuleExecutionEngine {
                 // Check constant propagation: if pattern token is a literal and text token is an identifier
                 let constant_prop_match = if !p_tok.starts_with('$') && !self.constant_values.is_empty() {
                     // Check if text token is an identifier that has a constant value matching the pattern token
-                    if let Some(constant_value) = self.constant_values.get(&text_tokens[j].0) {
+                    let direct_const_match = if let Some(constant_value) = self.constant_values.get(&text_tokens[j].0) {
                         let constant_str = match constant_value {
                             astgrep_dataflow::ConstantValue::Integer(i) => i.to_string(),
                             astgrep_dataflow::ConstantValue::String(s) => s.clone(),
@@ -829,13 +1038,57 @@ impl RuleExecutionEngine {
                         }
                     } else {
                         false
-                    }
+                    };
+                    
+                    // Check for member access pattern like "this.field" or "obj.field"
+                    // where text token is "this"/"obj" and is followed by "." and field name
+                    let member_access_match = if !direct_const_match && j + 2 < text_tokens.len() {
+                        // Check if next token is "." and the one after that is a field name
+                        if text_tokens[j + 1].0 == "." {
+                            let field_name = &text_tokens[j + 2].0;
+                            // Check if the field has a constant value matching the pattern
+                            if let Some(constant_value) = self.constant_values.get(field_name) {
+                                let constant_str = match constant_value {
+                                    astgrep_dataflow::ConstantValue::Integer(i) => i.to_string(),
+                                    astgrep_dataflow::ConstantValue::String(s) => s.clone(),
+                                    astgrep_dataflow::ConstantValue::Boolean(b) => b.to_string(),
+                                    astgrep_dataflow::ConstantValue::Null => "null".to_string(),
+                                    astgrep_dataflow::ConstantValue::Unknown => String::new(),
+                                };
+                                let matches = if case_insensitive {
+                                    constant_str.eq_ignore_ascii_case(p_tok)
+                                } else {
+                                    constant_str == *p_tok
+                                };
+                                if matches {
+                                    // Mark that we need to skip the "." and field name tokens
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+                    
+                    direct_const_match || member_access_match
                 } else {
                     false
                 };
                 
                 if !direct_match && !constant_prop_match { return None; }
-                i += 1; j += 1;
+                i += 1;
+                j += 1;
+                
+                // If this was a member access match (e.g., this.x), skip the "." and field name tokens
+                if constant_prop_match && !direct_match && j + 1 < text_tokens.len() && text_tokens[j].0 == "." {
+                    j += 2; // Skip "." and the field name
+                }
             }
         }
         Some(j)
@@ -967,6 +1220,24 @@ impl RuleExecutionEngine {
             if ch == '\n' { line += 1; col = 1; } else { col += 1; }
         }
         (line, col)
+    }
+
+    /// Convert 1-based (line, column) to byte index in `s`
+    fn line_col_to_byte_index(&self, s: &str, target_line: usize, target_col: usize) -> usize {
+        let mut line: usize = 1;
+        let mut col: usize = 1;
+        for (ci, ch) in s.char_indices() {
+            if line == target_line && col == target_col {
+                return ci;
+            }
+            if ch == '\n' {
+                line += 1;
+                col = 1;
+            } else {
+                col += 1;
+            }
+        }
+        s.len()
     }
 
 

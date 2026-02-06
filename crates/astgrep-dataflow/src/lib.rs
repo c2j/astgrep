@@ -16,6 +16,7 @@ pub mod advanced_taint;
 pub mod symbol_table;
 pub mod constant_propagation;
 pub mod constant_analysis;
+pub mod symbolic_propagation;
 
 pub use graph::*;
 pub use sources::*;
@@ -30,6 +31,7 @@ pub use advanced_taint::*;
 pub use symbol_table::*;
 pub use constant_propagation::*;
 pub use constant_analysis::*;
+pub use symbolic_propagation::*;
 
 use astgrep_core::{AstNode, Result};
 use std::collections::{HashMap, HashSet};

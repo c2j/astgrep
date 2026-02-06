@@ -309,7 +309,7 @@ impl TreeSitterParser {
             "expression_statement" => NodeType::ExpressionStatement,
             "binary_expression" | "logical_expression" | "comparison_expression" => NodeType::BinaryExpression,
             "unary_expression" | "update_expression" => NodeType::UnaryExpression,
-            "member_expression" | "subscript_expression" | "attribute" => NodeType::MemberExpression,
+            "member_expression" | "subscript_expression" | "attribute" | "field_access" => NodeType::MemberExpression,
             "array" | "array_literal" | "list" | "tuple" => NodeType::ArrayExpression,
             "object" | "object_literal" | "dictionary" | "hash" => NodeType::ObjectExpression,
 
@@ -386,7 +386,7 @@ impl TreeSitterParser {
                 NodeType::BinaryExpression
             } else if ts_kind.contains("unary") {
                 NodeType::UnaryExpression
-            } else if ts_kind.contains("member") || ts_kind.contains("attribute") {
+            } else if ts_kind.contains("member") || ts_kind.contains("attribute") || ts_kind.contains("field_access") {
                 NodeType::MemberExpression
             } else if ts_kind.contains("call") {
                 NodeType::CallExpression
@@ -956,14 +956,17 @@ impl TreeSitterParser {
         outer: &PatternType,
         bindings: &mut MetaVariableBindings
     ) -> Result<bool> {
-        // Check if inner pattern matches current node
-        if self.match_pattern_type(node, source, inner, bindings)? {
-            // Check if we're inside an outer pattern
+        // First, match inner pattern to capture metavariables
+        let mut inner_bindings = bindings.clone();
+        if self.match_pattern_type(node, source, inner, &mut inner_bindings)? {
+            // Check if we're inside an outer pattern, preserving inner bindings
             let mut current = node.parent();
             while let Some(parent) = current {
-                let mut temp_bindings = bindings.clone();
-                if self.match_pattern_type(&parent, source, outer, &mut temp_bindings)? {
-                    *bindings = temp_bindings;
+                // Use inner_bindings (with captured metavariables from inner) for outer matching
+                let mut combined_bindings = inner_bindings.clone();
+                if self.match_pattern_type(&parent, source, outer, &mut combined_bindings)? {
+                    // Merge both inner and outer bindings
+                    *bindings = combined_bindings;
                     return Ok(true);
                 }
                 current = parent.parent();

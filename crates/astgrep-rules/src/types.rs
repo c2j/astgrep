@@ -364,6 +364,7 @@ pub enum Condition {
     MetavariableComparison(MetavariableComparison),
     MetavariableName(MetavariableName),
     MetavariableAnalysis(MetavariableAnalysisCondition),
+    MetavariableType(MetavariableType),
     NodeType(String),
     NodeAttribute(String, String),
     Custom(String),
@@ -401,11 +402,17 @@ impl MetavariableComparison {
 pub struct MetavariableName {
     pub metavariable: String,
     pub name_pattern: String,
+    /// Fully qualified name (for semgrep-internal-metavariable-name)
+    pub fqn: Option<String>,
 }
 
 impl MetavariableName {
     pub fn new(metavariable: String, name_pattern: String) -> Self {
-        Self { metavariable, name_pattern }
+        Self { metavariable, name_pattern, fqn: None }
+    }
+
+    pub fn with_fqn(metavariable: String, fqn: String) -> Self {
+        Self { metavariable, name_pattern: fqn.clone(), fqn: Some(fqn) }
     }
 }
 
@@ -419,6 +426,19 @@ pub struct MetavariableAnalysisCondition {
 impl MetavariableAnalysisCondition {
     pub fn new(metavariable: String, analysis: MetavariableAnalysis) -> Self {
         Self { metavariable, analysis }
+    }
+}
+
+/// Metavariable type constraint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetavariableType {
+    pub metavariable: String,
+    pub var_type: String,
+}
+
+impl MetavariableType {
+    pub fn new(metavariable: String, var_type: String) -> Self {
+        Self { metavariable, var_type }
     }
 }
 
@@ -587,7 +607,7 @@ mod tests {
         .with_fix("Use PreparedStatement".to_string());
 
         assert_eq!(rule.patterns.len(), 1);
-        assert_eq!(rule.get_metadata("cwe"), Some(&"CWE-89".to_string()));
+        assert_eq!(rule.get_metadata("cwe"), Some(&serde_yaml::Value::String("CWE-89".to_string())));
         assert_eq!(rule.fix, Some("Use PreparedStatement".to_string()));
     }
 

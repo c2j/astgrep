@@ -319,6 +319,21 @@ impl RuleValidator {
                 }
                 // Additional validation for analysis configuration could be added here
             }
+            Condition::MetavariableType(metavar_type) => {
+                // Validate metavariable type constraint
+                if metavar_type.metavariable.is_empty() {
+                    return Err(AnalysisError::rule_validation_error(format!(
+                        "Pattern {} condition {} metavariable name cannot be empty",
+                        pattern_index, condition_index
+                    )));
+                }
+                if metavar_type.var_type.is_empty() {
+                    return Err(AnalysisError::rule_validation_error(format!(
+                        "Pattern {} condition {} type cannot be empty",
+                        pattern_index, condition_index
+                    )));
+                }
+            }
             Condition::Custom(custom_condition) => {
                 if custom_condition.is_empty() {
                     return Err(AnalysisError::rule_validation_error(format!(

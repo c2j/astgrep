@@ -96,7 +96,7 @@ run_semgrep_test() {
 
     # Run semgrep and count matches
     # echo "semgrep --config "$yaml_file" "$java_file" --json"
-    local semgrep_output=$(semgrep --config "$yaml_file" "$java_file" --json 2>/dev/null || echo '{"results":[]}')
+    local semgrep_output=$(semgrep --config "$yaml_file" "$java_file" --json 2>/dev/null |jq || echo '{"results":[]}')
     local match_count=$(echo "$semgrep_output" | grep -c '"check_id"' 2>/dev/null || echo "0")
 
     # Clean and ensure we return a valid number

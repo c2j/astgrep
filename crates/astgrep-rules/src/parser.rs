@@ -263,32 +263,85 @@ impl RuleParser {
     }
 
     /// Parse patterns array
+    /// In Semgrep, items in `patterns` are combined with AND logic
     fn parse_patterns_array(&self, patterns_value: &Value, index: usize) -> Result<Vec<Pattern>> {
         let patterns_array = patterns_value
             .as_sequence()
             .ok_or_else(|| AnalysisError::parse_error(format!("Rule {} 'patterns' must be an array", index)))?;
 
-        let mut patterns: Vec<Pattern> = Vec::new();
+        // Collect all components
+        let mut positive_patterns: Vec<Pattern> = Vec::new();
+        let mut negative_patterns: Vec<Pattern> = Vec::new();
+        let mut conditions: Vec<Condition> = Vec::new();
+
         for (pattern_index, pattern_value) in patterns_array.iter().enumerate() {
             // Check if this is a metavariable-comparison (not a pattern, but a condition)
             if let Some(mapping) = pattern_value.as_mapping() {
                 if mapping.contains_key(&Value::String("metavariable-comparison".to_string())) {
-                    // This is a metavariable-comparison condition, parse it and add to the last pattern
-                    if let Some(last_pattern) = patterns.last_mut() {
-                        if let Some(metavar_comp_value) = mapping.get(&Value::String("metavariable-comparison".to_string())) {
-                            let metavar_comp = self.parse_metavariable_comparison(metavar_comp_value, index, pattern_index)?;
-                            last_pattern.conditions.push(Condition::MetavariableComparison(metavar_comp));
-                        }
+                    if let Some(metavar_comp_value) = mapping.get(&Value::String("metavariable-comparison".to_string())) {
+                        let metavar_comp = self.parse_metavariable_comparison(metavar_comp_value, index, pattern_index)?;
+                        conditions.push(Condition::MetavariableComparison(metavar_comp));
+                    }
+                    continue;
+                }
+                
+                // Check if this is a semgrep-internal-metavariable-name (not a pattern, but a condition)
+                if mapping.contains_key(&Value::String("semgrep-internal-metavariable-name".to_string())) {
+                    if let Some(metavar_name_value) = mapping.get(&Value::String("semgrep-internal-metavariable-name".to_string())) {
+                        let metavar_name = self.parse_internal_metavariable_name(metavar_name_value, index, pattern_index)?;
+                        conditions.push(Condition::MetavariableName(metavar_name));
+                    }
+                    continue;
+                }
+
+                // Check if this is a metavariable-type (not a pattern, but a condition)
+                if mapping.contains_key(&Value::String("metavariable-type".to_string())) {
+                    if let Some(metavar_type_value) = mapping.get(&Value::String("metavariable-type".to_string())) {
+                        let metavar_type = self.parse_metavariable_type(metavar_type_value, index, pattern_index)?;
+                        conditions.push(Condition::MetavariableType(metavar_type));
                     }
                     continue;
                 }
             }
             
             let pattern = self.parse_single_pattern(pattern_value, index, pattern_index)?;
-            patterns.push(pattern);
+            
+            // Separate positive and negative patterns
+            match &pattern.pattern_type {
+                PatternType::Not(_) | PatternType::NotRegex(_) | PatternType::NotInside(_) => {
+                    negative_patterns.push(pattern);
+                }
+                _ => {
+                    positive_patterns.push(pattern);
+                }
+            }
         }
 
-        Ok(patterns)
+        // Combine all components into a single Pattern::All (AND logic)
+        if positive_patterns.is_empty() && negative_patterns.is_empty() && conditions.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Build the combined pattern
+        let mut all_components: Vec<Pattern> = Vec::new();
+        
+        // Add positive patterns
+        all_components.extend(positive_patterns);
+        
+        // Add negative patterns
+        all_components.extend(negative_patterns);
+
+        // Create the main pattern with all conditions
+        let mut main_pattern = if all_components.len() == 1 {
+            all_components.into_iter().next().unwrap()
+        } else {
+            Pattern::all(all_components)
+        };
+        
+        // Add conditions to the main pattern
+        main_pattern.conditions.extend(conditions);
+
+        Ok(vec![main_pattern])
     }
     
     /// Parse metavariable comparison
@@ -318,6 +371,28 @@ impl RuleParser {
         let value = String::new();
         
         Ok(MetavariableComparison::new(metavariable, operator, value))
+    }
+
+    /// Parse metavariable type constraint
+    fn parse_metavariable_type(&self, value: &Value, rule_index: usize, pattern_index: usize) -> Result<MetavariableType> {
+        let type_obj = value
+            .as_mapping()
+            .ok_or_else(|| AnalysisError::parse_error(format!(
+                "Rule {} pattern {} metavariable-type must be an object",
+                rule_index, pattern_index
+            )))?;
+
+        let metavariable = self.get_string_field(type_obj, "metavariable", rule_index)?;
+        let var_type = self.get_string_field(type_obj, "type", rule_index)?;
+
+        // Remove $ prefix from metavariable name if present
+        let metavariable = if metavariable.starts_with('$') {
+            metavariable[1..].to_string()
+        } else {
+            metavariable
+        };
+
+        Ok(MetavariableType::new(metavariable, var_type))
     }
 
     /// Parse pattern-either (OR logic)
@@ -387,6 +462,21 @@ impl RuleParser {
             } else {
                 Pattern::any(any_patterns)
             }
+        } else if let Some(patterns_value) = pattern_obj.get(&Value::String("patterns".to_string())) {
+            // Handle nested patterns (AND logic)
+            let patterns = self.parse_patterns_array(patterns_value, rule_index)?;
+            if patterns.len() == 1 {
+                patterns.into_iter().next().unwrap()
+            } else {
+                Pattern::all(patterns)
+            }
+        } else if let Some(metavar_value) = pattern_obj.get(&Value::String("metavariable-pattern".to_string())) {
+            // Handle standalone metavariable-pattern (no main pattern, just the constraint)
+            // This creates a pattern that matches anything but applies the metavariable-pattern constraint
+            let mut pattern = Pattern::simple("...".to_string());
+            let metavar_pattern = self.parse_metavariable_pattern(metavar_value, rule_index, pattern_index)?;
+            pattern.metavariable_pattern = Some(metavar_pattern);
+            pattern
         } else {
             return Err(AnalysisError::parse_error(format!(
                 "Rule {} pattern {} must have a pattern field",
@@ -456,29 +546,66 @@ impl RuleParser {
 
         let metavariable = self.get_string_field(metavar_obj, "metavariable", rule_index)?;
         
-        let patterns_value = metavar_obj
-            .get(&Value::String("patterns".to_string()))
-            .ok_or_else(|| AnalysisError::parse_error(format!(
-                "Rule {} pattern {} metavariable_pattern missing 'patterns'",
-                rule_index, pattern_index
-            )))?;
-
-        let patterns_array = patterns_value
-            .as_sequence()
-            .ok_or_else(|| AnalysisError::parse_error(format!(
-                "Rule {} pattern {} metavariable_pattern 'patterns' must be an array",
-                rule_index, pattern_index
-            )))?;
-
+        // Support multiple ways to specify patterns:
+        // 1. `patterns` - array of pattern strings
+        // 2. `pattern` - single pattern string
+        // 3. `pattern-either` - array of pattern objects with alternatives
         let mut patterns = Vec::new();
-        for pattern_value in patterns_array {
+        
+        // Check for `patterns` field (array of strings)
+        if let Some(patterns_value) = metavar_obj.get(&Value::String("patterns".to_string())) {
+            let patterns_array = patterns_value
+                .as_sequence()
+                .ok_or_else(|| AnalysisError::parse_error(format!(
+                    "Rule {} pattern {} metavariable_pattern 'patterns' must be an array",
+                    rule_index, pattern_index
+                )))?;
+
+            for pattern_value in patterns_array {
+                let pattern_str = pattern_value
+                    .as_str()
+                    .ok_or_else(|| AnalysisError::parse_error(format!(
+                        "Rule {} pattern {} metavariable pattern must be a string",
+                        rule_index, pattern_index
+                    )))?;
+                patterns.push(pattern_str.to_string());
+            }
+        }
+        // Check for `pattern` field (single string)
+        else if let Some(pattern_value) = metavar_obj.get(&Value::String("pattern".to_string())) {
             let pattern_str = pattern_value
                 .as_str()
                 .ok_or_else(|| AnalysisError::parse_error(format!(
-                    "Rule {} pattern {} metavariable pattern must be a string",
+                    "Rule {} pattern {} metavariable_pattern 'pattern' must be a string",
                     rule_index, pattern_index
                 )))?;
             patterns.push(pattern_str.to_string());
+        }
+        // Check for `pattern-either` field (array of pattern objects)
+        else if let Some(pattern_either_value) = metavar_obj.get(&Value::String("pattern-either".to_string())) {
+            let either_array = pattern_either_value
+                .as_sequence()
+                .ok_or_else(|| AnalysisError::parse_error(format!(
+                    "Rule {} pattern {} metavariable_pattern 'pattern-either' must be an array",
+                    rule_index, pattern_index
+                )))?;
+            
+            for pattern_obj in either_array {
+                // Each element should be an object with a `pattern` field
+                if let Some(obj) = pattern_obj.as_mapping() {
+                    if let Some(pattern_value) = obj.get(&Value::String("pattern".to_string())) {
+                        if let Some(pattern_str) = pattern_value.as_str() {
+                            patterns.push(pattern_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            return Err(AnalysisError::parse_error(format!(
+                "Rule {} pattern {} metavariable_pattern must have 'patterns', 'pattern', or 'pattern-either' field",
+                rule_index, pattern_index
+            )));
         }
 
         let mut metavar_pattern = MetavariablePattern::with_patterns(metavariable, patterns);
@@ -535,6 +662,21 @@ impl RuleParser {
         let name_pattern = self.get_string_field(metavar_obj, "name", rule_index)?;
 
         Ok(MetavariableName::new(metavariable, name_pattern))
+    }
+
+    /// Parse semgrep-internal-metavariable-name constraint
+    fn parse_internal_metavariable_name(&self, value: &Value, rule_index: usize, pattern_index: usize) -> Result<MetavariableName> {
+        let metavar_obj = value
+            .as_mapping()
+            .ok_or_else(|| AnalysisError::parse_error(format!(
+                "Rule {} pattern {} semgrep-internal-metavariable-name must be an object",
+                rule_index, pattern_index
+            )))?;
+
+        let metavariable = self.get_string_field(metavar_obj, "metavariable", rule_index)?;
+        let fqn = self.get_string_field(metavar_obj, "fqn", rule_index)?;
+
+        Ok(MetavariableName::with_fqn(metavariable, fqn))
     }
 
     /// Parse metavariable analysis

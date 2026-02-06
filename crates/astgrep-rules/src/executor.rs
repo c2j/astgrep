@@ -11,6 +11,23 @@ use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Represents a taint match (source or sink)
+struct TaintMatch {
+    node: Box<dyn AstNode>,
+    bindings: HashMap<String, String>,
+    var_name: Option<String>,
+}
+
+impl Clone for TaintMatch {
+    fn clone(&self) -> Self {
+        Self {
+            node: self.node.clone_node(),
+            bindings: self.bindings.clone(),
+            var_name: self.var_name.clone(),
+        }
+    }
+}
+
 /// Advanced rule executor with full integration
 pub struct AdvancedRuleExecutor {
     pattern_matcher: AdvancedSemgrepMatcher,
@@ -18,6 +35,8 @@ pub struct AdvancedRuleExecutor {
     execution_stats: ExecutionStatistics,
     /// Constant propagator for variable value tracking
     constant_propagator: Option<astgrep_dataflow::ConstantPropagator>,
+    /// Symbolic propagator for alias tracking
+    symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
 }
 
 impl AdvancedRuleExecutor {
@@ -28,6 +47,7 @@ impl AdvancedRuleExecutor {
             dataflow_analyzer: DataFlowAnalyzer::new(),
             execution_stats: ExecutionStatistics::new(),
             constant_propagator: None,
+            symbolic_propagator: None,
         }
     }
 
@@ -76,6 +96,25 @@ impl AdvancedRuleExecutor {
         } else {
             None
         };
+
+        // Perform symbolic propagation analysis if needed
+        let enable_symbolic_propagation = applicable_rules.iter().any(|r| r.requires_symbolic_propagation());
+        if enable_symbolic_propagation {
+            use astgrep_dataflow::SymbolicPropagator;
+            let mut propagator = SymbolicPropagator::new().with_deep_propagation(true);
+            match propagator.analyze(ast) {
+                Ok(()) => {
+                    eprintln!("DEBUG: Symbolic propagation analysis completed");
+                    self.symbolic_propagator = Some(propagator);
+                }
+                Err(e) => {
+                    eprintln!("DEBUG: Symbolic propagation analysis failed: {}", e);
+                    self.symbolic_propagator = None;
+                }
+            }
+        } else {
+            self.symbolic_propagator = None;
+        }
 
         // Perform data flow analysis if needed
         let dataflow_analysis = if applicable_rules.iter().any(|r| r.requires_dataflow()) {
@@ -176,15 +215,14 @@ impl AdvancedRuleExecutor {
     ) -> Result<Vec<Finding>> {
         let mut findings = Vec::new();
 
+        // Preprocess pattern to handle typed metavariable syntax like "($TYPE $VAR).method()"
+        let (processed_pattern, type_constraints) = self.preprocess_typed_metavariables(pattern);
+
         // Convert astgrep_rules::Pattern to astgrep_core::SemgrepPattern
-        let semgrep_pattern = self.convert_pattern_to_semgrep_pattern(pattern)?;
+        let semgrep_pattern = self.convert_pattern_to_semgrep_pattern(&processed_pattern)?;
 
         // Find pattern matches using the advanced matcher
         let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
-        eprintln!("DEBUG execute_pattern_analysis: found {} matches", matches.len());
-        for (i, m) in matches.iter().enumerate() {
-            eprintln!("DEBUG match {}: bindings={:?}", i, m.bindings);
-        }
 
         // Heuristic de-dup: keep only smallest, non-overlapping spans to avoid repeated matches
         let mut mm: Vec<((usize, usize), usize, usize, usize, usize, SemgrepMatchResult)> = matches
@@ -223,9 +261,30 @@ impl AdvancedRuleExecutor {
             filtered.push(m);
         }
 
+        // Get full source code from the root AST node
+        let full_source = ast.text().unwrap_or("").to_string();
+
         for match_result in filtered {
-            // Check pattern conditions
-            if self.check_pattern_conditions(pattern, &match_result, dataflow_analysis)? {
+            // Check pattern conditions with full source code
+            // Also check type constraints from typed metavariable syntax
+            let conditions_passed = self.check_pattern_conditions(&processed_pattern, &match_result, dataflow_analysis, &full_source)?;
+            
+            // Check additional type constraints from typed metavariable preprocessing
+            let mut final_conditions_passed = conditions_passed;
+            if conditions_passed {
+                for (var_name, expected_type) in &type_constraints {
+                    // Check if the variable's type matches the expected type
+                    if let Some(var_value) = match_result.bindings.get(var_name) {
+                        let type_check_passed = self.check_variable_type(var_value, expected_type, &full_source);
+                        if !type_check_passed {
+                            final_conditions_passed = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if final_conditions_passed {
                 let finding = self.create_finding_from_match(rule, pattern, &match_result, file_path)?;
                 findings.push(finding);
             }
@@ -264,9 +323,10 @@ impl AdvancedRuleExecutor {
         pattern: &Pattern,
         match_result: &SemgrepMatchResult,
         dataflow_analysis: Option<&DataFlowAnalysis>,
+        full_source: &str,
     ) -> Result<bool> {
         for condition in &pattern.conditions {
-            if !self.evaluate_condition(condition, match_result, dataflow_analysis)? {
+            if !self.evaluate_condition(condition, match_result, dataflow_analysis, full_source)? {
                 return Ok(false);
             }
         }
@@ -279,13 +339,23 @@ impl AdvancedRuleExecutor {
         condition: &Condition,
         match_result: &SemgrepMatchResult,
         _dataflow_analysis: Option<&DataFlowAnalysis>,
+        full_source: &str,
     ) -> Result<bool> {
         match condition {
             Condition::MetavariableRegex(metavar_regex) => {
                 // Check if metavariable exists and matches regex
                 if let Some(metavar_value) = match_result.bindings.get(&metavar_regex.metavariable) {
-                    if let Ok(regex) = regex::Regex::new(&metavar_regex.regex) {
-                        Ok(regex.is_match(metavar_value))
+                    // Support (?i) case-insensitive flag and other inline regex flags
+                    let regex_str = &metavar_regex.regex;
+                    let regex = if regex_str.starts_with("(?i)") {
+                        // Case-insensitive regex
+                        regex::Regex::new(&format!("(?i){}", &regex_str[4..]))
+                    } else {
+                        regex::Regex::new(regex_str)
+                    };
+                    
+                    if let Ok(re) = regex {
+                        Ok(re.is_match(metavar_value))
                     } else {
                         Ok(false)
                     }
@@ -304,7 +374,7 @@ impl AdvancedRuleExecutor {
                     let resolved_value = if let Some(ref propagator) = self.constant_propagator {
                         // Get the location of the matched node
                         if let Some((start_line, start_col, _, _)) = match_result.node.location() {
-                            use astgrep_dataflow::SourceLocation;
+                            use astgrep_dataflow::constant_propagation::SourceLocation;
                             let location = SourceLocation::new(start_line, start_col);
                             
                             // Try to get the constant value at this location
@@ -353,11 +423,159 @@ impl AdvancedRuleExecutor {
                     Ok(false)
                 }
             }
+            Condition::MetavariableType(metavar_type) => {
+                // Check if metavariable exists and matches the expected type
+                if let Some(metavar_value) = match_result.bindings.get(&metavar_type.metavariable) {
+                    // Extract the actual value from the metavariable binding
+                    let var_value = metavar_value.trim();
+                    
+                    // First, try to infer type from the value itself (for literals)
+                    let inferred_type = self.infer_type_from_value(var_value);
+                    
+                    if let Some(type_info) = inferred_type {
+                        // Value is a literal, compare its inferred type
+                        Ok(type_info == metavar_type.var_type)
+                    } else {
+                        // Value is a variable, extract type from source code
+                        if let Some(type_info) = self.extract_type_info(match_result, var_value, full_source) {
+                            Ok(type_info == metavar_type.var_type)
+                        } else {
+                            // If we can't determine the type, reject the match
+                            // This prevents false positives when type info is unavailable
+                            Ok(false)
+                        }
+                    }
+                } else {
+                    Ok(false)
+                }
+            }
             Condition::Custom(custom_condition) => {
                 // Custom condition evaluation
                 self.evaluate_custom_condition(custom_condition, match_result)
             }
         }
+    }
+
+    /// Extract type information for a variable from the match context
+    fn extract_type_info(&self, match_result: &SemgrepMatchResult, var_name: &str, full_source: &str) -> Option<String> {
+        // Try to extract type information from the full source code
+        // This looks for variable declarations like "TypeName varName" in method signatures or declarations
+        
+        // Build import map for name resolution
+        let import_map = self.build_import_map(full_source);
+        
+        // Pattern 1: Method parameter declarations like "String varName" or "Type varName"
+        // Matches: "Type varName" followed by comma, closing paren, or space
+        let param_pattern = format!(r"(\w+)\s+{}\s*[,)]", regex::escape(var_name));
+        if let Ok(regex) = regex::Regex::new(&param_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(type_match) = captures.get(1) {
+                    let simple_type = type_match.as_str().to_string();
+                    return self.resolve_type_with_imports(&simple_type, &import_map);
+                }
+            }
+        }
+        
+        // Pattern 2: Variable declarations like "Type varName = ...;" or "Type varName;"
+        // Handles cases like: PrintWriter pWriter = response.getWriter();
+        let var_pattern = format!(r"(\w+)\s+{}\s*=[^;]*;", regex::escape(var_name));
+        if let Ok(regex) = regex::Regex::new(&var_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(type_match) = captures.get(1) {
+                    let simple_type = type_match.as_str().to_string();
+                    return self.resolve_type_with_imports(&simple_type, &import_map);
+                }
+            }
+        }
+        
+        // Pattern 3: Field declarations like "private Type varName = ...;" or "private Type varName;"
+        // Handles cases like: private PrintWriter pWriter = response.getWriter();
+        let field_pattern = format!(r"(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?(\w+)\s+{}\s*=[^;]*;", regex::escape(var_name));
+        if let Ok(regex) = regex::Regex::new(&field_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(type_match) = captures.get(1) {
+                    let simple_type = type_match.as_str().to_string();
+                    return self.resolve_type_with_imports(&simple_type, &import_map);
+                }
+            }
+        }
+        
+        None
+    }
+    
+    /// Build a map of imported simple names to their fully qualified names
+    fn build_import_map(&self, full_source: &str) -> HashMap<String, String> {
+        let mut import_map = HashMap::new();
+        
+        // Parse import statements like "import org.foo.Foo;" or "import org.foo.*;"
+        let import_pattern = regex::Regex::new(r"import\s+([\w.]+)(?:\.\*)?;").unwrap();
+        
+        for captures in import_pattern.captures_iter(full_source) {
+            if let Some(import_match) = captures.get(1) {
+                let import_path = import_match.as_str();
+                
+                // Extract the simple name (last part after the last dot)
+                if let Some(last_dot) = import_path.rfind('.') {
+                    let simple_name = &import_path[last_dot + 1..];
+                    let fully_qualified = import_path.to_string();
+                    
+                    eprintln!("DEBUG: Found import: {} -> {}", simple_name, fully_qualified);
+                    import_map.insert(simple_name.to_string(), fully_qualified);
+                } else {
+                    // No dot, the whole import is the simple name
+                    import_map.insert(import_path.to_string(), import_path.to_string());
+                }
+            }
+        }
+        
+        import_map
+    }
+    
+    /// Resolve a simple type name to its fully qualified name using import map
+    fn resolve_type_with_imports(&self, simple_type: &str, import_map: &HashMap<String, String>) -> Option<String> {
+        // First check if this simple type is in the import map
+        if let Some(fully_qualified) = import_map.get(simple_type) {
+            eprintln!("DEBUG: Resolved type '{}' to '{}'", simple_type, fully_qualified);
+            return Some(fully_qualified.clone());
+        }
+        
+        // If not found in imports, return the simple type as-is
+        // (it might be a primitive type or in the same package)
+        Some(simple_type.to_string())
+    }
+
+    /// Infer the type of a value from its literal representation
+    fn infer_type_from_value(&self, value: &str) -> Option<String> {
+        let trimmed = value.trim();
+        
+        // String literal: "..." or '...'
+        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
+           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+            return Some("String".to_string());
+        }
+        
+        // Integer literal: digits only (possibly with negative sign)
+        if trimmed.parse::<i64>().is_ok() {
+            return Some("int".to_string());
+        }
+        
+        // Floating point literal: contains dot and parses as float
+        if trimmed.contains('.') && trimmed.parse::<f64>().is_ok() {
+            return Some("float".to_string());
+        }
+        
+        // Boolean literal: true or false
+        if trimmed == "true" || trimmed == "false" {
+            return Some("boolean".to_string());
+        }
+        
+        // Null literal
+        if trimmed == "null" {
+            return Some("null".to_string());
+        }
+        
+        // Not a recognized literal, probably a variable name
+        None
     }
 
     /// Evaluate comparison between metavariable value and expected value
@@ -683,6 +901,59 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        // Handle bit XOR operations like "$X ^ 1 == 3"
+        // Parse expressions like "$VAR ^ 1 == 3" or "$VAR ^ 1 == 2"
+        if expr.contains('^') && expr.contains("==") {
+            // Try to parse the expression
+            // Format: $VAR ^ N == M
+            let parts: Vec<&str> = expr.split("==").collect();
+            if parts.len() == 2 {
+                let left_side = parts[0].trim();
+                let expected_result = parts[1].trim();
+
+                // Parse the bit operation: $VAR ^ N
+                if left_side.contains('^') {
+                    let bit_parts: Vec<&str> = left_side.split('^').collect();
+                    if bit_parts.len() == 2 {
+                        let var_part = bit_parts[0].trim();
+                        let mask_part = bit_parts[1].trim();
+
+                        eprintln!("DEBUG bitxor: var_part='{}', mask_part='{}', expected='{}'", var_part, mask_part, expected_result);
+
+                        // Check if this is the metavariable we're evaluating
+                        if var_part.starts_with("$") {
+                            // Parse the mask value
+                            if let Ok(mask) = mask_part.parse::<i64>() {
+                                // Parse the expected result
+                                if let Ok(expected) = expected_result.parse::<i64>() {
+                                    // Parse the actual value
+                                    if let Ok(val) = value.parse::<i64>() {
+                                        let result = val ^ mask;
+                                        eprintln!("DEBUG bitxor: val={}, mask={}, result={}, expected={}", val, mask, result, expected);
+                                        return Ok(result == expected);
+                                    } else {
+                                        eprintln!("DEBUG: Failed to parse value '{}' as i64", value);
+                                    }
+                                } else {
+                                    eprintln!("DEBUG: Failed to parse expected '{}' as i64", expected_result);
+                                }
+                            } else {
+                                eprintln!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
+                            }
+                        } else {
+                            eprintln!("DEBUG: var_part '{}' doesn't start with $", var_part);
+                        }
+                    } else {
+                        eprintln!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
+                    }
+                } else {
+                    eprintln!("DEBUG: left_side '{}' doesn't contain ^", left_side);
+                }
+            } else {
+                eprintln!("DEBUG: parts.len() = {}, expected 2", parts.len());
+            }
+        }
+
         // Handle bit NOT operations like "~ $X == -1"
         // Python: ~x = -(x + 1)
         if expr.contains('~') && expr.contains("==") {
@@ -858,38 +1129,40 @@ impl AdvancedRuleExecutor {
         file_path: Option<&Path>,
     ) -> Result<Vec<Finding>> {
         let mut findings = Vec::new();
-        
-        // Get source text for analysis
         let source_text = ast.text().unwrap_or_default();
         
-        // Direct approach: check for source annotations and sink patterns in source code
-        let has_source = self.check_source_patterns(&source_text, dataflow_spec);
-        let has_sink = self.check_sink_patterns(&source_text, dataflow_spec);
+        // Step 1: Find all source matches using pattern matching
+        let source_matches = self.find_taint_sources(ast, dataflow_spec)?;
+        if source_matches.is_empty() {
+            return Ok(findings);
+        }
         
-        // Check for variable flow from source to sink
-        let has_taint_flow = if has_source && has_sink {
-            self.check_taint_flow(&source_text, dataflow_spec)
-        } else {
-            false
-        };
+        // Step 2: Find all sink matches using pattern matching
+        let sink_matches = self.find_taint_sinks(ast, dataflow_spec)?;
+        if sink_matches.is_empty() {
+            return Ok(findings);
+        }
         
-        // Also check dataflow analysis results if available
-        let has_dataflow_match = if let Some(analysis) = dataflow_analysis {
-            self.check_dataflow_taint(analysis, dataflow_spec, &source_text)
-        } else {
-            false
-        };
+        // Step 3: Check for taint flow from sources to sinks
+        let taint_flows = self.detect_taint_flows(
+            &source_matches, 
+            &sink_matches, 
+            ast, 
+            dataflow_analysis
+        )?;
         
-        // Report finding if either method detects taint
-        if has_taint_flow || has_dataflow_match || (has_source && has_sink) {
-            if let Some(location) = self.find_taint_location(ast, &source_text, dataflow_spec) {
+        // Step 4: Create findings for each detected taint flow
+        for (source_match, sink_match) in taint_flows {
+            if let Some(location) = sink_match.node.location() {
                 let finding = Finding::new(
                     rule.id.clone(),
-                    format!("{}: Potential path traversal vulnerability - tainted data from user input flows to file operation", 
-                        rule.name),
+                    format!("{}: {}", rule.name, rule.description),
                     rule.severity,
                     rule.confidence,
-                    location,
+                    Location::new(
+                        file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                        location.0, location.1, location.2, location.3
+                    ),
                 );
                 findings.push(finding);
             }
@@ -898,382 +1171,178 @@ impl AdvancedRuleExecutor {
         Ok(findings)
     }
     
-    /// Check if source code contains source patterns (e.g., @RequestParam)
-    fn check_source_patterns(&self, source_text: &str, dataflow_spec: &DataFlowSpec) -> bool {
-        // Check for common Spring annotation sources
-        let source_patterns = ["@RequestParam", "@PathVariable", "@RequestBody", 
-                               "@RequestHeader", "@CookieValue"];
+    /// Find all taint sources matching the source patterns
+    fn find_taint_sources(
+        &mut self,
+        ast: &dyn AstNode,
+        dataflow_spec: &DataFlowSpec
+    ) -> Result<Vec<TaintMatch>> {
+        let mut sources = Vec::new();
         
-        for pattern in &source_patterns {
-            if source_text.contains(pattern) {
-                return true;
-            }
-        }
-        
-        // Also check patterns from the rule
-        dataflow_spec.sources.iter().any(|s| {
-            // Extract key terms from source pattern
-            if s.contains("RequestParam") && source_text.contains("@RequestParam") {
-                return true;
-            }
-            if s.contains("PathVariable") && source_text.contains("@PathVariable") {
-                return true;
-            }
-            if s.contains("RequestBody") && source_text.contains("@RequestBody") {
-                return true;
-            }
-            false
-        })
-    }
-    
-    /// Check if source code contains sink patterns (e.g., new File(...))
-    fn check_sink_patterns(&self, source_text: &str, dataflow_spec: &DataFlowSpec) -> bool {
-        // Check for common file operation sinks
-        let sink_patterns = ["new File(", "FileInputStream", "FileReader", "getResourceAsStream"];
-        
-        for pattern in &sink_patterns {
-            if source_text.contains(pattern) {
-                return true;
-            }
-        }
-        
-        // Also check patterns from the rule
-        dataflow_spec.sinks.iter().any(|s| {
-            if s.contains("File(") && source_text.contains("new File(") {
-                return true;
-            }
-            if s.contains("FileInputStream") && source_text.contains("FileInputStream") {
-                return true;
-            }
-            if s.contains("FileReader") && source_text.contains("FileReader") {
-                return true;
-            }
-            false
-        })
-    }
-    
-    /// Check if there's a taint flow from source to sink
-    fn check_taint_flow(&self, source_text: &str, _dataflow_spec: &DataFlowSpec) -> bool {
-        // Extract variable names from source annotations
-        let source_vars = self.extract_taint_variables(source_text);
-        
-        // Check if any source variable is used in a sink
-        for var in &source_vars {
-            if self.variable_in_sink(var, source_text) {
-                return true;
-            }
-        }
-        
-        // If we can't determine variable flow but both source and sink exist,
-        // assume there might be a flow (conservative approach)
-        !source_vars.is_empty()
-    }
-    
-    /// Extract variable names that could be tainted sources
-    fn extract_taint_variables(&self, source_text: &str) -> Vec<String> {
-        let mut vars = Vec::new();
-        
-        // Pattern: @RequestParam String path
-        // Find lines with @RequestParam, @PathVariable, etc.
-        for line in source_text.lines() {
-            let annotations = ["@RequestParam", "@PathVariable", "@RequestBody", 
-                              "@RequestHeader", "@CookieValue"];
+        for source_pattern_str in &dataflow_spec.sources {
+            // Convert source pattern to SemgrepPattern
+            let source_pattern = astgrep_core::SemgrepPattern {
+                pattern_type: astgrep_core::PatternType::Simple(source_pattern_str.clone()),
+                metavariable_pattern: None,
+                conditions: Vec::new(),
+                focus: None,
+            };
             
-            for annotation in &annotations {
-                if line.contains(annotation) {
-                    // Extract the variable name (last word before closing paren or end of line)
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        // Get the last part and clean it
-                        let last = parts.last().unwrap();
-                        let clean = last.trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-                        if !clean.is_empty() && clean != "String" && clean != "int" 
-                           && clean != "boolean" && clean != "Integer" {
-                            vars.push(clean.to_string());
+            // Find matches
+            let matches = self.pattern_matcher.find_matches(&source_pattern, ast)?;
+            for m in matches {
+                // Extract the variable name from bindings if available
+                let mut var_name = None;
+                for (key, value) in &m.bindings {
+                    if key.starts_with("$") && !value.is_empty() {
+                        var_name = Some(value.clone());
+                        break;
+                    }
+                }
+                
+                sources.push(TaintMatch {
+                    node: m.node,
+                    bindings: m.bindings,
+                    var_name,
+                });
+            }
+        }
+        
+        Ok(sources)
+    }
+    
+    /// Find all taint sinks matching the sink patterns
+    fn find_taint_sinks(
+        &mut self,
+        ast: &dyn AstNode,
+        dataflow_spec: &DataFlowSpec
+    ) -> Result<Vec<TaintMatch>> {
+        let mut sinks = Vec::new();
+        
+        for sink_pattern_str in &dataflow_spec.sinks {
+            // Convert sink pattern to SemgrepPattern
+            let sink_pattern = astgrep_core::SemgrepPattern {
+                pattern_type: astgrep_core::PatternType::Simple(sink_pattern_str.clone()),
+                metavariable_pattern: None,
+                conditions: Vec::new(),
+                focus: None,
+            };
+            
+            // Find matches
+            let matches = self.pattern_matcher.find_matches(&sink_pattern, ast)?;
+            for m in matches {
+                sinks.push(TaintMatch {
+                    node: m.node,
+                    bindings: m.bindings,
+                    var_name: None,
+                });
+            }
+        }
+        
+        Ok(sinks)
+    }
+    
+    /// Detect taint flows from sources to sinks
+    fn detect_taint_flows(
+        &self,
+        sources: &[TaintMatch],
+        sinks: &[TaintMatch],
+        ast: &dyn AstNode,
+        dataflow_analysis: Option<&DataFlowAnalysis>,
+    ) -> Result<Vec<(TaintMatch, TaintMatch)>> {
+        let mut flows = Vec::new();
+        
+        // Use simple heuristics to detect taint flows
+        for source in sources {
+            if let Some(ref source_var) = source.var_name {
+                for sink in sinks {
+                    // Check if the source variable appears in the sink context
+                    if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast) {
+                        flows.push((source.clone(), sink.clone()));
+                    }
+                }
+            }
+        }
+        
+        // Also check dataflow analysis results if available
+        if let Some(analysis) = dataflow_analysis {
+            for flow in &analysis.taint_flows {
+                if flow.is_vulnerable() {
+                    // Find corresponding source and sink matches
+                    for source in sources {
+                        for sink in sinks {
+                            if self.is_flow_matching(&flow, source, sink) {
+                                flows.push((source.clone(), sink.clone()));
+                            }
                         }
                     }
                 }
             }
         }
         
-        vars
+        Ok(flows)
     }
     
-    /// Check if a variable is used in a sink context
-    fn variable_in_sink(&self, var: &str, source_text: &str) -> bool {
-        // Check if variable appears in File constructor or similar
-        let patterns = [
-            format!("new File({})", var),
-            format!("new File( {})", var),
-            format!("File({})", var),
-            format!("File( {})", var),
-        ];
-        
-        for pattern in &patterns {
-            if source_text.contains(pattern) {
+    /// Check if a node uses any of the given variables
+    fn node_uses_variables(&self, node: &dyn AstNode, variables: &[String]) -> bool {
+        let node_text = node.text().unwrap_or_default();
+        for var in variables {
+            if node_text.contains(var) {
                 return true;
             }
         }
-        
-        // Also check if variable appears after new File( in the same file
-        if source_text.contains("new File(") {
-            // Simple heuristic: if the variable exists and new File( exists, 
-            // check if they're in close proximity
-            let file_pos = source_text.find("new File(").unwrap();
-            let var_pos = source_text.find(var);
-            
-            if let Some(vp) = var_pos {
-                // Check if variable is within 100 chars of the File constructor
-                let distance = if vp > file_pos { vp - file_pos } else { file_pos - vp };
-                if distance < 200 {
-                    return true;
-                }
-            }
+        false
+    }
+    
+    /// Check if a variable flows to a sink
+    fn is_variable_flowing_to_sink(
+        &self,
+        var_name: &str,
+        sink_node: &dyn AstNode,
+        _ast: &dyn AstNode
+    ) -> bool {
+        // Check if the variable appears in the sink node
+        if self.node_uses_variables(sink_node, &[var_name.to_string()]) {
+            return true;
         }
         
         false
     }
     
-    /// Check dataflow analysis for taint matches
-    fn check_dataflow_taint(&self, analysis: &DataFlowAnalysis, dataflow_spec: &DataFlowSpec, source_text: &str) -> bool {
-        for flow in &analysis.taint_flows {
-            if flow.is_vulnerable() {
-                // Check if source matches
-                let source_match = dataflow_spec.sources.iter().any(|p| {
-                    flow.source.description.contains(p) ||
-                    (p.contains("RequestParam") && flow.source.description.contains("request")) ||
-                    (p.contains("PathVariable") && flow.source.description.contains("path"))
-                });
-                
-                // Check if sink matches
-                let sink_match = dataflow_spec.sinks.iter().any(|p| {
-                    flow.sink.description.contains(p) ||
-                    (p.contains("File") && source_text.contains("new File(")) ||
-                    (p.contains("FileInputStream") && source_text.contains("FileInputStream"))
-                });
-                
-                if source_match && sink_match {
-                    return true;
-                }
+    /// Check if a dataflow matches source and sink
+    fn is_flow_matching(
+        &self,
+        flow: &astgrep_dataflow::TaintFlow,
+        source: &TaintMatch,
+        sink: &TaintMatch
+    ) -> bool {
+        // Check if flow source matches our source
+        let source_matches = if let (Some(src_loc), Some(flow_loc)) = (source.node.location(), &flow.source.location) {
+            src_loc.0 == flow_loc.start_line && src_loc.1 == flow_loc.start_column
+        } else {
+            // Fallback: compare by description text
+            if let Some(source_text) = source.node.text() {
+                flow.source.description.contains(&source_text) || source_text.contains(&flow.source.description)
+            } else {
+                false
             }
-        }
+        };
         
-        false
+        // Check if flow sink matches our sink
+        let sink_matches = if let (Some(sink_loc), Some(flow_loc)) = (sink.node.location(), &flow.sink.location) {
+            sink_loc.0 == flow_loc.start_line && sink_loc.1 == flow_loc.start_column
+        } else {
+            // Fallback: compare by description text
+            if let Some(sink_text) = sink.node.text() {
+                flow.sink.description.contains(&sink_text) || sink_text.contains(&flow.sink.description)
+            } else {
+                false
+            }
+        };
+        
+        source_matches && sink_matches
     }
     
-    /// Find the location of the taint in the AST
-    fn find_taint_location(&self, ast: &dyn AstNode, source_text: &str, _dataflow_spec: &DataFlowSpec) -> Option<Location> {
-        // Try to find the sink location (e.g., new File(...))
-        if let Some(pos) = source_text.find("new File(") {
-            let before = &source_text[..pos];
-            let line = before.chars().filter(|&c| c == '\n').count() + 1;
-            let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
-            let col = pos - last_newline + 1;
-            
-            // Find end of statement
-            let after = &source_text[pos..];
-            if let Some(end_pos) = after.find(';') {
-                let end_col = col + end_pos;
-                return Some(Location {
-                    file: std::path::PathBuf::new(),
-                    start_line: line,
-                    start_column: col,
-                    end_line: line,
-                    end_column: end_col,
-                });
-            }
-        }
-        
-        // Fallback to AST location
-        ast.location().map(|(sl, sc, el, ec)| Location {
-            file: std::path::PathBuf::new(),
-            start_line: sl,
-            start_column: sc,
-            end_line: el,
-            end_column: ec,
-        })
-    }
-    
-    /// Check if a source pattern matches a source description
-    fn pattern_matches_source(&self, pattern: &str, source_desc: &str) -> bool {
-        // Extract key terms from the pattern
-        let key_terms: Vec<&str> = pattern
-            .split(|c: char| c.is_whitespace() || c == '$' || c == '(' || c == ')' || c == '{' || c == '}')
-            .filter(|s| !s.is_empty() && s.len() > 2)
-            .collect();
-        
-        // Check if any key term appears in the source description
-        key_terms.iter().any(|term| {
-            source_desc.to_lowercase().contains(&term.to_lowercase())
-        })
-    }
-    
-    /// Check if a sink pattern matches a sink description
-    fn pattern_matches_sink(&self, pattern: &str, sink_desc: &str, source_text: &str) -> bool {
-        // For sink patterns like "new File(...)", check if File constructor is called
-        if pattern.contains("new File") && source_text.contains("new File(") {
-            return true;
-        }
-        if pattern.contains("FileInputStream") && source_text.contains("FileInputStream") {
-            return true;
-        }
-        if pattern.contains("FileReader") && source_text.contains("FileReader") {
-            return true;
-        }
-        if pattern.contains("getResourceAsStream") && source_text.contains("getResourceAsStream") {
-            return true;
-        }
-        
-        // Check if pattern appears in sink description
-        sink_desc.to_lowercase().contains(&pattern.to_lowercase())
-    }
-    
-    /// Execute simple taint pattern matching when dataflow analysis doesn't find flows
-    fn execute_simple_taint_matching(
-        &mut self,
-        rule: &Rule,
-        dataflow_spec: &DataFlowSpec,
-        ast: &dyn AstNode,
-        file_path: Option<&Path>,
-        source_text: &str,
-    ) -> Result<Vec<Finding>> {
-        let mut findings = Vec::new();
-        
-        // Direct check for source annotations in source code
-        let has_request_param = source_text.contains("@RequestParam");
-        let has_path_variable = source_text.contains("@PathVariable");
-        let has_request_body = source_text.contains("@RequestBody");
-        let has_request_header = source_text.contains("@RequestHeader");
-        let has_cookie_value = source_text.contains("@CookieValue");
-        let has_source_annotation = has_request_param || has_path_variable || has_request_body || has_request_header || has_cookie_value;
-        
-        // Direct check for sink patterns in source code
-        let has_new_file = source_text.contains("new File(");
-        let has_file_input_stream = source_text.contains("FileInputStream");
-        let has_file_reader = source_text.contains("FileReader");
-        let has_get_resource = source_text.contains("getResourceAsStream");
-        let has_sink = has_new_file || has_file_input_stream || has_file_reader || has_get_resource;
-        
-        // Check if there's a variable flow from source to sink
-        // Extract variable names after @RequestParam etc.
-        let source_vars: Vec<String> = self.extract_variables_from_annotations(source_text);
-        
-        // Check if any source variable is used in a sink
-        let mut taint_detected = false;
-        if has_source_annotation && has_sink && !source_vars.is_empty() {
-            // Check if any source variable appears in a sink context
-            for var in &source_vars {
-                // Check if this variable is used in File constructor or other sinks
-                if self.variable_used_in_sink(var, source_text) {
-                    taint_detected = true;
-                    break;
-                }
-            }
-        }
-        
-        // Also detect if source annotation and sink are in the same method (simplified check)
-        if !taint_detected && has_source_annotation && has_sink {
-            // Basic check: if both exist in the same file, report it
-            // This is a simplified approach for now
-            taint_detected = true;
-        }
-        
-        if taint_detected {
-            // Find the location of the sink in the AST
-            if let Some((sl, sc, el, ec)) = self.find_sink_location(ast, source_text) {
-                let location = Location {
-                    file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
-                    start_line: sl,
-                    start_column: sc,
-                    end_line: el,
-                    end_column: ec,
-                };
-                
-                let finding = Finding::new(
-                    rule.id.clone(),
-                    format!("{}: Potential path traversal vulnerability - tainted data from user input flows to file operation", 
-                        rule.name),
-                    rule.severity,
-                    rule.confidence,
-                    location,
-                );
-                findings.push(finding);
-            }
-        }
-        
-        Ok(findings)
-    }
-    
-    /// Extract variable names from Spring annotations like @RequestParam
-    fn extract_variables_from_annotations(&self, source_text: &str) -> Vec<String> {
-        let mut vars = Vec::new();
-        
-        // Pattern: @RequestParam String path
-        let annotations = ["@RequestParam", "@PathVariable", "@RequestBody", "@RequestHeader", "@CookieValue"];
-        
-        for annotation in &annotations {
-            if let Some(pos) = source_text.find(annotation) {
-                // Get text after annotation
-                let after = &source_text[pos + annotation.len()..];
-                // Find the next identifier (should be the type like "String")
-                // Then the variable name
-                let tokens: Vec<&str> = after.split_whitespace().take(3).collect();
-                if tokens.len() >= 2 {
-                    // tokens[0] might be "String", tokens[1] should be the variable name
-                    let var_name = tokens[1].trim_matches(|c: char| !c.is_alphanumeric() && c != '_');
-                    if !var_name.is_empty() && var_name != "String" && var_name != "int" && var_name != "boolean" {
-                        vars.push(var_name.to_string());
-                    }
-                }
-            }
-        }
-        
-        vars
-    }
-    
-    /// Check if a variable is used in a sink context
-    fn variable_used_in_sink(&self, var: &str, source_text: &str) -> bool {
-        // Check if variable appears in File constructor or similar sinks
-        let patterns = [
-            format!("new File({})", var),
-            format!("new File( {})", var),
-            format!("new FileInputStream({})", var),
-            format!("new FileReader({})", var),
-            format!(".getResourceAsStream({})", var),
-        ];
-        
-        for pattern in &patterns {
-            if source_text.contains(pattern) {
-                return true;
-            }
-        }
-        
-        false
-    }
-    
-    /// Find the location of a sink in the AST
-    fn find_sink_location(&self, ast: &dyn AstNode, source_text: &str) -> Option<(usize, usize, usize, usize)> {
-        // Look for "new File(" pattern in the source
-        if let Some(pos) = source_text.find("new File(") {
-            // Count lines and columns
-            let before = &source_text[..pos];
-            let line = before.chars().filter(|&c| c == '\n').count() + 1;
-            let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
-            let col = pos - last_newline + 1;
-            
-            // Find end of the constructor call
-            let after = &source_text[pos..];
-            if let Some(end_pos) = after.find(';') {
-                let end_line = line;
-                let end_col = col + end_pos;
-                return Some((line, col, end_line, end_col));
-            }
-        }
-        
-        // Fallback: use AST node location
-        ast.location()
-    }
-
     /// Get execution statistics
     pub fn statistics(&self) -> &ExecutionStatistics {
         &self.execution_stats
@@ -1341,7 +1410,7 @@ impl AdvancedRuleExecutor {
     /// Convert astgrep_rules::Condition to astgrep_core::Condition
     fn convert_condition_to_core(&self, condition: &Condition) -> Result<astgrep_core::Condition> {
         use astgrep_core::{Condition as CoreCondition, MetavariableComparison as CoreMetavariableComparison, ComparisonOperator as CoreComparisonOperator};
-        use astgrep_core::{MetavariableRegex as CoreMetavariableRegex, MetavariableName as CoreMetavariableName, MetavariableAnalysisCondition as CoreMetavariableAnalysisCondition};
+        use astgrep_core::{MetavariableRegex as CoreMetavariableRegex, MetavariableName as CoreMetavariableName, MetavariableAnalysisCondition as CoreMetavariableAnalysisCondition, MetavariableType as CoreMetavariableType};
 
         match condition {
             Condition::MetavariableRegex(metavar_regex) => {
@@ -1392,6 +1461,14 @@ impl AdvancedRuleExecutor {
             }
             Condition::NodeAttribute(attr_name, attr_value) => {
                 Ok(CoreCondition::NodeAttribute(attr_name.clone(), attr_value.clone()))
+            }
+            Condition::MetavariableType(metavar_type) => {
+                // Convert MetavariableType to core Condition
+                let core_type = CoreMetavariableType {
+                    metavariable: metavar_type.metavariable.clone(),
+                    var_type: metavar_type.var_type.clone(),
+                };
+                Ok(CoreCondition::MetavariableType(core_type))
             }
             Condition::Custom(custom) => {
                 Ok(CoreCondition::Custom(custom.clone()))
@@ -1520,5 +1597,246 @@ impl Rule {
     /// Check if this rule requires data flow analysis
     pub fn requires_dataflow(&self) -> bool {
         self.dataflow.is_some()
+    }
+    
+    /// Check if this rule requires symbolic propagation analysis
+    pub fn requires_symbolic_propagation(&self) -> bool {
+        // Check metadata for symbolic_propagation option
+        if let Some(Value::String(val)) = self.metadata.get("symbolic_propagation") {
+            return val == "true" || val == "on" || val == "yes" || val == "1";
+        }
+        if let Some(Value::Bool(val)) = self.metadata.get("symbolic_propagation") {
+            return *val;
+        }
+        // For taint mode rules, enable symbolic propagation by default
+        self.mode == crate::types::RuleMode::Taint
+    }
+}
+
+// Helper functions for typed metavariable support
+impl AdvancedRuleExecutor {
+    /// Preprocess pattern to handle typed metavariable syntax like "($TYPE $VAR).method()"
+    /// Returns the processed pattern and a map of variable names to their expected types
+    fn preprocess_typed_metavariables(
+        &self,
+        pattern: &Pattern,
+    ) -> (Pattern, Vec<(String, String)>) {
+        let mut type_constraints = Vec::new();
+
+        // Process based on pattern type
+        match &pattern.pattern_type {
+            PatternType::Simple(_) => {
+                // For Simple patterns, check if it contains typed metavariable syntax
+                // with access to any metavariable_pattern on the pattern itself
+                let metavar_patterns: Vec<&MetavariablePattern> = pattern
+                    .metavariable_pattern
+                    .as_ref()
+                    .map(|mp| vec![mp])
+                    .unwrap_or_default();
+                let (new_pattern, constraints) =
+                    self.process_subpattern_with_metavars(pattern, &metavar_patterns);
+                if !constraints.is_empty() {
+                    return (new_pattern, constraints);
+                }
+            }
+            PatternType::All(patterns) => {
+                // Collect metavariable patterns from sub-patterns first
+                let mut metavar_patterns: Vec<&MetavariablePattern> = Vec::new();
+                for sub_pattern in patterns {
+                    if let Some(ref mp) = sub_pattern.metavariable_pattern {
+                        metavar_patterns.push(mp);
+                    }
+                }
+
+                // Process each sub-pattern in the All composite
+                let mut processed_patterns = Vec::new();
+                let mut all_constraints = Vec::new();
+
+                for sub_pattern in patterns {
+                    // Skip placeholder patterns (Simple("...") with metavariable_pattern)
+                    if let PatternType::Simple(ref s) = sub_pattern.pattern_type {
+                        if s == "..." && sub_pattern.metavariable_pattern.is_some() {
+                            // Extract type constraints from this metavariable-pattern
+                            if let Some(ref mp) = sub_pattern.metavariable_pattern {
+                                for type_pattern in &mp.patterns {
+                                    // The metavariable_pattern applies to the main pattern
+                                    // We'll handle this when processing the main pattern
+                                    eprintln!(
+                                        "DEBUG: Found metavariable-pattern for {}: {}",
+                                        mp.metavariable, type_pattern
+                                    );
+                                }
+                            }
+                            continue; // Skip adding this placeholder pattern
+                        }
+                    }
+
+                    // Process the sub-pattern with access to metavariable patterns
+                    let (processed, constraints) =
+                        self.process_subpattern_with_metavars(sub_pattern, &metavar_patterns);
+                    processed_patterns.push(processed);
+                    all_constraints.extend(constraints);
+                }
+
+                if !all_constraints.is_empty() || !processed_patterns.is_empty() {
+                    let mut new_pattern = if processed_patterns.len() == 1 {
+                        processed_patterns.into_iter().next().unwrap()
+                    } else {
+                        Pattern::all(processed_patterns)
+                    };
+                    new_pattern.conditions = pattern.conditions.clone();
+                    new_pattern.focus = pattern.focus.clone();
+                    return (new_pattern, all_constraints);
+                }
+            }
+            PatternType::Either(patterns) => {
+                // Process each sub-pattern in the Either composite
+                let mut processed_patterns = Vec::new();
+                let mut all_constraints = Vec::new();
+
+                for sub_pattern in patterns {
+                    let (processed, constraints) = self.preprocess_typed_metavariables(sub_pattern);
+                    processed_patterns.push(processed);
+                    all_constraints.extend(constraints);
+                }
+
+                if !all_constraints.is_empty() {
+                    let mut new_pattern = Pattern::either(processed_patterns);
+                    new_pattern.conditions = pattern.conditions.clone();
+                    new_pattern.focus = pattern.focus.clone();
+                    new_pattern.metavariable_pattern = pattern.metavariable_pattern.clone();
+                    return (new_pattern, all_constraints);
+                }
+            }
+            _ => {
+                // Other pattern types not yet supported for typed metavariables
+            }
+        }
+
+        // No transformation needed, return original
+        (pattern.clone(), type_constraints)
+    }
+
+    /// Process a sub-pattern with access to metavariable patterns from other sub-patterns
+    fn process_subpattern_with_metavars(
+        &self,
+        pattern: &Pattern,
+        metavar_patterns: &[&MetavariablePattern],
+    ) -> (Pattern, Vec<(String, String)>) {
+        let mut type_constraints = Vec::new();
+
+        if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
+            // Check if pattern contains typed metavariable syntax: "($TYPE $VAR)"
+            let typed_metavar_regex = regex::Regex::new(r"\(\$(\w+)\s+\$(\w+)\)").unwrap();
+
+            if let Some(captures) = typed_metavar_regex.captures(pattern_str) {
+                let type_var = captures.get(1).unwrap().as_str();
+                let value_var = captures.get(2).unwrap().as_str();
+                let full_match = captures.get(0).unwrap();
+
+                eprintln!(
+                    "DEBUG: Found typed metavariable syntax: type_var=${}, value_var=${}",
+                    type_var, value_var
+                );
+
+                // Extract the expected type from metavariable patterns
+                for mp in metavar_patterns {
+                    if mp.metavariable == format!("${}", type_var)
+                        || mp.metavariable == type_var
+                    {
+                        // Get the expected type from the patterns
+                        for type_pattern in &mp.patterns {
+                            eprintln!(
+                                "DEBUG: Type pattern for ${}: {}",
+                                type_var, type_pattern
+                            );
+                            type_constraints.push((value_var.to_string(), type_pattern.clone()));
+                        }
+                    }
+                }
+
+                // Replace "($TYPE $VAR)" with "$VAR" in the pattern
+                let new_pattern_str =
+                    pattern_str.replacen(full_match.as_str(), &format!("${}", value_var), 1);
+                eprintln!(
+                    "DEBUG: Transformed pattern from '{}' to '{}'",
+                    pattern_str, new_pattern_str
+                );
+
+                let mut new_pattern = Pattern::simple(new_pattern_str);
+                new_pattern.conditions = pattern.conditions.clone();
+                new_pattern.focus = pattern.focus.clone();
+                new_pattern.metavariable_pattern = pattern.metavariable_pattern.clone();
+
+                return (new_pattern, type_constraints);
+            }
+        }
+
+        // No transformation needed, return original
+        (pattern.clone(), type_constraints)
+    }
+
+    /// Check if a variable's type matches the expected type
+    fn check_variable_type(&self, var_value: &str, expected_type: &str, full_source: &str) -> bool {
+        // Build import map for name resolution
+        let import_map = self.build_import_map(full_source);
+        
+        // Look for variable declaration in the source code
+        // Try different patterns to find the variable's type
+        
+        // Pattern 1: "Type varName =" or "Type varName;"
+        let var_pattern = format!(r"(\w+)\s+{}\s*[=;]", regex::escape(var_value));
+        if let Ok(regex) = regex::Regex::new(&var_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(type_match) = captures.get(1) {
+                    let simple_type = type_match.as_str();
+                    let resolved_type = self.resolve_type_with_imports(simple_type, &import_map);
+                    
+                    eprintln!("DEBUG: Variable {} has type '{}', resolved to '{:?}', expected '{}'", 
+                             var_value, simple_type, resolved_type, expected_type);
+                    
+                    // Check if the resolved type matches the expected type
+                    if let Some(resolved) = resolved_type {
+                        // Check exact match or simple name match
+                        if resolved == expected_type || simple_type == expected_type {
+                            return true;
+                        }
+                        
+                        // Check if expected type ends with the simple type (e.g., "org.foo.Foo" ends with "Foo")
+                        if expected_type.ends_with(&format!(".{}", simple_type)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Pattern 2: Method parameter "Type varName," or "Type varName)"
+        let param_pattern = format!(r"(\w+)\s+{}\s*[,)]", regex::escape(var_value));
+        if let Ok(regex) = regex::Regex::new(&param_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(type_match) = captures.get(1) {
+                    let simple_type = type_match.as_str();
+                    let resolved_type = self.resolve_type_with_imports(simple_type, &import_map);
+                    
+                    eprintln!("DEBUG: Parameter {} has type '{}', resolved to '{:?}', expected '{}'", 
+                             var_value, simple_type, resolved_type, expected_type);
+                    
+                    if let Some(resolved) = resolved_type {
+                        if resolved == expected_type || simple_type == expected_type {
+                            return true;
+                        }
+                        
+                        if expected_type.ends_with(&format!(".{}", simple_type)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If we can't determine the type, be permissive
+        eprintln!("DEBUG: Could not determine type for {}, allowing match", var_value);
+        true
     }
 }

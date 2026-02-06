@@ -87,6 +87,7 @@ pub enum Condition {
     MetavariableComparison(MetavariableComparison),
     MetavariableName(MetavariableName),
     MetavariableAnalysis(MetavariableAnalysisCondition),
+    MetavariableType(MetavariableType),
     NodeType(String),
     NodeAttribute(String, String),
     Custom(String),
@@ -142,6 +143,19 @@ pub struct MetavariableAnalysisCondition {
 impl MetavariableAnalysisCondition {
     pub fn new(metavariable: String, analysis: MetavariableAnalysis) -> Self {
         Self { metavariable, analysis }
+    }
+}
+
+/// Metavariable type constraint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetavariableType {
+    pub metavariable: String,
+    pub var_type: String,
+}
+
+impl MetavariableType {
+    pub fn new(metavariable: String, var_type: String) -> Self {
+        Self { metavariable, var_type }
     }
 }
 
