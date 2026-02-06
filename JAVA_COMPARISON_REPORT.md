@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月 7日 星期六 00时30分02秒 CST
+Generated on: 2026年 2月 7日 星期六 06时28分53秒 CST
 
 ## Test Summary
 
@@ -37,7 +37,7 @@ Generated on: 2026年 2月 7日 星期六 00时30分02秒 CST
 | naming_class_attribute |  | 2 | 2 | ✅ MATCH |
 | non_irrelevant_rule |  | 1 | 1 | ✅ MATCH |
 | sym_prop_class_attr | taint | 2 | 2 | ✅ MATCH |
-| sym_prop_deep |  | 1 | 00 | ❌ DIFFER |
+| sym_prop_deep |  | 1 | 1 | ✅ MATCH |
 | sym_prop_merge1 |  | 2 | 00 | ❌ DIFFER |
 | sym_prop_merge2 |  | 1 | 00 | ❌ DIFFER |
 | sym_prop_new |  | 1 | 00 | ❌ DIFFER |
@@ -62,10 +62,10 @@ Generated on: 2026年 2月 7日 星期六 00时30分02秒 CST
 
 ### Summary Statistics
 
-- **Matching results**: 18 tests
-- **Differing results**: 20 tests
+- **Matching results**: 19 tests
+- **Differing results**: 19 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 47%
+- **Compatibility rate**: 50%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月 7日 星期六 00时31分36秒 CST
+**Report Generated**: 2026年 2月 7日 星期六 06时30分25秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development

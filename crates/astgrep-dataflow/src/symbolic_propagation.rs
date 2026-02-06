@@ -263,6 +263,7 @@ impl Default for SymbolicState {
 }
 
 /// Symbolic propagation analyzer
+#[derive(Clone)]
 pub struct SymbolicPropagator {
     /// Current symbolic state
     state: SymbolicState,
@@ -296,8 +297,10 @@ impl SymbolicPropagator {
 
     /// Analyze a node and update symbolic state
     fn analyze_node(&mut self, node: &dyn AstNode) -> Result<()> {
-        match node.node_type() {
-            "local_variable_declaration" | "field_declaration" => {
+        let node_type = node.node_type();
+
+        match node_type {
+            "local_variable_declaration" | "variable_declaration" | "field_declaration" => {
                 self.analyze_declaration(node)?;
             }
             "assignment_expression" => {
@@ -306,23 +309,36 @@ impl SymbolicPropagator {
             "method_invocation" | "call_expression" => {
                 self.analyze_method_call(node)?;
             }
-            "field_access" => {
+            "field_access" | "member_expression" => {
                 self.analyze_field_access(node)?;
             }
-            _ => {
-                // Recursively analyze children
-                for i in 0..node.child_count() {
-                    if let Some(child) = node.child(i) {
-                        self.analyze_node(child)?;
-                    }
-                }
+            _ => {}
+        }
+
+        // Always recursively analyze children, even for special node types
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                self.analyze_node(child)?;
             }
         }
+
         Ok(())
     }
 
     /// Analyze a variable declaration
     fn analyze_declaration(&mut self, node: &dyn AstNode) -> Result<()> {
+        // Skip if this is just a wrapper node (contains another variable_declaration)
+        // For example, "String userName = req.xyz;" might have a child "userName = req.xyz"
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if child.node_type() == "variable_declaration" || child.node_type() == "variable_declarator" || child.node_type() == "declarator" {
+                    // This is a nested declarator - real declaration is inside
+                    // Don't analyze this node as a whole, let's recursion handle the child
+                    return Ok(());
+                }
+            }
+        }
+
         // Try to extract variable name and initializer
         let mut var_name = None;
         let mut initializer = None;
@@ -330,21 +346,23 @@ impl SymbolicPropagator {
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
                 match child.node_type() {
-                    "variable_declarator" | "declarator" => {
-                        // Analyze the declarator
-                        self.analyze_declarator(child, &mut var_name, &mut initializer)?;
-                    }
                     "identifier" => {
+                        // The first identifier is likely to be variable name
                         if var_name.is_none() {
                             var_name = child.text().map(|s| s.to_string());
                         }
                     }
+                    "field_access" | "member_expression" => {
+                        // This is likely to be initializer
+                        if initializer.is_none() {
+                            initializer = Some(child.clone_node());
+                        }
+                    }
                     _ => {
-                        // Check if it's an initializer
-                        if let Some(text) = child.text() {
-                            if !text.is_empty() && initializer.is_none() {
-                                initializer = Some(child.clone_node());
-                            }
+                        // Check if it's an initializer by looking for field access or assignment patterns
+                        let text = child.text().unwrap_or("");
+                        if (text.contains(".") || text.contains("(")) && initializer.is_none() {
+                            initializer = Some(child.clone_node());
                         }
                     }
                 }
@@ -420,7 +438,6 @@ impl SymbolicPropagator {
         // Bind the left variable to the symbolic value of the right side
         if let (Some(var_name), Some(right_node)) = (left, right) {
             let symbolic_value = self.node_to_symbolic_value(right_node.as_ref());
-            eprintln!("DEBUG analyze_assignment: Binding '{}' to symbolic value: {:?}", var_name, symbolic_value);
             self.state.bind(var_name, symbolic_value);
         }
 
@@ -458,16 +475,14 @@ impl SymbolicPropagator {
     ) -> SymbolicValue {
         let node_type = node.node_type();
         let node_text = node.text();
-        eprintln!("DEBUG node_to_symbolic_value: node_type={}, text={:?}", node_type, node_text);
 
         match node_type {
             "method_invocation" | "call_expression" => {
-                eprintln!("DEBUG: Extracting as method call");
-                let result = self.extract_method_call_dyn(node);
-                eprintln!("DEBUG: Method call result: {:?}", result);
-                result
+                self.extract_method_call_dyn(node)
             },
-            "field_access" => self.extract_field_access_dyn(node),
+            "field_access" | "member_expression" => {
+                self.extract_field_access_dyn(node)
+            },
             _ => {
                 // For other nodes, try to extract as method call or field access
                 let method_result = self.extract_method_call_dyn(node);
@@ -514,7 +529,9 @@ impl SymbolicPropagator {
                         base = Some(self.extract_field_access_dyn(child));
                     }
                     _ => {
-                        if field.is_none() {
+                        // Skip operators like ".", "->", etc.
+                        let text = child.text().unwrap_or("");
+                        if field.is_none() && !text.starts_with(".") && !text.starts_with("->") {
                             field = child.text().map(|s| s.to_string());
                         }
                     }
@@ -541,27 +558,21 @@ impl SymbolicPropagator {
         let mut base = None;
         let mut method = None;
 
-        eprintln!("DEBUG extract_method_call_dyn: node_type={}, child_count={}", node.node_type(), node.child_count());
-
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
                 let child_type = child.node_type();
                 let child_text = child.text();
-                eprintln!("DEBUG extract_method_call_dyn: child {} type={}, text={:?}", i, child_type, child_text);
 
                 match child_type {
                     "identifier" => {
                         if base.is_none() {
                             base = child_text.map(|s| SymbolicValue::variable(&s));
-                            eprintln!("DEBUG: Set base to {:?}", base);
                         } else if method.is_none() {
                             method = child_text.map(|s| s.to_string());
-                            eprintln!("DEBUG: Set method to {:?}", method);
                         }
                     }
                     "field_access" => {
                         base = Some(self.extract_field_access_dyn(child));
-                        eprintln!("DEBUG: Set base from field_access to {:?}", base);
                     }
                     _ => {
                         // Try to extract method name from text
@@ -570,7 +581,6 @@ impl SymbolicPropagator {
                                 let parts: Vec<&str> = text.split('(').collect();
                                 if !parts.is_empty() {
                                     method = Some(parts[0].to_string());
-                                    eprintln!("DEBUG: Set method from text to {:?}", method);
                                 }
                             }
                         }
@@ -578,8 +588,6 @@ impl SymbolicPropagator {
                 }
             }
         }
-
-        eprintln!("DEBUG extract_method_call_dyn: Final base={:?}, method={:?}", base, method);
 
         if let (Some(base), Some(method)) = (base, method) {
             SymbolicValue::method_call(base, &method)

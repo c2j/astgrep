@@ -105,6 +105,8 @@ impl AdvancedRuleExecutor {
             match propagator.analyze(ast) {
                 Ok(()) => {
                     eprintln!("DEBUG: Symbolic propagation analysis completed");
+                    // Set the symbolic propagator in the pattern matcher
+                    self.pattern_matcher.set_symbolic_propagator(propagator.clone());
                     self.symbolic_propagator = Some(propagator);
                 }
                 Err(e) => {

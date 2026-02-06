@@ -23,6 +23,8 @@ pub struct AdvancedSemgrepMatcher {
     constant_values: HashMap<String, ConstantValue>,
     /// Full source code of the file being analyzed
     full_source: Option<String>,
+    /// Symbolic propagator for variable alias tracking
+    symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
 }
 
 
@@ -37,6 +39,7 @@ impl AdvancedSemgrepMatcher {
             max_depth: None,
             constant_values: HashMap::new(),
             full_source: None,
+            symbolic_propagator: None,
         }
     }
 
@@ -49,6 +52,11 @@ impl AdvancedSemgrepMatcher {
     /// Set constant propagation values (mutable)
     pub fn set_constant_values(&mut self, constants: HashMap<String, ConstantValue>) {
         self.constant_values = constants;
+    }
+
+    /// Set symbolic propagator for variable alias tracking (mutable)
+    pub fn set_symbolic_propagator(&mut self, propagator: astgrep_dataflow::SymbolicPropagator) {
+        self.symbolic_propagator = Some(propagator);
     }
 
     /// Enable debug mode
@@ -109,8 +117,8 @@ impl AdvancedSemgrepMatcher {
         // Try to match at current node only if no descendant produced a match
         if !subtree_has_match {
             let snapshot = self.metavar_manager.snapshot();
-            eprintln!("DEBUG: Trying to match at node type: {}, text: {:?}", 
-                     node.node_type(), 
+            eprintln!("DEBUG: Trying to match at node type: {}, text: {:?}",
+                     node.node_type(),
                      node.text().map(|t| &t[..t.len().min(50)]));
             if self.matches_pattern(pattern, node)? {
                 let bindings = self.metavar_manager.get_binding_values();
@@ -157,13 +165,13 @@ impl AdvancedSemgrepMatcher {
                 self.matches_any_patterns(patterns, node)?
             }
         };
-        
+
         // If pattern type matches, evaluate conditions (e.g., metavariable-regex)
         if type_matches && !pattern.conditions.is_empty() {
             let bindings = self.metavar_manager.get_binding_values();
             return self.evaluate_conditions(&pattern.conditions, &bindings);
         }
-        
+
         Ok(type_matches)
     }
 
@@ -274,7 +282,7 @@ impl AdvancedSemgrepMatcher {
         node: &dyn AstNode,
     ) -> Result<bool> {
         eprintln!("DEBUG matches_all_patterns: {} patterns at node {:?}", patterns.len(), node.text().map(|t| &t[..t.len().min(30)]));
-        
+
         // Separate context patterns (Inside, NotInside) from content patterns
         let (context_patterns, content_patterns): (Vec<_>, Vec<_>) = patterns
             .iter()
@@ -323,14 +331,14 @@ impl AdvancedSemgrepMatcher {
     }
 
     /// Check if a node is inside a pattern context (for pattern-inside)
-    /// 
+    ///
     /// This function now properly extracts metavariable bindings from the pattern-inside match,
     /// enabling metavariable unification between context and content patterns.
-    /// 
+    ///
     /// For example, with:
     ///   pattern-inside: class $T { private int $X; ... }
     ///   pattern: foo(this.$X)
-    /// 
+    ///
     /// If the class declares "private int x;", this function will bind $X="x",
     /// and the content pattern will only match "foo(this.x)", not "foo(this.y)".
     fn matches_inside_context(
@@ -429,10 +437,10 @@ impl AdvancedSemgrepMatcher {
     }
 
     /// Extract field bindings from a class context pattern
-    /// 
+    ///
     /// Given a pattern like "class $T { private int $X; ... }" and source text,
     /// this function extracts what metavariables like $X should be bound to.
-    /// 
+    ///
     /// Returns a map of variable names to their bound values.
     fn extract_field_bindings_from_class_context(
         &self,
@@ -440,28 +448,28 @@ impl AdvancedSemgrepMatcher {
         source_text: &str,
     ) -> Option<HashMap<String, String>> {
         use regex::Regex;
-        
+
         let mut bindings = HashMap::new();
-        
+
         // Parse the pattern to extract field declaration information
         // Pattern format: class $T { ... private TYPE $X; ... }
-        
+
         // Extract the field type and metavariable name from the pattern
         // Look for patterns like "private int $X" or "private String $FIELD"
         let field_pattern = Regex::new(r"private\s+(\w+)\s+\$(\w+)").ok()?;
-        
+
         if let Some(captures) = field_pattern.captures(pattern_str) {
             let field_type = captures.get(1)?.as_str();
             let metavar_name = captures.get(2)?.as_str();
-            
+
             eprintln!("DEBUG extract_field_bindings: pattern has field of type '{}' binding to '${}'", field_type, metavar_name);
             eprintln!("DEBUG extract_field_bindings: searching in source (len={}): '{}'", source_text.len(), &source_text[..source_text.len().min(100)]);
-            
+
             // The source_text might be just a small node text (like "private") or the full file
             // We need to search for field declarations in the available text
             // Match: private int x; or private int x = ...;
             let decl_pattern = Regex::new(&format!(r"private\s+{}\s+(\w+)\s*(?:=|;)", regex::escape(field_type))).ok()?;
-            
+
             for cap in decl_pattern.captures_iter(source_text) {
                 if let Some(field_name_match) = cap.get(1) {
                     let field_name = field_name_match.as_str().to_string();
@@ -472,14 +480,14 @@ impl AdvancedSemgrepMatcher {
                     break;
                 }
             }
-            
+
             // If no field found in this text, we might need to look at a broader context
             // For now, store what we're looking for so we can validate later
             if !bindings.contains_key(&format!("${}", metavar_name)) {
                 eprintln!("DEBUG extract_field_bindings: no field of type '{}' found in current context", field_type);
             }
         }
-        
+
         // Also handle class name metavariable $T
         if pattern_str.contains("$T") {
             // Look for class declaration
@@ -492,7 +500,7 @@ impl AdvancedSemgrepMatcher {
                 }
             }
         }
-        
+
         if bindings.is_empty() {
             None
         } else {
@@ -526,12 +534,12 @@ impl AdvancedSemgrepMatcher {
             if literal == "..." && (text.starts_with('"') || text.starts_with("\"") || node.node_type() == "literal") {
                 return Ok(true);
             }
-            
+
             // Direct match
             if text.contains(literal) {
                 return Ok(true);
             }
-            
+
             // Constant propagation: if node is an identifier, check if it has a constant value
             if node.node_type() == "identifier" {
                 if let Some(constant_value) = self.constant_values.get(text) {
@@ -543,13 +551,13 @@ impl AdvancedSemgrepMatcher {
                         ConstantValue::Null => "null".to_string(),
                         ConstantValue::Unknown => return Ok(false),
                     };
-                    
+
                     if constant_str == literal {
                         return Ok(true);
                     }
                 }
             }
-            
+
             Ok(false)
         } else {
             Ok(false)
@@ -596,7 +604,7 @@ impl AdvancedSemgrepMatcher {
             })
             .collect::<Vec<_>>()
             .join(" ");
-        
+
         // For patterns containing "return", only match at return_statement nodes
         if pattern_text.to_lowercase().contains("return") {
             let node_type = node.node_type();
@@ -614,15 +622,15 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
         }
-        
+
         // Try to match against the current node's text
         let node_text = node.text().unwrap_or("");
-        
+
         // Try to match the pattern sequence against the node's text
         if self.match_sequence_against_text(patterns, node_text, node, depth)? {
             return Ok(true);
         }
-        
+
         // If no match at current node, try matching against children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
@@ -633,10 +641,10 @@ impl AdvancedSemgrepMatcher {
                 self.metavar_manager.restore(snapshot);
             }
         }
-        
+
         Ok(false)
     }
-    
+
     /// Match a sequence of patterns against text
     fn match_sequence_against_text(
         &mut self,
@@ -650,7 +658,13 @@ impl AdvancedSemgrepMatcher {
         eprintln!("DEBUG match_sequence_against_text: text='{}', tokens={:?}", text, text_tokens);
         eprintln!("DEBUG patterns: {:?}", patterns);
 
-        // Try to find a matching position in the text tokens
+        // Expand tokens using symbolic propagation if available
+        let expanded_tokens = self.expand_tokens_with_symbolic_propagation(&text_tokens);
+        if !expanded_tokens.is_empty() && expanded_tokens != text_tokens {
+            eprintln!("DEBUG: Expanded tokens via symbolic propagation: {:?}", expanded_tokens);
+        }
+
+        // Try to match with original tokens first
         for start_pos in 0..text_tokens.len() {
             let snapshot = self.metavar_manager.snapshot();
             if self.try_match_sequence_at_position(patterns, &text_tokens, start_pos, node)? {
@@ -660,10 +674,86 @@ impl AdvancedSemgrepMatcher {
             self.metavar_manager.restore(snapshot);
         }
 
+        // If no match with original tokens, try with expanded tokens
+        if !expanded_tokens.is_empty() && expanded_tokens != text_tokens {
+            for start_pos in 0..expanded_tokens.len() {
+                let snapshot = self.metavar_manager.snapshot();
+                if self.try_match_sequence_at_position(patterns, &expanded_tokens, start_pos, node)? {
+                    eprintln!("DEBUG: matched with expanded tokens at position {}", start_pos);
+                    return Ok(true);
+                }
+                self.metavar_manager.restore(snapshot);
+            }
+        }
+
         eprintln!("DEBUG: no match found");
         Ok(false)
     }
-    
+
+    /// Expand tokens using symbolic propagation
+    /// For example, if "userName" is aliased to "req.xyz", expand to ["req", ".", "xyz"]
+    fn expand_tokens_with_symbolic_propagation(&self, tokens: &[String]) -> Vec<String> {
+        if self.symbolic_propagator.is_none() {
+            return tokens.to_vec();
+        }
+
+        let propagator = self.symbolic_propagator.as_ref().unwrap();
+        eprintln!("DEBUG expand_tokens_with_symbolic_propagation: propagator state has {} variables", propagator.state().variables.len());
+        for (var, val) in propagator.state().variables.iter() {
+            eprintln!("DEBUG: {} -> {:?}", var, val);
+        }
+
+        let mut expanded = Vec::new();
+
+        for token in tokens {
+            // Skip punctuation and operators
+            if token == "." || token == "," || token == ";" || token == "(" || token == ")" {
+                expanded.push(token.clone());
+                continue;
+            }
+
+            // Check if this token is a variable with a symbolic value
+            if let Some(symbolic_value) = propagator.state().get(token) {
+                let expanded_text = self.symbolic_value_to_tokens(symbolic_value);
+                if !expanded_text.is_empty() {
+                    eprintln!("DEBUG: Expanding '{}' via symbolic value {:?} to {:?}", token, symbolic_value, expanded_text);
+                    expanded.extend(expanded_text);
+                } else {
+                    expanded.push(token.clone());
+                }
+            } else {
+                expanded.push(token.clone());
+            }
+        }
+
+        expanded
+    }
+
+    /// Convert a symbolic value to a list of tokens
+    fn symbolic_value_to_tokens(&self, value: &astgrep_dataflow::SymbolicValue) -> Vec<String> {
+        use astgrep_dataflow::SymbolicValue;
+
+        match value {
+            SymbolicValue::Variable(name) => vec![name.clone()],
+            SymbolicValue::FieldAccess { base, field } => {
+                let mut tokens = self.symbolic_value_to_tokens(base);
+                tokens.push(".".to_string());
+                tokens.push(field.clone());
+                tokens
+            }
+            SymbolicValue::MethodCall { base, method } => {
+                let mut tokens = self.symbolic_value_to_tokens(base);
+                tokens.push(".".to_string());
+                tokens.push(method.clone());
+                tokens.push("(".to_string());
+                tokens.push(")".to_string());
+                tokens
+            }
+            SymbolicValue::Constant(s) => vec![s.clone()],
+            SymbolicValue::Unknown => vec![],
+        }
+    }
+
     /// Try to match a pattern sequence starting at a specific position
     fn try_match_sequence_at_position(
         &mut self,
@@ -673,12 +763,12 @@ impl AdvancedSemgrepMatcher {
         node: &dyn AstNode,
     ) -> Result<bool> {
         let mut text_idx = start_pos;
-        
+
         for pattern in patterns {
             if text_idx >= text_tokens.len() {
                 return Ok(false);
             }
-            
+
             match pattern {
                 ParsedPattern::Literal(literal) => {
                     // Skip parentheses in the text when matching
@@ -787,11 +877,11 @@ impl AdvancedSemgrepMatcher {
                             match nested_pattern {
                                 ParsedPattern::Literal(lit) => {
                                     // Skip parentheses
-                                    while nested_idx < text_tokens.len() && 
+                                    while nested_idx < text_tokens.len() &&
                                           (text_tokens[nested_idx] == "(" || text_tokens[nested_idx] == ")") {
                                         nested_idx += 1;
                                     }
-                                    if nested_idx < text_tokens.len() && 
+                                    if nested_idx < text_tokens.len() &&
                                        (*lit == "..." || text_tokens[nested_idx] == *lit) {
                                         nested_idx += 1;
                                     }
@@ -813,15 +903,15 @@ impl AdvancedSemgrepMatcher {
                 }
             }
         }
-        
+
         Ok(true)
     }
-    
+
     /// Simple tokenizer for matching
     fn tokenize(&self, text: &str) -> Vec<String> {
         let mut tokens = Vec::new();
         let mut current = String::new();
-        
+
         for ch in text.chars() {
             match ch {
                 ' ' | '\t' | '\n' | '\r' => {
@@ -842,11 +932,11 @@ impl AdvancedSemgrepMatcher {
                 }
             }
         }
-        
+
         if !current.is_empty() {
             tokens.push(current);
         }
-        
+
         tokens
     }
 
@@ -932,7 +1022,7 @@ impl AdvancedSemgrepMatcher {
 
     /// Evaluate comparison operators
     fn evaluate_comparison(&self, value: &str, operator: &ComparisonOperator, expected: &str) -> Result<bool> {
-        
+
         match operator {
             ComparisonOperator::Equals => Ok(value == expected),
             ComparisonOperator::NotEquals => Ok(value != expected),
@@ -1076,7 +1166,7 @@ impl AdvancedSemgrepMatcher {
             if parts.len() == 2 {
                 let left_side = parts[0].trim();
                 let expected_result = parts[1].trim();
-                
+
                 // Remove the ~ operator and get the variable part
                 // Handle both "~$VAR" and "~ $VAR"
                 let var_part = if left_side.starts_with("~") {
@@ -1084,9 +1174,9 @@ impl AdvancedSemgrepMatcher {
                 } else {
                     left_side
                 };
-                
+
                 eprintln!("DEBUG bitnot: var_part='{}', expected='{}'", var_part, expected_result);
-                
+
                 // Check if this is the metavariable we're evaluating
                 if var_part.starts_with("$") {
                     // Parse the expected result
