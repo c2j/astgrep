@@ -1181,7 +1181,7 @@ impl AdvancedRuleExecutor {
     }
 
     /// Execute taint analysis for taint mode rules
-    fn execute_taint_analysis(
+    pub fn execute_taint_analysis(
         &mut self,
         rule: &Rule,
         dataflow_spec: &DataFlowSpec,
@@ -1194,10 +1194,12 @@ impl AdvancedRuleExecutor {
         
         // Step 1: Find all source matches using pattern matching
         let source_matches = self.find_taint_sources(ast, dataflow_spec)?;
+        eprintln!("[DEBUG] Source matches found: {}", source_matches.len());
         if source_matches.is_empty() {
+            eprintln!("[DEBUG] No source matches, returning early");
             return Ok(findings);
         }
-        
+
         // Step 2: Find all sink matches using pattern matching
         let sink_matches = self.find_taint_sinks(ast, dataflow_spec)?;
         if sink_matches.is_empty() {
@@ -1206,29 +1208,35 @@ impl AdvancedRuleExecutor {
         
         // Step 3: Check for taint flow from sources to sinks
         let taint_flows = self.detect_taint_flows(
-            &source_matches, 
-            &sink_matches, 
-            ast, 
+            &source_matches,
+            &sink_matches,
+            ast,
             dataflow_analysis
         )?;
-        
-        // Step 4: Create findings for each detected taint flow
-        for (source_match, sink_match) in taint_flows {
+
+        // Step 4: Create findings for each unique sink with taint flow
+        let mut seen_sink_locations = std::collections::HashSet::new();
+        for (_source_match, sink_match) in taint_flows {
             if let Some(location) = sink_match.node.location() {
-                let finding = Finding::new(
-                    rule.id.clone(),
-                    format!("{}: {}", rule.name, rule.description),
-                    rule.severity,
-                    rule.confidence,
-                    Location::new(
-                        file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
-                        location.0, location.1, location.2, location.3
-                    ),
-                );
-                findings.push(finding);
+                // Use (line, start_col, end_col) as a unique key for the sink
+                let sink_key = (location.0, location.1, location.2, location.3);
+                if seen_sink_locations.insert(sink_key) {
+                    // First time seeing this sink location, create a finding
+                    let finding = Finding::new(
+                        rule.id.clone(),
+                        format!("{}: {}", rule.name, rule.description),
+                        rule.severity,
+                        rule.confidence,
+                        Location::new(
+                            file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                            location.0, location.1, location.2, location.3
+                        ),
+                    );
+                    findings.push(finding);
+                }
             }
         }
-        
+
         Ok(findings)
     }
     
@@ -1238,14 +1246,17 @@ impl AdvancedRuleExecutor {
         ast: &dyn AstNode,
         dataflow_spec: &DataFlowSpec
     ) -> Result<Vec<TaintMatch>> {
+        eprintln!("[DEBUG] ENTER find_taint_sources with {} source patterns", dataflow_spec.sources.len());
         let mut sources = Vec::new();
-        
+
         for source_pattern in &dataflow_spec.sources {
-            // Normalize pattern: remove trailing semicolons for more flexible matching
-            let normalized_pattern = source_pattern.pattern_text().trim_end_matches(';');
+            // Normalize pattern: remove trailing semicolons and whitespace for more flexible matching
+            let original_pattern = source_pattern.pattern_text();
+            let normalized_pattern = original_pattern.trim_end_matches(';').trim_end_matches('\n').trim();
+            eprintln!("[DEBUG] Normalizing source pattern: '{:?}' -> '{}'", original_pattern, normalized_pattern);
 
             // Convert source pattern to SemgrepPattern
-            let source_pattern = astgrep_core::SemgrepPattern {
+            let semgrep_pattern = astgrep_core::SemgrepPattern {
                 pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
                 metavariable_pattern: None,
                 conditions: Vec::new(),
@@ -1255,10 +1266,12 @@ impl AdvancedRuleExecutor {
                     Some(source_pattern.focus_metavariables.clone())
                 },
             };
-            
+
             // Find matches
-            let matches = self.pattern_matcher.find_matches(&source_pattern, ast)?;
+            let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+            eprintln!("[DEBUG] Source matches found: {}", matches.len());
             for m in matches {
+                eprintln!("[DEBUG] Source match: bindings={:?}, text={:?}", m.bindings, m.node.text());
                 // Extract the variable name from bindings if available
                 let mut var_name = None;
                 for (key, value) in &m.bindings {
@@ -1267,7 +1280,14 @@ impl AdvancedRuleExecutor {
                         break;
                     }
                 }
-                
+
+                // If no var_name from bindings, try to extract from parent assignment
+                if var_name.is_none() {
+                    var_name = self.extract_variable_name_from_assignment(m.node.as_ref());
+                }
+
+                eprintln!("[DEBUG] Extracted var_name: {:?}", var_name);
+
                 sources.push(TaintMatch {
                     node: m.node,
                     bindings: m.bindings,
@@ -1279,6 +1299,35 @@ impl AdvancedRuleExecutor {
         Ok(sources)
     }
     
+    /// Extract variable name from an assignment expression
+    fn extract_variable_name_from_assignment(&self, node: &dyn AstNode) -> Option<String> {
+        // Try to get parent node by searching through the tree
+        let node_text = node.text().unwrap_or_default();
+
+        // If the node is a call_expression, look for assignment context
+        if node_text.contains("newInstance()") || node_text.contains("newDocumentBuilder()") {
+            // Try to find the variable name from the assignment
+            // The text might look like "dbf = DocumentBuilderFactory.newInstance()"
+            // or be embedded in a larger statement
+            if let Some(eq_pos) = node_text.find('=') {
+                // Extract the left side before '='
+                let left_side = node_text[..eq_pos].trim();
+                // The variable name is the last word on the left side
+                if let Some(space_pos) = left_side.rfind(' ') {
+                    let var_name = left_side[space_pos + 1..].trim().to_string();
+                    eprintln!("[DEBUG] Extracted var_name '{}' from assignment text", var_name);
+                    return Some(var_name);
+                } else if !left_side.is_empty() {
+                    // No space, just use the whole left side
+                    eprintln!("[DEBUG] Extracted var_name '{}' from assignment text", left_side);
+                    return Some(left_side.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
     /// Find all taint sinks matching the sink patterns
     fn find_taint_sinks(
         &mut self,
@@ -1288,11 +1337,13 @@ impl AdvancedRuleExecutor {
         let mut sinks = Vec::new();
         
         for sink_pattern in &dataflow_spec.sinks {
-            // Normalize pattern: remove trailing semicolons for more flexible matching
-            let normalized_pattern = sink_pattern.pattern_text().trim_end_matches(';').trim();
+            // Normalize pattern: remove trailing semicolons and whitespace for more flexible matching
+            let original_pattern = sink_pattern.pattern_text();
+            let normalized_pattern = original_pattern.trim_end_matches(';').trim_end_matches('\n').trim();
+            eprintln!("[DEBUG] Normalizing sink pattern: '{:?}' -> '{}'", original_pattern, normalized_pattern);
 
             // Convert sink pattern to SemgrepPattern
-            let sink_pattern = astgrep_core::SemgrepPattern {
+            let semgrep_pattern = astgrep_core::SemgrepPattern {
                 pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
                 metavariable_pattern: None,
                 conditions: Vec::new(),
@@ -1300,8 +1351,10 @@ impl AdvancedRuleExecutor {
             };
             
             // Find matches
-            let matches = self.pattern_matcher.find_matches(&sink_pattern, ast)?;
+            let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+            eprintln!("[DEBUG] Sink matches found: {}", matches.len());
             for m in matches {
+                eprintln!("[DEBUG] Sink match: bindings={:?}, text={:?}", m.bindings, m.node.text());
                 sinks.push(TaintMatch {
                     node: m.node,
                     bindings: m.bindings,
@@ -1321,20 +1374,27 @@ impl AdvancedRuleExecutor {
         ast: &dyn AstNode,
         dataflow_analysis: Option<&DataFlowAnalysis>,
     ) -> Result<Vec<(TaintMatch, TaintMatch)>> {
+        eprintln!("[DEBUG] detect_taint_flows: {} sources, {} sinks", sources.len(), sinks.len());
         let mut flows = Vec::new();
-        
+
         // Use simple heuristics to detect taint flows
-        for source in sources {
+        for (i, source) in sources.iter().enumerate() {
+            eprintln!("[DEBUG] Checking source {}: var_name={:?}", i, source.var_name);
             if let Some(ref source_var) = source.var_name {
-                for sink in sinks {
-                    // Check if the source variable appears in the sink context
+                for (j, sink) in sinks.iter().enumerate() {
+                    eprintln!("[DEBUG] Checking source {} with sink {}: var='{}' vs sink text='{}'",
+                              i, j, source_var, sink.node.text().unwrap_or_default());
+                    // Check if source variable appears in sink context
                     if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast) {
+                        eprintln!("[DEBUG] FLOW FOUND: source {} -> sink {}", i, j);
                         flows.push((source.clone(), sink.clone()));
                     }
                 }
+            } else {
+                eprintln!("[DEBUG] Source {} has no var_name, skipping", i);
             }
         }
-        
+
         // Also check dataflow analysis results if available
         if let Some(analysis) = dataflow_analysis {
             for flow in &analysis.taint_flows {

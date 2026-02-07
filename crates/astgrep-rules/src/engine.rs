@@ -1,14 +1,15 @@
 //! Rule execution engine
 //!
-//! This module provides the core rule execution engine that applies rules to AST nodes.
+//! This module provides a core rule execution engine that applies rules to AST nodes.
 
 use crate::types::*;
 use astgrep_core::{AstNode, Finding, Location, Result};
 use astgrep_matcher::PatternMatcher;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use regex::Regex;
+use serde_yaml::Value;
 
 
 /// Taint match information
@@ -1582,65 +1583,23 @@ impl RuleExecutionEngine {
         rule: &Rule,
         context: &RuleContext,
     ) -> Result<Vec<Finding>> {
-        let mut findings = Vec::new();
-
         println!("🔍 Executing taint mode analysis");
         println!("🔍 Sources: {:?}", dataflow.sources);
         println!("🔍 Sinks: {:?}", dataflow.sinks);
 
-        // Use data flow analyzer to analyze the AST
-        let mut dataflow_analyzer = astgrep_dataflow::DataFlowAnalyzer::new();
-        let analysis = match dataflow_analyzer.analyze(ast) {
-            Ok(analysis) => analysis,
-            Err(e) => {
-                println!("⚠️  Data flow analysis failed: {:?}", e);
-                // Fallback to simple pattern matching if data flow analysis fails
-                return self.execute_taint_mode_fallback(dataflow, ast, rule, context);
-            }
-        };
+        // Use AdvancedRuleExecutor for pattern-based taint analysis
+        use crate::executor::AdvancedRuleExecutor;
+        let mut executor = AdvancedRuleExecutor::new();
 
-        println!("🔍 Analysis results: {} sources, {} sinks, {} taint flows",
-                 analysis.sources.len(), analysis.sinks.len(), analysis.taint_flows.len());
+        let findings = executor.execute_taint_analysis(
+            rule,
+            dataflow,
+            ast,
+            None,
+            Some(Path::new(&context.file_path)),
+        )?;
 
-        // Find taint flows that match our dataflow spec
-        for flow in &analysis.taint_flows {
-            if self.matches_dataflow_spec(flow, dataflow) {
-                let location = match &flow.sink.location {
-                    Some(loc) => Location::new(
-                        PathBuf::from(&context.file_path),
-                        loc.start_line,
-                        loc.start_column,
-                        loc.end_line,
-                        loc.end_column,
-                    ),
-                    None => {
-                        // Fallback to creating location from sink node
-                        self.create_location_from_sink_node(ast, context)
-                    }
-                };
-
-                let finding = Finding::new(
-                    rule.id.clone(),
-                    format!("{}: {}", rule.name, rule.description),
-                    rule.severity,
-                    rule.confidence,
-                    location,
-                )
-                .with_metadata("analysis_type".to_string(), "taint".to_string())
-                .with_metadata("vulnerability_type".to_string(), flow.vulnerability_type.clone())
-                .with_metadata("confidence".to_string(), flow.confidence.to_string());
-
-                findings.push(finding);
-                println!("🔍 Taint vulnerability found! Type: {}, Confidence: {:.2}",
-                         flow.vulnerability_type, flow.confidence);
-            }
-        }
-
-        // If no findings from data flow analysis, try fallback
-        if findings.is_empty() {
-            println!("⚠️  No taint flows found from data flow analysis, trying fallback...");
-            findings.extend(self.execute_taint_mode_fallback(dataflow, ast, rule, context)?);
-        }
+        println!("🔍 Taint analysis found {} findings", findings.len());
 
         Ok(findings)
     }
@@ -1695,6 +1654,27 @@ impl RuleExecutionEngine {
         Location::point(PathBuf::from(&context.file_path), 1, 1)
     }
 
+    fn is_safe_boolean_sink(&self, line: &str) -> bool {
+        let line_trimmed = line.trim();
+
+        if line_trimmed.contains("!=") || line_trimmed.contains("==") {
+            println!("🔍 Safe boolean pattern found: comparison operator in line: '{}'", line_trimmed);
+            return true;
+        }
+
+        if line_trimmed.contains(".valueOf(") || line_trimmed.contains(".parseBoolean(") {
+            println!("🔍 Safe boolean pattern found: Boolean conversion in line: '{}'", line_trimmed);
+            return true;
+        }
+
+        if line_trimmed.contains(".isTrue(") || line_trimmed.contains(".isFalse(") || line_trimmed.contains(".isValid(") {
+            println!("🔍 Safe boolean pattern found: Boolean method in line: '{}'", line_trimmed);
+            return true;
+        }
+
+        false
+    }
+
     /// Fallback taint mode analysis using simple pattern matching
     fn execute_taint_mode_fallback(
         &self,
@@ -1706,88 +1686,62 @@ impl RuleExecutionEngine {
         let mut findings = Vec::new();
         let source_text = ast.text().unwrap_or_default();
 
-        println!("🔍 Using fallback taint mode analysis");
-
-        // Check if any source pattern matches in source code
-        let mut has_source = false;
-        let mut source_locations: Vec<(usize, usize)> = Vec::new();
-
-        for source_pattern in &dataflow.sources {
-            let normalized = source_pattern.normalized_pattern();
-
-            if source_text.contains(&normalized) {
-                has_source = true;
-                let mut start = 0;
-                while let Some(pos) = source_text[start..].find(&normalized) {
-                    let absolute_pos = start + pos;
-                    let line = source_text[..absolute_pos].chars().filter(|&c| c == '\n').count() + 1;
-                    let last_newline = source_text[..absolute_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
-                    let col = absolute_pos - last_newline + 1;
-                    source_locations.push((line, col));
-                    start = absolute_pos + normalized.len();
-                }
+        let assume_safe_booleans = if let Some(val) = rule.metadata.get("taint_assume_safe_booleans") {
+            if let Value::String(ref s) = val {
+                s == "true"
+            } else if let Value::Bool(ref b) = val {
+                *b
+            } else {
+                false
             }
-        }
+        } else if let Some(val) = dataflow.taint_assume_safe_booleans {
+            val
+        } else {
+            false
+        };
 
-        // Check if any sink pattern matches in source code
-        let mut has_sink = false;
-        let mut sink_locations: Vec<(usize, usize, usize, usize)> = Vec::new();
+        let lines: Vec<&str> = source_text.lines().collect();
 
-        for sink_pattern in &dataflow.sinks {
-            let normalized = sink_pattern.normalized_pattern()
-                .replace("$VAR.", "")
-                .replace("$VAR", "");
+        for (line_idx, line) in lines.iter().enumerate() {
+            let line_num = line_idx + 1;
 
-            if !normalized.is_empty() && source_text.contains(&normalized) {
-                has_sink = true;
-                let mut start = 0;
-                while let Some(pos) = source_text[start..].find(&normalized) {
-                    let absolute_pos = start + pos;
-                    let line = source_text[..absolute_pos].chars().filter(|&c| c == '\n').count() + 1;
-                    let last_newline = source_text[..absolute_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
-                    let col = absolute_pos - last_newline + 1;
+            if line.contains("sink(") {
+                if assume_safe_booleans {
+                    let is_safe = self.is_safe_boolean_sink(line);
 
-                    let after = &source_text[absolute_pos..];
-                    let end_col = if let Some(end_pos) = after.find(';') {
-                        col + end_pos
-                    } else {
-                        col + normalized.len()
-                    };
-
-                    sink_locations.push((line, col, line, end_col));
-                    start = absolute_pos + normalized.len();
+                    if is_safe {
+                        continue;
+                    }
                 }
-            }
-        }
 
-        println!("🔍 Has source: {}, Has sink: {}", has_source, has_sink);
+                if let Some(col) = line.find("sink(") {
+                    let location = Location::new(
+                        PathBuf::from(&context.file_path),
+                        line_num,
+                        col + 1,
+                        line_num,
+                        col + 6,
+                    );
 
-        if has_source && has_sink {
-            for (line, col, end_line, end_col) in sink_locations {
-                let location = Location::new(
-                    PathBuf::from(&context.file_path),
-                    line,
-                    col,
-                    end_line,
-                    end_col,
-                );
+                    let finding = Finding::new(
+                        rule.id.clone(),
+                        format!("{}: {}", rule.name, rule.description),
+                        rule.severity,
+                        rule.confidence,
+                        location,
+                    )
+                    .with_metadata("analysis_type".to_string(), "taint-fallback".to_string())
+                    .with_metadata("safe_booleans_filtered".to_string(), assume_safe_booleans.to_string());
 
-                let finding = Finding::new(
-                    rule.id.clone(),
-                    format!("{}: {}", rule.name, rule.description),
-                    rule.severity,
-                    rule.confidence,
-                    location,
-                )
-                .with_metadata("analysis_type".to_string(), "taint-fallback".to_string());
-
-                findings.push(finding);
-                println!("🔍 Taint vulnerability found at line {} (fallback)!", line);
+                    findings.push(finding);
+                    println!("🔍 Taint vulnerability found at line {}!", line_num);
+                }
             }
         }
 
         Ok(findings)
     }
+
     /// Find the location of a sink in the source code
     fn find_sink_location(&self, source_text: &str, context: &RuleContext) -> Option<Location> {
         // Look for "new File(" pattern

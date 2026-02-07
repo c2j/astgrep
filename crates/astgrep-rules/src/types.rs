@@ -452,6 +452,7 @@ pub struct DataFlowSpec {
     pub sanitizers: Vec<String>,
     pub must_flow: bool,
     pub max_depth: Option<usize>,
+    pub taint_assume_safe_booleans: Option<bool>,
 }
 
 /// Source pattern for taint analysis
@@ -512,6 +513,7 @@ impl DataFlowSpec {
             sanitizers: Vec::new(),
             must_flow: true,
             max_depth: None,
+            taint_assume_safe_booleans: None,
         }
     }
 
@@ -532,6 +534,7 @@ impl DataFlowSpec {
             sanitizers: Vec::new(),
             must_flow: true,
             max_depth: None,
+            taint_assume_safe_booleans: None,
         }
     }
 

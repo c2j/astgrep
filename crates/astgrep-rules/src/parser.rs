@@ -152,7 +152,7 @@ impl RuleParser {
             };
             options.insert("sql_statement_boundary".to_string(), str_val);
         }
-        
+
         // Parse symbolic_propagation option
         if let Some(val) = options_obj.get(&Value::String("symbolic_propagation".to_string())) {
             let str_val = if let Some(b) = val.as_bool() {
@@ -168,7 +168,23 @@ impl RuleParser {
             };
             options.insert("symbolic_propagation".to_string(), str_val);
         }
-        
+
+        // Parse taint_assume_safe_booleans option
+        if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_booleans".to_string())) {
+            let str_val = if let Some(b) = val.as_bool() {
+                b.to_string()
+            } else if let Some(s) = val.as_str() {
+                match s.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" | "yes" => "true".to_string(),
+                    "off" | "false" | "0" | "no" => "false".to_string(),
+                    _ => s.to_string(),
+                }
+            } else {
+                return Ok(Some(options));
+            };
+            options.insert("taint_assume_safe_booleans".to_string(), str_val);
+        }
+
         Ok(Some(options))
     }
 
@@ -864,6 +880,12 @@ impl RuleParser {
             }
         }
 
+        if let Some(taint_assume_safe_booleans_value) = dataflow_obj.get(&Value::String("taint_assume_safe_booleans".to_string())) {
+            if let Some(b) = taint_assume_safe_booleans_value.as_bool() {
+                dataflow.taint_assume_safe_booleans = Some(b);
+            }
+        }
+
         Ok(Some(dataflow))
     }
 
@@ -1206,16 +1228,60 @@ impl RuleParser {
 
         // If it's an object, parse fields
         if let Some(mapping) = value.as_mapping() {
-            // Extract pattern
-            let pattern_str = mapping.get(&Value::String("pattern".to_string()))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| AnalysisError::parse_error("Source pattern must have a 'pattern' field".to_string()))?;
+            // Extract pattern and focus-metavariables - check for "patterns" array (Semgrep format)
+            let (pattern_str, focus_metavariables) = if let Some(patterns_value) = mapping.get(&Value::String("patterns".to_string())) {
+                // Semgrep uses "patterns" array where:
+                // - Elements with "pattern" field define the pattern to match
+                // - Elements with "focus-metavariable" field specify which variable to track
+                let patterns_array = patterns_value.as_sequence()
+                    .ok_or_else(|| AnalysisError::parse_error("'patterns' must be an array".to_string()))?;
 
-            // Extract focus-metavariables (optional)
-            let focus_metavariables = mapping.get(&Value::String("focus-metavariable".to_string()))
-                .and_then(|v| v.as_str())
-                .map(|s| vec![s.to_string()])
-                .unwrap_or_default();
+                if patterns_array.is_empty() {
+                    return Err(AnalysisError::parse_error("'patterns' array must not be empty".to_string()));
+                }
+
+                // Extract pattern from first element with "pattern" field
+                let mut pattern_str = None;
+                let mut focus_vars = Vec::new();
+
+                for pattern_elem in patterns_array {
+                    if let Some(elem_map) = pattern_elem.as_mapping() {
+                        // Look for pattern field
+                        if let Some(p_val) = elem_map.get(&Value::String("pattern".to_string())) {
+                            if let Some(p_str) = p_val.as_str() {
+                                pattern_str = Some(p_str.to_string());
+                            }
+                        }
+                        // Look for focus-metavariable field
+                        if let Some(f_val) = elem_map.get(&Value::String("focus-metavariable".to_string())) {
+                            if let Some(f_str) = f_val.as_str() {
+                                focus_vars.push(f_str.to_string());
+                            }
+                        }
+                    } else if let Some(p_str) = pattern_elem.as_str() {
+                        // Simple string pattern
+                        pattern_str = Some(p_str.to_string());
+                    }
+                }
+
+                let pattern_str = pattern_str.ok_or_else(|| AnalysisError::parse_error("No pattern found in 'patterns' array".to_string()))?;
+                (pattern_str, focus_vars)
+            } else if let Some(pattern_value) = mapping.get(&Value::String("pattern".to_string())) {
+                // Standard "pattern" field
+                let pattern_str = pattern_value.as_str()
+                    .ok_or_else(|| AnalysisError::parse_error("Source pattern must have a 'pattern' field".to_string()))?
+                    .to_string();
+
+                // Check for focus-metavariable at this level (alternate format)
+                let focus_metavariables = mapping.get(&Value::String("focus-metavariable".to_string()))
+                    .and_then(|v| v.as_str())
+                    .map(|s| vec![s.to_string()])
+                    .unwrap_or_default();
+
+                (pattern_str, focus_metavariables)
+            } else {
+                return Err(AnalysisError::parse_error("Source pattern must have 'pattern' or 'patterns' field".to_string()));
+            };
 
             // Check if fallback flag is set (optional)
             let is_fallback = mapping.get(&Value::String("is_fallback".to_string()))
@@ -1223,7 +1289,7 @@ impl RuleParser {
                 .unwrap_or(false);
 
             return Ok(SourcePattern {
-                pattern: Pattern::simple(pattern_str.to_string()),
+                pattern: Pattern::simple(pattern_str),
                 focus_metavariables,
                 is_fallback,
             });
