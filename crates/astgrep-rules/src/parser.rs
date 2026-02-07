@@ -88,7 +88,7 @@ impl RuleParser {
             let sources = self.parse_pattern_sources(rule_obj, index)?;
             let sinks = self.parse_pattern_sinks(rule_obj, index)?;
             let sanitizers = self.parse_pattern_sanitizers(rule_obj, index).unwrap_or_default();
-            
+
             if !sources.is_empty() && !sinks.is_empty() {
                 let dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
                 (Vec::new(), Some(dataflow))
@@ -852,7 +852,7 @@ impl RuleParser {
         let sinks = self.parse_string_array(dataflow_obj, "sinks")?;
         let sanitizers = self.parse_string_array(dataflow_obj, "sanitizers").unwrap_or_default();
 
-        let mut dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
+        let mut dataflow = DataFlowSpec::from_strings(sources, sinks).with_sanitizers(sanitizers);
 
         if let Some(must_flow) = self.get_optional_bool_field(dataflow_obj, "must_flow") {
             dataflow.must_flow = must_flow;
@@ -1029,7 +1029,7 @@ impl RuleParser {
     }
 
     /// Parse pattern-sources field for taint analysis
-    fn parse_pattern_sources(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Vec<String>> {
+    fn parse_pattern_sources(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Vec<SourcePattern>> {
         let sources_value = obj.get(&Value::String("pattern-sources".to_string()));
         
         if sources_value.is_none() {
@@ -1043,12 +1043,23 @@ impl RuleParser {
 
         let mut sources = Vec::new();
         for (i, source) in sources_array.iter().enumerate() {
-            // Extract pattern from source definition
-            if let Some(pattern_str) = self.extract_pattern_from_taint_def(source) {
-                sources.push(pattern_str);
+            // Try to parse as a SourcePattern object
+            if let Ok(source_pattern) = self.parse_source_pattern(source, i) {
+                sources.push(source_pattern);
             } else {
-                // If we can't extract a simple pattern, store the YAML representation
-                sources.push(format!("source_{}", i));
+                // Fallback to simple pattern
+                if let Some(pattern_str) = self.extract_pattern_from_taint_def(source) {
+                    sources.push(SourcePattern {
+                        pattern: Pattern::simple(pattern_str),
+                        focus_metavariables: Vec::new(),
+                        is_fallback: true,
+                    });
+                } else {
+                    return Err(AnalysisError::parse_error(format!(
+                        "Rule {} source at index {} must have a 'pattern' field",
+                        index, i
+                    )));
+                }
             }
         }
 
@@ -1056,7 +1067,7 @@ impl RuleParser {
     }
 
     /// Parse pattern-sinks field for taint analysis
-    fn parse_pattern_sinks(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Vec<String>> {
+    fn parse_pattern_sinks(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Vec<SinkPattern>> {
         let sinks_value = obj.get(&Value::String("pattern-sinks".to_string()));
         
         if sinks_value.is_none() {
@@ -1070,12 +1081,22 @@ impl RuleParser {
 
         let mut sinks = Vec::new();
         for (i, sink) in sinks_array.iter().enumerate() {
-            // Extract pattern from sink definition
-            if let Some(pattern_str) = self.extract_pattern_from_taint_def(sink) {
-                sinks.push(pattern_str);
+            // Try to parse as a SinkPattern object
+            if let Ok(sink_pattern) = self.parse_sink_pattern(sink, i) {
+                sinks.push(sink_pattern);
             } else {
-                // If we can't extract a simple pattern, store the YAML representation
-                sinks.push(format!("sink_{}", i));
+                // Fallback to simple pattern
+                if let Some(pattern_str) = self.extract_pattern_from_taint_def(sink) {
+                    sinks.push(SinkPattern {
+                        pattern: Pattern::simple(pattern_str),
+                        is_fallback: true,
+                    });
+                } else {
+                    return Err(AnalysisError::parse_error(format!(
+                        "Rule {} sink at index {} must have a 'pattern' field",
+                        index, i
+                    )));
+                }
             }
         }
 
@@ -1172,6 +1193,76 @@ impl RuleParser {
         None
     }
 
+    /// Parse a source pattern from YAML value
+    fn parse_source_pattern(&self, value: &Value, _index: usize) -> Result<SourcePattern> {
+        // If it's a simple string, create a basic SourcePattern
+        if let Some(s) = value.as_str() {
+            return Ok(SourcePattern {
+                pattern: Pattern::simple(s.to_string()),
+                focus_metavariables: Vec::new(),
+                is_fallback: false,
+            });
+        }
+
+        // If it's an object, parse fields
+        if let Some(mapping) = value.as_mapping() {
+            // Extract pattern
+            let pattern_str = mapping.get(&Value::String("pattern".to_string()))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AnalysisError::parse_error("Source pattern must have a 'pattern' field".to_string()))?;
+
+            // Extract focus-metavariables (optional)
+            let focus_metavariables = mapping.get(&Value::String("focus-metavariable".to_string()))
+                .and_then(|v| v.as_str())
+                .map(|s| vec![s.to_string()])
+                .unwrap_or_default();
+
+            // Check if fallback flag is set (optional)
+            let is_fallback = mapping.get(&Value::String("is_fallback".to_string()))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            return Ok(SourcePattern {
+                pattern: Pattern::simple(pattern_str.to_string()),
+                focus_metavariables,
+                is_fallback,
+            });
+        }
+
+        Err(AnalysisError::parse_error("Invalid source pattern format".to_string()))
+    }
+
+    /// Parse a sink pattern from YAML value
+    fn parse_sink_pattern(&self, value: &Value, _index: usize) -> Result<SinkPattern> {
+        // If it's a simple string, create a basic SinkPattern
+        if let Some(s) = value.as_str() {
+            return Ok(SinkPattern {
+                pattern: Pattern::simple(s.to_string()),
+                is_fallback: false,
+            });
+        }
+
+        // If it's an object, parse fields
+        if let Some(mapping) = value.as_mapping() {
+            // Extract pattern
+            let pattern_str = mapping.get(&Value::String("pattern".to_string()))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AnalysisError::parse_error("Sink pattern must have a 'pattern' field".to_string()))?;
+
+            // Check if fallback flag is set (optional)
+            let is_fallback = mapping.get(&Value::String("is_fallback".to_string()))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            return Ok(SinkPattern {
+                pattern: Pattern::simple(pattern_str.to_string()),
+                is_fallback,
+            });
+        }
+
+        Err(AnalysisError::parse_error("Invalid sink pattern format".to_string()))
+    }
+
     /// Simplify Semgrep pattern to basic pattern matcher format
     fn simplify_semgrep_pattern(&self, pattern: &str) -> String {
         let mut result = pattern.to_string();
@@ -1265,23 +1356,34 @@ rules:
         assert_eq!(rules.len(), 1);
         let rule = &rules[0];
         assert_eq!(rule.id, "enhanced-pattern-test");
-        assert_eq!(rule.patterns.len(), 2);
 
-        // Check first pattern parsed as Simple pattern (pattern-not-inside is not yet combined)
-        if let PatternType::Simple(s) = &rule.patterns[0].pattern_type {
-            assert_eq!(s, "def $FUNC(...):");
+        // patterns array is combined into a single Pattern::All
+        assert_eq!(rule.patterns.len(), 1);
+
+        // Check the combined pattern is PatternType::All
+        if let PatternType::All(sub_patterns) = &rule.patterns[0].pattern_type {
+            // Should have 2 sub-patterns
+            assert_eq!(sub_patterns.len(), 2);
+
+            // Check first sub-pattern is Simple pattern
+            if let PatternType::Simple(s) = &sub_patterns[0].pattern_type {
+                assert_eq!(s, "def $FUNC(...):");
+            } else {
+                panic!("Expected Simple pattern type");
+            }
+
+            // Check second sub-pattern is Regex and has focus
+            if let PatternType::Regex(regex_str) = &sub_patterns[1].pattern_type {
+                assert_eq!(regex_str, "eval\\(");
+            } else {
+                panic!("Expected Regex pattern type");
+            }
+
+            // Focus should be on the second pattern
+            assert_eq!(sub_patterns[1].focus, Some(vec!["$FUNC".to_string(), "$ARG".to_string()]));
         } else {
-            panic!("Expected Simple pattern type");
+            panic!("Expected PatternType::All");
         }
-
-        // Check second pattern is Regex and focus is parsed
-        if let PatternType::Regex(regex_str) = &rule.patterns[1].pattern_type {
-            assert_eq!(regex_str, "eval\\(");
-        } else {
-            panic!("Expected Regex pattern type");
-        }
-
-        assert_eq!(rule.patterns[1].focus, Some(vec!["$FUNC".to_string(), "$ARG".to_string()]));
     }
 
     #[test]

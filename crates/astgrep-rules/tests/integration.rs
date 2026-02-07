@@ -37,6 +37,7 @@ fn test_complete_rule_execution() {
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
     };
 
     // Execute rule
@@ -90,6 +91,7 @@ fn test_basic_rule_execution() {
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
     };
 
     // Execute rule
@@ -138,6 +140,7 @@ fn test_rule_validation() {
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
     };
 
     let result = validator.validate_rule(&valid_rule);
@@ -181,6 +184,7 @@ fn test_rule_engine_configuration() {
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
     };
 
     engine.add_rule(rule).unwrap();
@@ -227,6 +231,7 @@ fn test_simple_performance() {
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
     };
 
     // Execute rule and measure time
@@ -279,6 +284,7 @@ fn test_error_handling() {
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
     };
 
     // Try to add invalid rule (should fail validation)
@@ -323,6 +329,7 @@ fn test_multiple_rules() {
             paths: None,
             metadata: std::collections::HashMap::new(),
             enabled: true,
+            mode: astgrep_rules::RuleMode::Search,
         };
         engine.add_rule(rule).unwrap();
     }

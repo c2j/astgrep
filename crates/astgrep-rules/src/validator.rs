@@ -570,7 +570,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
 
-        let dataflow = DataFlowSpec::new(Vec::new(), vec!["sink".to_string()]);
+        let dataflow = DataFlowSpec::from_strings(Vec::new(), vec!["sink".to_string()]);
         rule.dataflow = Some(dataflow);
 
         assert!(validator.validate_rule(&rule).is_err());
@@ -581,7 +581,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
 
-        let dataflow = DataFlowSpec::new(
+        let dataflow = DataFlowSpec::from_strings(
             vec!["source".to_string()],
             vec!["sink".to_string()],
         ).with_max_depth(0);

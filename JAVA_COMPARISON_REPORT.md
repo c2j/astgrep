@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月 7日 星期六 07时32分59秒 CST
+Generated on: 2026年 2月 7日 星期六 11时55分04秒 CST
 
 ## Test Summary
 
@@ -41,7 +41,7 @@ Generated on: 2026年 2月 7日 星期六 07时32分59秒 CST
 | sym_prop_merge1 |  | 2 | 2 | ✅ MATCH |
 | sym_prop_merge2 |  | 1 | 1 | ✅ MATCH |
 | sym_prop_new |  | 1 | 1 | ✅ MATCH |
-| sym_prop_non_literal |  | 1 | 00 | ❌ DIFFER |
+| sym_prop_non_literal |  | 1 | 1 | ✅ MATCH |
 | taint_assume_safe_booleans1 | taint | 1 | 00 | ❌ DIFFER |
 | taint_assume_safe_numbers1 | taint | 1 | 00 | ❌ DIFFER |
 | taint_assume_safe_numbers3 | taint | 1 | 00 | ❌ DIFFER |
@@ -62,10 +62,10 @@ Generated on: 2026年 2月 7日 星期六 07时32分59秒 CST
 
 ### Summary Statistics
 
-- **Matching results**: 22 tests
-- **Differing results**: 16 tests
+- **Matching results**: 23 tests
+- **Differing results**: 15 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 57%
+- **Compatibility rate**: 60%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月 7日 星期六 07时34分31秒 CST
+**Report Generated**: 2026年 2月 7日 星期六 11时56分31秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development

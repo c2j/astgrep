@@ -28,7 +28,7 @@ impl RuleExecutionExample {
                         r".*\+.*".to_string()
                     )))
             ],
-            dataflow: Some(DataFlowSpec::new(
+            dataflow: Some(DataFlowSpec::from_strings(
                 vec!["user_input".to_string(), "request_parameter".to_string()],
                 vec!["sql_execution".to_string(), "database_query".to_string()],
             ).with_sanitizers(vec!["sql_escape".to_string(), "prepared_statement".to_string()])),
@@ -63,7 +63,7 @@ impl RuleExecutionExample {
                         r".*user.*".to_string()
                     )))
             ],
-            dataflow: Some(DataFlowSpec::new(
+            dataflow: Some(DataFlowSpec::from_strings(
                 vec!["user_input".to_string(), "url_parameter".to_string()],
                 vec!["html_output".to_string(), "dom_manipulation".to_string()],
             ).with_sanitizers(vec!["html_encode".to_string(), "sanitize_html".to_string()])),

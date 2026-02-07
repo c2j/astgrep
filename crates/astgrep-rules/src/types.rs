@@ -447,16 +447,85 @@ impl MetavariableType {
 /// Data flow analysis specification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataFlowSpec {
-    pub sources: Vec<String>,
-    pub sinks: Vec<String>,
+    pub sources: Vec<SourcePattern>,
+    pub sinks: Vec<SinkPattern>,
     pub sanitizers: Vec<String>,
     pub must_flow: bool,
     pub max_depth: Option<usize>,
 }
 
+/// Source pattern for taint analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourcePattern {
+    pub pattern: Pattern,
+    pub focus_metavariables: Vec<String>,
+    pub is_fallback: bool,
+}
+
+impl SourcePattern {
+    pub fn pattern_type(&self) -> &PatternType {
+        &self.pattern.pattern_type
+    }
+
+    pub fn pattern_text(&self) -> &str {
+        match &self.pattern.pattern_type {
+            PatternType::Simple(s) => s,
+            _ => "",
+        }
+    }
+
+    pub fn normalized_pattern(&self) -> String {
+        self.pattern_text().trim_end_matches(';').trim().to_string()
+    }
+}
+
+/// Sink pattern for taint analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SinkPattern {
+    pub pattern: Pattern,
+    pub is_fallback: bool,
+}
+
+impl SinkPattern {
+    pub fn pattern_type(&self) -> &PatternType {
+        &self.pattern.pattern_type
+    }
+
+    pub fn pattern_text(&self) -> &str {
+        match &self.pattern.pattern_type {
+            PatternType::Simple(s) => s,
+            _ => "",
+        }
+    }
+
+    pub fn normalized_pattern(&self) -> String {
+        self.pattern_text().trim_end_matches(';').trim().to_string()
+    }
+}
+
 impl DataFlowSpec {
-    /// Create a new data flow specification
-    pub fn new(sources: Vec<String>, sinks: Vec<String>) -> Self {
+    /// Create a new data flow specification from pattern objects
+    pub fn new(sources: Vec<SourcePattern>, sinks: Vec<SinkPattern>) -> Self {
+        Self {
+            sources,
+            sinks,
+            sanitizers: Vec::new(),
+            must_flow: true,
+            max_depth: None,
+        }
+    }
+
+    /// Create a new data flow specification from simple strings (backward compatibility)
+    pub fn from_strings(sources: Vec<String>, sinks: Vec<String>) -> Self {
+        let sources = sources.into_iter().map(|s| SourcePattern {
+            pattern: Pattern::simple(s),
+            focus_metavariables: Vec::new(),
+            is_fallback: true,
+        }).collect();
+        let sinks = sinks.into_iter().map(|s| SinkPattern {
+            pattern: Pattern::simple(s),
+            is_fallback: true,
+        }).collect();
         Self {
             sources,
             sinks,
@@ -676,7 +745,7 @@ mod tests {
 
     #[test]
     fn test_dataflow_spec() {
-        let dataflow = DataFlowSpec::new(
+        let dataflow = DataFlowSpec::from_strings(
             vec!["request.getParameter(...)".to_string()],
             vec!["Statement.execute(...)".to_string()],
         )

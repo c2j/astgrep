@@ -1064,11 +1064,23 @@ impl AdvancedRuleExecutor {
     fn matches_dataflow_spec(&self, flow: &astgrep_dataflow::TaintFlow, spec: &DataFlowSpec) -> bool {
         // Simple pattern matching for sources and sinks
         let source_matches = spec.sources.iter().any(|pattern| {
-            flow.source.description.contains(pattern)
+            match pattern.pattern_type() {
+                PatternType::Simple(ref s) => {
+                    let text = &flow.source.description;
+                    text.contains(s)
+                }
+                _ => false,
+            }
         });
-        
+
         let sink_matches = spec.sinks.iter().any(|pattern| {
-            flow.sink.description.contains(pattern)
+            match pattern.pattern_type() {
+                PatternType::Simple(ref s) => {
+                    let text = &flow.sink.description;
+                    text.contains(s)
+                }
+                _ => false,
+            }
         });
 
         source_matches && sink_matches
@@ -1228,16 +1240,20 @@ impl AdvancedRuleExecutor {
     ) -> Result<Vec<TaintMatch>> {
         let mut sources = Vec::new();
         
-        for source_pattern_str in &dataflow_spec.sources {
+        for source_pattern in &dataflow_spec.sources {
             // Normalize pattern: remove trailing semicolons for more flexible matching
-            let normalized_pattern = source_pattern_str.trim_end_matches(';').trim();
-            
+            let normalized_pattern = source_pattern.pattern_text().trim_end_matches(';');
+
             // Convert source pattern to SemgrepPattern
             let source_pattern = astgrep_core::SemgrepPattern {
                 pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
                 metavariable_pattern: None,
                 conditions: Vec::new(),
-                focus: None,
+                focus: if source_pattern.focus_metavariables.is_empty() {
+                    None
+                } else {
+                    Some(source_pattern.focus_metavariables.clone())
+                },
             };
             
             // Find matches
@@ -1271,10 +1287,10 @@ impl AdvancedRuleExecutor {
     ) -> Result<Vec<TaintMatch>> {
         let mut sinks = Vec::new();
         
-        for sink_pattern_str in &dataflow_spec.sinks {
+        for sink_pattern in &dataflow_spec.sinks {
             // Normalize pattern: remove trailing semicolons for more flexible matching
-            let normalized_pattern = sink_pattern_str.trim_end_matches(';').trim();
-            
+            let normalized_pattern = sink_pattern.pattern_text().trim_end_matches(';').trim();
+
             // Convert sink pattern to SemgrepPattern
             let sink_pattern = astgrep_core::SemgrepPattern {
                 pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
