@@ -11,6 +11,34 @@ use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// Check if a node type/text is an operator
+fn is_operator_node(node_type: &str, node_text: Option<&str>) -> bool {
+    if matches!(node_type,
+        "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "++" | "--" |
+        "+" | "-" | "*" | "/" | "%" |
+        "==" | "!=" | "<" | ">" | "<=" | ">=" |
+        "&&" | "||" | "!" | "&" | "|" | "^" | "~" |
+        "<<" | ">>" | ">>>" |
+        "assignment_operator" | "operator"
+    ) {
+        return true;
+    }
+
+    if let Some(text) = node_text {
+        if text.len() <= 3 && matches!(text,
+            "=" | "+=" | "-=" | "*=" | "/=" | "%=" |
+            "+" | "-" | "*" | "/" | "%" |
+            "==" | "!=" | "<" | ">" | "<=" | ">=" |
+            "&&" | "||" | "!" | "&" | "|" | "^" | "~" |
+            "<<" | ">>" | ">>>"
+        ) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Represents a taint match (source or sink)
 struct TaintMatch {
     node: Box<dyn AstNode>,
@@ -226,9 +254,19 @@ impl AdvancedRuleExecutor {
         // Find pattern matches using the advanced matcher
         let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
 
-        // If no matches found and we have type constraints with symbolic propagation,
+        // Check if pattern contains ellipsis (indicating potential cross-statement matches)
+        let pattern_str = match &processed_pattern.pattern_type {
+            PatternType::Simple(s) => s.as_str(),
+            _ => "",
+        };
+        let has_ellipsis = pattern_str.contains("...");
+
+        // If no matches found and we have either:
+        // 1. Type constraints with symbolic propagation, or
+        // 2. Pattern contains ellipsis and symbolic propagation is enabled
         // try to find matches using symbolic propagation
-        let matches = if matches.is_empty() && !type_constraints.is_empty() && self.symbolic_propagator.is_some() {
+        let matches = if matches.is_empty() && self.symbolic_propagator.is_some()
+            && (!type_constraints.is_empty() || has_ellipsis) {
             eprintln!("DEBUG: No direct matches found, attempting symbolic propagation matching");
             self.find_matches_via_symbolic_propagation(&semgrep_pattern, ast, &type_constraints)?
         } else {
@@ -2071,37 +2109,335 @@ impl AdvancedRuleExecutor {
         type_constraints: &[(String, String)],
     ) -> Result<Vec<astgrep_core::SemgrepMatchResult>> {
         use astgrep_core::SemgrepMatchResult;
-        
-        eprintln!("DEBUG: Searching for symbolic propagation matches with {} type constraints", 
+
+        eprintln!("DEBUG: Searching for symbolic propagation matches with {} type constraints",
                  type_constraints.len());
-        
+
         let mut matches = Vec::new();
-        
+
         // Get the symbolic propagator
         let propagator = match self.symbolic_propagator {
             Some(ref p) => p,
             None => return Ok(matches),
         };
-        
-        // Extract pattern info - we expect if statement patterns with method calls
+
+        // Extract pattern info
         let pattern_str = match &pattern.pattern_type {
             astgrep_core::PatternType::Simple(s) => s.as_str(),
             _ => return Ok(matches),
         };
-        
-        // Check if this is an if statement pattern with getName().contains()
-        if !pattern_str.contains("if") || !pattern_str.contains("getName") || !pattern_str.contains("contains") {
+
+        eprintln!("DEBUG: Pattern string: '{}'", pattern_str);
+
+        // Check if pattern contains ellipsis for method chaining
+        if !pattern_str.contains("...") {
+            eprintln!("DEBUG: Pattern does not contain ellipsis, skipping symbolic propagation");
             return Ok(matches);
         }
-        
-        // Get full source code from AST
-        let full_source = ast.text().unwrap_or("").to_string();
-        
-        // Find all if statements in the AST
-        self.find_if_statements_with_symbolic_match(ast, pattern_str, type_constraints, propagator, &full_source, &mut matches)?;
-        
+
+        // Try to parse the pattern to extract start and end methods
+        // Patterns like "x(). ... .z()" or "$X(). ... .z()"
+        if let Some((start_method, end_method)) = self.parse_ellipsis_pattern(pattern_str) {
+            eprintln!("DEBUG: Parsed ellipsis pattern: start='{}', end='{}'", start_method, end_method);
+            // Get full source code from AST
+            let full_source = ast.text().unwrap_or("").to_string();
+            self.find_ellipsis_matches_via_symbolic_propagation(
+                ast, &start_method, &end_method, propagator, &full_source, &mut matches
+            )?;
+        } else {
+            // Fall back to original if statement logic for getName().contains() patterns
+            if pattern_str.contains("if") && pattern_str.contains("getName") && pattern_str.contains("contains") {
+                let full_source = ast.text().unwrap_or("").to_string();
+                self.find_if_statements_with_symbolic_match(ast, pattern_str, type_constraints, propagator, &full_source, &mut matches)?;
+            } else {
+                eprintln!("DEBUG: Could not parse ellipsis pattern, skipping symbolic propagation");
+            }
+        }
+
         eprintln!("DEBUG: Symbolic propagation found {} matches", matches.len());
         Ok(matches)
+    }
+
+    /// Parse an ellipsis pattern like "x(). ... .z()" or "$X(). ... .z()"
+    /// Returns (start_method, end_method) if successful
+    fn parse_ellipsis_pattern(&self, pattern_str: &str) -> Option<(String, String)> {
+        // Remove whitespace for easier parsing
+        let pattern = pattern_str.replace(" ", "");
+
+        // Pattern format: something(). ... .something()
+        // Find "()" at the start
+        let start_paren = pattern.find("()")?;
+        let start_method = if start_paren > 0 {
+            pattern[..start_paren].to_string()
+        } else {
+            return None;
+        };
+
+        // Find "...()" sequence
+        let ellipsis_idx = pattern.find("...")?;
+        let after_ellipsis = &pattern[ellipsis_idx + 3..];
+
+        // Skip one dot, then find the final "()" for end method
+        if !after_ellipsis.starts_with('.') {
+            return None;
+        }
+
+        let remaining = &after_ellipsis[1..];
+        let end_paren = remaining.find("()")?;
+        // Remove any leading dots from end_method
+        let end_method = remaining[..end_paren].trim_start_matches('.').to_string();
+
+        Some((start_method, end_method))
+    }
+
+    /// Find matches for ellipsis patterns using symbolic propagation
+    /// Matches patterns like "x(). ... .z()" by tracking variable assignments
+    fn find_ellipsis_matches_via_symbolic_propagation(
+        &self,
+        node: &dyn AstNode,
+        start_method: &str,
+        end_method: &str,
+        propagator: &astgrep_dataflow::SymbolicPropagator,
+        full_source: &str,
+        matches: &mut Vec<astgrep_core::SemgrepMatchResult>,
+    ) -> Result<()> {
+        use astgrep_core::SemgrepMatchResult;
+        use astgrep_dataflow::SymbolicValue;
+
+        eprintln!("DEBUG: Searching for matches: {}(). ... .{}()", start_method, end_method);
+
+        // Collect all variable declarations and their locations
+        let mut var_declarations: Vec<(String, usize, usize)> = Vec::new();
+
+        // Collect all method invocation nodes
+        let mut method_calls: Vec<(String, String, usize, usize, Box<dyn AstNode>)> = Vec::new();
+
+        // First pass: collect all variable declarations
+        self.collect_variable_declarations(node, &mut var_declarations)?;
+
+        // Second pass: collect all method calls
+        self.collect_method_calls(node, &mut method_calls)?;
+
+        eprintln!("DEBUG: Found {} variable declarations", var_declarations.len());
+        eprintln!("DEBUG: Found {} method calls", method_calls.len());
+
+        // For each variable, check if it's derived from start_method
+        let mut derived_vars: Vec<String> = Vec::new();
+
+        for (var_name, _var_line, _var_col) in &var_declarations {
+            // Get symbolic value for this variable
+            if let Some(sym_val) = propagator.get_symbolic_value(var_name) {
+                eprintln!("DEBUG: Variable '{}' has symbolic value: {:?}", var_name, sym_val);
+
+                // Check if this value is derived from start_method
+                if self.is_symbolic_value_derived_from_method(sym_val, start_method) {
+                    eprintln!("DEBUG: Variable '{}' is derived from {}()", var_name, start_method);
+                    derived_vars.push(var_name.clone());
+                } else {
+                    // Check if it's derived indirectly through other variables
+                    if self.check_indirect_derivation(var_name, start_method, propagator) {
+                        eprintln!("DEBUG: Variable '{}' is indirectly derived from {}()", var_name, start_method);
+                        derived_vars.push(var_name.clone());
+                    }
+                }
+            }
+        }
+
+        // Now look for method calls that use these derived variables and call end_method
+        for (receiver, method_name, line, col, node) in &method_calls {
+            if method_name == end_method {
+                eprintln!("DEBUG: Found {}() call with receiver '{}' at {}:{}", method_name, receiver, line, col);
+
+                // Check if the receiver is derived from start_method
+                if derived_vars.contains(receiver) {
+                    eprintln!("DEBUG: Match found! Receiver '{}' is derived from {}()", receiver, start_method);
+
+                    // Create a match result
+                    let bindings = std::collections::HashMap::new();
+                    let match_result = SemgrepMatchResult::new(node.clone_node(), bindings);
+                    matches.push(match_result);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if a symbolic value is derived from a specific method call
+    fn is_symbolic_value_derived_from_method(
+        &self,
+        sym_val: &astgrep_dataflow::SymbolicValue,
+        method_name: &str,
+    ) -> bool {
+        use astgrep_dataflow::SymbolicValue;
+
+        match sym_val {
+            SymbolicValue::MethodCall { base, method } => {
+                // Check if this method matches or if base is derived from it
+                eprintln!("DEBUG: Checking MethodCall: method='{}', base={:?}", method, base);
+                if method == method_name {
+                    eprintln!("DEBUG: Method matches target '{}'", method_name);
+                    return true;
+                }
+                let result = self.is_symbolic_value_derived_from_method(base, method_name);
+                eprintln!("DEBUG: Base derived from '{}': {}", method_name, result);
+                result
+            }
+            SymbolicValue::Variable(name) => {
+                // For variables, check the name directly
+                eprintln!("DEBUG: Checking Variable: name='{}' vs method_name='{}'", name, method_name);
+                let result = name == method_name;
+                eprintln!("DEBUG: Variable matches: {}", result);
+                result
+            }
+            SymbolicValue::FieldAccess { base, .. } => {
+                return self.is_symbolic_value_derived_from_method(base, method_name);
+            }
+            _ => {
+                eprintln!("DEBUG: Unknown symbolic value, returning false");
+                false
+            }
+        }
+    }
+
+    /// Check if a variable is indirectly derived from a method through other variables
+    fn check_indirect_derivation(
+        &self,
+        var_name: &str,
+        target_method: &str,
+        propagator: &astgrep_dataflow::SymbolicPropagator,
+    ) -> bool {
+        use astgrep_dataflow::SymbolicValue;
+
+        let mut visited = std::collections::HashSet::new();
+        let mut to_check = vec![var_name.to_string()];
+
+        while let Some(current_var) = to_check.pop() {
+            if visited.contains(&current_var) {
+                continue;
+            }
+            visited.insert(current_var.clone());
+
+            if let Some(sym_val) = propagator.get_symbolic_value(&current_var) {
+                // Check if this value is derived from target_method
+                if self.is_symbolic_value_derived_from_method(sym_val, target_method) {
+                    return true;
+                }
+
+                // If this is a variable reference, add it to the check queue
+                if let SymbolicValue::Variable(ref_name) = sym_val {
+                    to_check.push(ref_name.clone());
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Collect all variable declarations in the AST
+    fn collect_variable_declarations(
+        &self,
+        node: &dyn AstNode,
+        declarations: &mut Vec<(String, usize, usize)>,
+    ) -> Result<()> {
+        let node_type = node.node_type();
+
+        match node_type {
+            "local_variable_declaration" | "variable_declaration" | "field_declaration" => {
+                // Extract variable name
+                for i in 0..node.child_count() {
+                    if let Some(child) = node.child(i) {
+                        if child.node_type() == "identifier" {
+                            if let Some(name) = child.text() {
+                                if let Some((line, col, _, _)) = child.location() {
+                                    declarations.push((name.to_string(), line, col));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        // Recursively process children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                self.collect_variable_declarations(child, declarations)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Collect all method invocations in the AST
+    fn collect_method_calls(
+        &self,
+        node: &dyn AstNode,
+        method_calls: &mut Vec<(String, String, usize, usize, Box<dyn AstNode>)>,
+    ) -> Result<()> {
+        let node_type = node.node_type();
+
+        if node_type == "method_invocation" || node_type == "call_expression" {
+            // Extract receiver and method name
+            let mut receiver = None;
+            let mut method_name = None;
+
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    let child_type = child.node_type();
+                    let child_text = child.text();
+
+                    match child_type {
+                        "identifier" => {
+                            // The first identifier might be the method name (for no-receiver calls)
+                            // or the receiver (for chained calls like a.b())
+                            if receiver.is_none() {
+                                receiver = child_text.map(|s| s.to_string());
+                            } else if method_name.is_none() {
+                                method_name = child_text.map(|s| s.to_string());
+                            }
+                        }
+                        "field_access" | "member_expression" => {
+                            // This is likely the receiver part
+                            if let Some(text) = child_text {
+                                // Extract the receiver name from field access
+                                let parts: Vec<&str> = text.split('.').collect();
+                                if parts.len() >= 2 {
+                                    receiver = Some(parts[0].to_string());
+                                    method_name = Some(parts[1].to_string());
+                                }
+                            }
+                        }
+                        _ => {
+                            // Check for method names in arguments or other positions
+                            if method_name.is_none() && !is_operator_node(child_type, child_text) {
+                                if let Some(text) = child_text {
+                                    if text.contains('(') && text.contains(')') {
+                                        // Extract method name from "method()"
+                                        let name_part = text.trim_end_matches('(').trim_end_matches(')');
+                                        method_name = Some(name_part.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let (Some(recv), Some(meth), Some((line, col, _, _))) = (receiver, method_name, node.location()) {
+                method_calls.push((recv, meth, line, col, node.clone_node()));
+            }
+        }
+
+        // Recursively process children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                self.collect_method_calls(child, method_calls)?;
+            }
+        }
+
+        Ok(())
     }
     
     /// Find if statements that match via symbolic propagation

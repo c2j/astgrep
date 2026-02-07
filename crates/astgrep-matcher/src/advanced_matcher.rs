@@ -104,6 +104,15 @@ impl AdvancedSemgrepMatcher {
         eprintln!("DEBUG: Recursing into {} children of node type: {}", node.child_count(), node.node_type());
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
+                // Skip simple identifiers in assignment contexts to avoid false positives
+                // (e.g., 'd' in 'Object d = b.z();' should not be expanded via symbolic propagation)
+                if child.node_type() == "identifier" {
+                    let text = child.text().unwrap_or("");
+                    if !text.contains(".") && !text.contains("(") {
+                        continue;
+                    }
+                }
+
                 eprintln!("DEBUG: Processing child {} of type: {}", i, child.node_type());
                 if self.find_matches_recursive(pattern, child, matches, depth + 1)? {
                     subtree_has_match = true;
@@ -634,6 +643,17 @@ impl AdvancedSemgrepMatcher {
         // If no match at current node, try matching against children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
+                // Skip simple identifiers in assignment contexts to avoid false positives
+                // (e.g., 'd' in 'Object d = b.z();' should not be expanded via symbolic propagation)
+                if child.node_type() == "identifier" {
+                    // Only match identifiers that are part of expressions (method calls, field access, etc.)
+                    // Skip if it's a standalone identifier that would be an assignment target
+                    let text = child.text().unwrap_or("");
+                    if !text.contains(".") && !text.contains("(") {
+                        continue;
+                    }
+                }
+
                 let snapshot = self.metavar_manager.snapshot();
                 if self.match_sequence(patterns, child, depth + 1)? {
                     return Ok(true);
@@ -734,7 +754,17 @@ impl AdvancedSemgrepMatcher {
         use astgrep_dataflow::SymbolicValue;
 
         match value {
-            SymbolicValue::Variable(name) => vec![name.clone()],
+            SymbolicValue::Variable(name) => {
+                if let Some(propagator) = &self.symbolic_propagator {
+                    if let Some(symbolic_value) = propagator.state().get(name) {
+                        self.symbolic_value_to_tokens(symbolic_value)
+                    } else {
+                        vec![name.clone()]
+                    }
+                } else {
+                    vec![name.clone()]
+                }
+            },
             SymbolicValue::FieldAccess { base, field } => {
                 let mut tokens = self.symbolic_value_to_tokens(base);
                 tokens.push(".".to_string());
@@ -743,11 +773,21 @@ impl AdvancedSemgrepMatcher {
             }
             SymbolicValue::MethodCall { base, method } => {
                 let mut tokens = self.symbolic_value_to_tokens(base);
-                tokens.push(".".to_string());
-                tokens.push(method.clone());
+                if !method.is_empty() {
+                    tokens.push(".".to_string());
+                    tokens.push(method.clone());
+                }
                 tokens.push("(".to_string());
                 tokens.push(")".to_string());
                 tokens
+            }
+            SymbolicValue::ConstructorCall { class } => {
+                vec![
+                    "new".to_string(),
+                    class.clone(),
+                    "(".to_string(),
+                    ")".to_string(),
+                ]
             }
             SymbolicValue::Constant(s) => vec![s.clone()],
             SymbolicValue::Unknown => vec![],

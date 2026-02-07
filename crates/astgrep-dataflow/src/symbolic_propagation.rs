@@ -52,6 +52,8 @@ pub enum SymbolicValue {
     FieldAccess { base: Box<SymbolicValue>, field: String },
     /// A method call result
     MethodCall { base: Box<SymbolicValue>, method: String },
+    /// A constructor invocation (e.g., new B())
+    ConstructorCall { class: String },
     /// A constant value
     Constant(String),
     /// Unknown/untracked value
@@ -80,6 +82,13 @@ impl SymbolicValue {
         }
     }
 
+    /// Create a constructor call symbolic value
+    pub fn constructor_call(class: &str) -> Self {
+        SymbolicValue::ConstructorCall {
+            class: class.to_string(),
+        }
+    }
+
     /// Check if this value is derived from another value
     pub fn is_derived_from(&self, other: &SymbolicValue) -> bool {
         match self {
@@ -96,6 +105,7 @@ impl SymbolicValue {
             SymbolicValue::MethodCall { base, .. } => {
                 base.is_derived_from(other) || base.as_ref() == other
             }
+            SymbolicValue::ConstructorCall { .. } => false,
             _ => false,
         }
     }
@@ -106,6 +116,7 @@ impl SymbolicValue {
             SymbolicValue::Variable(name) => Some(name),
             SymbolicValue::FieldAccess { base, .. } => base.root_variable(),
             SymbolicValue::MethodCall { base, .. } => base.root_variable(),
+            SymbolicValue::ConstructorCall { .. } => None,
             _ => None,
         }
     }
@@ -295,6 +306,11 @@ impl SymbolicPropagator {
         Ok(())
     }
 
+    /// Get the symbolic value for a given variable name
+    pub fn get_symbolic_value(&self, var_name: &str) -> Option<&SymbolicValue> {
+        self.state.get(var_name)
+    }
+
     /// Analyze a node and update symbolic state
     fn analyze_node(&mut self, node: &dyn AstNode) -> Result<()> {
         let node_type = node.node_type();
@@ -477,6 +493,9 @@ impl SymbolicPropagator {
         let node_text = node.text();
 
         match node_type {
+            "constructor_invocation" | "object_creation_expression" | "class_creator" => {
+                self.extract_constructor_call_dyn(node)
+            },
             "method_invocation" | "call_expression" => {
                 self.extract_method_call_dyn(node)
             },
@@ -484,6 +503,12 @@ impl SymbolicPropagator {
                 self.extract_field_access_dyn(node)
             },
             _ => {
+                // Check for 'new' keyword to detect constructor calls
+                if let Some(text) = node_text {
+                    if text.starts_with("new ") && text.contains("(") {
+                        return self.extract_constructor_call_dyn(node);
+                    }
+                }
                 // For other nodes, try to extract as method call or field access
                 let method_result = self.extract_method_call_dyn(node);
                 if !matches!(method_result, SymbolicValue::Unknown) {
@@ -589,8 +614,66 @@ impl SymbolicPropagator {
             }
         }
 
-        if let (Some(base), Some(method)) = (base, method) {
-            SymbolicValue::method_call(base, &method)
+        if let Some(method) = method {
+            if let Some(base) = base {
+                SymbolicValue::method_call(base, &method)
+            } else {
+                SymbolicValue::Unknown
+            }
+        } else if let Some(base) = base {
+            // For calls like x() without an explicit method name,
+            // treat as a method call with empty method name
+            SymbolicValue::method_call(base, "")
+        } else {
+            SymbolicValue::Unknown
+        }
+    }
+
+    /// Extract a constructor call symbolic value
+    fn extract_constructor_call_dyn(&self, node: &dyn AstNode) -> SymbolicValue {
+        let mut class = None;
+        let node_text = node.text();
+
+        // Try to extract the class name from the constructor call
+        // The pattern should be: new ClassName(...)
+        if let Some(text) = node_text {
+            if text.starts_with("new ") {
+                // Extract class name after "new " and before "(" or whitespace + "("
+                let rest = &text[4..]; // Skip "new "
+                let rest = rest.trim();
+                // Find the class name (everything before "(")
+                if let Some(paren_pos) = rest.find('(') {
+                    let class_name = &rest[..paren_pos].trim();
+                    if !class_name.is_empty() {
+                        class = Some(class_name.to_string());
+                    }
+                }
+            }
+        }
+
+        // Fallback: look for identifier child nodes
+        if class.is_none() {
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    match child.node_type() {
+                        "identifier" | "type_identifier" => {
+                            let child_text = child.text();
+                            // Skip "new" keyword if it appears as a child
+                            if let Some(ct) = child_text {
+                                if ct != "new" {
+                                    class = Some(ct.to_string());
+                                    break;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        if let Some(class_name) = class {
+            SymbolicValue::constructor_call(&class_name)
         } else {
             SymbolicValue::Unknown
         }
@@ -649,6 +732,9 @@ mod tests {
 
         let field = SymbolicValue::field_access(SymbolicValue::variable("obj"), "field");
         assert!(matches!(field, SymbolicValue::FieldAccess { field: f, .. } if f == "field"));
+
+        let constructor = SymbolicValue::constructor_call("MyClass");
+        assert!(matches!(constructor, SymbolicValue::ConstructorCall { class } if class == "MyClass"));
     }
 
     #[test]
@@ -660,6 +746,15 @@ mod tests {
         assert!(field_x.is_derived_from(&x));
         assert!(method_x.is_derived_from(&x));
         assert!(!x.is_derived_from(&field_x));
+    }
+
+    #[test]
+    fn test_constructor_call_no_derivation() {
+        let constructor = SymbolicValue::constructor_call("MyClass");
+        let x = SymbolicValue::variable("x");
+        assert!(!constructor.is_derived_from(&x));
+        assert!(!x.is_derived_from(&constructor));
+        assert!(constructor.root_variable().is_none());
     }
 
     #[test]
