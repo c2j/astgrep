@@ -1589,7 +1589,26 @@ impl AdvancedRuleExecutor {
             };
 
             // Find matches
-            let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+            let mut matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+            
+            // If no matches and pattern looks like a fully qualified name, try matching just the class and method
+            if matches.is_empty() && normalized_pattern.contains('.') {
+                if let Some(simplified) = Self::simplify_fully_qualified_pattern(normalized_pattern) {
+                    eprintln!("[DEBUG] No matches with full pattern, trying simplified: '{}'", simplified);
+                    let simplified_semgrep_pattern = astgrep_core::SemgrepPattern {
+                        pattern_type: astgrep_core::PatternType::Simple(simplified),
+                        metavariable_pattern: None,
+                        conditions: Vec::new(),
+                        focus: if source_pattern.focus_metavariables.is_empty() {
+                            None
+                        } else {
+                            Some(source_pattern.focus_metavariables.clone())
+                        },
+                    };
+                    matches = self.pattern_matcher.find_matches(&simplified_semgrep_pattern, ast)?;
+                }
+            }
+            
             eprintln!("[DEBUG] Source matches found: {}", matches.len());
             for m in matches {
                 eprintln!("[DEBUG] Source match: bindings={:?}, text={:?}", m.bindings, m.node.text());
@@ -1624,6 +1643,11 @@ impl AdvancedRuleExecutor {
                     var_name = self.extract_variable_name_from_assignment(m.node.as_ref(), source_text);
                 }
                 
+                // If still no var_name, check if source is in a for-each loop and extract the iteration variable
+                if var_name.is_none() {
+                    var_name = self.extract_foreach_iteration_variable(m.node.as_ref(), source_text);
+                }
+                
                 // If still no var_name and the match looks like a string literal,
                 // try to find the variable that is assigned this string literal
                 if var_name.is_none() {
@@ -1643,6 +1667,28 @@ impl AdvancedRuleExecutor {
                 // try to extract from method parameters for method declaration patterns
                 if var_name.is_none() && !source_pattern.focus_metavariables.is_empty() {
                     var_name = self.extract_focused_parameter_name(m.node.as_ref());
+                }
+                
+                // If still no var_name and pattern is a simple variable pattern like $SOURCE,
+                // try to extract from method parameter declarations
+                if var_name.is_none() {
+                    if let Some(text) = m.node.text() {
+                        let text = text.trim();
+                        // Check if this looks like a simple identifier that could be a method parameter
+                        if !text.contains("(") && !text.contains(".") && !text.contains("=") {
+                            var_name = self.extract_method_parameter_name(m.node.as_ref(), source_text, text);
+                        }
+                    }
+                }
+                
+                // If still no var_name, check if this is a tainted value being assigned to a field/variable
+                // Pattern: x = tainted  or  this.x = tainted
+                if var_name.is_none() {
+                    if let Some(text) = m.node.text() {
+                        if text == "tainted" || text.contains("tainted") {
+                            var_name = self.extract_assignment_target(m.node.as_ref(), source_text);
+                        }
+                    }
                 }
 
                 eprintln!("[DEBUG] Extracted var_name: {:?}", var_name);
@@ -1808,60 +1854,36 @@ impl AdvancedRuleExecutor {
         let node_text = node.text().unwrap_or_default();
         eprintln!("[DEBUG] extract_variable_name_from_assignment: node_text='{}', node_type='{}'", node_text, node.node_type());
 
-        // If the node is a call_expression, look for assignment context
-        if node_text.contains("newInstance()") || node_text.contains("newDocumentBuilder()") {
-            // Try to find the variable name from the assignment
-            // The text might look like "dbf = DocumentBuilderFactory.newInstance()"
-            // or be embedded in a larger statement
-            if let Some(eq_pos) = node_text.find('=') {
-                // Extract the left side before '='
-                let left_side = node_text[..eq_pos].trim();
-                // The variable name is the last word on the left side
-                if let Some(space_pos) = left_side.rfind(' ') {
-                    let var_name = left_side[space_pos + 1..].trim().to_string();
-                    eprintln!("[DEBUG] Extracted var_name '{}' from assignment text", var_name);
-                    return Some(var_name);
-                } else if !left_side.is_empty() {
-                    // No space, just use the whole left side
-                    eprintln!("[DEBUG] Extracted var_name '{}' from assignment text", left_side);
-                    return Some(left_side.to_string());
-                }
-            }
-        }
-
-        // For source() calls, try to extract the variable being assigned
-        // Pattern: String v = source();
-        if node_text == "source()" || node_text.contains("source()") {
-            eprintln!("[DEBUG] Found source() call, trying to extract assigned variable");
+        // Get the node's location to find it in the full source
+        if let Some((start_line, start_col, _end_line, _end_col)) = node.location() {
+            eprintln!("[DEBUG] Node location: line={}, col={}", start_line, start_col);
             
-            // Get the node's location to find it in the full source
-            if let Some((start_line, start_col, end_line, end_col)) = node.location() {
-                eprintln!("[DEBUG] source() location: {}:{} - {}:{}", start_line, start_col, end_line, end_col);
+            // Find the line containing this node
+            let lines: Vec<&str> = source_text.lines().collect();
+            if start_line > 0 && start_line <= lines.len() {
+                let line_text = lines[start_line - 1];
+                eprintln!("[DEBUG] Line containing node: '{}'", line_text);
                 
-                // Find the line containing this source() call
-                let lines: Vec<&str> = source_text.lines().collect();
-                if start_line > 0 && start_line <= lines.len() {
-                    let line_text = lines[start_line - 1];
-                    eprintln!("[DEBUG] Line containing source(): '{}'", line_text);
+                // Look for pattern: "var = <node_text>" or "Type var = <node_text>"
+                // Find where the node text appears in the line
+                if let Some(node_pos) = line_text.find(&node_text) {
+                    let before_node = &line_text[..node_pos];
+                    eprintln!("[DEBUG] Text before node: '{}'", before_node);
                     
-                    // Look for pattern: "Type var = source()" or "var = source()"
-                    if let Some(source_pos) = line_text.find("source()") {
-                        let before_source = &line_text[..source_pos];
-                        eprintln!("[DEBUG] Text before source(): '{}'", before_source);
+                    // Look for the last '=' before the node
+                    if let Some(eq_pos) = before_node.rfind('=') {
+                        let before_eq = &before_node[..eq_pos].trim();
+                        eprintln!("[DEBUG] Text before '=': '{}'", before_eq);
                         
-                        // Look for the last '=' before source()
-                        if let Some(eq_pos) = before_source.rfind('=') {
-                            let before_eq = &before_source[..eq_pos].trim();
-                            eprintln!("[DEBUG] Text before '=': '{}'", before_eq);
-                            
-                            // Extract the variable name (last word before '=')
-                            let parts: Vec<&str> = before_eq.split_whitespace().collect();
-                            if let Some(last_part) = parts.last() {
-                                let var_name = last_part.trim().to_string();
-                                if !var_name.is_empty() && !var_name.contains("(") && !var_name.contains("=") {
-                                    eprintln!("[DEBUG] Extracted var_name '{}' from source() assignment", var_name);
-                                    return Some(var_name);
-                                }
+                        // Extract the variable name (last word before '=')
+                        let parts: Vec<&str> = before_eq.split_whitespace().collect();
+                        if let Some(last_part) = parts.last() {
+                            let var_name = last_part.trim().to_string();
+                            // Clean up any trailing characters like semicolons or spaces
+                            let var_name = var_name.trim_end_matches(';').trim().to_string();
+                            if !var_name.is_empty() && !var_name.contains("(") && !var_name.contains("=") {
+                                eprintln!("[DEBUG] Extracted var_name '{}' from assignment", var_name);
+                                return Some(var_name);
                             }
                         }
                     }
@@ -1896,6 +1918,147 @@ impl AdvancedRuleExecutor {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Extract the iteration variable from a for-each loop when source is in the iterable expression
+    /// For example: "for (StackTraceElement ste : Thread.currentThread().getStackTrace())"
+    /// When source matches "getStackTrace()", this should return "ste"
+    fn extract_foreach_iteration_variable(&self, node: &dyn AstNode, source_text: &str) -> Option<String> {
+        let node_text = node.text().unwrap_or_default();
+        
+        // Get the node's location
+        if let Some((start_line, _start_col, _end_line, _end_col)) = node.location() {
+            let lines: Vec<&str> = source_text.lines().collect();
+            if start_line > 0 && start_line <= lines.len() {
+                let line_text = lines[start_line - 1];
+                
+                // Check if this line contains a for-each loop pattern
+                // Pattern: "for (Type var : iterable_expression)"
+                if line_text.contains("for (") && line_text.contains(":") {
+                    // Find the for loop pattern
+                    if let Some(for_start) = line_text.find("for (") {
+                        let after_for = &line_text[for_start + 5..]; // Skip "for ("
+                        
+                        // Look for the colon separator
+                        if let Some(colon_pos) = after_for.find(':') {
+                            let before_colon = &after_for[..colon_pos].trim();
+                            
+                            // Extract the variable name from "Type var" pattern
+                            // The variable name is the last word before the colon
+                            let parts: Vec<&str> = before_colon.split_whitespace().collect();
+                            if parts.len() >= 2 {
+                                // Last part should be the variable name
+                                let var_name = parts.last().unwrap().trim().to_string();
+                                eprintln!("[DEBUG] Extracted for-each iteration variable: '{}'", var_name);
+                                return Some(var_name);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Extract method parameter name when a simple identifier pattern matches
+    /// This handles cases like @RequestParam String path where pattern is $SOURCE
+    fn extract_method_parameter_name(&self, node: &dyn AstNode, source_text: &str, matched_text: &str) -> Option<String> {
+        eprintln!("[DEBUG] extract_method_parameter_name: matched_text='{}'", matched_text);
+        
+        // Get the node's location
+        if let Some((start_line, _start_col, _end_line, _end_col)) = node.location() {
+            let lines: Vec<&str> = source_text.lines().collect();
+            if start_line > 0 && start_line <= lines.len() {
+                let line_text = lines[start_line - 1];
+                eprintln!("[DEBUG] Checking line {}: '{}'", start_line, line_text);
+                
+                // Check if this line contains a method declaration with parameters
+                // Pattern: "methodName(..., Type paramName, ...)" or "methodName(@Annotation Type paramName, ...)"
+                if line_text.contains("public ") && line_text.contains('(') && line_text.contains(')') {
+                    eprintln!("[DEBUG] Found method declaration line");
+                    
+                    // Look for the method parameter section
+                    if let Some(paren_start) = line_text.find('(') {
+                        if let Some(paren_end) = line_text.rfind(')') {
+                            let params_section = &line_text[paren_start..=paren_end];
+                            eprintln!("[DEBUG] Params section: '{}'", params_section);
+                            
+                            // Check if the matched identifier appears in the parameter list
+                            // First try to find it as a standalone word
+                            let search_pattern = format!("\\b{}\\b", regex::escape(matched_text));
+                            if let Ok(re) = regex::Regex::new(&search_pattern) {
+                                if re.is_match(params_section) {
+                                    eprintln!("[DEBUG] Found '{}' in params section", matched_text);
+                                    // Verify this is actually a parameter by checking context
+                                    // Split params by comma to get individual parameters
+                                    let params: Vec<&str> = params_section[1..params_section.len()-1].split(',').collect();
+                                    for param in params {
+                                        let param = param.trim();
+                                        eprintln!("[DEBUG] Checking param: '{}'", param);
+                                        // Check if param ends with our matched text (the variable name)
+                                        // Pattern: "Type varName" or "@Annotation Type varName"
+                                        let param_words: Vec<&str> = param.split_whitespace().collect();
+                                        if let Some(last_word) = param_words.last() {
+                                            if *last_word == matched_text {
+                                                eprintln!("[DEBUG] Extracted method parameter: '{}'", matched_text);
+                                                return Some(matched_text.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Extract the target variable/field from an assignment statement
+    /// When source matches "tainted" in "x = tainted" or "this.x = tainted", extract "x"
+    fn extract_assignment_target(&self, node: &dyn AstNode, source_text: &str) -> Option<String> {
+        let node_text = node.text().unwrap_or_default();
+        
+        // Get the node's location
+        if let Some((start_line, _start_col, _end_line, _end_col)) = node.location() {
+            let lines: Vec<&str> = source_text.lines().collect();
+            if start_line > 0 && start_line <= lines.len() {
+                let line_text = lines[start_line - 1];
+                
+                // Find the position of "tainted" in the line
+                if let Some(tainted_pos) = line_text.find("tainted") {
+                    let before_tainted = &line_text[..tainted_pos];
+                    
+                    // Look for assignment operator before tainted
+                    if let Some(eq_pos) = before_tainted.rfind('=') {
+                        let target = &before_tainted[..eq_pos].trim();
+                        
+                        // Extract the variable/field name
+                        // Handle: "x", "this.x", "Type x", etc.
+                        let parts: Vec<&str> = target.split_whitespace().collect();
+                        if let Some(last_part) = parts.last() {
+                            let var_name = last_part.trim().to_string();
+                            // Remove "this." prefix if present
+                            let var_name = if var_name.starts_with("this.") {
+                                var_name[5..].to_string()
+                            } else {
+                                var_name
+                            };
+                            
+                            if !var_name.is_empty() && !var_name.contains("(") && !var_name.contains("=") {
+                                eprintln!("[DEBUG] Extracted assignment target: '{}'", var_name);
+                                return Some(var_name);
                             }
                         }
                     }
@@ -1974,7 +2137,22 @@ impl AdvancedRuleExecutor {
             };
             
             // Find matches
-            let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+            let mut matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+            
+            // If no matches and pattern looks like a fully qualified name, try matching just the class and method
+            if matches.is_empty() && normalized_pattern.contains('.') {
+                if let Some(simplified) = Self::simplify_fully_qualified_pattern(normalized_pattern) {
+                    eprintln!("[DEBUG] No matches with full sink pattern, trying simplified: '{}'", simplified);
+                    let simplified_semgrep_pattern = astgrep_core::SemgrepPattern {
+                        pattern_type: astgrep_core::PatternType::Simple(simplified),
+                        metavariable_pattern: None,
+                        conditions: Vec::new(),
+                        focus: None,
+                    };
+                    matches = self.pattern_matcher.find_matches(&simplified_semgrep_pattern, ast)?;
+                }
+            }
+            
             eprintln!("[DEBUG] Sink matches found: {}", matches.len());
             for m in matches {
                 eprintln!("[DEBUG] Sink match: bindings={:?}, text={:?}", m.bindings, m.node.text());
@@ -2120,13 +2298,12 @@ impl AdvancedRuleExecutor {
                     }
                 }
             } else {
-                // Source has no var_name - might be a string literal pattern
-                // Check if any variable in the sink's method is assigned a non-empty string literal
-                eprintln!("[DEBUG] Source {} has no var_name, checking for string literal assignments", i);
+                // Source has no var_name - might be a string literal pattern or method parameter with annotation
+                eprintln!("[DEBUG] Source {} has no var_name, checking for string literal assignments and method parameters", i);
                 
                 for (j, sink) in sinks.iter().enumerate() {
                     if let (Some(ref sink_var), Some(ref method_name)) = (&sink.var_name, &sink.method_name) {
-                        // Get or build dependency graph for this method
+                        // Check 1: String literal assignments
                         let dep_graph = method_cache.entry(Some(method_name.clone())).or_insert_with(|| {
                             let mut graph = VariableDependencyGraph::new();
                             if let Some(method_body) = self.extract_method_body(source_text, method_name) {
@@ -2135,11 +2312,17 @@ impl AdvancedRuleExecutor {
                             graph
                         });
                         
-                        // Check if sink variable is assigned a non-empty string literal
-                        // or depends on a variable that is assigned a non-empty string literal
                         if dep_graph.is_assigned_string_literal(sink_var) ||
                            dep_graph.has_string_literal_in_dependency_chain(sink_var) {
                             eprintln!("[DEBUG] FLOW FOUND (string literal): source {} -> sink {} ({} is assigned string literal)", i, j, sink_var);
+                            flows.push((source.clone(), sink.clone()));
+                            continue;
+                        }
+                        
+                        // Check 2: Method parameter with taint annotation
+                        // If sink variable is a method parameter with @RequestParam, @PathVariable, etc., it's tainted
+                        if self.is_tainted_method_parameter(source_text, method_name, sink_var) {
+                            eprintln!("[DEBUG] FLOW FOUND (tainted parameter): source {} -> sink {} ({} is a tainted method parameter)", i, j, sink_var);
                             flows.push((source.clone(), sink.clone()));
                         }
                     }
@@ -2164,6 +2347,61 @@ impl AdvancedRuleExecutor {
         }
         
         Ok(flows)
+    }
+
+    /// Check if a variable is a method parameter with taint-related annotations
+    /// This handles cases like @RequestParam, @PathVariable, @RequestBody, etc.
+    fn is_tainted_method_parameter(&self, source_text: &str, method_name: &str, var_name: &str) -> bool {
+        // Find the method declaration line
+        let lines: Vec<&str> = source_text.lines().collect();
+        
+        for (i, line) in lines.iter().enumerate() {
+            // Look for method declaration with the given method name
+            if line.contains(&format!("{}", method_name)) && line.contains('(') && line.contains(')') {
+                // Check if this line or previous lines have taint-related annotations
+                let method_line = line;
+                
+                // Check the method signature for the parameter
+                if let Some(paren_start) = method_line.find('(') {
+                    if let Some(paren_end) = method_line.rfind(')') {
+                        let params_section = &method_line[paren_start..=paren_end];
+                        
+                        // Split parameters and check each one
+                        let params: Vec<&str> = params_section[1..params_section.len()-1].split(',').collect();
+                        for param in params {
+                            let param = param.trim();
+                            // Check if this parameter matches our variable name
+                            let param_words: Vec<&str> = param.split_whitespace().collect();
+                            if let Some(last_word) = param_words.last() {
+                                if *last_word == var_name {
+                                    // Found the parameter, now check for taint annotations
+                                    // Look at current line and previous lines for annotations
+                                    let start_check = if i > 3 { i - 3 } else { 0 };
+                                    for j in start_check..=i {
+                                        let check_line = lines[j];
+                                        // Check for taint-related annotations
+                                        if check_line.contains("@RequestParam") 
+                                            || check_line.contains("@PathVariable")
+                                            || check_line.contains("@RequestBody")
+                                            || check_line.contains("@RequestHeader")
+                                            || check_line.contains("@CookieValue") {
+                                            // Check if this annotation is associated with our parameter
+                                            // The annotation should be close to the parameter
+                                            if j == i || (j < i && lines[j+1..=i].join(" ").contains(var_name)) {
+                                                eprintln!("[DEBUG] Found tainted parameter: {} with annotation in method {}", var_name, method_name);
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        false
     }
 
     /// Extract method body by method name from source text
@@ -3708,5 +3946,31 @@ impl AdvancedRuleExecutor {
             .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
             .next();
         result
+    }
+
+    /// Simplify a fully qualified class name pattern to just class.method pattern
+    /// For example: "javax.xml.parsers.DocumentBuilderFactory.newInstance()" -> "DocumentBuilderFactory.newInstance()"
+    fn simplify_fully_qualified_pattern(pattern: &str) -> Option<String> {
+        // Check if this looks like a fully qualified name (contains multiple dots indicating package)
+        let dot_count = pattern.matches('.').count();
+        if dot_count < 2 {
+            // Not a fully qualified name, no need to simplify
+            return None;
+        }
+
+        // Split by dots and get the last two parts (class name and method/field)
+        let parts: Vec<&str> = pattern.split('.').collect();
+        if parts.len() >= 2 {
+            // Get the last two parts: class name and method/field
+            let class_name = parts[parts.len() - 2];
+            let method_or_field = parts[parts.len() - 1];
+            
+            // Reconstruct as "ClassName.method()"
+            let simplified = format!("{}.{}", class_name, method_or_field);
+            eprintln!("[DEBUG] Simplified FQN pattern: '{}' -> '{}'", pattern, simplified);
+            return Some(simplified);
+        }
+
+        None
     }
 }
