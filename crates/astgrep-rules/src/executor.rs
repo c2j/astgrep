@@ -370,10 +370,14 @@ impl VariableDependencyGraph {
     
     /// Apply custom propagator rules to a line
     fn apply_propagators(&mut self, line: &str) {
+        eprintln!("[DEBUG] apply_propagators called with line: '{}'", line);
+        eprintln!("[DEBUG] Number of propagators: {}", self.propagators.len());
+        
         // Collect propagations first to avoid borrow issues
         let mut propagations: Vec<(String, String)> = Vec::new();
         
-        for propagator in &self.propagators {
+        for (i, propagator) in self.propagators.iter().enumerate() {
+            eprintln!("[DEBUG] Processing propagator {}", i);
             // Get pattern text
             let pattern_text = match &propagator.pattern.pattern_type {
                 crate::types::PatternType::Simple(s) => s.as_str(),
@@ -407,6 +411,50 @@ impl VariableDependencyGraph {
                                         eprintln!("[DEBUG] Propagator forEach: {} -> {}", collection, candidate);
                                         propagations.push((collection.to_string(), candidate.to_string()));
                                         break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if pattern_text.contains(".set") && pattern_text.contains("(") {
+                // Handle setter pattern: obj.setX(data) - propagate from data to obj
+                // Pattern: (Type $OBJ).$SETTER($DATA) where $SETTER matches set.*
+                eprintln!("[DEBUG] Checking setter pattern: '{}' on line: '{}'", pattern_text, line);
+                
+                // Extract the setter method name pattern (e.g., $SETTER or setOrderBy)
+                if let Some(set_pos) = pattern_text.find(".set") {
+                    let after_set = &pattern_text[set_pos + 1..]; // Skip the dot, keep "set..."
+                    if let Some(paren_pos) = after_set.find('(') {
+                        let setter_pattern = &after_set[..paren_pos]; // e.g., "setX" or "$SETTER"
+                        eprintln!("[DEBUG] Setter pattern extracted: {}", setter_pattern);
+                        
+                        // Check if line contains a setter call
+                        if line.contains(".set") && line.contains('(') {
+                            // Find the setter call in the line
+                            if let Some(line_set_pos) = line.find(".set") {
+                                let line_after_set = &line[line_set_pos + 1..];
+                                if let Some(line_paren_pos) = line_after_set.find('(') {
+                                    let actual_setter = &line_after_set[..line_paren_pos];
+                                    eprintln!("[DEBUG] Found setter in line: {}", actual_setter);
+                                    
+                                    // Check if setter matches pattern (starts with "set")
+                                    if actual_setter.starts_with("set") {
+                                        // Extract object name (before .set)
+                                        let before_setter = &line[..line_set_pos];
+                                        let obj_parts: Vec<&str> = before_setter.split(|c: char| c == ' ' || c == '(' || c == '.').collect();
+                                        if let Some(obj_name) = obj_parts.last() {
+                                            let obj_name = obj_name.trim();
+                                            
+                                            // Extract argument (inside parentheses)
+                                            let after_paren = &line_after_set[line_paren_pos + 1..];
+                                            if let Some(close_paren) = after_paren.find(')') {
+                                                let arg = &after_paren[..close_paren].trim();
+                                                
+                                                eprintln!("[DEBUG] Setter propagator: {} -> {} (setter: {})", arg, obj_name, actual_setter);
+                                                propagations.push((arg.to_string(), obj_name.to_string()));
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1872,25 +1920,54 @@ impl AdvancedRuleExecutor {
         )?;
 
         // Step 4: Create findings for each unique sink with taint flow
-        let mut seen_sink_locations = std::collections::HashSet::new();
-        for (_source_match, sink_match) in taint_flows {
+        // Filter out nested/contained findings (keep only outermost ones)
+        let mut filtered_flows: Vec<(TaintMatch, TaintMatch)> = Vec::new();
+        
+        // Sort flows by start position (line, col) in ascending order
+        let mut sorted_flows = taint_flows.clone();
+        sorted_flows.sort_by(|(_, sink_a), (_, sink_b)| {
+            let loc_a = sink_a.node.location().unwrap_or((0, 0, 0, 0));
+            let loc_b = sink_b.node.location().unwrap_or((0, 0, 0, 0));
+            loc_a.0.cmp(&loc_b.0).then(loc_a.1.cmp(&loc_b.1))
+        });
+        
+        // Keep only flows that are not contained within another flow
+        for (source_match, sink_match) in sorted_flows {
             if let Some(location) = sink_match.node.location() {
-                // Use (line, start_col, end_col) as a unique key for the sink
-                let sink_key = (location.0, location.1, location.2, location.3);
-                if seen_sink_locations.insert(sink_key) {
-                    // First time seeing this sink location, create a finding
-                    let finding = Finding::new(
-                        rule.id.clone(),
-                        format!("{}: {}", rule.name, rule.description),
-                        rule.severity,
-                        rule.confidence,
-                        Location::new(
-                            file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
-                            location.0, location.1, location.2, location.3
-                        ),
-                    );
-                    findings.push(finding);
+                let (start_line, start_col, end_line, end_col) = location;
+                
+                // Check if this flow is contained within any already kept flow
+                let is_contained = filtered_flows.iter().any(|(_, existing_sink)| {
+                    if let Some(existing_loc) = existing_sink.node.location() {
+                        let (e_start_line, e_start_col, e_end_line, e_end_col) = existing_loc;
+                        // This flow is contained if it's inside the existing flow
+                        (start_line > e_start_line || (start_line == e_start_line && start_col >= e_start_col))
+                            && (end_line < e_end_line || (end_line == e_end_line && end_col <= e_end_col))
+                    } else {
+                        false
+                    }
+                });
+                
+                if !is_contained {
+                    filtered_flows.push((source_match, sink_match));
                 }
+            }
+        }
+        
+        // Create findings for filtered flows
+        for (_source_match, sink_match) in filtered_flows {
+            if let Some(location) = sink_match.node.location() {
+                let finding = Finding::new(
+                    rule.id.clone(),
+                    format!("{}: {}", rule.name, rule.description),
+                    rule.severity,
+                    rule.confidence,
+                    Location::new(
+                        file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                        location.0, location.1, location.2, location.3
+                    ),
+                );
+                findings.push(finding);
             }
         }
 
@@ -1908,6 +1985,14 @@ impl AdvancedRuleExecutor {
         let mut sources = Vec::new();
 
         for source_pattern in &dataflow_spec.sources {
+            // Always try to find annotated method parameters (e.g., @RequestParam, @PathVariable)
+            // These are common taint sources in web applications
+            let annotation_sources = self.find_annotated_method_params(ast, source_text);
+            if !annotation_sources.is_empty() {
+                eprintln!("[DEBUG] Found {} annotated method parameter sources", annotation_sources.len());
+                sources.extend(annotation_sources);
+            }
+
             // Normalize pattern: remove trailing semicolons and whitespace for more flexible matching
             let original_pattern = source_pattern.pattern_text();
             let normalized_pattern = original_pattern.trim_end_matches(';').trim_end_matches('\n').trim();
@@ -2106,7 +2191,190 @@ impl AdvancedRuleExecutor {
         
         Ok(sources)
     }
-    
+
+    /// Find annotated method parameters (e.g., @RequestParam String orderBy)
+    /// This handles complex source patterns with annotation matching
+    fn find_annotated_method_params(
+        &self,
+        ast: &dyn AstNode,
+        source_text: &str,
+    ) -> Vec<TaintMatch> {
+        let mut results = Vec::new();
+
+        eprintln!("[DEBUG] Looking for annotated method parameters");
+
+        // List of taint-related annotations
+        let taint_annotations = [
+            "RequestParam",
+            "PathVariable",
+            "RequestBody",
+            "RequestHeader",
+            "CookieValue",
+        ];
+
+        // Iterate through all lines to find method declarations with annotated parameters
+        for (line_num, line) in source_text.lines().enumerate() {
+            eprintln!("[DEBUG] Checking line {}: {}", line_num, line);
+            // Check if this line contains any taint annotation
+            for annotation in &taint_annotations {
+                let anno_str = format!("@{}", annotation);
+                if line.contains(&anno_str) {
+                    eprintln!("[DEBUG] Found annotation {} in line {}", anno_str, line_num);
+                    // Found an annotation, now try to extract the parameter name
+                    if let Some(param_name) = self.extract_annotated_param(line, annotation) {
+                        eprintln!(
+                            "[DEBUG] Found annotated parameter: {} with @{}",
+                            param_name, annotation
+                        );
+
+                        // Find the method name for this parameter
+                        let method_name =
+                            self.find_method_name_by_line(source_text, line_num + 1);
+
+                        // Create a TaintMatch for this parameter
+                        // We need to find or create a node for this parameter
+                        if let Some(param_node) =
+                            self.find_param_node_by_name(ast, &param_name)
+                        {
+                            let mut bindings = std::collections::HashMap::new();
+                            bindings.insert(
+                                "SOURCE".to_string(),
+                                param_name.clone(),
+                            );
+
+                            results.push(TaintMatch {
+                                node: param_node,
+                                bindings,
+                                var_name: Some(param_name),
+                                method_name,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
+    /// Extract parameter name from a line with annotation
+    /// e.g., "@RequestParam(value = \"smth\") String orderBy" -> "orderBy"
+    fn extract_annotated_param(&self, line: &str, annotation: &str) -> Option<String> {
+        eprintln!("[DEBUG] extract_annotated_param called with line: '{}'", line);
+        // Find the annotation position
+        if let Some(anno_pos) = line.find(&format!("@{}", annotation)) {
+            eprintln!("[DEBUG] Found annotation at position {}", anno_pos);
+            let after_anno = &line[anno_pos..];
+
+            // Skip the annotation and its parentheses if present
+            // Need to find the matching closing paren for the annotation
+            let after_anno = if after_anno.contains('(') {
+                // Find the matching closing paren by counting
+                let mut paren_count = 0;
+                let mut close_pos = None;
+                for (i, c) in after_anno.char_indices() {
+                    match c {
+                        '(' => paren_count += 1,
+                        ')' => {
+                            paren_count -= 1;
+                            if paren_count == 0 {
+                                close_pos = Some(i);
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                if let Some(pos) = close_pos {
+                    eprintln!("[DEBUG] Found matching closing paren at position {}", pos);
+                    &after_anno[pos + 1..]
+                } else {
+                    eprintln!("[DEBUG] No matching closing paren found");
+                    // Fallback: just skip the annotation name
+                    &after_anno[annotation.len() + 1..]
+                }
+            } else {
+                // No parentheses, skip just the annotation name
+                eprintln!("[DEBUG] No parentheses in annotation");
+                &after_anno[annotation.len() + 1..]
+            };
+
+            eprintln!("[DEBUG] After annotation: '{}'", after_anno);
+
+            // Now we should have something like: " String orderBy" or "String orderBy, HttpServletResponse response) {"
+            // Extract the parameter name (the word after the type, right after the annotation)
+            let parts: Vec<&str> = after_anno.split_whitespace().collect();
+            eprintln!("[DEBUG] Parts after split: {:?}", parts);
+
+            // We expect at least 2 parts: type and variable name
+            // e.g., ["String", "orderBy,"] or ["String", "orderBy,", "HttpServletResponse", "response)"]
+            // The parameter name is the second element (index 1), not the last one
+            if parts.len() >= 2 {
+                let param_name = parts[1].trim();
+                // Remove trailing comma, closing paren, or other punctuation if present
+                let param_name = param_name.trim_end_matches(|c: char| c == ',' || c == ')' || c == '{').to_string();
+
+                eprintln!("[DEBUG] Extracted param name: '{}'", param_name);
+
+                // Validate it looks like a variable name
+                if !param_name.is_empty()
+                    && param_name.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false)
+                    && !param_name.contains("(")
+                    && !param_name.contains(")")
+                    && !param_name.contains(",")
+                {
+                    eprintln!("[DEBUG] Param name validated: '{}'", param_name);
+                    return Some(param_name);
+                } else {
+                    eprintln!("[DEBUG] Param name validation failed for: '{}'", param_name);
+                }
+            } else {
+                eprintln!("[DEBUG] Not enough parts: {}", parts.len());
+            }
+        } else {
+            eprintln!("[DEBUG] Annotation not found in line");
+        }
+
+        None
+    }
+
+    /// Find a parameter node by name in the AST
+    fn find_param_node_by_name(
+        &self,
+        ast: &dyn AstNode,
+        param_name: &str,
+    ) -> Option<Box<dyn AstNode>> {
+        // Try to find a formal_parameter or identifier node with the given name
+        self.find_node_by_type_and_text(ast, "identifier", param_name)
+    }
+
+    /// Find a node by type and text content
+    fn find_node_by_type_and_text(
+        &self,
+        node: &dyn AstNode,
+        node_type: &str,
+        text: &str,
+    ) -> Option<Box<dyn AstNode>> {
+        if node.node_type() == node_type {
+            if let Some(node_text) = node.text() {
+                if node_text.trim() == text {
+                    return Some(node.clone_node());
+                }
+            }
+        }
+
+        // Recursively search children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if let Some(found) = self.find_node_by_type_and_text(&*child, node_type, text) {
+                    return Some(found);
+                }
+            }
+        }
+
+        None
+    }
+
     /// Find the variable name that is assigned a specific string literal
     /// This is used when a string literal pattern matches to find the variable it's assigned to
     fn find_variable_for_string_literal(
@@ -2157,18 +2425,30 @@ impl AdvancedRuleExecutor {
         // Method declarations typically look like: "public void methodName(...)" or "public static void methodName(...)"
         for i in (0..line_num).rev() {
             let line = lines[i];
+            
+            // Skip class declarations (contain "class" keyword)
+            if line.contains("class") && line.contains("public") {
+                continue;
+            }
+            
             // Look for method declaration patterns
-            // Pattern: public [static] [returnType] methodName(
-            if let Some(captures) = regex::Regex::new(r"public\s+(?:static\s+)?(?:\w+)\s+(\w+)\s*\(").ok()?.captures(line) {
+            // Pattern: public [static] [final] [returnType] methodName(
+            // Return type can be: void, primitive types, or ClassName (with possible generics)
+            if let Some(captures) = regex::Regex::new(r"public\s+(?:static\s+)?(?:final\s+)?(?:void|int|long|short|byte|float|double|boolean|char|\w+(?:<[^>]+>)?)\s+(\w+)\s*\(").ok()?.captures(line) {
                 if let Some(method_name) = captures.get(1) {
                     return Some(method_name.as_str().to_string());
                 }
             }
-            // Also check for constructor pattern: public methodName(
-            if let Some(captures) = regex::Regex::new(r"public\s+(\w+)\s*\(").ok()?.captures(line) {
+            
+            // Also check for ResponseEntity<String> pattern (generic return types)
+            if let Some(captures) = regex::Regex::new(r"public\s+(?:static\s+)?(?:\w+(?:<[^>]+>)?)\s+(\w+)\s*\(").ok()?.captures(line) {
                 if let Some(method_name) = captures.get(1) {
-                    // Make sure this looks like a constructor (same name as class would be)
-                    return Some(method_name.as_str().to_string());
+                    let name = method_name.as_str();
+                    // Make sure it's not a class name (class names typically start with uppercase)
+                    // Method names typically start with lowercase
+                    if name.chars().next().map(|c| c.is_lowercase()).unwrap_or(false) {
+                        return Some(name.to_string());
+                    }
                 }
             }
         }
@@ -2447,6 +2727,43 @@ impl AdvancedRuleExecutor {
         }
         
         None
+    }
+
+    /// Check if a method body contains sanitization operations for a specific variable
+    /// This detects patterns like PreparedStatement.setString() which parameterizes queries
+    fn contains_sanitization_in_scope(
+        &self,
+        method_body: &str,
+        var_name: Option<&str>,
+    ) -> bool {
+        eprintln!("[DEBUG] Checking sanitization in method body of length {}", method_body.len());
+        
+        // Check for PreparedStatement.setString() or similar parameterization patterns
+        // This indicates the variable is being safely parameterized
+        if method_body.contains(".setString(") {
+            eprintln!("[DEBUG] Found .setString() sanitization in method body");
+            return true;
+        }
+        
+        // Check for other common sanitization patterns
+        if method_body.contains("PreparedStatement") && method_body.contains("setString") {
+            eprintln!("[DEBUG] Found PreparedStatement with setString sanitization");
+            return true;
+        }
+        
+        // Check for .replaceAll() patterns that remove dangerous characters
+        if method_body.contains(".replaceAll") {
+            // If we know the variable name, check if it's specifically sanitized
+            if let Some(vname) = var_name {
+                // Check if the variable appears in a replaceAll call
+                if method_body.contains(&format!("{}.", vname)) && method_body.contains("replaceAll") {
+                    eprintln!("[DEBUG] Found replaceAll sanitization for variable: {}", vname);
+                    return true;
+                }
+            }
+        }
+        
+        false
     }
 
     /// Extract field/variable assignment target when source pattern matches an expression
@@ -2764,6 +3081,18 @@ impl AdvancedRuleExecutor {
                 }
                 
                 eprintln!("[DEBUG] Creating sink TaintMatch: var_name={:?}, method_name={:?}", var_name, method_name);
+                
+                // Check if this sink is in a method that contains sanitization
+                // For example: applicationJdbcTemplate.query() followed by setString()
+                if let Some(ref mname) = method_name {
+                    if let Some(method_body) = self.extract_method_body(source_text, mname) {
+                        // Check if method contains .setString() or other sanitization patterns
+                        if self.contains_sanitization_in_scope(&method_body, var_name.as_deref()) {
+                            eprintln!("[DEBUG] Skipping sink in sanitized method: {}", mname);
+                            continue;
+                        }
+                    }
+                }
                 
                 sinks.push(TaintMatch {
                     node: m.node,
