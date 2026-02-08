@@ -293,12 +293,20 @@ impl AdvancedSemgrepMatcher {
     ) -> Result<bool> {
         eprintln!("DEBUG matches_all_patterns: {} patterns at node {:?}", patterns.len(), node.text().map(|t| &t[..t.len().min(30)]));
 
-        // Separate context patterns (Inside, NotInside) from content patterns
-        let (context_patterns, content_patterns): (Vec<_>, Vec<_>) = patterns
+        // Separate patterns into categories:
+        // 1. Context patterns (Inside, NotInside) - establish context for matching
+        // 2. Negative patterns (Not, NotRegex) - must NOT match
+        // 3. Positive content patterns - must ALL match
+        let (context_patterns, rest): (Vec<_>, Vec<_>) = patterns
             .iter()
             .partition(|p| matches!(p.pattern_type, PatternType::Inside(_) | PatternType::NotInside(_)));
+        
+        let (negative_patterns, content_patterns): (Vec<&SemgrepPattern>, Vec<&SemgrepPattern>) = rest
+            .iter()
+            .partition(|p| matches!(p.pattern_type, PatternType::Not(_) | PatternType::NotRegex(_)));
 
-        eprintln!("DEBUG: {} content patterns, {} context patterns", content_patterns.len(), context_patterns.len());
+        eprintln!("DEBUG: {} content patterns, {} negative patterns, {} context patterns", 
+            content_patterns.len(), negative_patterns.len(), context_patterns.len());
 
         // IMPORTANT: Process context patterns FIRST to capture metavariable bindings
         // This ensures that metavariables bound in pattern-inside (like $X in "private int $X")
@@ -321,6 +329,27 @@ impl AdvancedSemgrepMatcher {
             }
             eprintln!("DEBUG: context pattern matched! bindings: {:?}", self.metavar_manager.get_binding_values());
             // Keep bindings from successful context matches - these will constrain content patterns
+        }
+
+        // Process negative patterns (Not, NotRegex) - these must NOT match
+        // If any negative pattern matches, the overall pattern fails
+        for pattern in &negative_patterns {
+            eprintln!("DEBUG: checking negative pattern: {:?}", pattern.pattern_type);
+            let snapshot = self.metavar_manager.snapshot();
+            let negative_matches = match &pattern.pattern_type {
+                PatternType::Not(inner) => self.matches_not_pattern(inner.as_ref(), node)?,
+                PatternType::NotRegex(regex) => self.matches_not_regex_pattern(regex.as_str(), node)?,
+                _ => unreachable!(),
+            };
+            // Note: matches_not_pattern and matches_not_regex_pattern return true if the inner pattern does NOT match
+            // So if negative_matches is false, it means the negative pattern matched (which is bad)
+            if !negative_matches {
+                eprintln!("DEBUG: negative pattern matched - excluding this match");
+                self.metavar_manager.restore(snapshot);
+                return Ok(false);
+            }
+            eprintln!("DEBUG: negative pattern did not match (good)");
+            self.metavar_manager.restore(snapshot);
         }
 
         // Then, match content patterns with context bindings already set
@@ -895,7 +924,7 @@ impl AdvancedSemgrepMatcher {
         // Check if this is a function declaration pattern (has opening brace in patterns)
         let is_function_pattern = patterns.iter().any(|p| matches!(p, ParsedPattern::Literal(s) if s == "{"));
 
-        for pattern in patterns {
+        for (pattern_idx, pattern) in patterns.iter().enumerate() {
             if text_idx >= text_tokens.len() {
                 // For function patterns, if we matched the opening brace and there's no closing brace in text,
                 // that's OK - the node text might be truncated
@@ -905,17 +934,41 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
 
+            eprintln!("DEBUG: Processing pattern {:?} at pattern_idx {} text_idx {}", pattern, pattern_idx, text_idx);
             match pattern {
                 ParsedPattern::Literal(literal) => {
+                    eprintln!("DEBUG: Processing Literal '{}' at text_idx {}", literal, text_idx);
                     // Track if we matched to opening brace
                     if *literal == "{" {
                         matched_opening_brace = true;
                         eprintln!("DEBUG: Matched opening brace at position {}", text_idx);
                     }
                     // Special case: "..." in pattern should match any string literal token
-                    if *literal == "..." && text_tokens[text_idx].starts_with('"') {
-                        // This is a string literal wildcard, match any string literal
-                        text_idx += 1;
+                    // Handle both "..." (quoted ellipsis in pattern like $X.println("...")) and ... (bare ellipsis)
+                    if *literal == "..." || *literal == "\"...\"" {
+                        // When we see "..." in the pattern, we need to find a string literal
+                        // It might be directly at current position, or after an opening parenthesis
+                        let mut found_string = false;
+                        
+                        // Check current position first
+                        if text_tokens[text_idx].starts_with('"') {
+                            found_string = true;
+                        } 
+                        // Check if current position is '(' and next position has the string
+                        else if text_tokens[text_idx] == "(" && text_idx + 1 < text_tokens.len() && text_tokens[text_idx + 1].starts_with('"') {
+                            text_idx += 1; // Skip the '('
+                            found_string = true;
+                        }
+                        
+                        if found_string {
+                            // This is a string literal wildcard, match any string literal
+                            eprintln!("DEBUG: Matched '...' to string literal {}", text_tokens[text_idx]);
+                            text_idx += 1;
+                        } else {
+                            // No string literal found where expected
+                            eprintln!("DEBUG: Expected string literal but found '{}' at position {}", text_tokens[text_idx], text_idx);
+                            return Ok(false);
+                        }
                     } else if literal.starts_with('$') {
                         // Special case: metavariable like "$RE"
                         // This matches a string literal and binds the content (without quotes) to the metavariable
@@ -967,8 +1020,10 @@ impl AdvancedSemgrepMatcher {
                         }
                     } else if text_tokens[text_idx] != *literal {
                         // Literal must match exactly
+                        eprintln!("DEBUG: Literal '{}' did not match token '{}'", literal, text_tokens[text_idx]);
                         return Ok(false);
                     } else {
+                        eprintln!("DEBUG: Matched literal '{}' to token '{}'", literal, text_tokens[text_idx]);
                         text_idx += 1;
                     }
                 }
@@ -992,8 +1047,11 @@ impl AdvancedSemgrepMatcher {
                         // Binding failed - metavariable already bound to different value
                         return Ok(false);
                     }
-                    // Find the next non-ellipsis pattern and try to match at each position
-                    let next_pattern_idx = patterns.iter().position(|p| !matches!(p, ParsedPattern::EllipsisMetavariable(_) | ParsedPattern::Wildcard));
+                    // Find the next non-ellipsis pattern AFTER the current position
+                    let next_pattern_idx = patterns.iter().enumerate()
+                        .skip(pattern_idx + 1)
+                        .find(|(_, p)| !matches!(p, ParsedPattern::EllipsisMetavariable(_) | ParsedPattern::Wildcard))
+                        .map(|(idx, _)| idx);
                     if let Some(next_idx) = next_pattern_idx {
                         // Try to match the rest of the pattern starting at each position
                         let remaining_patterns = &patterns[next_idx + 1..];
@@ -1056,7 +1114,11 @@ impl AdvancedSemgrepMatcher {
                     // Wildcard matches zero or more tokens (ellipsis in Semgrep)
                     // This is similar to EllipsisMetavariable but doesn't bind to a variable
                     eprintln!("DEBUG: Matching Wildcard at position {}, tokens: {:?}", text_idx, &text_tokens[text_idx..text_tokens.len().min(text_idx+5)]);
-                    let next_pattern_idx = patterns.iter().position(|p| !matches!(p, ParsedPattern::Wildcard));
+                    // Find next non-wildcard pattern AFTER the current position
+                    let next_pattern_idx = patterns.iter().enumerate()
+                        .skip(pattern_idx + 1)
+                        .find(|(_, p)| !matches!(p, ParsedPattern::Wildcard))
+                        .map(|(idx, _)| idx);
                     if let Some(next_idx) = next_pattern_idx {
                         // Try to match rest of pattern starting at each position
                         let remaining_patterns = &patterns[next_idx..];
@@ -1111,10 +1173,18 @@ impl AdvancedSemgrepMatcher {
                     // This handles cases like (..., $X, ...) for parameter lists
                     let nested_start = text_idx;
 
-                    // Check if this is a parameter list pattern (contains parentheses)
+                    // Check if this is a parameter list pattern (contains commas)
                     let is_param_list_pattern = nested_patterns.iter().any(|p| {
                         matches!(p, ParsedPattern::Literal(lit) if lit == ",")
                     });
+
+                    // Check if text starts with '(' - if so, skip it for matching
+                    // This handles patterns like "foo(this.$X)" where the pattern has
+                    // a Sequence for "(this.$X)" but text tokens have "(" as a separate token
+                    let mut actual_start = nested_start;
+                    if actual_start < text_tokens.len() && text_tokens[actual_start] == "(" {
+                        actual_start += 1;
+                    }
 
                     if is_param_list_pattern && nested_start < text_tokens.len() && text_tokens[nested_start] == "(" {
                         // Strategy for parameter lists: Match the entire parenthesized expression
@@ -1145,8 +1215,12 @@ impl AdvancedSemgrepMatcher {
                             return Ok(false);
                         }
                     } else {
-                        // Try to match the sequence as-is
-                        if let Ok(mut nested_idx) = self.try_match_nested_sequence(nested_patterns, text_tokens, nested_start, node) {
+                        // Try to match the sequence as-is, starting after '(' if present
+                        if let Ok(mut nested_idx) = self.try_match_nested_sequence(nested_patterns, text_tokens, actual_start, node) {
+                            // After matching, skip the closing ')' if present
+                            if nested_idx < text_tokens.len() && text_tokens[nested_idx] == ")" {
+                                nested_idx += 1;
+                            }
                             text_idx = nested_idx;
                         } else {
                             return Ok(false);
@@ -1169,11 +1243,49 @@ impl AdvancedSemgrepMatcher {
         let mut current = String::new();
         let mut in_line_comment = false;
         let mut in_block_comment = false;
+        let mut in_string = false;
+        let mut string_char = '"';
         let mut chars = text.chars().peekable();
 
         while let Some(ch) = chars.next() {
+            // Handle string literals
+            if !in_line_comment && !in_block_comment {
+                if in_string {
+                    current.push(ch);
+                    if ch == string_char {
+                        // Check for escaped quote
+                        let mut backslash_count = 0;
+                        let current_chars: Vec<char> = current.chars().collect();
+                        for i in (0..current_chars.len() - 1).rev() {
+                            if current_chars[i] == '\\' {
+                                backslash_count += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        // If even number of backslashes, the quote is not escaped
+                        if backslash_count % 2 == 0 {
+                            tokens.push(current.clone());
+                            current.clear();
+                            in_string = false;
+                        }
+                    }
+                    continue;
+                } else if ch == '"' || ch == '\'' {
+                    // Start of string literal
+                    if !current.is_empty() {
+                        tokens.push(current.clone());
+                        current.clear();
+                    }
+                    in_string = true;
+                    string_char = ch;
+                    current.push(ch);
+                    continue;
+                }
+            }
+
             // Handle line comments (// in Java, # in some languages)
-            if !in_block_comment && ch == '/' {
+            if !in_block_comment && !in_string && ch == '/' {
                 if let Some(&next_ch) = chars.peek() {
                     if next_ch == '/' {
                         // Start of line comment
@@ -1366,9 +1478,9 @@ impl AdvancedSemgrepMatcher {
         }
 
         // If we bound at least one metavar, consider it a success
-        Ok(bound_metavars > 0)
-    }
-        }
+    //     Ok(bound_metavars > 0)
+    // }
+    //     }
 
         if metavars.is_empty() {
             return Ok(true);

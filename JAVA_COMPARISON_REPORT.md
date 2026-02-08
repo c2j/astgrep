@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月 8日 星期日 08时27分29秒 CST
+Generated on: 2026年 2月 8日 星期日 13时02分40秒 CST
 
 ## Test Summary
 
@@ -30,14 +30,14 @@ Generated on: 2026年 2月 8日 星期日 08时27分29秒 CST
 | metavar_comparison_bitor |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitxor |  | 1 | 1 | ✅ MATCH |
 | metavar_name_imported_entity_java |  | 2 | 2 | ✅ MATCH |
-| metavar_type_not_java |  | 1 | 00 | ❌ DIFFER |
-| metavar_type_str_eq_java |  | 2 | 2 | ✅ MATCH |
+| metavar_type_not_java |  | 1 | 1 | ✅ MATCH |
+| metavar_type_str_eq_java |  | 2 | 00 | ❌ DIFFER |
 | metavariable_name_resolution |  | 1 | 00 | ❌ DIFFER |
 | misc_name_and_neg |  | 00 | 00 | ✅ MATCH |
 | naming_class_attribute |  | 2 | 00 | ❌ DIFFER |
-| non_irrelevant_rule |  | 1 | 1 | ✅ MATCH |
+| non_irrelevant_rule |  | 1 | 00 | ❌ DIFFER |
 | sym_prop_class_attr | taint | 2 | 00 | ❌ DIFFER |
-| sym_prop_deep |  | 1 | 1 | ✅ MATCH |
+| sym_prop_deep |  | 1 | 00 | ❌ DIFFER |
 | sym_prop_merge1 |  | 2 | 00 | ❌ DIFFER |
 | sym_prop_merge2 |  | 1 | 00 | ❌ DIFFER |
 | sym_prop_new |  | 1 | 00 | ❌ DIFFER |
@@ -62,10 +62,10 @@ Generated on: 2026年 2月 8日 星期日 08时27分29秒 CST
 
 ### Summary Statistics
 
-- **Matching results**: 15 tests
-- **Differing results**: 23 tests
+- **Matching results**: 13 tests
+- **Differing results**: 25 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 39%
+- **Compatibility rate**: 34%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月 8日 星期日 08时29分06秒 CST
+**Report Generated**: 2026年 2月 8日 星期日 13时04分41秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development
