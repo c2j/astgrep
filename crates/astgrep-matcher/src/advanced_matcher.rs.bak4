@@ -652,77 +652,31 @@ impl AdvancedSemgrepMatcher {
         }
 
         // Try to match against current node's text
-        let mut node_text: String = node.text().unwrap_or("").to_string();
+        let mut node_text = node.text().unwrap_or("");
 
-        // For function declaration patterns, try to include the closing brace
-        // Only apply this for single function declarations, not for class nodes
-        let node_type = node.node_type();
-        eprintln!("DEBUG: pattern_text='{}', node_type='{}', contains_declaration={}, contains_method={}, is_class={}",
-            pattern_text,
-            node_type,
-            pattern_text.contains("public void"),
-            (node_type.contains("declaration") || node_type.contains("method")),
-            node_type.contains("class"));
+        // For function declaration patterns, truncate text at opening brace
         if (pattern_text.contains("public void") || pattern_text.contains("function")) &&
-           pattern_text.contains("{") && pattern_text.contains("}") &&
-           !node_type.contains("class") &&
-           (node_type.contains("declaration") || node_type.contains("method")) {
-            // Find opening brace
-            if let Some(open_pos) = node_text.find('{') {
-                // Try to find matching closing brace (first closing brace that brings us back to 0)
-                let mut brace_count = 1;
-                let mut close_pos = open_pos + 1;
-                let chars: Vec<char> = node_text.chars().collect();
-                while close_pos < chars.len() && brace_count > 0 {
-                    if chars[close_pos] == '{' {
-                        brace_count += 1;
-                    } else if chars[close_pos] == '}' {
-                        brace_count -= 1;
-                    }
-                    if brace_count == 0 {
-                        break;
-                    }
-                    close_pos += 1;
-                }
-
-                if brace_count == 0 {
-                    // Found matching closing brace, include it
-                    eprintln!("DEBUG: Found matching closing brace at position {}, node_text (first 100 chars): {:?}",
-                        close_pos,
-                        node_text.chars().take(100).collect::<String>());
-                    let with_both_braces = node_text[..close_pos + 1].to_string();
-                    eprintln!("DEBUG: with_both_braces (length {}): {:?}", with_both_braces.len(), with_both_braces);
-                    // Strip any comments before opening brace and between braces
-                    eprintln!("DEBUG: Processing with_both_braces lines...");
-                    let cleaned = with_both_braces.lines()
-                        .map(|line| {
-                            eprintln!("DEBUG: Processing line: {:?}", line);
-                            if let Some(comment_pos) = line.find("//") {
-                                let result = &line[..comment_pos];
-                                eprintln!("DEBUG: Found comment at pos {}, result: {:?}", comment_pos, result);
-                                // Preserve empty lines as-is, don't convert to empty string
-                                if result.is_empty() {
-                                    eprintln!("DEBUG: Result is empty, returning empty line");
-                                    ""  // Keep empty lines as-is
-                                } else {
-                                    result
-                                }
-                            } else {
-                                line
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    eprintln!("DEBUG: cleaned (length {}): {:?}", cleaned.len(), cleaned);
-                    node_text = cleaned;
-                } else {
-                    eprintln!("DEBUG: No matching closing brace found, brace_count={}", brace_count);
-                }
+           pattern_text.contains("{") {
+            // Find opening brace and truncate there
+            if let Some(brace_pos) = node_text.find('{') {
+                // Also strip any comments before brace
+                let before_brace = &node_text[..brace_pos];
+                // Remove inline comments (//)
+                let cleaned = before_brace.lines()
+                    .map(|line| {
+                        if let Some(comment_pos) = line.find("//") {
+                            &line[..comment_pos]
+                        } else {
+                            line
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                node_text = cleaned;
             }
         }
 
-        // Try to match the pattern sequence against the node's text
-        if self.match_sequence_against_text(patterns, &node_text, node, depth)? {
+        // Try to match pattern sequence against node's text
             return Ok(true);
         }
 
@@ -763,7 +717,6 @@ impl AdvancedSemgrepMatcher {
         let text_tokens = self.tokenize(text);
         eprintln!("DEBUG match_sequence_against_text: text='{}', tokens={:?}", text, text_tokens);
         eprintln!("DEBUG patterns: {:?}", patterns);
-        eprintln!("DEBUG: Looking for pattern: {:?}", patterns.iter().find(|p| matches!(p, ParsedPattern::Literal(s) if s == "}")));
 
         // Expand tokens using symbolic propagation if available
         let expanded_tokens = self.expand_tokens_with_symbolic_propagation(&text_tokens);
@@ -890,27 +843,20 @@ impl AdvancedSemgrepMatcher {
         node: &dyn AstNode,
     ) -> Result<bool> {
         let mut text_idx = start_pos;
-        let mut matched_opening_brace = false;
-
-        // Check if this is a function declaration pattern (has opening brace in patterns)
-        let is_function_pattern = patterns.iter().any(|p| matches!(p, ParsedPattern::Literal(s) if s == "{"));
 
         for pattern in patterns {
             if text_idx >= text_tokens.len() {
-                // For function patterns, if we matched the opening brace and there's no closing brace in text,
-                // that's OK - the node text might be truncated
-                if is_function_pattern && matched_opening_brace {
-                    return Ok(true);
-                }
                 return Ok(false);
             }
 
             match pattern {
                 ParsedPattern::Literal(literal) => {
-                    // Track if we matched to opening brace
-                    if *literal == "{" {
-                        matched_opening_brace = true;
-                        eprintln!("DEBUG: Matched opening brace at position {}", text_idx);
+                    // Skip parentheses in the text when matching
+                    while text_idx < text_tokens.len() && (text_tokens[text_idx] == "(" || text_tokens[text_idx] == ")") {
+                        text_idx += 1;
+                    }
+                    if text_idx >= text_tokens.len() {
+                        return Ok(false);
                     }
                     // Special case: "..." in pattern should match any string literal token
                     if *literal == "..." && text_tokens[text_idx].starts_with('"') {
@@ -1053,104 +999,40 @@ impl AdvancedSemgrepMatcher {
                     text_idx = text_tokens.len();
                 }
                 ParsedPattern::Wildcard => {
-                    // Wildcard matches zero or more tokens (ellipsis in Semgrep)
-                    // This is similar to EllipsisMetavariable but doesn't bind to a variable
-                    eprintln!("DEBUG: Matching Wildcard at position {}, tokens: {:?}", text_idx, &text_tokens[text_idx..text_tokens.len().min(text_idx+5)]);
-                    let next_pattern_idx = patterns.iter().position(|p| !matches!(p, ParsedPattern::Wildcard));
-                    if let Some(next_idx) = next_pattern_idx {
-                        // Try to match rest of pattern starting at each position
-                        let remaining_patterns = &patterns[next_idx..];
-                        for next_pos in text_idx..=text_tokens.len() {
-                            eprintln!("DEBUG: Wildcard trying next_pos {}, token at that position: {:?}",
-                                next_pos,
-                                if next_pos < text_tokens.len() { Some(&text_tokens[next_pos]) } else { None });
-                            let snapshot = self.metavar_manager.snapshot();
-                            if self.try_match_sequence_at_position(remaining_patterns, text_tokens, next_pos, node)? {
-                                // Found a match!
-                                text_idx = next_pos;
-                                // Match rest of pattern
-                                for (i, pattern) in remaining_patterns.iter().enumerate() {
-                                    if text_idx >= text_tokens.len() {
-                                        return Ok(false);
-                                    }
-                                    match pattern {
-                                        ParsedPattern::Literal(lit) => {
-                                            if text_tokens[text_idx] != *lit {
-                                                return Ok(false);
-                                            }
-                                            text_idx += 1;
-                                        }
-                                        ParsedPattern::Metavariable(metav) => {
-                                            let value = &text_tokens[text_idx];
-                                            if !self.metavar_manager.bind(metav.clone(), value.clone(), node)? {
-                                                return Ok(false);
-                                            }
-                                            text_idx += 1;
-                                        }
-                                        ParsedPattern::Wildcard | ParsedPattern::EllipsisMetavariable(_) => {
-                                            // Nested wildcards - this shouldn't happen but handle gracefully
-                                            text_idx += 1;
-                                        }
-                                        _ => {
-                                            return Ok(false);
-                                        }
-                                    }
-                                }
-                                return Ok(true);
-                            }
-                            self.metavar_manager.restore(snapshot);
-                        }
-                        return Ok(false);
-                    } else {
-                        // No more patterns after wildcard, match everything
-                        text_idx = text_tokens.len();
-                    }
+                    // Wildcard matches any single token
+                    text_idx += 1;
                 }
                 ParsedPattern::Sequence(nested_patterns) => {
                     // Recursively match nested sequence
-                    // This handles cases like (..., $X, ...) for parameter lists
+                    // This handles cases like foo(this.$X) where the parentheses
+                    // create a nested sequence in the pattern
                     let nested_start = text_idx;
-
-                    // Check if this is a parameter list pattern (contains parentheses)
-                    let is_param_list_pattern = nested_patterns.iter().any(|p| {
-                        matches!(p, ParsedPattern::Literal(lit) if lit == ",")
-                    });
-
-                    if is_param_list_pattern && nested_start < text_tokens.len() && text_tokens[nested_start] == "(" {
-                        // Strategy for parameter lists: Match the entire parenthesized expression
-                        // Find matching closing parenthesis
-                        let mut paren_count = 1;
-                        let mut paren_idx = nested_start + 1;
-                        while paren_idx < text_tokens.len() && paren_count > 0 {
-                            if text_tokens[paren_idx] == "(" {
-                                paren_count += 1;
-                            } else if text_tokens[paren_idx] == ")" {
-                                paren_count -= 1;
+                    if self.try_match_sequence_at_position(nested_patterns, text_tokens, nested_start, node)? {
+                        // Calculate how many tokens were consumed by the nested match
+                        // by re-matching and counting
+                        let mut nested_idx = nested_start;
+                        for nested_pattern in nested_patterns {
+                            match nested_pattern {
+                                ParsedPattern::Literal(lit) => {
+                                    // Skip parentheses
+                                    while nested_idx < text_tokens.len() &&
+                                          (text_tokens[nested_idx] == "(" || text_tokens[nested_idx] == ")") {
+                                        nested_idx += 1;
+                                    }
+                                    if nested_idx < text_tokens.len() &&
+                                       (*lit == "..." || text_tokens[nested_idx] == *lit) {
+                                        nested_idx += 1;
+                                    }
+                                }
+                                ParsedPattern::Metavariable(_) | ParsedPattern::EllipsisMetavariable(_) | ParsedPattern::Wildcard => {
+                                    nested_idx += 1;
+                                }
+                                _ => {}
                             }
-                            if paren_count == 0 {
-                                break;
-                            }
-                            paren_idx += 1;
                         }
-
-                        if paren_count == 0 && paren_idx < text_tokens.len() {
-                            // Try to match metavariables in the parameter list
-                            let param_tokens = &text_tokens[nested_start..=paren_idx];
-                            if self.try_extract_metavars_from_params(nested_patterns, param_tokens, node)? {
-                                text_idx = paren_idx + 1;
-                            } else {
-                                return Ok(false);
-                            }
-                        } else {
-                            return Ok(false);
-                        }
+                        text_idx = nested_idx;
                     } else {
-                        // Try to match the sequence as-is
-                        if let Ok(mut nested_idx) = self.try_match_nested_sequence(nested_patterns, text_tokens, nested_start, node) {
-                            text_idx = nested_idx;
-                        } else {
-                            return Ok(false);
-                        }
+                        return Ok(false);
                     }
                 }
                 _ => {
@@ -1265,97 +1147,9 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
         }
-
         Ok(true)
     }
 
-    /// Try to match a nested sequence and return the position after the match
-    fn try_match_nested_sequence(&mut self, nested_patterns: &[ParsedPattern], text_tokens: &[String], nested_start: usize, node: &dyn AstNode) -> Result<usize> {
-        if self.try_match_sequence_at_position(nested_patterns, text_tokens, nested_start, node)? {
-            // Calculate how many tokens were consumed
-            // by re-matching and counting
-            let mut nested_idx = nested_start;
-            for nested_pattern in nested_patterns {
-                match nested_pattern {
-                    ParsedPattern::Literal(lit) => {
-                        // Skip parentheses
-                        while nested_idx < text_tokens.len() &&
-                              (text_tokens[nested_idx] == "(" || text_tokens[nested_idx] == ")") {
-                            nested_idx += 1;
-                        }
-                        if nested_idx < text_tokens.len() &&
-                           (*lit == "..." || text_tokens[nested_idx] == *lit) {
-                            nested_idx += 1;
-                        }
-                    }
-                    ParsedPattern::Metavariable(_) | ParsedPattern::EllipsisMetavariable(_) | ParsedPattern::Wildcard => {
-                        nested_idx += 1;
-                    }
-                    _ => {}
-                }
-            }
-            Ok(nested_idx)
-        } else {
-            Err(AnalysisError::pattern_match_error("Failed to match nested sequence"))
-        }
-    }
-
-    /// Try to extract metavariables from parameter tokens like (String x)
-    fn try_extract_metavars_from_params(&mut self, nested_patterns: &[ParsedPattern], param_tokens: &[String], node: &dyn AstNode) -> Result<bool> {
-        // Find all metavariables in the nested patterns
-        let mut metavars: Vec<String> = Vec::new();
-        for pattern in nested_patterns {
-            if let ParsedPattern::Metavariable(name) = pattern {
-                metavars.push(name.clone());
-            }
-        }
-
-        if metavars.is_empty() {
-            return Ok(true);
-        }
-
-        // For parameter lists like (String x), try to extract parameter names
-        // In Java, parameters are typically "Type name" like "String x"
-        // We want to extract "x" (the parameter name), not "String" (the type)
-        let mut param_idx = 0;
-        while param_idx < param_tokens.len() {
-            let token = &param_tokens[param_idx];
-
-            // Skip non-identifier tokens
-            if token == "(" || token == ")" || token == "," {
-                param_idx += 1;
-                continue;
-            }
-
-            // Look for identifiers that might be parameter names
-            // Parameter names are typically identifiers after types
-            // In "String x", "String" is the type (starts with capital), "x" is the name
-            if token.chars().all(|c| c.is_alphanumeric() || c == '_') {
-                // Check if this is likely a parameter name:
-                // - Not the first token (which is likely a type)
-                // - Doesn't start with capital (Java types typically start with capital)
-                // - Is after a non-identifier token
-                let is_first_token = param_idx == 0 || param_tokens[param_idx - 1] == "(";
-                let starts_with_capital = token.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
-
-                if !is_first_token && !starts_with_capital {
-                    // This is likely a parameter name
-                    // Bind it to the first metavariable
-                    if let Some(metavar) = metavars.get(0) {
-                        let snapshot = self.metavar_manager.snapshot();
-                        if self.metavar_manager.bind(metavar.clone(), token.clone(), node)? {
-                            eprintln!("DEBUG: Bound metavariable '{}' to parameter '{}'", metavar, token);
-                            return Ok(true);
-                        }
-                        self.metavar_manager.restore(snapshot);
-                    }
-                }
-            }
-            param_idx += 1;
-        }
-
-        Ok(false)
-    }
     /// Evaluate a single condition
     fn evaluate_condition(&self, condition: &Condition, bindings: &HashMap<String, String>) -> Result<bool> {
         match condition {

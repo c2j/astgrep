@@ -1211,7 +1211,8 @@ impl AdvancedRuleExecutor {
             &source_matches,
             &sink_matches,
             ast,
-            dataflow_analysis
+            dataflow_analysis,
+            dataflow_spec.taint_assume_safe_booleans.unwrap_or(false)
         )?;
 
         // Step 4: Create findings for each unique sink with taint flow
@@ -1373,8 +1374,10 @@ impl AdvancedRuleExecutor {
         sinks: &[TaintMatch],
         ast: &dyn AstNode,
         dataflow_analysis: Option<&DataFlowAnalysis>,
+        taint_assume_safe_booleans: bool,
     ) -> Result<Vec<(TaintMatch, TaintMatch)>> {
-        eprintln!("[DEBUG] detect_taint_flows: {} sources, {} sinks", sources.len(), sinks.len());
+        eprintln!("[DEBUG] detect_taint_flows: {} sources, {} sinks, assume_safe_booleans={}",
+                  sources.len(), sinks.len(), taint_assume_safe_booleans);
         let mut flows = Vec::new();
 
         // Use simple heuristics to detect taint flows
@@ -1385,7 +1388,7 @@ impl AdvancedRuleExecutor {
                     eprintln!("[DEBUG] Checking source {} with sink {}: var='{}' vs sink text='{}'",
                               i, j, source_var, sink.node.text().unwrap_or_default());
                     // Check if source variable appears in sink context
-                    if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast) {
+                    if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast, taint_assume_safe_booleans) {
                         eprintln!("[DEBUG] FLOW FOUND: source {} -> sink {}", i, j);
                         flows.push((source.clone(), sink.clone()));
                     }
@@ -1430,11 +1433,18 @@ impl AdvancedRuleExecutor {
         &self,
         var_name: &str,
         sink_node: &dyn AstNode,
-        _ast: &dyn AstNode
+        _ast: &dyn AstNode,
+        taint_assume_safe_booleans: bool,
     ) -> bool {
         let sink_text = sink_node.text().unwrap_or_default();
-        
-        // Check if the source variable directly appears in the sink node
+
+        // When taint_assume_safe_booleans is true, check if the variable is used in safe boolean contexts
+        if taint_assume_safe_booleans && self.is_variable_in_safe_boolean_context(var_name, sink_text) {
+            eprintln!("[DEBUG] Variable '{}' in safe boolean context, not flowing", var_name);
+            return false;
+        }
+
+        // Check if source variable directly appears in sink node
         if sink_text.contains(var_name) {
             return true;
         }
@@ -1467,9 +1477,61 @@ impl AdvancedRuleExecutor {
         
         false
     }
-    
-    /// Extract the receiver variable from a sink node
-    /// For example, from "dbf.newDocumentBuilder()", extract "dbf"
+
+    /// Check if a variable is used in a safe boolean context
+    /// Returns true if the variable is used in a way that doesn't propagate taint
+    /// (e.g., Boolean.valueOf(var), var != "safe", etc.)
+    fn is_variable_in_safe_boolean_context(&self, var_name: &str, sink_text: &str) -> bool {
+        // Pattern 1: Boolean conversion functions
+        if sink_text.contains(&format!("Boolean.valueOf({})", var_name)) {
+            return true;
+        }
+        if sink_text.contains(&format!("Boolean.parseBoolean({})", var_name)) {
+            return true;
+        }
+
+        // Pattern 2: Boolean comparison operators
+        // Check for patterns like "var != something" or "var == something"
+        // We need to make sure var is actually the variable being compared, not part of a string
+        let comparison_patterns = [
+            format!("{} != ", var_name),
+            format!("{} == ", var_name),
+            format!("{} > ", var_name),
+            format!("{} < ", var_name),
+            format!("{} >= ", var_name),
+            format!("{} <= ", var_name),
+            format!(" {}!= ", var_name),
+            format!(" {}== ", var_name),
+            format!(" {}> ", var_name),
+            format!(" {}< ", var_name),
+            format!(" {}>= ", var_name),
+            format!(" {}<= ", var_name),
+        ];
+
+        for pattern in &comparison_patterns {
+            if sink_text.contains(pattern) {
+                return true;
+            }
+        }
+
+        // Pattern 3: More complex boolean expressions using parentheses
+        // Like "(x != "safe")"
+        let paren_patterns = [
+            format!("({} != ", var_name),
+            format!("({} == ", var_name),
+            format!("({} > ", var_name),
+            format!("({} < ", var_name),
+        ];
+
+        for pattern in &paren_patterns {
+            if sink_text.contains(pattern) {
+                return true;
+            }
+        }
+
+        false
+    }
+
     fn extract_receiver_from_sink(&self, sink_node: &dyn AstNode) -> Option<String> {
         let sink_text = sink_node.text().unwrap_or_default();
         
