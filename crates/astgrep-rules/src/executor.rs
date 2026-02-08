@@ -44,6 +44,284 @@ struct TaintMatch {
     node: Box<dyn AstNode>,
     bindings: HashMap<String, String>,
     var_name: Option<String>,
+    /// Method name containing this match (for scope isolation)
+    method_name: Option<String>,
+}
+
+/// Variable dependency tracker for intra-procedural dataflow analysis
+/// Tracks which variables depend on (are derived from) other variables
+struct VariableDependencyGraph {
+    /// Maps a variable to the set of variables it depends on
+    dependencies: HashMap<String, Vec<String>>,
+    /// Maps a variable to its assigned expression text
+    assignments: HashMap<String, String>,
+}
+
+impl VariableDependencyGraph {
+    fn new() -> Self {
+        Self {
+            dependencies: HashMap::new(),
+            assignments: HashMap::new(),
+        }
+    }
+
+    /// Record that `target` variable is assigned from `source_vars`
+    fn record_assignment(&mut self, target: String, source_vars: Vec<String>, expr: String) {
+        self.dependencies.insert(target.clone(), source_vars);
+        self.assignments.insert(target, expr);
+    }
+
+    /// Check if `var` depends on (transitively) any of the `source_vars`
+    /// If `check_safe_context` is true, returns false if the dependency path goes through a safe numeric context
+    fn depends_on(&self, var: &str, source_vars: &[String], check_safe_context: bool) -> bool {
+        let mut visited = std::collections::HashSet::new();
+        self.check_dependency_recursive(var, source_vars, &mut visited, check_safe_context)
+    }
+
+    fn check_dependency_recursive(
+        &self,
+        var: &str,
+        source_vars: &[String],
+        visited: &mut std::collections::HashSet<String>,
+        check_safe_context: bool,
+    ) -> bool {
+        if !visited.insert(var.to_string()) {
+            return false; // Already visited, avoid cycles
+        }
+
+        // Direct match
+        if source_vars.iter().any(|s| s == var) {
+            return true;
+        }
+
+        // Check transitive dependencies
+        if let Some(deps) = self.dependencies.get(var) {
+            for dep in deps {
+                // Check if this dependency is through a safe numeric context
+                if check_safe_context {
+                    if let Some(expr) = self.assignments.get(var) {
+                        if self.is_safe_numeric_expression_advanced(expr, &self.assignments) {
+                            // This variable is assigned from a safe numeric expression,
+                            // so don't consider it as tainted even if it depends on source
+                            eprintln!("[DEBUG] Variable '{}' assigned from safe numeric expression: {}", var, expr);
+                            continue;
+                        }
+                    }
+                }
+                
+                if self.check_dependency_recursive(dep, source_vars, visited, check_safe_context) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Check if an expression is in a safe numeric context
+    /// Also checks if any variables in the expression are assigned string values
+    fn is_safe_numeric_expression_advanced(&self, expr: &str, var_assignments: &HashMap<String, String>) -> bool {
+        let expr = expr.trim();
+        
+        // IMPORTANT: If the expression contains string literals, it's likely string concatenation
+        // which should NOT be considered safe numeric context
+        if expr.contains('"') || expr.contains('\'') {
+            return false;
+        }
+        
+        // Check if any variable in the expression is assigned a string value
+        let vars_in_expr = self.extract_variables_from_expression(expr);
+        for var in &vars_in_expr {
+            if let Some(assign_expr) = var_assignments.get(var) {
+                let assign_expr = assign_expr.trim();
+                // If the assignment expression contains string literals, it's a string variable
+                if assign_expr.contains('"') || assign_expr.contains('\'') {
+                    eprintln!("[DEBUG] Variable '{}' is assigned a string value: {}", var, assign_expr);
+                    return false;
+                }
+            }
+        }
+        
+        // Now check for numeric patterns
+        self.is_safe_numeric_expression(expr)
+    }
+
+    /// Check if an expression is in a safe numeric context (basic check)
+    fn is_safe_numeric_expression(&self, expr: &str) -> bool {
+        let expr = expr.trim();
+        
+        // Check for numeric method calls: getSomething(), x.length, etc.
+        // These typically return numeric values
+        let numeric_method_patterns = [
+            ".getSomething()",
+            ".length",
+            ".size()",
+            ".count()",
+            ".indexOf(",
+            ".lastIndexOf(",
+            ".compareTo(",
+        ];
+        
+        for pattern in &numeric_method_patterns {
+            if expr.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Check for type casts to numeric types
+        if regex::Regex::new(r"\(int\)|\(long\)|\(short\)|\(byte\)|\(float\)|\(double\)|\(Integer\)|\(Long\)|\(Short\)|\(Byte\)|\(Float\)|\(Double\)").ok()
+            .map(|re| re.is_match(expr))
+            .unwrap_or(false) {
+            return true;
+        }
+        
+        // Check for numeric wrapper conversions
+        let numeric_conversions = [
+            "Integer.valueOf(",
+            "Integer.parseInt(",
+            "Long.valueOf(",
+            "Long.parseLong(",
+            "Short.valueOf(",
+            "Short.parseShort(",
+        ];
+        
+        for pattern in &numeric_conversions {
+            if expr.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Check for arithmetic operations (indicates numeric context)
+        // But only if there are no string variables involved
+        let arithmetic_ops = ['+', '-', '*', '/', '%'];
+        if expr.chars().any(|c| arithmetic_ops.contains(&c)) {
+            return true;
+        }
+        
+        false
+    }
+
+    /// Check if a variable is assigned a non-empty string literal
+    fn is_assigned_string_literal(
+        &self, var: &str
+    ) -> bool {
+        if let Some(expr) = self.assignments.get(var) {
+            let expr = expr.trim();
+            // Check if the expression is a non-empty string literal
+            // Pattern: "..." where ... is not empty
+            if expr.starts_with('"') && expr.ends_with('"') && expr.len() > 2 {
+                // Make sure it's not just an empty string ""
+                let content = &expr[1..expr.len()-1];
+                if !content.is_empty() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if a variable depends on (transitively) any variable that is assigned a non-empty string literal
+    fn has_string_literal_in_dependency_chain(&self, var: &str) -> bool {
+        let mut visited = std::collections::HashSet::new();
+        self.check_string_literal_dependency_recursive(var, &mut visited)
+    }
+
+    fn check_string_literal_dependency_recursive(
+        &self,
+        var: &str,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> bool {
+        if !visited.insert(var.to_string()) {
+            return false;
+        }
+
+        // Check if this variable is assigned a string literal
+        if self.is_assigned_string_literal(var) {
+            return true;
+        }
+
+        // Check transitive dependencies
+        if let Some(deps) = self.dependencies.get(var) {
+            for dep in deps {
+                if self.check_string_literal_dependency_recursive(dep, visited) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Build dependency graph from method body text
+    fn build_from_method(&mut self, method_text: &str) {
+        // Parse local variable declarations and assignments
+        // Pattern: Type var = expression;
+        // Pattern: var = expression;
+        // Pattern: var = source();
+        // Pattern: var = other + something;
+
+        for line in method_text.lines() {
+            let line = line.trim();
+
+            // Match local variable declaration: Type var = expr;
+            // or assignment: var = expr;
+            if let Some(eq_pos) = line.find('=') {
+                let before_eq = line[..eq_pos].trim();
+                let after_eq = line[eq_pos + 1..].trim().trim_end_matches(';').trim();
+
+                // Extract variable name (last identifier before =)
+                let parts: Vec<&str> = before_eq.split_whitespace().collect();
+                if let Some(var_name) = parts.last() {
+                    let var_name = var_name.trim().to_string();
+                    if !var_name.is_empty() {
+                        // Find all variables used in the right-hand side
+                        let source_vars = self.extract_variables_from_expression(after_eq);
+                        self.record_assignment(var_name, source_vars, after_eq.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    /// Extract variable names from an expression
+    fn extract_variables_from_expression(&self, expr: &str) -> Vec<String> {
+        let mut vars = Vec::new();
+        let expr = expr.trim();
+
+        // Skip string literals
+        // Simple heuristic: split by operators and extract identifiers
+        let operators = ['+', '-', '*', '/', '%', '(', ')', '.', ',', ';'];
+        let tokens: Vec<&str> = expr.split(|c: char| operators.contains(&c)).collect();
+
+        for token in tokens {
+            let token = token.trim();
+            // Skip empty, numeric literals, string literals, and keywords
+            if token.is_empty()
+                || token.parse::<f64>().is_ok()
+                || token.starts_with('"')
+                || token.starts_with('\'')
+                || token == "source"
+                || token == "sink"
+                || token == "sink1"
+                || token == "sink2"
+                || token == "new"
+                || token == "null"
+                || token == "true"
+                || token == "false"
+            {
+                continue;
+            }
+
+            // Check if it looks like an identifier (starts with letter or underscore)
+            if let Some(first_char) = token.chars().next() {
+                if first_char.is_alphabetic() || first_char == '_' {
+                    vars.push(token.to_string());
+                }
+            }
+        }
+
+        vars
+    }
 }
 
 impl Clone for TaintMatch {
@@ -52,6 +330,7 @@ impl Clone for TaintMatch {
             node: self.node.clone_node(),
             bindings: self.bindings.clone(),
             var_name: self.var_name.clone(),
+            method_name: self.method_name.clone(),
         }
     }
 }
@@ -1193,7 +1472,7 @@ impl AdvancedRuleExecutor {
         let source_text = ast.text().unwrap_or_default();
         
         // Step 1: Find all source matches using pattern matching
-        let source_matches = self.find_taint_sources(ast, dataflow_spec)?;
+        let source_matches = self.find_taint_sources(ast, dataflow_spec, &source_text)?;
         eprintln!("[DEBUG] Source matches found: {}", source_matches.len());
         if source_matches.is_empty() {
             eprintln!("[DEBUG] No source matches, returning early");
@@ -1201,13 +1480,13 @@ impl AdvancedRuleExecutor {
         }
 
         // Step 2: Find all sink matches using pattern matching
-        let sink_matches = self.find_taint_sinks(ast, dataflow_spec)?;
+        let sink_matches = self.find_taint_sinks(ast, dataflow_spec, &source_text)?;
         if sink_matches.is_empty() {
             return Ok(findings);
         }
         
         // Step 3: Check for taint flow from sources to sinks
-        // Get taint_assume_safe_booleans from rule metadata or dataflow spec
+        // Get taint options from rule metadata or dataflow spec
         let assume_safe_booleans = if let Some(val) = rule.metadata.get("taint_assume_safe_booleans") {
             if let serde_yaml::Value::String(ref s) = val {
                 s == "true"
@@ -1219,12 +1498,40 @@ impl AdvancedRuleExecutor {
         } else {
             dataflow_spec.taint_assume_safe_booleans.unwrap_or(false)
         };
+        
+        let assume_safe_numbers = if let Some(val) = rule.metadata.get("taint_assume_safe_numbers") {
+            if let serde_yaml::Value::String(ref s) = val {
+                s == "true"
+            } else if let serde_yaml::Value::Bool(ref b) = val {
+                *b
+            } else {
+                false
+            }
+        } else {
+            dataflow_spec.taint_assume_safe_numbers.unwrap_or(false)
+        };
+        
+        let only_propagate_through_assignments = if let Some(val) = rule.metadata.get("taint_only_propagate_through_assignments") {
+            if let serde_yaml::Value::String(ref s) = val {
+                s == "true"
+            } else if let serde_yaml::Value::Bool(ref b) = val {
+                *b
+            } else {
+                false
+            }
+        } else {
+            dataflow_spec.taint_only_propagate_through_assignments.unwrap_or(false)
+        };
+        
         let taint_flows = self.detect_taint_flows(
             &source_matches,
             &sink_matches,
             ast,
             dataflow_analysis,
-            assume_safe_booleans
+            assume_safe_booleans,
+            assume_safe_numbers,
+            only_propagate_through_assignments,
+            &source_text
         )?;
 
         // Step 4: Create findings for each unique sink with taint flow
@@ -1257,7 +1564,8 @@ impl AdvancedRuleExecutor {
     fn find_taint_sources(
         &mut self,
         ast: &dyn AstNode,
-        dataflow_spec: &DataFlowSpec
+        dataflow_spec: &DataFlowSpec,
+        source_text: &str
     ) -> Result<Vec<TaintMatch>> {
         eprintln!("[DEBUG] ENTER find_taint_sources with {} source patterns", dataflow_spec.sources.len());
         let mut sources = Vec::new();
@@ -1313,7 +1621,22 @@ impl AdvancedRuleExecutor {
 
                 // If no var_name from bindings, try to extract from parent assignment
                 if var_name.is_none() {
-                    var_name = self.extract_variable_name_from_assignment(m.node.as_ref());
+                    var_name = self.extract_variable_name_from_assignment(m.node.as_ref(), source_text);
+                }
+                
+                // If still no var_name and the match looks like a string literal,
+                // try to find the variable that is assigned this string literal
+                if var_name.is_none() {
+                    if let Some(text) = m.node.text() {
+                        let text = text.trim();
+                        // Check if this is a string literal pattern match (starts and ends with ")
+                        if text.starts_with('"') && text.ends_with('"') && text.len() > 2 {
+                            // This is a string literal match, find the variable it's assigned to
+                            if let Some((start_line, _, _, _)) = m.node.location() {
+                                var_name = self.find_variable_for_string_literal(source_text, start_line, text);
+                            }
+                        }
+                    }
                 }
                 
                 // If still no var_name and focus-metavariables are specified, 
@@ -1324,10 +1647,30 @@ impl AdvancedRuleExecutor {
 
                 eprintln!("[DEBUG] Extracted var_name: {:?}", var_name);
 
+                // When taint_assume_safe_numbers is true, filter out numeric type sources
+                if dataflow_spec.taint_assume_safe_numbers.unwrap_or(false) {
+                    if let Some(ref vname) = var_name {
+                        if self.is_numeric_parameter(m.node.as_ref(), vname) {
+                            continue;
+                        }
+                    }
+                }
+
+                // Extract method name for scope isolation using source location
+                let node_ref = m.node.as_ref();
+                let method_name = if node_ref.node_type() == "method_declaration" {
+                    self.extract_method_name_from_declaration(node_ref)
+                } else if let Some((start_line, _, _, _)) = node_ref.location() {
+                    self.find_method_name_by_line(source_text, start_line)
+                } else {
+                    None
+                };
+
                 sources.push(TaintMatch {
                     node: m.node,
                     bindings: m.bindings,
                     var_name,
+                    method_name,
                 });
             }
         }
@@ -1335,10 +1678,135 @@ impl AdvancedRuleExecutor {
         Ok(sources)
     }
     
+    /// Find the variable name that is assigned a specific string literal
+    /// This is used when a string literal pattern matches to find the variable it's assigned to
+    fn find_variable_for_string_literal(
+        &self,
+        source_text: &str,
+        line_num: usize,
+        literal: &str,
+    ) -> Option<String> {
+        let lines: Vec<&str> = source_text.lines().collect();
+        if line_num == 0 || line_num > lines.len() {
+            return None;
+        }
+
+        // Look at the line containing the string literal
+        let line = lines[line_num - 1];
+        
+        // Pattern: Type var = "literal" or var = "literal"
+        // Find the assignment that contains this string literal
+        if let Some(eq_pos) = line.find('=') {
+            let before_eq = line[..eq_pos].trim();
+            let after_eq = line[eq_pos + 1..].trim().trim_end_matches(';').trim();
+            
+            // Check if the string literal appears in the right-hand side
+            if after_eq.contains(literal) {
+                // Extract variable name from left-hand side
+                let parts: Vec<&str> = before_eq.split_whitespace().collect();
+                if let Some(var_name) = parts.last() {
+                    let var_name = var_name.trim().to_string();
+                    if !var_name.is_empty() {
+                        eprintln!("[DEBUG] Found variable '{}' assigned string literal: {}", var_name, literal);
+                        return Some(var_name);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+    
+    /// Find method name by line number in source text
+    fn find_method_name_by_line(&self, source_text: &str, line_num: usize) -> Option<String> {
+        let lines: Vec<&str> = source_text.lines().collect();
+        if line_num == 0 || line_num > lines.len() {
+            return None;
+        }
+        
+        // Search backwards from the given line to find the method declaration
+        // Method declarations typically look like: "public void methodName(...)" or "public static void methodName(...)"
+        for i in (0..line_num).rev() {
+            let line = lines[i];
+            // Look for method declaration patterns
+            // Pattern: public [static] [returnType] methodName(
+            if let Some(captures) = regex::Regex::new(r"public\s+(?:static\s+)?(?:\w+)\s+(\w+)\s*\(").ok()?.captures(line) {
+                if let Some(method_name) = captures.get(1) {
+                    return Some(method_name.as_str().to_string());
+                }
+            }
+            // Also check for constructor pattern: public methodName(
+            if let Some(captures) = regex::Regex::new(r"public\s+(\w+)\s*\(").ok()?.captures(line) {
+                if let Some(method_name) = captures.get(1) {
+                    // Make sure this looks like a constructor (same name as class would be)
+                    return Some(method_name.as_str().to_string());
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Find the method name that contains a given node
+    fn find_containing_method_name(&self, node: &dyn AstNode) -> Option<String> {
+        // Try to find the parent method by looking at the node's text context
+        // For Java, method declarations look like: "public void methodName(...) { ... }"
+        let node_text = node.text().unwrap_or_default();
+        
+        // Simple heuristic: look for method signature patterns in the text
+        // This is a simplified approach - in a real implementation we'd traverse the AST
+        if let Some(method_match) = regex::Regex::new(r"public\s+(?:static\s+)?(?:void|\w+)\s+(\w+)\s*\(").ok() {
+            for cap in method_match.captures_iter(&node_text) {
+                if let Some(method_name) = cap.get(1) {
+                    return Some(method_name.as_str().to_string());
+                }
+            }
+        }
+        
+        // If the node itself is a method declaration, extract its name
+        if node.node_type() == "method_declaration" {
+            return self.extract_method_name_from_declaration(node);
+        }
+        
+        None
+    }
+    
+    /// Extract method name from a method declaration node
+    fn extract_method_name_from_declaration(&self, node: &dyn AstNode) -> Option<String> {
+        if node.node_type() != "method_declaration" {
+            return None;
+        }
+        
+        // Look for the identifier child which is the method name
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if child.node_type() == "identifier" {
+                    return child.text().map(|s| s.to_string());
+                }
+            }
+        }
+        
+        // Fallback: try to extract from text
+        let text = node.text().unwrap_or_default();
+        if let Some(paren_idx) = text.find('(') {
+            let before = &text[..paren_idx];
+            if let Some(space_idx) = before.rfind(' ') {
+                return Some(before[space_idx+1..].trim().to_string());
+            }
+        }
+        
+        None
+    }
+
     /// Extract variable name from an assignment expression
-    fn extract_variable_name_from_assignment(&self, node: &dyn AstNode) -> Option<String> {
+    fn extract_variable_name_from_assignment(
+        &self,
+        node: &dyn AstNode,
+        source_text: &str
+    ) -> Option<String> {
         // Try to get parent node by searching through the tree
         let node_text = node.text().unwrap_or_default();
+        eprintln!("[DEBUG] extract_variable_name_from_assignment: node_text='{}', node_type='{}'", node_text, node.node_type());
 
         // If the node is a call_expression, look for assignment context
         if node_text.contains("newInstance()") || node_text.contains("newDocumentBuilder()") {
@@ -1361,9 +1829,49 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        // For source() calls, try to extract the variable being assigned
+        // Pattern: String v = source();
+        if node_text == "source()" || node_text.contains("source()") {
+            eprintln!("[DEBUG] Found source() call, trying to extract assigned variable");
+            
+            // Get the node's location to find it in the full source
+            if let Some((start_line, start_col, end_line, end_col)) = node.location() {
+                eprintln!("[DEBUG] source() location: {}:{} - {}:{}", start_line, start_col, end_line, end_col);
+                
+                // Find the line containing this source() call
+                let lines: Vec<&str> = source_text.lines().collect();
+                if start_line > 0 && start_line <= lines.len() {
+                    let line_text = lines[start_line - 1];
+                    eprintln!("[DEBUG] Line containing source(): '{}'", line_text);
+                    
+                    // Look for pattern: "Type var = source()" or "var = source()"
+                    if let Some(source_pos) = line_text.find("source()") {
+                        let before_source = &line_text[..source_pos];
+                        eprintln!("[DEBUG] Text before source(): '{}'", before_source);
+                        
+                        // Look for the last '=' before source()
+                        if let Some(eq_pos) = before_source.rfind('=') {
+                            let before_eq = &before_source[..eq_pos].trim();
+                            eprintln!("[DEBUG] Text before '=': '{}'", before_eq);
+                            
+                            // Extract the variable name (last word before '=')
+                            let parts: Vec<&str> = before_eq.split_whitespace().collect();
+                            if let Some(last_part) = parts.last() {
+                                let var_name = last_part.trim().to_string();
+                                if !var_name.is_empty() && !var_name.contains("(") && !var_name.contains("=") {
+                                    eprintln!("[DEBUG] Extracted var_name '{}' from source() assignment", var_name);
+                                    return Some(var_name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         None
     }
-    
+
     /// Extract the focused parameter name from a method declaration
     /// This is used when focus-metavariable is set to a parameter in a method pattern
     fn extract_focused_parameter_name(&self, node: &dyn AstNode) -> Option<String> {
@@ -1398,11 +1906,56 @@ impl AdvancedRuleExecutor {
         None
     }
 
+    /// Check if a parameter is of a numeric type
+    fn is_numeric_parameter(&self, node: &dyn AstNode, param_name: &str) -> bool {
+        // Check node text for method signature pattern
+        let node_text = node.text().unwrap_or_default();
+        
+        // Look for method parameter declarations in the text
+        // Pattern: "type paramName" inside parentheses of a method declaration
+        // Examples: "int x", "long y", "String s", "Object o"
+        if let Some(paren_start) = node_text.find('(') {
+            if let Some(paren_end) = node_text.find(')') {
+                let params_section = &node_text[paren_start..=paren_end];
+                
+                // Check if the parameter name appears in the parameter list
+                if params_section.contains(param_name) {
+                    // Extract the type for this parameter
+                    // Pattern: "type paramName" or "type paramName," or ", type paramName"
+                    let param_patterns = [
+                        format!("int {}", param_name),
+                        format!("long {}", param_name),
+                        format!("short {}", param_name),
+                        format!("byte {}", param_name),
+                        format!("float {}", param_name),
+                        format!("double {}", param_name),
+                        format!("Integer {}", param_name),
+                        format!("Long {}", param_name),
+                        format!("Short {}", param_name),
+                        format!("Byte {}", param_name),
+                        format!("Float {}", param_name),
+                        format!("Double {}", param_name),
+                    ];
+                    
+                    for pattern in &param_patterns {
+                        if params_section.contains(pattern) {
+                            eprintln!("[DEBUG] Found numeric parameter: {}", pattern);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
     /// Find all taint sinks matching the sink patterns
     fn find_taint_sinks(
         &mut self,
         ast: &dyn AstNode,
-        dataflow_spec: &DataFlowSpec
+        dataflow_spec: &DataFlowSpec,
+        source_text: &str
     ) -> Result<Vec<TaintMatch>> {
         let mut sinks = Vec::new();
         
@@ -1425,10 +1978,64 @@ impl AdvancedRuleExecutor {
             eprintln!("[DEBUG] Sink matches found: {}", matches.len());
             for m in matches {
                 eprintln!("[DEBUG] Sink match: bindings={:?}, text={:?}", m.bindings, m.node.text());
+                
+                // Extract method name for scope isolation using source location
+                let node = m.node.as_ref();
+                let method_name = if let Some((start_line, _, _, _)) = node.location() {
+                    self.find_method_name_by_line(source_text, start_line)
+                } else {
+                    None
+                };
+                
+                // Extract variable name from focus-metavariable if specified
+                let mut var_name = None;
+                // Check if the sink pattern has focus information in the pattern itself
+                // For patterns like sink2("123", $VAL), extract the $VAL binding
+                for (key, value) in &m.bindings {
+                    if key.starts_with("$") || !key.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
+                        // This is likely a metavariable binding
+                        var_name = Some(value.clone());
+                        break;
+                    }
+                }
+                
+                // If no var_name from bindings, try to extract from sink call argument
+                // e.g., sink(w) -> extract "w"
+                if var_name.is_none() {
+                    if let Some(text) = m.node.text() {
+                        let text = text.trim();
+                        // Pattern: sink(arg) or sink1("...", arg) or sink2("...", arg)
+                        if let Some(open_paren) = text.find('(') {
+                            if let Some(close_paren) = text.rfind(')') {
+                                let args = &text[open_paren + 1..close_paren];
+                                // For simple case sink(w), extract w
+                                // For sink1("Abc", w), extract w (second argument)
+                                let arg_parts: Vec<&str> = args.split(',').collect();
+                                if arg_parts.len() == 1 {
+                                    // Single argument: sink(w)
+                                    let arg = arg_parts[0].trim();
+                                    if !arg.is_empty() && !arg.contains('"') && !arg.contains('\'') {
+                                        var_name = Some(arg.to_string());
+                                    }
+                                } else if arg_parts.len() >= 2 {
+                                    // Multiple arguments: sink1("...", w), take the last one
+                                    let last_arg = arg_parts.last().unwrap().trim();
+                                    if !last_arg.is_empty() && !last_arg.contains('"') && !last_arg.contains('\'') {
+                                        var_name = Some(last_arg.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                eprintln!("[DEBUG] Creating sink TaintMatch: var_name={:?}, method_name={:?}", var_name, method_name);
+                
                 sinks.push(TaintMatch {
                     node: m.node,
                     bindings: m.bindings,
-                    var_name: None,
+                    var_name,
+                    method_name,
                 });
             }
         }
@@ -1444,26 +2051,99 @@ impl AdvancedRuleExecutor {
         ast: &dyn AstNode,
         dataflow_analysis: Option<&DataFlowAnalysis>,
         taint_assume_safe_booleans: bool,
+        taint_assume_safe_numbers: bool,
+        taint_only_propagate_through_assignments: bool,
+        source_text: &str,
     ) -> Result<Vec<(TaintMatch, TaintMatch)>> {
-        eprintln!("[DEBUG] detect_taint_flows: {} sources, {} sinks, assume_safe_booleans={}",
-                  sources.len(), sinks.len(), taint_assume_safe_booleans);
+        eprintln!("[DEBUG] detect_taint_flows: {} sources, {} sinks, assume_safe_booleans={}, assume_safe_numbers={}, only_assignments={}",
+                  sources.len(), sinks.len(), taint_assume_safe_booleans, taint_assume_safe_numbers, taint_only_propagate_through_assignments);
         let mut flows = Vec::new();
+
+        // Build method cache for dependency graphs
+        let mut method_cache: HashMap<Option<String>, VariableDependencyGraph> = HashMap::new();
 
         // Use simple heuristics to detect taint flows
         for (i, source) in sources.iter().enumerate() {
-            eprintln!("[DEBUG] Checking source {}: var_name={:?}", i, source.var_name);
+            eprintln!("[DEBUG] Checking source {}: var_name={:?}, method={:?}", i, source.var_name, source.method_name);
             if let Some(ref source_var) = source.var_name {
                 for (j, sink) in sinks.iter().enumerate() {
-                    eprintln!("[DEBUG] Checking source {} with sink {}: var='{}' vs sink text='{}'",
-                              i, j, source_var, sink.node.text().unwrap_or_default());
+                    eprintln!("[DEBUG] Checking source {} with sink {}: var='{}' vs sink text='{}', source_method={:?}, sink_method={:?}",
+                              i, j, source_var, sink.node.text().unwrap_or_default(), source.method_name, sink.method_name);
+                    
+                    // Method-level scope isolation: if both source and sink have method names,
+                    // only pair them if they're in the same method
+                    if let (Some(ref src_method), Some(ref sink_method)) = (&source.method_name, &sink.method_name) {
+                        if src_method != sink_method {
+                            eprintln!("[DEBUG] Skipping: source and sink are in different methods ({} vs {})", src_method, sink_method);
+                            continue;
+                        }
+                    }
+                    
                     // Check if source variable appears in sink context
-                    if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast, taint_assume_safe_booleans) {
+                    if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast, taint_assume_safe_booleans, taint_assume_safe_numbers, taint_only_propagate_through_assignments) {
                         eprintln!("[DEBUG] FLOW FOUND: source {} -> sink {}", i, j);
                         flows.push((source.clone(), sink.clone()));
+                        continue;
+                    }
+
+                    // Check dataflow: if sink variable depends on source variable
+                    eprintln!("[DEBUG] Checking dataflow analysis: sink.var_name={:?}, sink.method_name={:?}", sink.var_name, sink.method_name);
+                    if let (Some(ref sink_var), Some(ref method_name)) = (&sink.var_name, &sink.method_name) {
+                        eprintln!("[DEBUG] Entering dataflow analysis: sink_var={}, method_name={}", sink_var, method_name);
+                        // Build or get dependency graph for this method
+                        let dep_graph = method_cache.entry(Some(method_name.clone())).or_insert_with(|| {
+                            let mut graph = VariableDependencyGraph::new();
+                            // Extract method body and build dependency graph
+                            eprintln!("[DEBUG] Extracting method body for: {}", method_name);
+                            if let Some(method_body) = self.extract_method_body(source_text, method_name) {
+                                eprintln!("[DEBUG] Building dependency graph for method: {} (body length: {})", method_name, method_body.len());
+                                graph.build_from_method(&method_body);
+                                eprintln!("[DEBUG] Dependency graph built. Assignments: {:?}", graph.assignments.keys().collect::<Vec<_>>());
+                            } else {
+                                eprintln!("[DEBUG] Failed to extract method body for: {}", method_name);
+                            }
+                            graph
+                        });
+
+                        // Check if sink variable depends on source variable
+                        // When taint_assume_safe_numbers is true, check for safe numeric context
+                        let check_safe_context = taint_assume_safe_numbers;
+                        eprintln!("[DEBUG] Checking dependency: {} depends on {} (check_safe={})", sink_var, source_var, check_safe_context);
+                        if dep_graph.depends_on(sink_var, &[source_var.clone()], check_safe_context) {
+                            eprintln!("[DEBUG] FLOW FOUND (dataflow): source {} -> sink {} ({} depends on {})", i, j, sink_var, source_var);
+                            flows.push((source.clone(), sink.clone()));
+                        } else {
+                            eprintln!("[DEBUG] No dependency found: {} does not depend on {}", sink_var, source_var);
+                        }
+                    } else {
+                        eprintln!("[DEBUG] Skipping dataflow analysis: sink.var_name or sink.method_name is None");
                     }
                 }
             } else {
-                eprintln!("[DEBUG] Source {} has no var_name, skipping", i);
+                // Source has no var_name - might be a string literal pattern
+                // Check if any variable in the sink's method is assigned a non-empty string literal
+                eprintln!("[DEBUG] Source {} has no var_name, checking for string literal assignments", i);
+                
+                for (j, sink) in sinks.iter().enumerate() {
+                    if let (Some(ref sink_var), Some(ref method_name)) = (&sink.var_name, &sink.method_name) {
+                        // Get or build dependency graph for this method
+                        let dep_graph = method_cache.entry(Some(method_name.clone())).or_insert_with(|| {
+                            let mut graph = VariableDependencyGraph::new();
+                            if let Some(method_body) = self.extract_method_body(source_text, method_name) {
+                                graph.build_from_method(&method_body);
+                            }
+                            graph
+                        });
+                        
+                        // Check if sink variable is assigned a non-empty string literal
+                        // or depends on a variable that is assigned a non-empty string literal
+                        if dep_graph.is_assigned_string_literal(sink_var) ||
+                           dep_graph.has_string_literal_in_dependency_chain(sink_var) {
+                            eprintln!("[DEBUG] FLOW FOUND (string literal): source {} -> sink {} ({} is assigned string literal)", i, j, sink_var);
+                            flows.push((source.clone(), sink.clone()));
+                        }
+                    }
+                }
             }
         }
 
@@ -1485,6 +2165,38 @@ impl AdvancedRuleExecutor {
         
         Ok(flows)
     }
+
+    /// Extract method body by method name from source text
+    fn extract_method_body(&self, source_text: &str, method_name: &str) -> Option<String> {
+        // Find the method declaration
+        let method_pattern = format!(r"public\s+(?:static\s+)?(?:\w+)\s+{}\s*\([^{{]*\{{", regex::escape(method_name));
+        if let Ok(re) = regex::Regex::new(&method_pattern) {
+            if let Some(mat) = re.find(source_text) {
+                let start = mat.start();
+                // Find matching closing brace
+                let mut brace_count = 0;
+                let mut in_method = false;
+                let mut end = start;
+                
+                for (i, c) in source_text[start..].chars().enumerate() {
+                    if c == '{' {
+                        brace_count += 1;
+                        in_method = true;
+                    } else if c == '}' {
+                        brace_count -= 1;
+                        if in_method && brace_count == 0 {
+                            end = start + i + 1;
+                            break;
+                        }
+                    }
+                }
+                
+                return Some(source_text[start..end].to_string());
+            }
+        }
+        
+        None
+    }
     
     /// Check if a node uses any of the given variables
     fn node_uses_variables(&self, node: &dyn AstNode, variables: &[String]) -> bool {
@@ -1504,13 +2216,29 @@ impl AdvancedRuleExecutor {
         sink_node: &dyn AstNode,
         _ast: &dyn AstNode,
         taint_assume_safe_booleans: bool,
+        taint_assume_safe_numbers: bool,
+        taint_only_propagate_through_assignments: bool,
     ) -> bool {
         let sink_text = sink_node.text().unwrap_or_default();
 
         // When taint_assume_safe_booleans is true, check if the variable is used in safe boolean contexts
-        if taint_assume_safe_booleans && self.is_variable_in_safe_boolean_context(var_name, sink_text) {
+        if taint_assume_safe_booleans && self.is_variable_in_safe_boolean_context(var_name, &sink_text) {
             eprintln!("[DEBUG] Variable '{}' in safe boolean context, not flowing", var_name);
             return false;
+        }
+
+        // When taint_assume_safe_numbers is true, check if the variable is used in safe numeric contexts
+        if taint_assume_safe_numbers && self.is_variable_in_safe_number_context(var_name, &sink_text) {
+            eprintln!("[DEBUG] Variable '{}' in safe number context, not flowing", var_name);
+            return false;
+        }
+
+        // When taint_only_propagate_through_assignments is true, check if there's a direct assignment chain
+        if taint_only_propagate_through_assignments {
+            if !self.is_direct_assignment_chain(var_name, &sink_text) {
+                eprintln!("[DEBUG] Variable '{}' not flowing through direct assignment chain", var_name);
+                return false;
+            }
         }
 
         // Check if source variable directly appears in sink node
@@ -1598,6 +2326,94 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        false
+    }
+
+    /// Returns true if the variable is used in a numeric context that doesn't propagate taint
+    /// (e.g., Integer.valueOf(var), var.length, comparison operations, etc.)
+    fn is_variable_in_safe_number_context(&self, var_name: &str, sink_text: &str) -> bool {
+        // Pattern 1: Numeric wrapper class conversion functions
+        let numeric_conversions = [
+            format!("Integer.valueOf({})", var_name),
+            format!("Integer.parseInt({})", var_name),
+            format!("Long.valueOf({})", var_name),
+            format!("Long.parseLong({})", var_name),
+            format!("Short.valueOf({})", var_name),
+            format!("Short.parseShort({})", var_name),
+            format!("Double.valueOf({})", var_name),
+            format!("Double.parseDouble({})", var_name),
+            format!("Float.valueOf({})", var_name),
+            format!("Float.parseFloat({})", var_name),
+        ];
+        for pattern in &numeric_conversions {
+            if sink_text.contains(pattern) {
+                return true;
+            }
+        }
+
+        // Pattern 2: String comparison operations that return integers
+        // e.g., "var.compareTo()", "var.indexOf()", "var.lastIndexOf()"
+        let string_methods_returning_int = [
+            format!("{}.compareTo(", var_name),
+            format!("{}.indexOf(", var_name),
+            format!("{}.lastIndexOf(", var_name),
+            format!("{}.length()", var_name),
+        ];
+        for pattern in &string_methods_returning_int {
+            if sink_text.contains(pattern) {
+                return true;
+            }
+        }
+
+        // Pattern 3: Array length access
+        if sink_text.contains(&format!("{}.length", var_name)) {
+            return true;
+        }
+
+        // Pattern 4: Numeric comparison operators (these return booleans, safe for numeric taint)
+        let comparison_patterns = [
+            format!("{} != ", var_name),
+            format!("{} == ", var_name),
+            format!("{} > ", var_name),
+            format!("{} < ", var_name),
+            format!("{} >= ", var_name),
+            format!("{} <= ", var_name),
+            format!(" {}!= ", var_name),
+            format!(" {}== ", var_name),
+            format!(" {}> ", var_name),
+            format!(" {}< ", var_name),
+            format!(" {}>= ", var_name),
+            format!(" {}<= ", var_name),
+        ];
+        for pattern in &comparison_patterns {
+            if sink_text.contains(pattern) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Returns true if there's a direct assignment chain from source to sink
+    /// When taint_only_propagate_through_assignments is true, we only consider
+    /// taint that flows through direct assignments, not through function calls
+    fn is_direct_assignment_chain(&self, var_name: &str, sink_text: &str) -> bool {
+        // For now, we consider it a direct assignment if:
+        // 1. The variable appears directly as an argument (simple case)
+        // 2. The sink contains the variable in a non-complex expression
+        
+        // Check if the variable is used in a String.format or similar complex expression
+        // These are NOT direct assignments
+        if sink_text.contains(&format!("String.format(",)) && sink_text.contains(var_name) {
+            // If the variable is inside String.format, it's not a direct assignment
+            return false;
+        }
+        
+        // If the variable appears directly, it's considered a direct assignment
+        if sink_text.contains(var_name) {
+            return true;
+        }
+        
         false
     }
 

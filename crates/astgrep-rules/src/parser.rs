@@ -90,7 +90,27 @@ impl RuleParser {
             let sanitizers = self.parse_pattern_sanitizers(rule_obj, index).unwrap_or_default();
 
             if !sources.is_empty() && !sinks.is_empty() {
-                let dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
+                let mut dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
+                
+                // Parse taint options from the options field
+                if let Some(options_obj) = rule_obj.get(&Value::String("options".to_string())).and_then(|v| v.as_mapping()) {
+                    if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_booleans".to_string())) {
+                        if let Some(b) = val.as_bool() {
+                            dataflow.taint_assume_safe_booleans = Some(b);
+                        }
+                    }
+                    if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_numbers".to_string())) {
+                        if let Some(b) = val.as_bool() {
+                            dataflow.taint_assume_safe_numbers = Some(b);
+                        }
+                    }
+                    if let Some(val) = options_obj.get(&Value::String("taint_only_propagate_through_assignments".to_string())) {
+                        if let Some(b) = val.as_bool() {
+                            dataflow.taint_only_propagate_through_assignments = Some(b);
+                        }
+                    }
+                }
+                
                 (Vec::new(), Some(dataflow))
             } else {
                 (Vec::new(), None)
@@ -183,6 +203,38 @@ impl RuleParser {
                 return Ok(Some(options));
             };
             options.insert("taint_assume_safe_booleans".to_string(), str_val);
+        }
+
+        // Parse taint_assume_safe_numbers option
+        if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_numbers".to_string())) {
+            let str_val = if let Some(b) = val.as_bool() {
+                b.to_string()
+            } else if let Some(s) = val.as_str() {
+                match s.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" | "yes" => "true".to_string(),
+                    "off" | "false" | "0" | "no" => "false".to_string(),
+                    _ => s.to_string(),
+                }
+            } else {
+                return Ok(Some(options));
+            };
+            options.insert("taint_assume_safe_numbers".to_string(), str_val);
+        }
+
+        // Parse taint_only_propagate_through_assignments option
+        if let Some(val) = options_obj.get(&Value::String("taint_only_propagate_through_assignments".to_string())) {
+            let str_val = if let Some(b) = val.as_bool() {
+                b.to_string()
+            } else if let Some(s) = val.as_str() {
+                match s.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" | "yes" => "true".to_string(),
+                    "off" | "false" | "0" | "no" => "false".to_string(),
+                    _ => s.to_string(),
+                }
+            } else {
+                return Ok(Some(options));
+            };
+            options.insert("taint_only_propagate_through_assignments".to_string(), str_val);
         }
 
         Ok(Some(options))
@@ -883,6 +935,18 @@ impl RuleParser {
         if let Some(taint_assume_safe_booleans_value) = dataflow_obj.get(&Value::String("taint_assume_safe_booleans".to_string())) {
             if let Some(b) = taint_assume_safe_booleans_value.as_bool() {
                 dataflow.taint_assume_safe_booleans = Some(b);
+            }
+        }
+
+        if let Some(taint_assume_safe_numbers_value) = dataflow_obj.get(&Value::String("taint_assume_safe_numbers".to_string())) {
+            if let Some(b) = taint_assume_safe_numbers_value.as_bool() {
+                dataflow.taint_assume_safe_numbers = Some(b);
+            }
+        }
+
+        if let Some(taint_only_propagate_through_assignments_value) = dataflow_obj.get(&Value::String("taint_only_propagate_through_assignments".to_string())) {
+            if let Some(b) = taint_only_propagate_through_assignments_value.as_bool() {
+                dataflow.taint_only_propagate_through_assignments = Some(b);
             }
         }
 

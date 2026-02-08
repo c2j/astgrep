@@ -453,6 +453,8 @@ pub struct DataFlowSpec {
     pub must_flow: bool,
     pub max_depth: Option<usize>,
     pub taint_assume_safe_booleans: Option<bool>,
+    pub taint_assume_safe_numbers: Option<bool>,
+    pub taint_only_propagate_through_assignments: Option<bool>,
 }
 
 /// Source pattern for taint analysis
@@ -514,6 +516,8 @@ impl DataFlowSpec {
             must_flow: true,
             max_depth: None,
             taint_assume_safe_booleans: None,
+            taint_assume_safe_numbers: None,
+            taint_only_propagate_through_assignments: None,
         }
     }
 
@@ -535,6 +539,8 @@ impl DataFlowSpec {
             must_flow: true,
             max_depth: None,
             taint_assume_safe_booleans: None,
+            taint_assume_safe_numbers: None,
+            taint_only_propagate_through_assignments: None,
         }
     }
 

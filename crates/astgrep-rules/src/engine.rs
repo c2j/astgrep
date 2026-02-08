@@ -1675,6 +1675,47 @@ impl RuleExecutionEngine {
         false
     }
 
+    fn is_safe_number_sink(&self, line: &str) -> bool {
+        let line_trimmed = line.trim();
+
+        // Numeric conversion functions
+        if line_trimmed.contains("Integer.valueOf(") || line_trimmed.contains("Integer.parseInt(") ||
+           line_trimmed.contains("Long.valueOf(") || line_trimmed.contains("Long.parseLong(") ||
+           line_trimmed.contains("Short.valueOf(") || line_trimmed.contains("Short.parseShort(") ||
+           line_trimmed.contains("Double.valueOf(") || line_trimmed.contains("Double.parseDouble(") ||
+           line_trimmed.contains("Float.valueOf(") || line_trimmed.contains("Float.parseFloat(") {
+            println!("🔍 Safe number pattern found: numeric conversion in line: '{}'", line_trimmed);
+            return true;
+        }
+
+        // String methods that return integers
+        if line_trimmed.contains(".compareTo(") || line_trimmed.contains(".indexOf(") ||
+           line_trimmed.contains(".lastIndexOf(") || line_trimmed.contains(".length()") {
+            println!("🔍 Safe number pattern found: string method returning int in line: '{}'", line_trimmed);
+            return true;
+        }
+
+        // Array length access
+        if line_trimmed.contains(".length") && !line_trimmed.contains(".length()") {
+            println!("🔍 Safe number pattern found: array length in line: '{}'", line_trimmed);
+            return true;
+        }
+
+        false
+    }
+
+    fn is_complex_expression_sink(&self, line: &str) -> bool {
+        let line_trimmed = line.trim();
+
+        // String.format is a complex expression
+        if line_trimmed.contains("String.format(") {
+            println!("🔍 Complex expression sink found: String.format in line: '{}'", line_trimmed);
+            return true;
+        }
+
+        false
+    }
+
     /// Fallback taint mode analysis using simple pattern matching
     fn execute_taint_mode_fallback(
         &self,
@@ -1700,6 +1741,34 @@ impl RuleExecutionEngine {
             false
         };
 
+        let assume_safe_numbers = if let Some(val) = rule.metadata.get("taint_assume_safe_numbers") {
+            if let Value::String(ref s) = val {
+                s == "true"
+            } else if let Value::Bool(ref b) = val {
+                *b
+            } else {
+                false
+            }
+        } else if let Some(val) = dataflow.taint_assume_safe_numbers {
+            val
+        } else {
+            false
+        };
+
+        let only_propagate_through_assignments = if let Some(val) = rule.metadata.get("taint_only_propagate_through_assignments") {
+            if let Value::String(ref s) = val {
+                s == "true"
+            } else if let Value::Bool(ref b) = val {
+                *b
+            } else {
+                false
+            }
+        } else if let Some(val) = dataflow.taint_only_propagate_through_assignments {
+            val
+        } else {
+            false
+        };
+
         let lines: Vec<&str> = source_text.lines().collect();
 
         for (line_idx, line) in lines.iter().enumerate() {
@@ -1710,6 +1779,21 @@ impl RuleExecutionEngine {
                     let is_safe = self.is_safe_boolean_sink(line);
 
                     if is_safe {
+                        continue;
+                    }
+                }
+
+                if assume_safe_numbers {
+                    let is_safe = self.is_safe_number_sink(line);
+
+                    if is_safe {
+                        continue;
+                    }
+                }
+
+                if only_propagate_through_assignments {
+                    // Skip sinks that involve complex expressions
+                    if self.is_complex_expression_sink(line) {
                         continue;
                     }
                 }
