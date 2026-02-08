@@ -1207,12 +1207,24 @@ impl AdvancedRuleExecutor {
         }
         
         // Step 3: Check for taint flow from sources to sinks
+        // Get taint_assume_safe_booleans from rule metadata or dataflow spec
+        let assume_safe_booleans = if let Some(val) = rule.metadata.get("taint_assume_safe_booleans") {
+            if let serde_yaml::Value::String(ref s) = val {
+                s == "true"
+            } else if let serde_yaml::Value::Bool(ref b) = val {
+                *b
+            } else {
+                false
+            }
+        } else {
+            dataflow_spec.taint_assume_safe_booleans.unwrap_or(false)
+        };
         let taint_flows = self.detect_taint_flows(
             &source_matches,
             &sink_matches,
             ast,
             dataflow_analysis,
-            dataflow_spec.taint_assume_safe_booleans.unwrap_or(false)
+            assume_safe_booleans
         )?;
 
         // Step 4: Create findings for each unique sink with taint flow
@@ -1275,16 +1287,39 @@ impl AdvancedRuleExecutor {
                 eprintln!("[DEBUG] Source match: bindings={:?}, text={:?}", m.bindings, m.node.text());
                 // Extract the variable name from bindings if available
                 let mut var_name = None;
-                for (key, value) in &m.bindings {
-                    if key.starts_with("$") && !value.is_empty() {
-                        var_name = Some(value.clone());
-                        break;
+                
+                // If focus-metavariables are specified, extract the binding for the first focus variable
+                if !source_pattern.focus_metavariables.is_empty() {
+                    let focus_var = &source_pattern.focus_metavariables[0];
+                    // Remove the "$" prefix to match the binding key
+                    let focus_key = focus_var.trim_start_matches('$');
+                    if let Some(value) = m.bindings.get(focus_key) {
+                        if !value.is_empty() {
+                            var_name = Some(value.clone());
+                            eprintln!("[DEBUG] Extracted var_name from focus-metavariable '{}': {}", focus_var, value);
+                        }
+                    }
+                }
+                
+                // If no var_name from focus-metavariable, try any binding that starts with "$"
+                if var_name.is_none() {
+                    for (key, value) in &m.bindings {
+                        if key.starts_with("$") && !value.is_empty() {
+                            var_name = Some(value.clone());
+                            break;
+                        }
                     }
                 }
 
                 // If no var_name from bindings, try to extract from parent assignment
                 if var_name.is_none() {
                     var_name = self.extract_variable_name_from_assignment(m.node.as_ref());
+                }
+                
+                // If still no var_name and focus-metavariables are specified, 
+                // try to extract from method parameters for method declaration patterns
+                if var_name.is_none() && !source_pattern.focus_metavariables.is_empty() {
+                    var_name = self.extract_focused_parameter_name(m.node.as_ref());
                 }
 
                 eprintln!("[DEBUG] Extracted var_name: {:?}", var_name);
@@ -1326,6 +1361,40 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        None
+    }
+    
+    /// Extract the focused parameter name from a method declaration
+    /// This is used when focus-metavariable is set to a parameter in a method pattern
+    fn extract_focused_parameter_name(&self, node: &dyn AstNode) -> Option<String> {
+        // Only handle method declarations
+        if node.node_type() != "method_declaration" {
+            return None;
+        }
+        
+        // Look for formal_parameters child
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if child.node_type() == "formal_parameters" {
+                    // Find the first parameter
+                    for j in 0..child.child_count() {
+                        if let Some(param) = child.child(j) {
+                            if param.node_type() == "formal_parameter" {
+                                // Find the identifier in the parameter
+                                for k in 0..param.child_count() {
+                                    if let Some(param_child) = param.child(k) {
+                                        if param_child.node_type() == "identifier" {
+                                            return param_child.text().map(|s| s.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         None
     }
 
@@ -2465,6 +2534,18 @@ impl AdvancedRuleExecutor {
                 // If this is a variable reference, add it to the check queue
                 if let SymbolicValue::Variable(ref_name) = sym_val {
                     to_check.push(ref_name.clone());
+                }
+                
+                // If this is a method call or field access, add the base variable to check queue
+                if let SymbolicValue::MethodCall { base, .. } = sym_val {
+                    if let SymbolicValue::Variable(ref_name) = base.as_ref() {
+                        to_check.push(ref_name.clone());
+                    }
+                }
+                if let SymbolicValue::FieldAccess { base, .. } = sym_val {
+                    if let SymbolicValue::Variable(ref_name) = base.as_ref() {
+                        to_check.push(ref_name.clone());
+                    }
                 }
             }
         }
