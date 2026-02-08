@@ -88,9 +88,12 @@ impl RuleParser {
             let sources = self.parse_pattern_sources(rule_obj, index)?;
             let sinks = self.parse_pattern_sinks(rule_obj, index)?;
             let sanitizers = self.parse_pattern_sanitizers(rule_obj, index).unwrap_or_default();
+            let propagators = self.parse_pattern_propagators(rule_obj, index).unwrap_or_default();
 
             if !sources.is_empty() && !sinks.is_empty() {
-                let mut dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
+                let mut dataflow = DataFlowSpec::new(sources, sinks)
+                    .with_sanitizers(sanitizers);
+                dataflow.propagators = propagators;
                 
                 // Parse taint options from the options field
                 if let Some(options_obj) = rule_obj.get(&Value::String("options".to_string())).and_then(|v| v.as_mapping()) {
@@ -1211,6 +1214,86 @@ impl RuleParser {
         }
 
         Ok(sanitizers)
+    }
+
+    /// Parse pattern-propagators field for taint analysis
+    fn parse_pattern_propagators(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Vec<PropagatorPattern>> {
+        use crate::types::PropagatorPattern;
+
+        let propagators_value = obj.get(&Value::String("pattern-propagators".to_string()));
+
+        if propagators_value.is_none() {
+            return Ok(Vec::new());
+        }
+
+        let propagators_array = propagators_value
+            .unwrap()
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error("'pattern-propagators' must be an array".to_string()))?;
+
+        let mut propagators = Vec::new();
+        for propagator in propagators_array.iter() {
+            if let Some(mapping) = propagator.as_mapping() {
+                // Extract pattern (for propagators, preserve original metavariables)
+                let pattern = if let Some(pattern_val) = mapping.get(&Value::String("pattern".to_string())) {
+                    if let Some(s) = pattern_val.as_str() {
+                        // For propagators, don't simplify metavariables - keep $X, $Y, etc.
+                        Pattern::simple(s.to_string())
+                    } else {
+                        continue;
+                    }
+                } else if let Some(patterns_val) = mapping.get(&Value::String("patterns".to_string())) {
+                    // Handle patterns array
+                    if let Some(arr) = patterns_val.as_sequence() {
+                        if let Some(first) = arr.first() {
+                            if let Some(mapping) = first.as_mapping() {
+                                if let Some(pattern) = mapping.get(&Value::String("pattern".to_string())) {
+                                    if let Some(s) = pattern.as_str() {
+                                        Pattern::simple(s.to_string())
+                                    } else {
+                                        continue;
+                                    }
+                                } else {
+                                    continue;
+                                }
+                            } else {
+                                continue;
+                            }
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                };
+
+                // Extract from and to fields
+                let from = mapping
+                    .get(&Value::String("from".to_string()))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                let to = mapping
+                    .get(&Value::String("to".to_string()))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                if !from.is_empty() && !to.is_empty() {
+                    propagators.push(PropagatorPattern {
+                        pattern,
+                        from,
+                        to,
+                        is_fallback: false,
+                    });
+                }
+            }
+        }
+
+        Ok(propagators)
     }
 
     /// Extract pattern string from taint definition (source, sink, or sanitizer)

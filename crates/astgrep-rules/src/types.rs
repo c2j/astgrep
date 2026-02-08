@@ -450,11 +450,21 @@ pub struct DataFlowSpec {
     pub sources: Vec<SourcePattern>,
     pub sinks: Vec<SinkPattern>,
     pub sanitizers: Vec<String>,
+    pub propagators: Vec<PropagatorPattern>,
     pub must_flow: bool,
     pub max_depth: Option<usize>,
     pub taint_assume_safe_booleans: Option<bool>,
     pub taint_assume_safe_numbers: Option<bool>,
     pub taint_only_propagate_through_assignments: Option<bool>,
+}
+
+/// Propagator pattern for custom taint propagation rules
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropagatorPattern {
+    pub pattern: Pattern,
+    pub from: String,
+    pub to: String,
+    pub is_fallback: bool,
 }
 
 /// Source pattern for taint analysis
@@ -513,6 +523,7 @@ impl DataFlowSpec {
             sources,
             sinks,
             sanitizers: Vec::new(),
+            propagators: Vec::new(),
             must_flow: true,
             max_depth: None,
             taint_assume_safe_booleans: None,
@@ -536,6 +547,7 @@ impl DataFlowSpec {
             sources,
             sinks,
             sanitizers: Vec::new(),
+            propagators: Vec::new(),
             must_flow: true,
             max_depth: None,
             taint_assume_safe_booleans: None,

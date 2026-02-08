@@ -55,6 +55,12 @@ struct VariableDependencyGraph {
     dependencies: HashMap<String, Vec<String>>,
     /// Maps a variable to its assigned expression text
     assignments: HashMap<String, String>,
+    /// Maps object fields to their tainted status (object_name.field_name -> tainted_by)
+    field_taints: HashMap<String, Vec<String>>,
+    /// Maps getter calls to their source fields (e.g., "e.getX()" -> "e.x")
+    getter_to_field: HashMap<String, String>,
+    /// Custom propagator rules
+    propagators: Vec<crate::types::PropagatorPattern>,
 }
 
 impl VariableDependencyGraph {
@@ -62,13 +68,66 @@ impl VariableDependencyGraph {
         Self {
             dependencies: HashMap::new(),
             assignments: HashMap::new(),
+            field_taints: HashMap::new(),
+            getter_to_field: HashMap::new(),
+            propagators: Vec::new(),
         }
+    }
+
+    fn with_propagators(mut self, propagators: Vec<crate::types::PropagatorPattern>) -> Self {
+        self.propagators = propagators;
+        self
     }
 
     /// Record that `target` variable is assigned from `source_vars`
     fn record_assignment(&mut self, target: String, source_vars: Vec<String>, expr: String) {
         self.dependencies.insert(target.clone(), source_vars);
         self.assignments.insert(target, expr);
+    }
+
+    /// Record that an object's field is tainted by a source
+    fn record_field_taint(&mut self, object: &str, field: &str, source: &str) {
+        let key = format!("{}.{}", object, field);
+        let sources = self.field_taints.entry(key).or_insert_with(Vec::new);
+        if !sources.contains(&source.to_string()) {
+            sources.push(source.to_string());
+        }
+    }
+
+    /// Map a getter call to its corresponding field
+    fn record_getter_mapping(&mut self, getter_call: &str, object: &str, field: &str) {
+        let field_key = format!("{}.{}", object, field);
+        self.getter_to_field.insert(getter_call.to_string(), field_key);
+    }
+
+    /// Check if a getter call returns a tainted field
+    fn is_getter_tainted(&self, getter_call: &str, source_vars: &[String]) -> bool {
+        eprintln!("[DEBUG] is_getter_tainted: checking '{}', source_vars={:?}", getter_call, source_vars);
+        
+        // Check if this getter maps to a field
+        if let Some(field_key) = self.getter_to_field.get(getter_call) {
+            eprintln!("[DEBUG] Found getter mapping: {} -> {}", getter_call, field_key);
+            // Check if the field itself is in source_vars (field-level source)
+            if source_vars.contains(field_key) {
+                eprintln!("[DEBUG] Match found! Field {} is in source_vars", field_key);
+                return true;
+            }
+            // Also check if the field is tainted by any source
+            if let Some(taint_sources) = self.field_taints.get(field_key) {
+                eprintln!("[DEBUG] Field {} has taint sources: {:?}", field_key, taint_sources);
+                for taint_source in taint_sources {
+                    if source_vars.contains(taint_source) {
+                        eprintln!("[DEBUG] Match found! {} is tainted by {}", field_key, taint_source);
+                        return true;
+                    }
+                }
+            } else {
+                eprintln!("[DEBUG] Field {} has no taint sources", field_key);
+            }
+        } else {
+            eprintln!("[DEBUG] No getter mapping found for {}", getter_call);
+        }
+        false
     }
 
     /// Check if `var` depends on (transitively) any of the `source_vars`
@@ -92,6 +151,13 @@ impl VariableDependencyGraph {
         // Direct match
         if source_vars.iter().any(|s| s == var) {
             return true;
+        }
+
+        // Check field-level taint for getter calls (e.g., e.getX())
+        if var.contains(".get") && var.ends_with("()") {
+            if self.is_getter_tainted(var, source_vars) {
+                return true;
+            }
         }
 
         // Check transitive dependencies
@@ -259,6 +325,9 @@ impl VariableDependencyGraph {
         // Pattern: var = expression;
         // Pattern: var = source();
         // Pattern: var = other + something;
+        // Pattern: obj.setX(source);  // setter call
+        // Pattern: var = obj.getX();  // getter call
+        // Pattern: obj.x = source;    // direct field access
 
         for line in method_text.lines() {
             let line = line.trim();
@@ -271,13 +340,270 @@ impl VariableDependencyGraph {
 
                 // Extract variable name (last identifier before =)
                 let parts: Vec<&str> = before_eq.split_whitespace().collect();
-                if let Some(var_name) = parts.last() {
-                    let var_name = var_name.trim().to_string();
+                if let Some(var_name_ref) = parts.last() {
+                    let var_name = var_name_ref.trim().to_string();
                     if !var_name.is_empty() {
                         // Find all variables used in the right-hand side
                         let source_vars = self.extract_variables_from_expression(after_eq);
-                        self.record_assignment(var_name, source_vars, after_eq.to_string());
+                        self.record_assignment(var_name.clone(), source_vars.clone(), after_eq.to_string());
+                        
+                        // Check if this is a getter call: var = obj.getX()
+                        self.process_getter_call(&var_name, after_eq);
                     }
+                }
+                
+                // Check for direct field access: obj.x = source
+                self.process_field_assignment(before_eq, after_eq);
+            }
+            
+            // Check for setter call: obj.setX(source)
+            self.process_setter_call(line);
+            
+            // Also check for getter calls used as method arguments (not in assignment)
+            // Pattern: sink(obj.getX()) or method(obj.getY())
+            self.process_getter_in_arguments(line);
+            
+            // Apply custom propagator rules
+            self.apply_propagators(line);
+        }
+    }
+    
+    /// Apply custom propagator rules to a line
+    fn apply_propagators(&mut self, line: &str) {
+        // Collect propagations first to avoid borrow issues
+        let mut propagations: Vec<(String, String)> = Vec::new();
+        
+        for propagator in &self.propagators {
+            // Get pattern text
+            let pattern_text = match &propagator.pattern.pattern_type {
+                crate::types::PatternType::Simple(s) => s.as_str(),
+                _ => continue,
+            };
+            
+            // Check if line matches propagator pattern
+            // Handle forEach pattern: $X.forEach(($Y) -> ...)
+            if pattern_text.contains(".forEach") && pattern_text.contains("->") {
+                if line.contains(".forEach") && line.contains("->") {
+                    eprintln!("[DEBUG] Propagator forEach pattern matched in line: {}", line);
+                    
+                    // Extract $X (the collection/object before .forEach)
+                    if let Some(for_each_pos) = line.find(".forEach") {
+                        let before_for_each = &line[..for_each_pos];
+                        let parts: Vec<&str> = before_for_each.split(|c: char| c == '(' || c == ',' || c == ' ').collect();
+                        if let Some(collection) = parts.last() {
+                            let collection = collection.trim();
+                            
+                            // Extract $Y (the lambda parameter inside parentheses)
+                            if let Some(open_paren) = line[for_each_pos..].find('(') {
+                                let after_open = &line[for_each_pos + open_paren + 1..];
+                                // Look for pattern: (param) or param
+                                let param_candidates: Vec<&str> = after_open.split(|c: char| c == '(' || c == ')' || c == ',' || c == '-').collect();
+                                for candidate in param_candidates {
+                                    let candidate = candidate.trim();
+                                    // Valid parameter: non-empty, starts with letter, not a keyword
+                                    if !candidate.is_empty() 
+                                        && candidate.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false)
+                                        && candidate != "null" && candidate != "true" && candidate != "false" {
+                                        eprintln!("[DEBUG] Propagator forEach: {} -> {}", collection, candidate);
+                                        propagations.push((collection.to_string(), candidate.to_string()));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if line.contains(pattern_text) {
+                // For other patterns, use simple substring matching
+                eprintln!("[DEBUG] Propagator pattern matched: {}", pattern_text);
+                
+                // Extract from and to metavariables
+                let from_var = self.extract_metavariable(&propagator.from, line, pattern_text);
+                let to_var = self.extract_metavariable(&propagator.to, line, pattern_text);
+                
+                if let (Some(from), Some(to)) = (from_var, to_var) {
+                    eprintln!("[DEBUG] Propagator: {} -> {}", from, to);
+                    propagations.push((from, to));
+                }
+            }
+        }
+        
+        // Apply collected propagations
+        for (from, to) in propagations {
+            self.record_assignment(to.clone(), vec![from.clone()], format!("propagated from {} to {}", from, to));
+        }
+    }
+    
+    /// Extract metavariable value from a line based on pattern
+    fn extract_metavariable(&self, metavar: &str, line: &str, pattern: &str) -> Option<String> {
+        // Simple heuristic: if metavar starts with $, extract the identifier at that position
+        if !metavar.starts_with('$') {
+            return Some(metavar.to_string());
+        }
+        
+        // For pattern like "$X.forEach" and line like "students.forEach"
+        // Extract X = students
+        let var_name = &metavar[1..]; // Remove $
+        
+        // Find pattern prefix before metavar
+        if let Some(var_pos) = pattern.find(metavar) {
+            let prefix = &pattern[..var_pos];
+            if line.contains(prefix) {
+                // Extract the identifier before the prefix in line
+                if let Some(prefix_pos) = line.find(prefix) {
+                    let before_prefix = &line[..prefix_pos].trim();
+                    let parts: Vec<&str> = before_prefix.split(|c: char| c == '(' || c == ',' || c == ' ' || c == '.').collect();
+                    if let Some(identifier) = parts.last() {
+                        let identifier = identifier.trim();
+                        if !identifier.is_empty() {
+                            return Some(identifier.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Try to extract any identifier that could match
+        let parts: Vec<&str> = line.split(|c: char| c == '(' || c == ',' || c == ' ').collect();
+        for part in parts {
+            let part = part.trim().trim_end_matches('.').trim_end_matches(')');
+            if !part.is_empty() && !part.starts_with('$') && part.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false) {
+                return Some(part.to_string());
+            }
+        }
+        
+        None
+    }
+    
+    /// Process getter calls that are used as method arguments (not in assignments)
+    fn process_getter_in_arguments(&mut self, line: &str) {
+        // Pattern: methodName(..., obj.getX(), ...)
+        // We need to find all getter calls and record their mappings
+        let line = line.trim();
+        
+        // Find all occurrences of .getX() patterns
+        let mut search_start = 0;
+        while let Some(get_pos) = line[search_start..].find(".get") {
+            let actual_pos = search_start + get_pos;
+            
+            // Check if this looks like a getter call
+            if let Some(paren_pos) = line[actual_pos..].find('(') {
+                let after_get = &line[actual_pos + 4..actual_pos + paren_pos];
+                // Check if the next char is ')' (getter has no args) or followed by ')'
+                if let Some(close_paren) = line[actual_pos + paren_pos..].find(')') {
+                    let args = &line[actual_pos + paren_pos + 1..actual_pos + paren_pos + close_paren];
+                    // Getter calls typically have no arguments
+                    if args.trim().is_empty() || !args.contains(',') {
+                        // Extract object name
+                        let before_get = &line[..actual_pos];
+                        let parts: Vec<&str> = before_get.split(|c: char| c == '(' || c == ',' || c == ' ').collect();
+                        if let Some(obj_name) = parts.last() {
+                            let obj_name = obj_name.trim();
+                            if !obj_name.is_empty() && !obj_name.contains('"') {
+                                let field_name = after_get.to_lowercase();
+                                let getter_call = format!("{}.get{}()", obj_name, after_get);
+                                
+                                // Record getter mapping
+                                self.record_getter_mapping(&getter_call, obj_name, &field_name);
+                                eprintln!("[DEBUG] Recorded argument getter mapping: {} -> {}.{}", getter_call, obj_name, field_name);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            search_start = actual_pos + 1;
+        }
+    }
+
+    /// Process setter call pattern: obj.setX(source)
+    /// Records that obj's X field is tainted by source
+    fn process_setter_call(&mut self, line: &str) {
+        // Pattern: obj.setX(source) or obj.setX(source);
+        if let Some(set_pos) = line.find(".set") {
+            if let Some(paren_pos) = line[set_pos..].find('(') {
+                let after_set = &line[set_pos + 4..set_pos + paren_pos];
+                let method_name = format!("set{}", after_set);
+                
+                // Extract object name
+                let before_set = &line[..set_pos];
+                let parts: Vec<&str> = before_set.split_whitespace().collect();
+                if let Some(obj_name) = parts.last() {
+                    let obj_name = obj_name.trim();
+                    
+                    // Extract field name from setter (setX -> x)
+                    if let Some(field_name) = method_name.strip_prefix("set") {
+                        let field_name = field_name.to_lowercase();
+                        
+                        // Extract arguments inside parentheses
+                        if let Some(open_paren) = line[set_pos..].find('(') {
+                            let args_start = set_pos + open_paren + 1;
+                            if let Some(close_paren) = line[args_start..].find(')') {
+                                let args = &line[args_start..args_start + close_paren];
+                                let source_vars = self.extract_variables_from_expression(args);
+                                
+                                // Record field taint for each source
+                                for source in &source_vars {
+                                    self.record_field_taint(obj_name, &field_name, source);
+                                    eprintln!("[DEBUG] Recorded field taint: {}.{} tainted by {}", obj_name, field_name, source);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Process getter call pattern: var = obj.getX()
+    /// Records mapping from getter call to field
+    fn process_getter_call(&mut self, target_var: &str, expr: &str) {
+        // Pattern: obj.getX()
+        if let Some(get_pos) = expr.find(".get") {
+            if let Some(paren_pos) = expr[get_pos..].find('(') {
+                let after_get = &expr[get_pos + 4..get_pos + paren_pos];
+                let method_name = format!("get{}", after_get);
+                
+                // Extract object name
+                let before_get = &expr[..get_pos];
+                let parts: Vec<&str> = before_get.split_whitespace().collect();
+                if let Some(obj_name) = parts.last() {
+                    let obj_name = obj_name.trim();
+                    
+                    // Extract field name from getter (getX -> x)
+                    if let Some(field_name) = method_name.strip_prefix("get") {
+                        let field_name = field_name.to_lowercase();
+                        let getter_call = format!("{}.{}()", obj_name, method_name.to_lowercase());
+                        
+                        // Record getter mapping
+                        self.record_getter_mapping(&getter_call, obj_name, &field_name);
+                        eprintln!("[DEBUG] Recorded getter mapping: {} -> {}.{}", getter_call, obj_name, field_name);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Process direct field assignment pattern: obj.x = source
+    fn process_field_assignment(&mut self, before_eq: &str, after_eq: &str) {
+        // Pattern: obj.field = value
+        if let Some(dot_pos) = before_eq.rfind('.') {
+            let obj_part = &before_eq[..dot_pos].trim();
+            let field_part = &before_eq[dot_pos + 1..].trim();
+            
+            // Check if obj_part is a variable and field_part is a field name
+            let obj_parts: Vec<&str> = obj_part.split_whitespace().collect();
+            if let Some(obj_name) = obj_parts.last() {
+                let obj_name = obj_name.trim();
+                let field_name = field_part.trim();
+                
+                // Extract source variables from right-hand side
+                let source_vars = self.extract_variables_from_expression(after_eq);
+                
+                // Record field taint
+                for source in &source_vars {
+                    self.record_field_taint(obj_name, field_name, source);
+                    eprintln!("[DEBUG] Recorded direct field taint: {}.{} tainted by {}", obj_name, field_name, source);
                 }
             }
         }
@@ -1471,6 +1797,16 @@ impl AdvancedRuleExecutor {
         let mut findings = Vec::new();
         let source_text = ast.text().unwrap_or_default();
         
+        // Debug: Print dataflow spec details
+        eprintln!("[DEBUG] Dataflow spec - sources: {}, sinks: {}, propagators: {}", 
+                  dataflow_spec.sources.len(), 
+                  dataflow_spec.sinks.len(),
+                  dataflow_spec.propagators.len());
+        for (i, prop) in dataflow_spec.propagators.iter().enumerate() {
+            eprintln!("[DEBUG] Propagator {}: pattern='{:?}', from='{}', to='{}'", 
+                      i, prop.pattern.pattern_type, prop.from, prop.to);
+        }
+        
         // Step 1: Find all source matches using pattern matching
         let source_matches = self.find_taint_sources(ast, dataflow_spec, &source_text)?;
         eprintln!("[DEBUG] Source matches found: {}", source_matches.len());
@@ -1531,7 +1867,8 @@ impl AdvancedRuleExecutor {
             assume_safe_booleans,
             assume_safe_numbers,
             only_propagate_through_assignments,
-            &source_text
+            &source_text,
+            &dataflow_spec.propagators
         )?;
 
         // Step 4: Create findings for each unique sink with taint flow
@@ -1681,17 +2018,57 @@ impl AdvancedRuleExecutor {
                     }
                 }
                 
+                // If still no var_name, check if source is assigned to a field/variable
+                // Pattern: Type var = source() or var = source()
+                if var_name.is_none() {
+                    if let Some(text) = m.node.text() {
+                        // Check for field/variable assignment: Type var = DocumentBuilderFactory.newInstance()
+                        // The text might be the full assignment statement
+                        var_name = self.extract_field_assignment_target(m.node.as_ref(), source_text, text);
+                        
+                        // If still not found, try to extract from the text itself if it looks like an assignment
+                        if var_name.is_none() && (text.contains("=") || text.contains("static")) {
+                            var_name = self.extract_var_from_assignment_text(text);
+                        }
+                    }
+                }
+                
                 // If still no var_name, check if this is a tainted value being assigned to a field/variable
                 // Pattern: x = tainted  or  this.x = tainted
                 if var_name.is_none() {
                     if let Some(text) = m.node.text() {
                         if text == "tainted" || text.contains("tainted") {
                             var_name = self.extract_assignment_target(m.node.as_ref(), source_text);
+                            
+                            // Also check if this is in a setter call: obj.setX(tainted)
+                            if var_name.is_none() {
+                                if let Some((line_num, _, _, _)) = m.node.location() {
+                                    var_name = self.extract_setter_argument(line_num, source_text);
+                                }
+                            }
                         }
                     }
                 }
 
                 eprintln!("[DEBUG] Extracted var_name: {:?}", var_name);
+                
+                // Check if the source variable is sanitized and skip if so
+                if let Some(ref vname) = var_name {
+                    if let Some((start_line, _, _, _)) = m.node.location() {
+                        let lines: Vec<&str> = source_text.lines().collect();
+                        if start_line > 0 && start_line <= lines.len() {
+                            let line_text = lines[start_line - 1];
+                            // Find the assignment and check if right-hand side is sanitized
+                            if let Some(eq_pos) = line_text.find('=') {
+                                let after_eq = &line_text[eq_pos + 1..].trim();
+                                if self.is_sanitized_expression(after_eq) {
+                                    eprintln!("[DEBUG] Source variable '{}' is sanitized, skipping", vname);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // When taint_assume_safe_numbers is true, filter out numeric type sources
                 if dataflow_spec.taint_assume_safe_numbers.unwrap_or(false) {
@@ -1704,7 +2081,13 @@ impl AdvancedRuleExecutor {
 
                 // Extract method name for scope isolation using source location
                 let node_ref = m.node.as_ref();
-                let method_name = if node_ref.node_type() == "method_declaration" {
+                
+                // First check if we have method name in bindings (e.g., from pattern like "public void $F(...)")
+                let method_name_from_bindings = m.bindings.get("F").cloned();
+                
+                let method_name = if let Some(name) = method_name_from_bindings {
+                    Some(name)
+                } else if node_ref.node_type() == "method_declaration" {
                     self.extract_method_name_from_declaration(node_ref)
                 } else if let Some((start_line, _, _, _)) = node_ref.location() {
                     self.find_method_name_by_line(source_text, start_line)
@@ -1868,7 +2251,15 @@ impl AdvancedRuleExecutor {
                 // Find where the node text appears in the line
                 if let Some(node_pos) = line_text.find(&node_text) {
                     let before_node = &line_text[..node_pos];
+                    let after_node = &line_text[node_pos + node_text.len()..];
                     eprintln!("[DEBUG] Text before node: '{}'", before_node);
+                    eprintln!("[DEBUG] Text after node: '{}'", after_node);
+                    
+                    // Check if the variable is sanitized (e.g., .replaceAll("'", ""))
+                    if self.is_sanitized_expression(after_node) {
+                        eprintln!("[DEBUG] Variable is sanitized, not treating as tainted source");
+                        return None;
+                    }
                     
                     // Look for the last '=' before the node
                     if let Some(eq_pos) = before_node.rfind('=') {
@@ -1969,6 +2360,39 @@ impl AdvancedRuleExecutor {
         None
     }
 
+    /// Check if an expression is sanitized (e.g., contains .replaceAll("'", ""))
+    fn is_sanitized_expression(&self, expr: &str) -> bool {
+        let expr = expr.trim();
+        
+        // Check for common sanitization patterns
+        // Pattern 1: .replaceAll("'", "") - removes quotes (SQL injection prevention)
+        if expr.contains(".replaceAll") && expr.contains("'") {
+            return true;
+        }
+        
+        // Pattern 2: .replace("'", "") - simple replace
+        if expr.contains(".replace") && expr.contains("'") {
+            return true;
+        }
+        
+        // Pattern 3: PreparedStatement.setString() - parameterized query
+        if expr.contains(".setString") {
+            return true;
+        }
+        
+        // Pattern 4: encode(), escape() methods
+        if expr.contains(".encode") || expr.contains(".escape") {
+            return true;
+        }
+        
+        // Pattern 5: validation patterns like matches(), contains validation
+        if expr.contains(".matches") || expr.contains(".validate") {
+            return true;
+        }
+        
+        false
+    }
+
     /// Extract method parameter name when a simple identifier pattern matches
     /// This handles cases like @RequestParam String path where pattern is $SOURCE
     fn extract_method_parameter_name(&self, node: &dyn AstNode, source_text: &str, matched_text: &str) -> Option<String> {
@@ -2025,6 +2449,98 @@ impl AdvancedRuleExecutor {
         None
     }
 
+    /// Extract field/variable assignment target when source pattern matches an expression
+    /// For example: "private static DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();"
+    /// When source matches "DocumentBuilderFactory.newInstance()", extracts "dbf"
+    fn extract_field_assignment_target(&self, node: &dyn AstNode, source_text: &str, matched_text: &str) -> Option<String> {
+        // Get the node's location
+        if let Some((start_line, _start_col, _end_line, _end_col)) = node.location() {
+            let lines: Vec<&str> = source_text.lines().collect();
+            if start_line > 0 && start_line <= lines.len() {
+                let line_text = lines[start_line - 1];
+                
+                // Check if this line contains an assignment with our matched expression
+                if let Some(expr_pos) = line_text.find(matched_text) {
+                    let before_expr = &line_text[..expr_pos];
+                    
+                    // Look for assignment operator before the expression
+                    if let Some(eq_pos) = before_expr.rfind('=') {
+                        let target = &before_expr[..eq_pos].trim();
+                        
+                        // Extract the variable/field name
+                        // Handle: "Type var", "static Type var", "private static Type var", etc.
+                        let parts: Vec<&str> = target.split_whitespace().collect();
+                        if let Some(last_part) = parts.last() {
+                            let var_name = last_part.trim().to_string();
+                            // Remove any trailing characters
+                            let var_name = var_name.trim_end_matches(|c: char| c == ';' || c == ' ').to_string();
+                            
+                            if !var_name.is_empty() && !var_name.contains("(") && !var_name.contains("=") {
+                                eprintln!("[DEBUG] Extracted field assignment target: '{}'", var_name);
+                                return Some(var_name);
+                            }
+                        }
+                    }
+                }
+                
+                // Also check for static initialization block pattern
+                // static { dbf = DocumentBuilderFactory.newInstance(); }
+                if line_text.contains("static") && line_text.contains('{') {
+                    // This might be a static block, the assignment could be in this or next lines
+                    // For simplicity, check if the matched expression is in a line with assignment
+                    for (i, line) in source_text.lines().enumerate() {
+                        if i >= start_line.saturating_sub(3) && i <= start_line + 1 {
+                            if line.contains(matched_text) && line.contains('=') {
+                                if let Some(eq_pos) = line.find('=') {
+                                    let before_eq = &line[..eq_pos].trim();
+                                    let parts: Vec<&str> = before_eq.split_whitespace().collect();
+                                    if let Some(last_part) = parts.last() {
+                                        let var_name = last_part.trim().to_string();
+                                        if !var_name.is_empty() && !var_name.contains("(") {
+                                            eprintln!("[DEBUG] Extracted static block assignment target: '{}'", var_name);
+                                            return Some(var_name);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Extract variable name from assignment text directly
+    /// For text like "private static DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();"
+    fn extract_var_from_assignment_text(&self, text: &str) -> Option<String> {
+        // Remove trailing semicolon
+        let text = text.trim_end_matches(';').trim();
+        
+        // Pattern: [modifiers] Type var = expr
+        // Find the '=' sign
+        if let Some(eq_pos) = text.find('=') {
+            let before_eq = &text[..eq_pos].trim();
+            
+            // Split by whitespace and get the last part (the variable name)
+            let parts: Vec<&str> = before_eq.split_whitespace().collect();
+            if let Some(last_part) = parts.last() {
+                let var_name = last_part.trim().to_string();
+                if !var_name.is_empty() 
+                    && !var_name.contains("(") 
+                    && !var_name.contains("=")
+                    && !var_name.contains("<")  // Avoid generics like Map<String>
+                    && var_name.chars().next().map(|c| c.is_alphabetic() || c == '_').unwrap_or(false) {
+                    eprintln!("[DEBUG] Extracted var from assignment text: '{}'", var_name);
+                    return Some(var_name);
+                }
+            }
+        }
+        
+        None
+    }
+
     /// Extract the target variable/field from an assignment statement
     /// When source matches "tainted" in "x = tainted" or "this.x = tainted", extract "x"
     fn extract_assignment_target(&self, node: &dyn AstNode, source_text: &str) -> Option<String> {
@@ -2060,6 +2576,47 @@ impl AdvancedRuleExecutor {
                                 eprintln!("[DEBUG] Extracted assignment target: '{}'", var_name);
                                 return Some(var_name);
                             }
+                        }
+                    }
+                }
+            }
+        }
+        
+        None
+    }
+
+    /// Extract the setter argument when source is inside a setter call
+    /// For example: obj.setX(tainted) -> returns "tainted" with field info
+    fn extract_setter_argument(&self, line_num: usize, source_text: &str) -> Option<String> {
+        let lines: Vec<&str> = source_text.lines().collect();
+        if line_num == 0 || line_num > lines.len() {
+            return None;
+        }
+        
+        let line_text = lines[line_num - 1];
+        
+        // Check if this line contains a setter call pattern: obj.setX(tainted)
+        if let Some(set_pos) = line_text.find(".set") {
+            if let Some(paren_pos) = line_text[set_pos..].find('(') {
+                // Extract object name
+                let before_set = &line_text[..set_pos];
+                let parts: Vec<&str> = before_set.split_whitespace().collect();
+                if let Some(obj_name) = parts.last() {
+                    let obj_name = obj_name.trim();
+                    
+                    // Extract field name from setter (setX -> x)
+                    let after_set = &line_text[set_pos + 4..set_pos + paren_pos];
+                    let field_name = after_set.to_lowercase();
+                    
+                    // Check if tainted is inside the parentheses
+                    let args_start = set_pos + paren_pos + 1;
+                    if let Some(close_paren) = line_text[args_start..].find(')') {
+                        let args = &line_text[args_start..args_start + close_paren];
+                        if args.contains("tainted") {
+                            // Return field reference like "e.x"
+                            let field_ref = format!("{}.{}", obj_name, field_name);
+                            eprintln!("[DEBUG] Extracted setter argument as field ref: '{}'", field_ref);
+                            return Some(field_ref);
                         }
                     }
                 }
@@ -2182,25 +2739,24 @@ impl AdvancedRuleExecutor {
                 if var_name.is_none() {
                     if let Some(text) = m.node.text() {
                         let text = text.trim();
-                        // Pattern: sink(arg) or sink1("...", arg) or sink2("...", arg)
-                        if let Some(open_paren) = text.find('(') {
-                            if let Some(close_paren) = text.rfind(')') {
-                                let args = &text[open_paren + 1..close_paren];
-                                // For simple case sink(w), extract w
-                                // For sink1("Abc", w), extract w (second argument)
-                                let arg_parts: Vec<&str> = args.split(',').collect();
-                                if arg_parts.len() == 1 {
-                                    // Single argument: sink(w)
-                                    let arg = arg_parts[0].trim();
-                                    if !arg.is_empty() && !arg.contains('"') && !arg.contains('\'') {
-                                        var_name = Some(arg.to_string());
-                                    }
-                                } else if arg_parts.len() >= 2 {
-                                    // Multiple arguments: sink1("...", w), take the last one
-                                    let last_arg = arg_parts.last().unwrap().trim();
-                                    if !last_arg.is_empty() && !last_arg.contains('"') && !last_arg.contains('\'') {
-                                        var_name = Some(last_arg.to_string());
-                                    }
+                        // Pattern: sink(arg), Runtime.getRuntime().exec(arg), etc.
+                        // Find the matching opening paren for the last closing paren
+                        // This handles nested calls like sink(obj.getX())
+                        if let Some(args) = Self::extract_last_call_args(text) {
+                            // For simple case sink(w), extract w
+                            // For sink1("Abc", w), extract w (second argument)
+                            let arg_parts: Vec<&str> = args.split(',').collect();
+                            if arg_parts.len() == 1 {
+                                // Single argument: sink(w)
+                                let arg = arg_parts[0].trim();
+                                if !arg.is_empty() && !arg.contains('"') && !arg.contains('\'') {
+                                    var_name = Some(arg.to_string());
+                                }
+                            } else if arg_parts.len() >= 2 {
+                                // Multiple arguments: sink1("...", w), take the last one
+                                let last_arg = arg_parts.last().unwrap().trim();
+                                if !last_arg.is_empty() && !last_arg.contains('"') && !last_arg.contains('\'') {
+                                    var_name = Some(last_arg.to_string());
                                 }
                             }
                         }
@@ -2232,6 +2788,7 @@ impl AdvancedRuleExecutor {
         taint_assume_safe_numbers: bool,
         taint_only_propagate_through_assignments: bool,
         source_text: &str,
+        propagators: &[crate::types::PropagatorPattern],
     ) -> Result<Vec<(TaintMatch, TaintMatch)>> {
         eprintln!("[DEBUG] detect_taint_flows: {} sources, {} sinks, assume_safe_booleans={}, assume_safe_numbers={}, only_assignments={}",
                   sources.len(), sinks.len(), taint_assume_safe_booleans, taint_assume_safe_numbers, taint_only_propagate_through_assignments);
@@ -2270,17 +2827,20 @@ impl AdvancedRuleExecutor {
                         eprintln!("[DEBUG] Entering dataflow analysis: sink_var={}, method_name={}", sink_var, method_name);
                         // Build or get dependency graph for this method
                         let dep_graph = method_cache.entry(Some(method_name.clone())).or_insert_with(|| {
-                            let mut graph = VariableDependencyGraph::new();
+                            let graph = VariableDependencyGraph::new()
+                                .with_propagators(propagators.to_vec());
                             // Extract method body and build dependency graph
                             eprintln!("[DEBUG] Extracting method body for: {}", method_name);
                             if let Some(method_body) = self.extract_method_body(source_text, method_name) {
                                 eprintln!("[DEBUG] Building dependency graph for method: {} (body length: {})", method_name, method_body.len());
+                                let mut graph = graph;
                                 graph.build_from_method(&method_body);
                                 eprintln!("[DEBUG] Dependency graph built. Assignments: {:?}", graph.assignments.keys().collect::<Vec<_>>());
+                                graph
                             } else {
                                 eprintln!("[DEBUG] Failed to extract method body for: {}", method_name);
+                                graph
                             }
-                            graph
                         });
 
                         // Check if sink variable depends on source variable
@@ -2305,11 +2865,15 @@ impl AdvancedRuleExecutor {
                     if let (Some(ref sink_var), Some(ref method_name)) = (&sink.var_name, &sink.method_name) {
                         // Check 1: String literal assignments
                         let dep_graph = method_cache.entry(Some(method_name.clone())).or_insert_with(|| {
-                            let mut graph = VariableDependencyGraph::new();
+                            let graph = VariableDependencyGraph::new()
+                                .with_propagators(propagators.to_vec());
                             if let Some(method_body) = self.extract_method_body(source_text, method_name) {
+                                let mut graph = graph;
                                 graph.build_from_method(&method_body);
+                                graph
+                            } else {
+                                graph
                             }
-                            graph
                         });
                         
                         if dep_graph.is_assigned_string_literal(sink_var) ||
@@ -2717,6 +3281,34 @@ impl AdvancedRuleExecutor {
         source_matches && sink_matches
     }
     
+    /// Extract arguments from the last function call in a chain
+    /// e.g., "sink(e.getX())" -> Some("e.getX()")
+    /// e.g., "Runtime.getRuntime().exec(nodeSucc)" -> Some("nodeSucc")
+    fn extract_last_call_args(text: &str) -> Option<&str> {
+        // Find the last closing paren
+        let close_pos = text.rfind(')')?;
+        
+        // Find the matching opening paren by counting
+        let mut paren_count = 1;
+        let mut open_pos = None;
+        
+        for (i, c) in text[..close_pos].chars().rev().enumerate() {
+            match c {
+                ')' => paren_count += 1,
+                '(' => {
+                    paren_count -= 1;
+                    if paren_count == 0 {
+                        open_pos = Some(close_pos - i - 1);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        open_pos.map(|pos| &text[pos + 1..close_pos])
+    }
+
     /// Get execution statistics
     pub fn statistics(&self) -> &ExecutionStatistics {
         &self.execution_stats
