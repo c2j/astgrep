@@ -1315,6 +1315,66 @@ impl AdvancedSemgrepMatcher {
         }
 
         // For parameter lists like (String x), try to extract parameter names
+        // The pattern `(..., $X, ...)` means: zero or more parameters before $X, then $X, then zero or more after
+        // For a single parameter `(String x)`, we should match without requiring literal commas
+        // We want to extract "x" (the parameter name), not "String" (the type)
+        let mut param_idx = 0;
+        let mut bound_metavars = 0;
+
+        while param_idx < param_tokens.len() && bound_metavars < metavars.len() {
+            let token = &param_tokens[param_idx];
+
+            // Skip parentheses
+            if token == "(" || token == ")" {
+                param_idx += 1;
+                continue;
+            }
+
+            // Skip literal commas for now - we're matching parameters, not commas
+            if token == "," {
+                param_idx += 1;
+                continue;
+            }
+
+            // Look for identifiers that might be parameter names
+            // Parameter names are typically identifiers after types
+            // In "String x", "String" is the type (starts with capital), "x" is the name
+            if token.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                // Check if this is likely a parameter name:
+                // - Not the first token (which is likely a type)
+                // - Doesn't start with capital (Java types typically start with capital)
+                // - Is after a non-identifier token (opening paren or type)
+                let is_first_token = param_idx == 0 || param_tokens.get(param_idx - 1).map(|t| t == "(").unwrap_or(false);
+                let is_type_token = token.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+
+                if !is_first_token && !is_type_token {
+                    // This is likely a parameter name
+                    // Bind it to the next metavariable
+                    if let Some(metavar) = metavars.get(bound_metavars) {
+                        let snapshot = self.metavar_manager.snapshot();
+                        if self.metavar_manager.bind(metavar.clone(), token.clone(), node)? {
+                            bound_metavars += 1;
+                            // Continue to find next parameter name
+                            return Ok(true);  // Early return on first successful bind
+                        } else {
+                            // Binding failed, try next token
+                        }
+                    }
+                }
+            }
+            param_idx += 1;
+        }
+
+        // If we bound at least one metavar, consider it a success
+        Ok(bound_metavars > 0)
+    }
+        }
+
+        if metavars.is_empty() {
+            return Ok(true);
+        }
+
+        // For parameter lists like (String x), try to extract parameter names
         // In Java, parameters are typically "Type name" like "String x"
         // We want to extract "x" (the parameter name), not "String" (the type)
         let mut param_idx = 0;
