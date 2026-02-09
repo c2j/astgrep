@@ -1,0 +1,211 @@
+//! Utility functions for constant propagation
+//!
+//! This module contains helper functions for context detection,
+//! name extraction, and value parsing.
+
+use crate::constant_propagation::state::{ConstantValue, SourceLocation};
+use std::collections::HashMap;
+use astgrep_core::AstNode;
+
+/// Get the source location of a node
+pub fn get_node_location(node: &dyn AstNode) -> Option<SourceLocation> {
+    node.location().map(|(start_line, start_col, _, _)| {
+        SourceLocation::new(start_line, start_col)
+    })
+}
+
+/// Check if this is a static block context
+pub fn is_static_block_context(node: &dyn AstNode) -> bool {
+    // Check for static block patterns:
+    // 1. The node itself contains "static {" pattern
+    // 2. Or it's inside a static initialization block
+    if let Some(text) = node.text() {
+        let text_trimmed = text.trim();
+        // Match patterns like "static {" or "static{"
+        if text_trimmed.starts_with("static") && text_trimmed.contains("{") {
+            return true;
+        }
+    }
+
+    // Check children recursively for static block patterns
+    // This handles cases where static keyword and block are separate children
+    let mut has_static = false;
+    let mut has_block = false;
+
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            let child_type = child.node_type();
+
+            // Look for static keyword
+            if child_type == "static" || child.text().map(|t| t.trim() == "static").unwrap_or(false) {
+                has_static = true;
+            }
+
+            // Look for block
+            if child_type == "block_statement" || child_type == "block" {
+                has_block = true;
+            }
+
+            // If we see both static and a block in the same node context, it's likely a static block
+            if has_static && has_block {
+                return true;
+            }
+        }
+    }
+
+    // Also check if parent node is a static block
+    if node.node_type() == "static_initializer"
+        || node.node_type() == "static_block"
+        || node.node_type() == "static_initialization" {
+        return true;
+    }
+
+    false
+}
+
+/// Check if this is a constructor declaration
+/// Java constructors appear as declaration_statement with:
+/// - 4 children: [modifiers, identifier(class_name), params, body]
+/// - No return type (unlike methods which have 5 children with return type)
+pub fn is_constructor_declaration(node: &dyn AstNode, class_name: Option<&str>) -> bool {
+    // Must be a declaration_statement
+    if node.node_type() != "declaration_statement" {
+        return false;
+    }
+
+    // Constructors have exactly 4 children (no return type)
+    // Methods have 5 children (with return type)
+    if node.child_count() != 4 {
+        return false;
+    }
+
+    // Find the identifier (should be the class name for constructors)
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            if child.node_type() == "identifier" {
+                if let Some(name) = child.text() {
+                    // If class_name is provided, check if they match
+                    if let Some(class) = class_name {
+                        if name == class {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Check if this is a method declaration
+/// Java methods appear as declaration_statement with:
+/// - 5 children: [modifiers, return_type, identifier(method_name), params, body]
+pub fn is_method_declaration(node: &dyn AstNode) -> bool {
+    // Must be a declaration_statement
+    if node.node_type() != "declaration_statement" {
+        return false;
+    }
+
+    // Methods have 5 children (with return type)
+    // Check if the 3rd child (index 2) is an identifier (method name)
+    if node.child_count() == 5 {
+        // Check if the 2nd child (after modifiers) is NOT an identifier
+        // (it would be the return type for methods)
+        if let Some(child) = node.child(2) {
+            if child.node_type() == "identifier" {
+                // Check if the 2nd child (index 1) is NOT an identifier
+                // (it would be the return type for methods)
+                if let Some(second_child) = node.child(1) {
+                    if second_child.node_type() != "identifier" {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Extract variable name from assignment target
+/// Handles: identifier, field_access (this.field), etc.
+pub fn extract_variable_name_from_assignment_target(node: &dyn AstNode) -> Option<String> {
+    match node.node_type() {
+        "identifier" => {
+            // Direct variable: x = ...
+            node.text().map(|t| t.to_string())
+        }
+        "field_access" => {
+            // Field access: this.field = ... or obj.field = ...
+            // Extract the field name (last identifier child)
+            let mut field_name = None;
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.node_type() == "identifier" {
+                        field_name = child.text().map(|t| t.to_string());
+                    }
+                }
+            }
+            field_name
+        }
+        _ => {
+            // Try to find identifier in other node types
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if let Some(name) = extract_variable_name_from_assignment_target(child) {
+                        return Some(name);
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+/// Extract constant value from expression node
+pub fn extract_constant_from_expression(node: &dyn AstNode, constants: &HashMap<String, ConstantValue>) -> Option<ConstantValue> {
+    match node.node_type() {
+        "literal" | "decimal_integer_literal" | "integer_literal" => {
+            // Integer literal
+            node.text()
+                .and_then(|t| t.parse::<i64>().ok())
+                .map(ConstantValue::Integer)
+        }
+        "string_literal" | "literal_string" => {
+            // String literal
+            node.text()
+                .map(|t| t.trim_matches('"').to_string())
+                .map(ConstantValue::String)
+        }
+        "true" | "false" => {
+            // Boolean literal
+            node.text()
+                .map(|t| t == "true")
+                .map(ConstantValue::Boolean)
+        }
+        "null_literal" | "null" => {
+            Some(ConstantValue::Null)
+        }
+        "identifier" => {
+            // If identifier refers to a known constant, propagate it
+            if let Some(var_name) = node.text() {
+                constants.get(var_name).cloned()
+            } else {
+                None
+            }
+        }
+        _ => {
+            // For other node types, check children
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if let Some(value) = extract_constant_from_expression(child, constants) {
+                        return Some(value);
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
