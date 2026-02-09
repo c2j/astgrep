@@ -1178,6 +1178,7 @@ impl RuleParser {
                 if let Some(pattern_str) = self.extract_pattern_from_taint_def(sink) {
                     sinks.push(SinkPattern {
                         pattern: Pattern::simple(pattern_str),
+                        focus_metavariables: Vec::new(),
                         is_fallback: true,
                     });
                 } else {
@@ -1234,11 +1235,12 @@ impl RuleParser {
         let mut propagators = Vec::new();
         for propagator in propagators_array.iter() {
             if let Some(mapping) = propagator.as_mapping() {
-                // Extract pattern (for propagators, preserve original metavariables)
+                // Extract pattern (for propagators, preserve original metavariables but remove type qualifiers)
                 let pattern = if let Some(pattern_val) = mapping.get(&Value::String("pattern".to_string())) {
                     if let Some(s) = pattern_val.as_str() {
                         // For propagators, don't simplify metavariables - keep $X, $Y, etc.
-                        Pattern::simple(s.to_string())
+                        // But do remove type qualifiers like "(Type $VAR)." -> "$VAR."
+                        Pattern::simple(self.simplify_type_qualifiers(s))
                     } else {
                         continue;
                     }
@@ -1249,7 +1251,7 @@ impl RuleParser {
                             if let Some(mapping) = first.as_mapping() {
                                 if let Some(pattern) = mapping.get(&Value::String("pattern".to_string())) {
                                     if let Some(s) = pattern.as_str() {
-                                        Pattern::simple(s.to_string())
+                                        Pattern::simple(self.simplify_type_qualifiers(s))
                                     } else {
                                         continue;
                                     }
@@ -1362,6 +1364,52 @@ impl RuleParser {
         None
     }
 
+    /// Extract pattern string from taint definition without simplifying metavariables
+    /// This preserves original metavariable names like $SQL, $EM, etc.
+    /// Also removes type qualifiers like "(Type $VAR)." to enable matching without type information.
+    fn extract_pattern_raw(&self, value: &Value) -> Option<String> {
+        // If it's a simple string, return it
+        if let Some(s) = value.as_str() {
+            return Some(self.simplify_type_qualifiers(s));
+        }
+
+        // If it's an object, try to extract pattern
+        if let Some(mapping) = value.as_mapping() {
+            // Try "pattern-inside" field - return as-is without simplification but remove type qualifiers
+            if let Some(pattern_inside) = mapping.get(&Value::String("pattern-inside".to_string())) {
+                if let Some(s) = pattern_inside.as_str() {
+                    return Some(self.simplify_type_qualifiers(s));
+                }
+            }
+
+            // Try "pattern" field - return as-is without simplification but remove type qualifiers
+            if let Some(pattern) = mapping.get(&Value::String("pattern".to_string())) {
+                if let Some(s) = pattern.as_str() {
+                    return Some(self.simplify_type_qualifiers(s));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Simplify type qualifiers in patterns
+    /// Converts "(Type $VAR).method(...)" to "$VAR.method(...)"
+    /// This allows matching without type information
+    fn simplify_type_qualifiers(&self, pattern: &str) -> String {
+        use regex::Regex;
+        
+        let mut result = pattern.to_string();
+        
+        // Pattern to match "(Type $VAR)." and replace with "$VAR."
+        // Matches: (typename $VAR). or (typename.sub $VAR).
+        // Example: (javax.persistence.EntityManager $EM).createQuery -> $EM.createQuery
+        let type_qualifier_regex = Regex::new(r"\([\w.]+\s+(\$\w+)\)\s*\.").unwrap();
+        result = type_qualifier_regex.replace_all(&result, "$1.").to_string();
+        
+        result
+    }
+
     /// Parse a source pattern from YAML value
     fn parse_source_pattern(&self, value: &Value, _index: usize) -> Result<SourcePattern> {
         // If it's a simple string, create a basic SourcePattern
@@ -1451,16 +1499,78 @@ impl RuleParser {
         if let Some(s) = value.as_str() {
             return Ok(SinkPattern {
                 pattern: Pattern::simple(s.to_string()),
+                focus_metavariables: Vec::new(),
                 is_fallback: false,
             });
         }
 
         // If it's an object, parse fields
         if let Some(mapping) = value.as_mapping() {
-            // Extract pattern
-            let pattern_str = mapping.get(&Value::String("pattern".to_string()))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| AnalysisError::parse_error("Sink pattern must have a 'pattern' field".to_string()))?;
+            // Check for "patterns" array (Semgrep format with focus-metavariable)
+            let (pattern_str, focus_metavariables) = if let Some(patterns_value) = mapping.get(&Value::String("patterns".to_string())) {
+                let patterns_array = patterns_value.as_sequence()
+                    .ok_or_else(|| AnalysisError::parse_error("'patterns' must be an array".to_string()))?;
+
+                if patterns_array.is_empty() {
+                    return Err(AnalysisError::parse_error("'patterns' array must not be empty".to_string()));
+                }
+
+                // Extract pattern from first element with "pattern" or "pattern-either" field
+                let mut pattern_str = None;
+                let mut focus_vars = Vec::new();
+
+                for pattern_elem in patterns_array {
+                    if let Some(elem_map) = pattern_elem.as_mapping() {
+                        // Look for focus-metavariable field
+                        if let Some(f_val) = elem_map.get(&Value::String("focus-metavariable".to_string())) {
+                            if let Some(f_str) = f_val.as_str() {
+                                focus_vars.push(f_str.to_string());
+                            }
+                        }
+                        // Look for pattern-either field - extract without simplifying to preserve metavariables
+                        if pattern_str.is_none() {
+                            if let Some(pattern_either) = elem_map.get(&Value::String("pattern-either".to_string())) {
+                                if let Some(arr) = pattern_either.as_sequence() {
+                                    let patterns: Vec<String> = arr.iter()
+                                        .filter_map(|v| self.extract_pattern_raw(v))
+                                        .collect();
+                                    if !patterns.is_empty() {
+                                        pattern_str = Some(patterns.join("|"));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // If no pattern found in pattern-either, try to extract from patterns array directly
+                if pattern_str.is_none() {
+                    for pattern_elem in patterns_array {
+                        if let Some(pattern) = self.extract_pattern_from_taint_def(pattern_elem) {
+                            pattern_str = Some(pattern);
+                            break;
+                        }
+                    }
+                }
+
+                let pattern_str = pattern_str.ok_or_else(|| AnalysisError::parse_error("No pattern found in sink 'patterns' array".to_string()))?;
+                (pattern_str, focus_vars)
+            } else if let Some(pattern_value) = mapping.get(&Value::String("pattern".to_string())) {
+                // Standard "pattern" field
+                let pattern_str = pattern_value.as_str()
+                    .ok_or_else(|| AnalysisError::parse_error("Sink pattern must have a 'pattern' field".to_string()))?
+                    .to_string();
+
+                // Check for focus-metavariable at this level (alternate format)
+                let focus_metavariables = mapping.get(&Value::String("focus-metavariable".to_string()))
+                    .and_then(|v| v.as_str())
+                    .map(|s| vec![s.to_string()])
+                    .unwrap_or_default();
+
+                (pattern_str, focus_metavariables)
+            } else {
+                return Err(AnalysisError::parse_error("Sink pattern must have 'pattern' or 'patterns' field".to_string()));
+            };
 
             // Check if fallback flag is set (optional)
             let is_fallback = mapping.get(&Value::String("is_fallback".to_string()))
@@ -1468,7 +1578,8 @@ impl RuleParser {
                 .unwrap_or(false);
 
             return Ok(SinkPattern {
-                pattern: Pattern::simple(pattern_str.to_string()),
+                pattern: Pattern::simple(pattern_str),
+                focus_metavariables,
                 is_fallback,
             });
         }

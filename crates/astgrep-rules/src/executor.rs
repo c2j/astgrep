@@ -81,8 +81,10 @@ impl VariableDependencyGraph {
 
     /// Record that `target` variable is assigned from `source_vars`
     fn record_assignment(&mut self, target: String, source_vars: Vec<String>, expr: String) {
-        self.dependencies.insert(target.clone(), source_vars);
-        self.assignments.insert(target, expr);
+        eprintln!("[DEBUG] Recording assignment: {} depends on {:?} (expr: {})", target, source_vars, expr);
+        self.dependencies.insert(target.clone(), source_vars.clone());
+        self.assignments.insert(target.clone(), expr);
+        eprintln!("[DEBUG] Assignment recorded. Dependencies for '{}': {:?}", target, self.dependencies.get(&target));
     }
 
     /// Record that an object's field is tainted by a source
@@ -157,6 +159,20 @@ impl VariableDependencyGraph {
         if var.contains(".get") && var.ends_with("()") {
             if self.is_getter_tainted(var, source_vars) {
                 return true;
+            }
+        }
+
+        // Check method calls on variables (e.g., sqlBuilder.toString())
+        // If var is "obj.method()", also check if "obj" depends on source_vars
+        if var.contains(".") && var.ends_with(")") {
+            // Extract the receiver object (e.g., "sqlBuilder" from "sqlBuilder.toString()")
+            if let Some(dot_pos) = var.find('.') {
+                let receiver = &var[..dot_pos];
+                eprintln!("[DEBUG] Method call detected: '{}' has receiver '{}', checking if receiver depends on source", var, receiver);
+                if self.check_dependency_recursive(receiver, source_vars, visited, check_safe_context) {
+                    eprintln!("[DEBUG] Receiver '{}' depends on source_vars, returning true", receiver);
+                    return true;
+                }
             }
         }
 
@@ -417,46 +433,100 @@ impl VariableDependencyGraph {
                         }
                     }
                 }
-            } else if pattern_text.contains(".set") && pattern_text.contains("(") {
+            } else if (pattern_text.contains(".set") || pattern_text.contains("$SETTER")) && pattern_text.contains("(") {
                 // Handle setter pattern: obj.setX(data) - propagate from data to obj
                 // Pattern: (Type $OBJ).$SETTER($DATA) where $SETTER matches set.*
+                // Also handle patterns like $PAGE.$SETTER($DATA) where SETTER is a metavariable
                 eprintln!("[DEBUG] Checking setter pattern: '{}' on line: '{}'", pattern_text, line);
                 
                 // Extract the setter method name pattern (e.g., $SETTER or setOrderBy)
-                if let Some(set_pos) = pattern_text.find(".set") {
+                // Handle both literal patterns (obj.setX) and metavariable patterns (obj.$SETTER)
+                let setter_pattern_opt = if let Some(set_pos) = pattern_text.find(".set") {
                     let after_set = &pattern_text[set_pos + 1..]; // Skip the dot, keep "set..."
                     if let Some(paren_pos) = after_set.find('(') {
-                        let setter_pattern = &after_set[..paren_pos]; // e.g., "setX" or "$SETTER"
-                        eprintln!("[DEBUG] Setter pattern extracted: {}", setter_pattern);
-                        
-                        // Check if line contains a setter call
-                        if line.contains(".set") && line.contains('(') {
-                            // Find the setter call in the line
-                            if let Some(line_set_pos) = line.find(".set") {
-                                let line_after_set = &line[line_set_pos + 1..];
-                                if let Some(line_paren_pos) = line_after_set.find('(') {
-                                    let actual_setter = &line_after_set[..line_paren_pos];
-                                    eprintln!("[DEBUG] Found setter in line: {}", actual_setter);
-                                    
-                                    // Check if setter matches pattern (starts with "set")
-                                    if actual_setter.starts_with("set") {
-                                        // Extract object name (before .set)
-                                        let before_setter = &line[..line_set_pos];
-                                        let obj_parts: Vec<&str> = before_setter.split(|c: char| c == ' ' || c == '(' || c == '.').collect();
-                                        if let Some(obj_name) = obj_parts.last() {
-                                            let obj_name = obj_name.trim();
+                        Some(&after_set[..paren_pos]) // e.g., "setX"
+                    } else {
+                        None
+                    }
+                } else if pattern_text.contains("$SETTER") {
+                    // Pattern uses $SETTER metavariable, treat it as a wildcard setter pattern
+                    Some("$SETTER")
+                } else {
+                    None
+                };
+                
+                if let Some(setter_pattern) = setter_pattern_opt {
+                    eprintln!("[DEBUG] Setter pattern extracted: {}", setter_pattern);
+                    
+                    // Check if line contains a setter call
+                    if line.contains(".set") && line.contains('(') {
+                        // Find the setter call in the line
+                        if let Some(line_set_pos) = line.find(".set") {
+                            let line_after_set = &line[line_set_pos + 1..];
+                            if let Some(line_paren_pos) = line_after_set.find('(') {
+                                let actual_setter = &line_after_set[..line_paren_pos];
+                                eprintln!("[DEBUG] Found setter in line: {}", actual_setter);
+                                
+                                // Check if setter matches pattern (starts with "set")
+                                if actual_setter.starts_with("set") {
+                                    // Extract object name (before .set)
+                                    let before_setter = &line[..line_set_pos];
+                                    let obj_parts: Vec<&str> = before_setter.split(|c: char| c == ' ' || c == '(' || c == '.').collect();
+                                    if let Some(obj_name) = obj_parts.last() {
+                                        let obj_name = obj_name.trim();
+                                        
+                                        // Extract argument (inside parentheses)
+                                        let after_paren = &line_after_set[line_paren_pos + 1..];
+                                        if let Some(close_paren) = after_paren.find(')') {
+                                            let arg = &after_paren[..close_paren].trim();
                                             
-                                            // Extract argument (inside parentheses)
-                                            let after_paren = &line_after_set[line_paren_pos + 1..];
-                                            if let Some(close_paren) = after_paren.find(')') {
-                                                let arg = &after_paren[..close_paren].trim();
-                                                
-                                                eprintln!("[DEBUG] Setter propagator: {} -> {} (setter: {})", arg, obj_name, actual_setter);
-                                                propagations.push((arg.to_string(), obj_name.to_string()));
-                                            }
+                                            eprintln!("[DEBUG] Setter propagator: {} -> {} (setter: {})", arg, obj_name, actual_setter);
+                                            propagations.push((arg.to_string(), obj_name.to_string()));
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            } else if pattern_text.contains(".append(") && pattern_text.contains("$") {
+                // Handle append pattern: $BUILDER.append($STR) - propagate from STR to BUILDER
+                eprintln!("[DEBUG] Checking append pattern: '{}' on line: '{}'", pattern_text, line);
+                
+                // Check if line contains .append(
+                if line.contains(".append(") {
+                    // Find the append call
+                    if let Some(append_pos) = line.find(".append(") {
+                        let before_append = &line[..append_pos];
+                        // Extract builder name
+                        let builder_parts: Vec<&str> = before_append.split(|c: char| c == ' ' || c == '(' || c == '.' || c == ',').collect();
+                        if let Some(builder_name) = builder_parts.last() {
+                            let builder_name = builder_name.trim();
+                            
+                            // Extract argument inside append(...)
+                            // Handle nested parentheses: find the matching closing paren
+                            let after_append = &line[append_pos + 8..]; // Skip ".append("
+                            let mut paren_depth = 1;
+                            let mut close_pos = 0;
+                            for (i, c) in after_append.char_indices() {
+                                match c {
+                                    '(' => paren_depth += 1,
+                                    ')' => {
+                                        paren_depth -= 1;
+                                        if paren_depth == 0 {
+                                            close_pos = i;
+                                            break;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            
+                            if paren_depth == 0 {
+                                let arg = after_append[..close_pos].trim();
+                                
+                                eprintln!("[DEBUG] Append propagator: {} -> {}", arg, builder_name);
+                                propagations.push((arg.to_string(), builder_name.to_string()));
                             }
                         }
                     }
@@ -3041,13 +3111,59 @@ impl AdvancedRuleExecutor {
                 
                 // Extract variable name from focus-metavariable if specified
                 let mut var_name = None;
-                // Check if the sink pattern has focus information in the pattern itself
-                // For patterns like sink2("123", $VAL), extract the $VAL binding
-                for (key, value) in &m.bindings {
-                    if key.starts_with("$") || !key.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
-                        // This is likely a metavariable binding
-                        var_name = Some(value.clone());
-                        break;
+                
+                // First, check if the sink pattern has focus_metavariables defined
+                // and try to extract the value from the match bindings
+                if !sink_pattern.focus_metavariables.is_empty() {
+                    for focus_var in &sink_pattern.focus_metavariables {
+                        // Try with the $ prefix first (e.g., "$SQL")
+                        if let Some(value) = m.bindings.get(focus_var) {
+                            eprintln!("[DEBUG] Extracted var_name from focus-metavariable '{}': {}", focus_var, value);
+                            var_name = Some(value.clone());
+                            break;
+                        }
+                        // Also try without the $ prefix (e.g., "SQL")
+                        let focus_var_no_dollar = focus_var.trim_start_matches('$');
+                        if let Some(value) = m.bindings.get(focus_var_no_dollar) {
+                            eprintln!("[DEBUG] Extracted var_name from focus-metavariable '{}': {}", focus_var, value);
+                            var_name = Some(value.clone());
+                            break;
+                        }
+                    }
+                }
+                
+                // If no var_name from focus-metavariables, check bindings for any metavariable
+                if var_name.is_none() {
+                    for (key, value) in &m.bindings {
+                        if key.starts_with("$") || !key.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
+                            // This is likely a metavariable binding
+                            var_name = Some(value.clone());
+                            break;
+                        }
+                    }
+                }
+                
+                // If we have a focus-metavariable but the extracted value looks incomplete
+                // (e.g., "toString" instead of "sqlBuilder.toString()"), try to extract
+                // the full first argument from the method call
+                if var_name.is_some() && sink_pattern.focus_metavariables.is_empty() == false {
+                    if let Some(ref v) = var_name {
+                        // If the extracted value is just a simple identifier that could be a method name
+                        // and doesn't contain a dot (receiver), try to get the full argument
+                        if !v.contains('.') && !v.contains('(') {
+                            if let Some(text) = m.node.text() {
+                                if let Some(args) = Self::extract_last_call_args(text.trim()) {
+                                    let arg_parts: Vec<&str> = args.split(',').collect();
+                                    if !arg_parts.is_empty() {
+                                        let first_arg = arg_parts[0].trim();
+                                        if first_arg.contains(v) && first_arg != *v {
+                                            eprintln!("[DEBUG] Replacing incomplete var_name '{}' with full argument '{}'", v, first_arg);
+                                            var_name = Some(first_arg.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
@@ -3144,7 +3260,7 @@ impl AdvancedRuleExecutor {
                     }
                     
                     // Check if source variable appears in sink context
-                    if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast, taint_assume_safe_booleans, taint_assume_safe_numbers, taint_only_propagate_through_assignments) {
+                    if self.is_variable_flowing_to_sink(source_var, sink.node.as_ref(), ast, taint_assume_safe_booleans, taint_assume_safe_numbers, taint_only_propagate_through_assignments, source_text) {
                         eprintln!("[DEBUG] FLOW FOUND: source {} -> sink {}", i, j);
                         flows.push((source.clone(), sink.clone()));
                         continue;
@@ -3175,6 +3291,17 @@ impl AdvancedRuleExecutor {
                         // Check if sink variable depends on source variable
                         // When taint_assume_safe_numbers is true, check for safe numeric context
                         let check_safe_context = taint_assume_safe_numbers;
+                        
+                        // Also check if the sink is accessing a numeric field
+                        if taint_assume_safe_numbers {
+                            if let Some(sink_field) = self.extract_field_from_sink(&sink.node.text().unwrap_or_default()) {
+                                if self.is_numeric_field(&sink_field, source_text) {
+                                    eprintln!("[DEBUG] Skipping dataflow: sink field '{}' is numeric (taint_assume_safe_numbers)", sink_field);
+                                    continue;
+                                }
+                            }
+                        }
+                        
                         eprintln!("[DEBUG] Checking dependency: {} depends on {} (check_safe={})", sink_var, source_var, check_safe_context);
                         if dep_graph.depends_on(sink_var, &[source_var.clone()], check_safe_context) {
                             eprintln!("[DEBUG] FLOW FOUND (dataflow): source {} -> sink {} ({} depends on {})", i, j, sink_var, source_var);
@@ -3349,6 +3476,7 @@ impl AdvancedRuleExecutor {
         taint_assume_safe_booleans: bool,
         taint_assume_safe_numbers: bool,
         taint_only_propagate_through_assignments: bool,
+        source_text: &str,
     ) -> bool {
         let sink_text = sink_node.text().unwrap_or_default();
 
@@ -3364,6 +3492,17 @@ impl AdvancedRuleExecutor {
             return false;
         }
 
+        // When taint_assume_safe_numbers is true, also check if the sink is accessing a numeric field
+        // This handles cases like "sink(this.y)" where "y" is an "int" field
+        if taint_assume_safe_numbers {
+            if let Some(sink_field) = self.extract_field_from_sink(&sink_text) {
+                if self.is_numeric_field(&sink_field, source_text) {
+                    eprintln!("[DEBUG] Sink field '{}' is numeric, not flowing (taint_assume_safe_numbers)", sink_field);
+                    return false;
+                }
+            }
+        }
+
         // When taint_only_propagate_through_assignments is true, check if there's a direct assignment chain
         if taint_only_propagate_through_assignments {
             if !self.is_direct_assignment_chain(var_name, &sink_text) {
@@ -3376,7 +3515,24 @@ impl AdvancedRuleExecutor {
         if sink_text.contains(var_name) {
             return true;
         }
+
+        // Handle field access normalization: "this.x" and "x" should be treated as the same field
+        // Case 1: var_name is "x", sink contains "this.x"
+        let field_access_pattern = format!("this.{}", var_name);
+        if sink_text.contains(&field_access_pattern) {
+            return true;
+        }
         
+        // Case 2: var_name is "this.x", sink contains "x"
+        if var_name.starts_with("this.") {
+            let field_name = &var_name[5..]; // Remove "this." prefix
+            // Check if the field name appears as a standalone variable in the sink
+            // We need to be careful to match whole words only
+            if self.contains_whole_word(&sink_text, field_name) {
+                return true;
+            }
+        }
+
         // Use symbolic propagator to check for aliases
         if let Some(ref propagator) = self.symbolic_propagator {
             // Get all aliases of the source variable
@@ -3575,7 +3731,88 @@ impl AdvancedRuleExecutor {
         
         None
     }
-    
+
+    /// Extract field name from sink text if it's a field access pattern
+    /// e.g., "sink(this.y)" -> Some("y"), "sink(obj.x)" -> Some("x")
+    fn extract_field_from_sink(&self, sink_text: &str) -> Option<String> {
+        // Look for patterns like "this.field" or "obj.field" inside the sink call
+        // Pattern: sink(... this.field ...) or sink(... obj.field ...)
+        if let Some(open_paren) = sink_text.find('(') {
+            let args = &sink_text[open_paren + 1..];
+            // Find field access patterns
+            if let Some(dot_pos) = args.find('.') {
+                let after_dot = &args[dot_pos + 1..];
+                // Extract field name (until next non-identifier character)
+                let field_name: String = after_dot
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                if !field_name.is_empty() {
+                    return Some(field_name);
+                }
+            }
+        }
+        None
+    }
+
+    /// Check if a field is of numeric type by looking at class field declarations
+    fn is_numeric_field(&self, field_name: &str, source_text: &str) -> bool {
+        // Look for field declarations like: "int y;", "Integer x;", "long count;", etc.
+        let numeric_types = [
+            "int", "long", "short", "byte", "float", "double",
+            "Integer", "Long", "Short", "Byte", "Float", "Double"
+        ];
+
+        for line in source_text.lines() {
+            let line = line.trim();
+            // Check for field declaration pattern: "Type fieldName;" or "Type fieldName = ..."
+            for type_name in &numeric_types {
+                let patterns = [
+                    format!("{} {};", type_name, field_name),
+                    format!("{} {} =", type_name, field_name),
+                    format!("{} {}=", type_name, field_name),
+                ];
+                for pattern in &patterns {
+                    if line.contains(pattern) {
+                        eprintln!("[DEBUG] Found numeric field declaration: {}", line);
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if a string contains a whole word (not part of another word)
+    fn contains_whole_word(&self, text: &str, word: &str) -> bool {
+        // Simple heuristic: check for common delimiters around the word
+        let delimiters = ['(', ')', ' ', ',', ';', '+', '-', '*', '/', '=', '<', '>', '!'];
+        
+        // Check if word appears at the start
+        if text.starts_with(word) {
+            if text.len() == word.len() || delimiters.contains(&text.chars().nth(word.len()).unwrap_or(' ')) {
+                return true;
+            }
+        }
+        
+        // Check if word appears in the middle or end
+        for (i, _) in text.match_indices(word) {
+            let before = if i == 0 { ' ' } else { text.chars().nth(i - 1).unwrap_or(' ') };
+            let after_pos = i + word.len();
+            let after = if after_pos >= text.len() { ' ' } else { text.chars().nth(after_pos).unwrap_or(' ') };
+            
+            // Check if word is surrounded by delimiters or string boundaries
+            let before_is_delimiter = i == 0 || delimiters.contains(&before);
+            let after_is_delimiter = after_pos >= text.len() || delimiters.contains(&after);
+            
+            if before_is_delimiter && after_is_delimiter {
+                return true;
+            }
+        }
+        
+        false
+    }
+
     /// Check if a dataflow matches source and sink
     fn is_flow_matching(
         &self,

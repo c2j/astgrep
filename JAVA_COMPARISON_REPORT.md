@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月 8日 星期日 21时38分07秒 CST
+Generated on: 2026年 2月 9日 星期一 12时24分18秒 CST
 
 ## Test Summary
 
@@ -34,90 +34,3 @@ Generated on: 2026年 2月 8日 星期日 21时38分07秒 CST
 | metavar_type_str_eq_java |  | 2 | 2 | ✅ MATCH |
 | metavariable_name_resolution |  | 1 | 1 | ✅ MATCH |
 | misc_name_and_neg |  | 00 | 00 | ✅ MATCH |
-| naming_class_attribute |  | 2 | 2 | ✅ MATCH |
-| non_irrelevant_rule |  | 1 | 1 | ✅ MATCH |
-| sym_prop_class_attr | taint | 2 | 2 | ✅ MATCH |
-| sym_prop_deep |  | 1 | 1 | ✅ MATCH |
-| sym_prop_merge1 |  | 2 | 2 | ✅ MATCH |
-| sym_prop_merge2 |  | 1 | 1 | ✅ MATCH |
-| sym_prop_new |  | 1 | 1 | ✅ MATCH |
-| sym_prop_non_literal |  | 1 | 1 | ✅ MATCH |
-| taint_assume_safe_booleans1 | taint | 1 | 1 | ✅ MATCH |
-| taint_assume_safe_numbers1 | taint | 1 | 1 | ✅ MATCH |
-| taint_assume_safe_numbers3 | taint | 1 | 2 | ❌ DIFFER |
-| taint_best_fit_sink5 | taint | 1 | 1 | ✅ MATCH |
-| taint_best_fit_sink6 | taint | 1 | 1 | ✅ MATCH |
-| taint_best_fit_sink9 | taint | 00 | 00 | ✅ MATCH |
-| taint_final_globals | taint | 1 | 1 | ✅ MATCH |
-| taint_final_globals2 | taint | 1 | 1 | ✅ MATCH |
-| taint_foreach | taint | 1 | 1 | ✅ MATCH |
-| taint_get_set_sensitivity | taint | 1 | 1 | ✅ MATCH |
-| taint_get_set_sensitivity1 | taint | 3 | 3 | ✅ MATCH |
-| taint_lambda1 | taint | 4 | 4 | ✅ MATCH |
-| taint_propagator_lambda | taint | 4 | 4 | ✅ MATCH |
-| taint_propagator4 | taint | 1 | 00 | ❌ DIFFER |
-| taint_this1 | taint | 3 | 2 | ❌ DIFFER |
-| tainted-file-path | taint | 1 | 1 | ✅ MATCH |
-| typed_metavar_not |  | 00 | 00 | ✅ MATCH |
-
-### Summary Statistics
-
-- **Matching results**: 35 tests
-- **Differing results**: 3 tests
-- **Missing rules**: 0 tests
-- **Compatibility rate**: 92%
-
-### Test Categories Analysis
-
-#### Taint Analysis
-Taint analysis tests focus on data flow tracking from sources to sinks.
-Key patterns tested:
-- Source-to-sink data flow
-- Sanitizer effectiveness
-- Field sensitivity
-- Lambda expressions
-- Global variables
-
-#### Metavariable Comparison
-Tests for metavariable constraints and comparisons.
-Key patterns tested:
-- Bitwise operations (AND, OR, XOR, NOT)
-- Numeric comparisons
-- String equality
-- Type constraints
-
-#### Symbolic Propagation
-Tests for symbolic value propagation through code.
-Key patterns tested:
-- Class attributes
-- Method chaining
-- Deep propagation
-- Merge scenarios
-
-#### Constant Propagation
-Tests for constant value propagation.
-Key patterns tested:
-- Private class attributes
-- Literal values
-- Expression evaluation
-
-### Implementation Notes
-
-#### Current Limitations
-1. **Java Parser Integration**: Need to integrate Java-specific parsing
-2. **Taint Analysis**: Advanced taint tracking not fully implemented
-3. **Symbolic Propagation**: Complex symbolic analysis pending
-4. **Metavariable Constraints**: Some constraint types need implementation
-
-#### Next Steps
-1. Implement Java AST parsing integration
-2. Add taint analysis engine for Java
-3. Implement symbolic propagation
-4. Add metavariable constraint evaluation
-5. Optimize performance for large Java codebases
-
----
-
-**Report Generated**: 2026年 2月 8日 星期日 21时39分41秒 CST
-**Total Tests Analyzed**: 38
-**Compatibility Status**: In Development

@@ -496,6 +496,7 @@ impl SourcePattern {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SinkPattern {
     pub pattern: Pattern,
+    pub focus_metavariables: Vec<String>,
     pub is_fallback: bool,
 }
 
@@ -541,6 +542,7 @@ impl DataFlowSpec {
         }).collect();
         let sinks = sinks.into_iter().map(|s| SinkPattern {
             pattern: Pattern::simple(s),
+            focus_metavariables: Vec::new(),
             is_fallback: true,
         }).collect();
         Self {
