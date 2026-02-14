@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月10日 星期二 07时23分13秒 CST
+Generated on: 2026年 2月14日 星期六 14时59分03秒 CST
 
 ## Test Summary
 
@@ -21,51 +21,51 @@ Generated on: 2026年 2月10日 星期二 07时23分13秒 CST
 
 | Test File | Rule Type | Semgrep Matches | CR-SemService Matches | Status |
 |-----------|-----------|-----------------|----------------------|--------|
-| cp_private_class_attr |  | 2 | 2 | ✅ MATCH |
+| cp_private_class_attr |  | 2 | 00 | ❌ DIFFER |
 | cp_private_class_attr1 |  | 00 | 00 | ✅ MATCH |
-| cp_private_class_attr2 |  | 1 | 1 | ✅ MATCH |
-| cp_private_class_attr3 |  | 1 | 1 | ✅ MATCH |
+| cp_private_class_attr2 |  | 1 | 00 | ❌ DIFFER |
+| cp_private_class_attr3 |  | 1 | 00 | ❌ DIFFER |
 | metavar_comparison_bitand |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitnot |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitor |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitxor |  | 1 | 1 | ✅ MATCH |
-| metavar_name_imported_entity_java |  | 2 | 2 | ✅ MATCH |
+| metavar_name_imported_entity_java |  | 2 | 00 | ❌ DIFFER |
 | metavar_type_not_java |  | 1 | 1 | ✅ MATCH |
 | metavar_type_str_eq_java |  | 2 | 2 | ✅ MATCH |
 | metavariable_name_resolution |  | 1 | 1 | ✅ MATCH |
 | misc_name_and_neg |  | 00 | 00 | ✅ MATCH |
 | naming_class_attribute |  | 2 | 2 | ✅ MATCH |
-| non_irrelevant_rule |  | 1 | 1 | ✅ MATCH |
-| sym_prop_class_attr | taint | 2 | 2 | ✅ MATCH |
-| sym_prop_deep |  | 1 | 1 | ✅ MATCH |
+| non_irrelevant_rule |  | 1 | 00 | ❌ DIFFER |
+| sym_prop_class_attr | taint | 2 | 00 | ❌ DIFFER |
+| sym_prop_deep |  | 1 | 3 | ❌ DIFFER |
 | sym_prop_merge1 |  | 2 | 2 | ✅ MATCH |
 | sym_prop_merge2 |  | 1 | 1 | ✅ MATCH |
 | sym_prop_new |  | 1 | 1 | ✅ MATCH |
 | sym_prop_non_literal |  | 1 | 1 | ✅ MATCH |
-| taint_assume_safe_booleans1 | taint | 1 | 1 | ✅ MATCH |
-| taint_assume_safe_numbers1 | taint | 1 | 1 | ✅ MATCH |
-| taint_assume_safe_numbers3 | taint | 1 | 1 | ✅ MATCH |
-| taint_best_fit_sink5 | taint | 1 | 1 | ✅ MATCH |
-| taint_best_fit_sink6 | taint | 1 | 1 | ✅ MATCH |
+| taint_assume_safe_booleans1 | taint | 1 | 00 | ❌ DIFFER |
+| taint_assume_safe_numbers1 | taint | 1 | 00 | ❌ DIFFER |
+| taint_assume_safe_numbers3 | taint | 1 | 00 | ❌ DIFFER |
+| taint_best_fit_sink5 | taint | 1 | 00 | ❌ DIFFER |
+| taint_best_fit_sink6 | taint | 1 | 00 | ❌ DIFFER |
 | taint_best_fit_sink9 | taint | 00 | 00 | ✅ MATCH |
-| taint_final_globals | taint | 1 | 1 | ✅ MATCH |
-| taint_final_globals2 | taint | 1 | 1 | ✅ MATCH |
-| taint_foreach | taint | 1 | 1 | ✅ MATCH |
-| taint_get_set_sensitivity | taint | 1 | 1 | ✅ MATCH |
-| taint_get_set_sensitivity1 | taint | 3 | 3 | ✅ MATCH |
-| taint_lambda1 | taint | 4 | 4 | ✅ MATCH |
-| taint_propagator_lambda | taint | 4 | 4 | ✅ MATCH |
-| taint_propagator4 | taint | 1 | 1 | ✅ MATCH |
-| taint_this1 | taint | 3 | 3 | ✅ MATCH |
-| tainted-file-path | taint | 1 | 1 | ✅ MATCH |
+| taint_final_globals | taint | 1 | 00 | ❌ DIFFER |
+| taint_final_globals2 | taint | 1 | 00 | ❌ DIFFER |
+| taint_foreach | taint | 1 | 00 | ❌ DIFFER |
+| taint_get_set_sensitivity | taint | 1 | 00 | ❌ DIFFER |
+| taint_get_set_sensitivity1 | taint | 3 | 00 | ❌ DIFFER |
+| taint_lambda1 | taint | 4 | 00 | ❌ DIFFER |
+| taint_propagator_lambda | taint | 4 | 00 | ❌ DIFFER |
+| taint_propagator4 | taint | 1 | 00 | ❌ DIFFER |
+| taint_this1 | taint | 3 | 00 | ❌ DIFFER |
+| tainted-file-path | taint | 1 | 00 | ❌ DIFFER |
 | typed_metavar_not |  | 00 | 00 | ✅ MATCH |
 
 ### Summary Statistics
 
-- **Matching results**: 38 tests
-- **Differing results**: 0 tests
+- **Matching results**: 16 tests
+- **Differing results**: 22 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 100%
+- **Compatibility rate**: 42%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月10日 星期二 07时24分44秒 CST
+**Report Generated**: 2026年 2月14日 星期六 15时00分53秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development

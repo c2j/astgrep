@@ -103,7 +103,7 @@ impl RuleExecutionEngine {
                             break;
                         }
                     }
-                    tokens.push((val, start, start + val.len()));
+                    tokens.push((val.clone(), start, start + val.len()));
                     last_end = start + val.len();
                 }
                 _ if ch.is_ascii_alphanumeric() || ch == '_' || ch == '$' => {

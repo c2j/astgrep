@@ -44,6 +44,7 @@ impl RuleExecutionExample {
             },
             enabled: true,
             mode: crate::types::RuleMode::Search,
+            sql_stmt_boundary: None,
         }
     }
 
@@ -79,6 +80,7 @@ impl RuleExecutionExample {
             },
             enabled: true,
             mode: crate::types::RuleMode::Search,
+            sql_stmt_boundary: None,
         }
     }
 

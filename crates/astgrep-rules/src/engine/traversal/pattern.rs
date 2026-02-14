@@ -4,9 +4,11 @@
 
 use crate::engine::traversal::RuleExecutionEngine;
 use crate::types::*;
-use astgrep_core::{AstNode, Finding, Language, Location, Result};
-use std::collections::HashSet;
+use astgrep_core::{AstNode, Confidence, Finding, Language, Location, Result, Severity};
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+// Helper functions from matching module are available through super::matching
 
 impl RuleExecutionEngine {
     /// Execute pattern matching
@@ -90,7 +92,7 @@ impl RuleExecutionEngine {
                         rule.confidence,
                         location,
                     )
-                    .with_metadata("pattern".to_string(), regex_str.clone());
+                    .with_metadata("pattern".to_string(), regex_str.to_string());
 
                     let finding = if let Some(ref fix) = rule.fix {
                         finding.with_fix(fix.clone())
@@ -128,7 +130,7 @@ impl RuleExecutionEngine {
         }
 
         let seg_by_stmt = if matches!(context.language, Language::Sql) {
-            Self::effective_sql_stmt_boundary(rule, context)
+            self.effective_sql_stmt_boundary(rule, context)
         } else {
             false
         };
@@ -172,7 +174,7 @@ impl RuleExecutionEngine {
                 rule.confidence,
                 location,
             )
-            .with_metadata("pattern".to_string(), pattern_str.clone());
+            .with_metadata("pattern".to_string(), pattern_str.to_string());
 
             let finding = if let Some(ref fix) = rule.fix {
                 finding.with_fix(fix.clone())
@@ -320,7 +322,7 @@ impl RuleExecutionEngine {
                     rule.confidence,
                     location,
                 );
-                finding = finding.with_metadata("pattern".to_string(), regex_str.clone());
+                finding = finding.with_metadata("pattern".to_string(), regex_str.to_string());
                 if let Some(ref fix) = rule.fix {
                     finding = finding.with_fix(fix.clone());
                 }
@@ -340,7 +342,7 @@ impl RuleExecutionEngine {
         seen: &mut std::collections::HashSet<(usize, usize)>,
     ) -> Result<()> {
         let seg_by_stmt = if matches!(context.language, Language::Sql) {
-            Self::effective_sql_stmt_boundary(rule, context)
+            self.effective_sql_stmt_boundary(rule, context)
         } else {
             false
         };
@@ -378,7 +380,7 @@ impl RuleExecutionEngine {
                 rule.confidence,
                 location,
             );
-            finding = finding.with_metadata("pattern".to_string(), pattern_str.clone());
+            finding = finding.with_metadata("pattern".to_string(), pattern_str.to_string());
             if let Some(ref fix) = rule.fix {
                 finding = finding.with_fix(fix.clone());
             }
@@ -404,7 +406,7 @@ impl RuleExecutionEngine {
         // Keep only smallest, non-overlapping node spans
         let mm: Vec<((usize, usize), usize, usize, usize, usize, Box<dyn AstNode>)> = matches
             .into_iter()
-            .map(|m| {
+            .map(|m: Box<dyn AstNode>| {
                 if let Some((sl, sc, el, ec)) = m.location() {
                     let dl = el.saturating_sub(sl);
                     let dc = ec.saturating_sub(sc);

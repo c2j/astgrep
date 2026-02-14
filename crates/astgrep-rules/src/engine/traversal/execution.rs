@@ -114,7 +114,9 @@ impl RuleExecutionEngine {
             println!("🔍 Rule is in taint mode");
             if let Some(ref dataflow) = rule.dataflow {
                 match self.execute_taint_mode(dataflow, ast, rule, context) {
-                    Ok(mut taint_findings) => findings.append(&mut taint_findings),
+                    Ok(mut taint_findings) => {
+                        findings.append(&mut taint_findings);
+                    }
                     Err(e) => {
                         return RuleResult::error(
                             rule.id.clone(),

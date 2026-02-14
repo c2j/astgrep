@@ -23,7 +23,7 @@ impl RuleExecutionEngine {
         // 2) Fallback: try to approximate location by searching literal anchors from the pattern
         if let Some(pat_str) = pattern.get_pattern_string() {
             if let Some((start_byte, end_byte)) =
-                Self::approximate_span_from_pattern(&context.source_code, pat_str)
+                RuleExecutionEngine::approximate_span_from_pattern(&context.source_code, pat_str)
             {
                 let (sl, sc) = Self::byte_index_to_line_col(&context.source_code, start_byte);
                 let (el, ec) = Self::byte_index_to_line_col(&context.source_code, end_byte);
