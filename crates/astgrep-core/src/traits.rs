@@ -29,12 +29,6 @@ pub trait LanguageParser: Send + Sync {
             Language::Python => &["py", "pyw", "pyi"],
             Language::Sql => &["sql", "ddl", "dml"],
             Language::Bash => &["sh", "bash", "zsh"],
-            Language::Php => &["php", "phtml", "php3", "php4", "php5"],
-            Language::CSharp => &["cs", "csx"],
-            Language::C => &["c", "h"],
-            Language::Ruby => &["rb", "rbw", "rake", "gemspec"],
-            Language::Kotlin => &["kt", "kts"],
-            Language::Swift => &["swift"],
             Language::Xml => &["xml", "xsd", "xsl", "xslt", "svg", "pom"],
         }
     }
@@ -68,7 +62,7 @@ pub trait AstNode: Send + Sync {
     fn text(&self) -> Option<&str>;
 
     /// Get an attribute value by key
-    fn get_attribute(&self, key: &str) -> Option<&str> {
+    fn get_attribute(&self, _key: &str) -> Option<&str> {
         None // Default implementation
     }
 
@@ -207,9 +201,6 @@ mod tests {
         assert!(Language::Python.extensions().contains(&"py"));
         assert!(Language::Sql.extensions().contains(&"sql"));
         assert!(Language::Bash.extensions().contains(&"sh"));
-        assert!(Language::Php.extensions().contains(&"php"));
-        assert!(Language::CSharp.extensions().contains(&"cs"));
-        assert!(Language::C.extensions().contains(&"c"));
     }
 
     #[test]

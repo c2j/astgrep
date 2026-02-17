@@ -16,6 +16,7 @@ pub mod advanced_taint;
 pub mod symbol_table;
 pub mod constant_propagation;
 pub mod constant_analysis;
+pub mod symbolic_propagation;
 
 pub use graph::*;
 pub use sources::*;
@@ -30,6 +31,7 @@ pub use advanced_taint::*;
 pub use symbol_table::*;
 pub use constant_propagation::*;
 pub use constant_analysis::*;
+pub use symbolic_propagation::*;
 
 use astgrep_core::{AstNode, Result};
 use std::collections::{HashMap, HashSet};
@@ -41,6 +43,7 @@ pub struct DataFlowAnalyzer {
     sink_detector: SinkDetector,
     sanitizer_detector: SanitizerDetector,
     taint_tracker: TaintTracker,
+    constant_propagator: ConstantPropagator,
 }
 
 impl DataFlowAnalyzer {
@@ -52,6 +55,7 @@ impl DataFlowAnalyzer {
             sink_detector: SinkDetector::new(),
             sanitizer_detector: SanitizerDetector::new(),
             taint_tracker: TaintTracker::new(),
+            constant_propagator: ConstantPropagator::new(),
         }
     }
 
@@ -68,12 +72,16 @@ impl DataFlowAnalyzer {
         // Perform taint analysis
         let taint_flows = self.taint_tracker.track_taint(&self.graph, &sources, &sinks, &sanitizers)?;
 
+        // Perform constant propagation analysis
+        let constant_values = self.constant_propagator.analyze_ast(ast)?;
+
         Ok(DataFlowAnalysis {
             graph: self.graph.clone(),
             sources,
             sinks,
             sanitizers,
             taint_flows,
+            constant_values,
         })
     }
 
@@ -165,6 +173,7 @@ pub struct DataFlowAnalysis {
     pub sinks: Vec<Sink>,
     pub sanitizers: Vec<Sanitizer>,
     pub taint_flows: Vec<TaintFlow>,
+    pub constant_values: HashMap<String, ConstantValue>,
 }
 
 impl DataFlowAnalysis {

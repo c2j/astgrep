@@ -2,18 +2,16 @@
 //!
 //! These tests verify that all components work together correctly.
 
-use astgrep_core::{Severity, Confidence, Language};
 use astgrep_ast::*;
-use astgrep_rules::{RuleEngine, Rule, Pattern, PatternType, RuleContext, RuleValidator};
+use astgrep_core::{Confidence, Language, Severity};
+use astgrep_rules::{Pattern, PatternType, Rule, RuleContext, RuleEngine, RuleValidator};
 
 /// Test the complete rule execution pipeline
 #[test]
 fn test_complete_rule_execution() {
     // Create a simple AST
-    let ast = AstBuilder::simple_call(
-        "executeQuery",
-        vec![AstBuilder::identifier("userInput")]
-    ).with_text("executeQuery(userInput)".to_string());
+    let ast = AstBuilder::simple_call("executeQuery", vec![AstBuilder::identifier("userInput")])
+        .with_text("executeQuery(userInput)".to_string());
 
     // Create a rule
     let rule = Rule {
@@ -23,20 +21,20 @@ fn test_complete_rule_execution() {
         severity: Severity::Warning,
         confidence: Confidence::Medium,
         languages: vec![Language::Java],
-        patterns: vec![
-            Pattern {
-                pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
-                metavariable_pattern: None,
-                focus: None,
-                conditions: vec![],
-            }
-        ],
+        patterns: vec![Pattern {
+            pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
+            metavariable_pattern: None,
+            focus: None,
+            conditions: vec![],
+        }],
         dataflow: None,
         fix: Some("Use prepared statements".to_string()),
         fix_regex: None,
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
+        sql_stmt_boundary: None,
     };
 
     // Execute rule
@@ -63,10 +61,7 @@ fn test_complete_rule_execution() {
 #[test]
 fn test_basic_rule_execution() {
     // Create a simple AST
-    let ast = AstBuilder::simple_call(
-        "executeQuery",
-        vec![AstBuilder::identifier("input")]
-    );
+    let ast = AstBuilder::simple_call("executeQuery", vec![AstBuilder::identifier("input")]);
 
     // Create a simple rule
     let rule = Rule {
@@ -76,20 +71,20 @@ fn test_basic_rule_execution() {
         severity: Severity::Warning,
         confidence: Confidence::Medium,
         languages: vec![Language::Java],
-        patterns: vec![
-            Pattern {
-                pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
-                metavariable_pattern: None,
-                focus: None,
-                conditions: vec![],
-            }
-        ],
+        patterns: vec![Pattern {
+            pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
+            metavariable_pattern: None,
+            focus: None,
+            conditions: vec![],
+        }],
         dataflow: None,
         fix: Some("Use prepared statements".to_string()),
         fix_regex: None,
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
+        sql_stmt_boundary: None,
     };
 
     // Execute rule
@@ -124,20 +119,20 @@ fn test_rule_validation() {
         severity: Severity::Info,
         confidence: Confidence::Low,
         languages: vec![Language::Java],
-        patterns: vec![
-            Pattern {
-                pattern_type: PatternType::Simple("test()".to_string()),
-                metavariable_pattern: None,
-                focus: None,
-                conditions: vec![],
-            }
-        ],
+        patterns: vec![Pattern {
+            pattern_type: PatternType::Simple("test()".to_string()),
+            metavariable_pattern: None,
+            focus: None,
+            conditions: vec![],
+        }],
         dataflow: None,
         fix: None,
         fix_regex: None,
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
+        sql_stmt_boundary: None,
     };
 
     let result = validator.validate_rule(&valid_rule);
@@ -167,20 +162,20 @@ fn test_rule_engine_configuration() {
         severity: Severity::Info,
         confidence: Confidence::Low,
         languages: vec![Language::Java],
-        patterns: vec![
-            Pattern {
-                pattern_type: PatternType::Simple("test()".to_string()),
-                metavariable_pattern: None,
-                focus: None,
-                conditions: vec![],
-            }
-        ],
+        patterns: vec![Pattern {
+            pattern_type: PatternType::Simple("test()".to_string()),
+            metavariable_pattern: None,
+            focus: None,
+            conditions: vec![],
+        }],
         dataflow: None,
         fix: None,
         fix_regex: None,
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
+        sql_stmt_boundary: None,
     };
 
     engine.add_rule(rule).unwrap();
@@ -200,10 +195,7 @@ fn test_simple_performance() {
     use std::time::Instant;
 
     // Create a simple AST
-    let ast = AstBuilder::simple_call(
-        "executeQuery",
-        vec![AstBuilder::identifier("input")]
-    );
+    let ast = AstBuilder::simple_call("executeQuery", vec![AstBuilder::identifier("input")]);
 
     // Create a simple rule
     let rule = Rule {
@@ -213,20 +205,20 @@ fn test_simple_performance() {
         severity: Severity::Warning,
         confidence: Confidence::Medium,
         languages: vec![Language::Java],
-        patterns: vec![
-            Pattern {
-                pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
-                metavariable_pattern: None,
-                focus: None,
-                conditions: vec![],
-            }
-        ],
+        patterns: vec![Pattern {
+            pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
+            metavariable_pattern: None,
+            focus: None,
+            conditions: vec![],
+        }],
         dataflow: None,
         fix: None,
         fix_regex: None,
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
+        sql_stmt_boundary: None,
     };
 
     // Execute rule and measure time
@@ -244,7 +236,10 @@ fn test_simple_performance() {
     let duration = start.elapsed();
 
     // Verify performance
-    assert!(duration.as_millis() < 1000, "Should complete within 1 second");
+    assert!(
+        duration.as_millis() < 1000,
+        "Should complete within 1 second"
+    );
     println!("Performance test findings count: {}", findings.len());
 }
 
@@ -255,11 +250,7 @@ fn test_error_handling() {
     let mut engine = RuleEngine::new();
 
     // Test with no rules
-    let context = RuleContext::new(
-        "test.java".to_string(),
-        Language::Java,
-        "test".to_string(),
-    );
+    let context = RuleContext::new("test.java".to_string(), Language::Java, "test".to_string());
 
     let findings = engine.analyze(&ast, &context).unwrap();
     assert!(findings.is_empty(), "No rules should produce no findings");
@@ -279,24 +270,26 @@ fn test_error_handling() {
         paths: None,
         metadata: std::collections::HashMap::new(),
         enabled: true,
+        mode: astgrep_rules::RuleMode::Search,
+        sql_stmt_boundary: None,
     };
 
     // Try to add invalid rule (should fail validation)
     let result = engine.add_rule(invalid_rule);
     assert!(result.is_err(), "Should fail to add invalid rule");
-    
+
     // Engine should still work with no valid rules
     let result = engine.analyze(&ast, &context);
-    assert!(result.is_ok(), "Analysis should succeed even with no valid rules");
+    assert!(
+        result.is_ok(),
+        "Analysis should succeed even with no valid rules"
+    );
 }
 
 /// Test multiple rules
 #[test]
 fn test_multiple_rules() {
-    let ast = AstBuilder::simple_call(
-        "executeQuery",
-        vec![AstBuilder::identifier("input")]
-    );
+    let ast = AstBuilder::simple_call("executeQuery", vec![AstBuilder::identifier("input")]);
 
     let mut engine = RuleEngine::new();
 
@@ -309,20 +302,20 @@ fn test_multiple_rules() {
             severity: Severity::Warning,
             confidence: Confidence::Medium,
             languages: vec![Language::Java],
-            patterns: vec![
-                Pattern {
-                    pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
-                    metavariable_pattern: None,
-                    focus: None,
-                    conditions: vec![],
-                }
-            ],
+            patterns: vec![Pattern {
+                pattern_type: PatternType::Simple("executeQuery($VAR)".to_string()),
+                metavariable_pattern: None,
+                focus: None,
+                conditions: vec![],
+            }],
             dataflow: None,
             fix: None,
             fix_regex: None,
             paths: None,
             metadata: std::collections::HashMap::new(),
             enabled: true,
+            mode: astgrep_rules::RuleMode::Search,
+            sql_stmt_boundary: None,
         };
         engine.add_rule(rule).unwrap();
     }

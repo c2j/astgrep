@@ -146,12 +146,6 @@ impl ParserFactory {
             Language::Python => Ok(Box::new(crate::python::PythonParser::new())),
             Language::Sql => Ok(Box::new(crate::sql::SqlParser::new())),
             Language::Bash => Ok(Box::new(crate::bash::BashParser::new())),
-            Language::Php => Ok(Box::new(crate::php::PhpParser::new())),
-            Language::CSharp => Ok(Box::new(crate::csharp::CSharpParser::new())),
-            Language::C => Ok(Box::new(crate::c::CParser::new())),
-            Language::Ruby => Ok(Box::new(crate::ruby::RubyParser::new())),
-            Language::Kotlin => Ok(Box::new(crate::kotlin::KotlinParser::new())),
-            Language::Swift => Ok(Box::new(crate::swift::SwiftParser::new())),
             Language::Xml => Ok(Box::new(crate::xml::XmlParser::new())),
         }
     }
@@ -196,42 +190,6 @@ impl ParserFactory {
             Language::Bash => ParserConfig {
                 timeout_ms: Some(parser::BASH_TIMEOUT_MS),
                 max_file_size: Some(parser::BASH_MAX_FILE_SIZE),
-                enable_recovery: true,
-                strict_mode: false,
-            },
-            Language::Php => ParserConfig {
-                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
-                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
-                enable_recovery: true,
-                strict_mode: false,
-            },
-            Language::CSharp => ParserConfig {
-                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
-                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
-                enable_recovery: true,
-                strict_mode: false,
-            },
-            Language::C => ParserConfig {
-                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
-                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
-                enable_recovery: true,
-                strict_mode: false,
-            },
-            Language::Ruby => ParserConfig {
-                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
-                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
-                enable_recovery: true,
-                strict_mode: false,
-            },
-            Language::Kotlin => ParserConfig {
-                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
-                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
-                enable_recovery: true,
-                strict_mode: false,
-            },
-            Language::Swift => ParserConfig {
-                timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
-                max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
                 enable_recovery: true,
                 strict_mode: false,
             },

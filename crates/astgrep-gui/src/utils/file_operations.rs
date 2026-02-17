@@ -54,8 +54,6 @@ impl FileOperations {
             "java" => Some("java".to_string()),
             "js" | "jsx" | "mjs" => Some("javascript".to_string()),
             "py" | "pyw" => Some("python".to_string()),
-            "go" => Some("go".to_string()),
-            "rs" => Some("rust".to_string()),
             "php" => Some("php".to_string()),
             "c" | "h" => Some("c".to_string()),
             "cpp" | "cxx" | "cc" | "hpp" => Some("cpp".to_string()),
@@ -71,12 +69,10 @@ impl FileOperations {
     /// Get common file filters for different file types
     pub fn get_source_file_filters() -> Vec<(&'static str, &'static [&'static str])> {
         vec![
-            ("All Source Files", &["java", "js", "jsx", "py", "go", "rs", "php", "c", "cpp", "h", "hpp"]),
+            ("All Source Files", &["java", "js", "jsx", "py", "php", "c", "cpp", "h", "hpp"]),
             ("Java Files", &["java"]),
             ("JavaScript Files", &["js", "jsx", "mjs"]),
             ("Python Files", &["py", "pyw"]),
-            ("Go Files", &["go"]),
-            ("Rust Files", &["rs"]),
             ("PHP Files", &["php"]),
             ("C/C++ Files", &["c", "cpp", "cxx", "cc", "h", "hpp"]),
             ("All Files", &["*"]),

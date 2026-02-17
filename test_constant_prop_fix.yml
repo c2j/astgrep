@@ -1,0 +1,8 @@
+rules:
+  - id: test-return-5-constant-prop
+    message: "Test pattern 'return 5;' matches 'return x;' where x = 5"
+    severity: ERROR
+    languages: [javascript]
+    pattern: "return 5;"
+    metadata:
+      constant_propagation: true

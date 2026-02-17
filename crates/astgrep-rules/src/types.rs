@@ -1,10 +1,29 @@
 //! Rule type definitions
-//! 
+//!
 //! This module defines the core types used in the rule system.
 
-use astgrep_core::{Confidence, Finding, Language, Severity, MetavariableAnalysis, ComparisonOperator};
+use astgrep_core::{
+    ComparisonOperator, Confidence, Finding, Language, MetavariableAnalysis, Severity,
+};
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use std::collections::HashMap;
+
+/// Rule execution mode
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RuleMode {
+    /// Standard pattern matching mode
+    Search,
+    /// Taint analysis mode (Semgrep compatible)
+    Taint,
+}
+
+impl Default for RuleMode {
+    fn default() -> Self {
+        RuleMode::Search
+    }
+}
 
 /// A complete rule definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,8 +39,13 @@ pub struct Rule {
     pub fix: Option<String>,
     pub fix_regex: Option<FixRegex>,
     pub paths: Option<PathsFilter>,
-    pub metadata: HashMap<String, String>,
+    pub metadata: HashMap<String, Value>,
     pub enabled: bool,
+    /// Rule execution mode (search or taint)
+    #[serde(default)]
+    pub mode: RuleMode,
+    /// SQL statement boundary setting
+    pub sql_stmt_boundary: Option<bool>,
 }
 
 impl Rule {
@@ -48,6 +72,8 @@ impl Rule {
             paths: None,
             metadata: HashMap::new(),
             enabled: true,
+            mode: RuleMode::Search,
+            sql_stmt_boundary: None,
         }
     }
 
@@ -64,7 +90,7 @@ impl Rule {
 
     /// Add metadata to this rule
     pub fn add_metadata(mut self, key: String, value: String) -> Self {
-        self.metadata.insert(key, value);
+        self.metadata.insert(key, Value::String(value));
         self
     }
 
@@ -87,8 +113,37 @@ impl Rule {
     }
 
     /// Get metadata value
-    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+    pub fn get_metadata(&self, key: &str) -> Option<&Value> {
         self.metadata.get(key)
+    }
+
+    /// Get metadata value as string (for backward compatibility)
+    pub fn get_metadata_string(&self, key: &str) -> Option<String> {
+        self.metadata.get(key).and_then(|v| {
+            match v {
+                Value::String(s) => Some(s.clone()),
+                Value::Sequence(arr) => {
+                    // Convert array to comma-separated string
+                    Some(
+                        arr.iter()
+                            .filter_map(|item| item.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    )
+                }
+                Value::Mapping(map) => {
+                    // Convert mapping to a simple representation
+                    Some(format!("{:?}", map))
+                }
+                Value::Number(n) => Some(n.to_string()),
+                Value::Bool(b) => Some(b.to_string()),
+                Value::Null => Some("null".to_string()),
+                Value::Tagged(tagged) => {
+                    // For tagged values, convert the inner value
+                    Some(format!("{:?}", tagged.value))
+                }
+            }
+        })
     }
 }
 
@@ -316,6 +371,7 @@ pub enum Condition {
     MetavariableComparison(MetavariableComparison),
     MetavariableName(MetavariableName),
     MetavariableAnalysis(MetavariableAnalysisCondition),
+    MetavariableType(MetavariableType),
     NodeType(String),
     NodeAttribute(String, String),
     Custom(String),
@@ -330,7 +386,10 @@ pub struct MetavariableRegex {
 
 impl MetavariableRegex {
     pub fn new(metavariable: String, regex: String) -> Self {
-        Self { metavariable, regex }
+        Self {
+            metavariable,
+            regex,
+        }
     }
 }
 
@@ -344,7 +403,11 @@ pub struct MetavariableComparison {
 
 impl MetavariableComparison {
     pub fn new(metavariable: String, operator: ComparisonOperator, value: String) -> Self {
-        Self { metavariable, operator, value }
+        Self {
+            metavariable,
+            operator,
+            value,
+        }
     }
 }
 
@@ -353,11 +416,25 @@ impl MetavariableComparison {
 pub struct MetavariableName {
     pub metavariable: String,
     pub name_pattern: String,
+    /// Fully qualified name (for semgrep-internal-metavariable-name)
+    pub fqn: Option<String>,
 }
 
 impl MetavariableName {
     pub fn new(metavariable: String, name_pattern: String) -> Self {
-        Self { metavariable, name_pattern }
+        Self {
+            metavariable,
+            name_pattern,
+            fqn: None,
+        }
+    }
+
+    pub fn with_fqn(metavariable: String, fqn: String) -> Self {
+        Self {
+            metavariable,
+            name_pattern: fqn.clone(),
+            fqn: Some(fqn),
+        }
     }
 }
 
@@ -370,7 +447,26 @@ pub struct MetavariableAnalysisCondition {
 
 impl MetavariableAnalysisCondition {
     pub fn new(metavariable: String, analysis: MetavariableAnalysis) -> Self {
-        Self { metavariable, analysis }
+        Self {
+            metavariable,
+            analysis,
+        }
+    }
+}
+
+/// Metavariable type constraint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetavariableType {
+    pub metavariable: String,
+    pub var_type: String,
+}
+
+impl MetavariableType {
+    pub fn new(metavariable: String, var_type: String) -> Self {
+        Self {
+            metavariable,
+            var_type,
+        }
     }
 }
 
@@ -379,22 +475,120 @@ impl MetavariableAnalysisCondition {
 /// Data flow analysis specification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataFlowSpec {
-    pub sources: Vec<String>,
-    pub sinks: Vec<String>,
+    pub sources: Vec<SourcePattern>,
+    pub sinks: Vec<SinkPattern>,
     pub sanitizers: Vec<String>,
+    pub propagators: Vec<PropagatorPattern>,
     pub must_flow: bool,
     pub max_depth: Option<usize>,
+    pub taint_assume_safe_booleans: Option<bool>,
+    pub taint_assume_safe_numbers: Option<bool>,
+    pub taint_only_propagate_through_assignments: Option<bool>,
+}
+
+/// Propagator pattern for custom taint propagation rules
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropagatorPattern {
+    pub pattern: Pattern,
+    pub from: String,
+    pub to: String,
+    pub is_fallback: bool,
+}
+
+/// Source pattern for taint analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourcePattern {
+    pub pattern: Pattern,
+    pub focus_metavariables: Vec<String>,
+    pub is_fallback: bool,
+}
+
+impl SourcePattern {
+    pub fn pattern_type(&self) -> &PatternType {
+        &self.pattern.pattern_type
+    }
+
+    pub fn pattern_text(&self) -> &str {
+        match &self.pattern.pattern_type {
+            PatternType::Simple(s) => s,
+            _ => "",
+        }
+    }
+
+    pub fn normalized_pattern(&self) -> String {
+        self.pattern_text().trim_end_matches(';').trim().to_string()
+    }
+}
+
+/// Sink pattern for taint analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SinkPattern {
+    pub pattern: Pattern,
+    pub focus_metavariables: Vec<String>,
+    pub is_fallback: bool,
+}
+
+impl SinkPattern {
+    pub fn pattern_type(&self) -> &PatternType {
+        &self.pattern.pattern_type
+    }
+
+    pub fn pattern_text(&self) -> &str {
+        match &self.pattern.pattern_type {
+            PatternType::Simple(s) => s,
+            _ => "",
+        }
+    }
+
+    pub fn normalized_pattern(&self) -> String {
+        self.pattern_text().trim_end_matches(';').trim().to_string()
+    }
 }
 
 impl DataFlowSpec {
-    /// Create a new data flow specification
-    pub fn new(sources: Vec<String>, sinks: Vec<String>) -> Self {
+    /// Create a new data flow specification from pattern objects
+    pub fn new(sources: Vec<SourcePattern>, sinks: Vec<SinkPattern>) -> Self {
         Self {
             sources,
             sinks,
             sanitizers: Vec::new(),
+            propagators: Vec::new(),
             must_flow: true,
             max_depth: None,
+            taint_assume_safe_booleans: None,
+            taint_assume_safe_numbers: None,
+            taint_only_propagate_through_assignments: None,
+        }
+    }
+
+    /// Create a new data flow specification from simple strings (backward compatibility)
+    pub fn from_strings(sources: Vec<String>, sinks: Vec<String>) -> Self {
+        let sources = sources
+            .into_iter()
+            .map(|s| SourcePattern {
+                pattern: Pattern::simple(s),
+                focus_metavariables: Vec::new(),
+                is_fallback: true,
+            })
+            .collect();
+        let sinks = sinks
+            .into_iter()
+            .map(|s| SinkPattern {
+                pattern: Pattern::simple(s),
+                focus_metavariables: Vec::new(),
+                is_fallback: true,
+            })
+            .collect();
+        Self {
+            sources,
+            sinks,
+            sanitizers: Vec::new(),
+            propagators: Vec::new(),
+            must_flow: true,
+            max_depth: None,
+            taint_assume_safe_booleans: None,
+            taint_assume_safe_numbers: None,
+            taint_only_propagate_through_assignments: None,
         }
     }
 
@@ -424,6 +618,10 @@ pub struct RuleContext {
     pub language: Language,
     pub source_code: String,
     pub custom_data: HashMap<String, String>,
+    /// Enable constant propagation analysis
+    pub enable_constant_propagation: bool,
+    /// SQL statement boundary setting
+    pub sql_stmt_boundary: Option<bool>,
 }
 
 impl RuleContext {
@@ -434,6 +632,8 @@ impl RuleContext {
             language,
             source_code,
             custom_data: HashMap::new(),
+            enable_constant_propagation: true, // Default to true
+            sql_stmt_boundary: None,
         }
     }
 
@@ -446,6 +646,12 @@ impl RuleContext {
     /// Get custom data
     pub fn get_data(&self, key: &str) -> Option<&String> {
         self.custom_data.get(key)
+    }
+
+    /// Set constant propagation enable flag
+    pub fn with_constant_propagation(mut self, enabled: bool) -> Self {
+        self.enable_constant_propagation = enabled;
+        self
     }
 }
 
@@ -530,14 +736,17 @@ mod tests {
         .with_fix("Use PreparedStatement".to_string());
 
         assert_eq!(rule.patterns.len(), 1);
-        assert_eq!(rule.get_metadata("cwe"), Some(&"CWE-89".to_string()));
+        assert_eq!(
+            rule.get_metadata("cwe"),
+            Some(&serde_yaml::Value::String("CWE-89".to_string()))
+        );
         assert_eq!(rule.fix, Some("Use PreparedStatement".to_string()));
     }
 
     #[test]
     fn test_pattern_creation() {
-        let pattern = Pattern::simple("console.log($MSG)".to_string())
-            .with_focus("$MSG".to_string());
+        let pattern =
+            Pattern::simple("console.log($MSG)".to_string()).with_focus("$MSG".to_string());
 
         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
             assert_eq!(pattern_str, "console.log($MSG)");
@@ -579,17 +788,18 @@ mod tests {
         let pattern = Pattern::simple("function $FUNC($PARAM1, $PARAM2) {}".to_string())
             .with_focus_metavariables(vec!["$PARAM1".to_string(), "$PARAM2".to_string()]);
 
-        assert_eq!(pattern.focus, Some(vec!["$PARAM1".to_string(), "$PARAM2".to_string()]));
+        assert_eq!(
+            pattern.focus,
+            Some(vec!["$PARAM1".to_string(), "$PARAM2".to_string()])
+        );
     }
 
     #[test]
     fn test_metavariable_pattern() {
-        let metavar = MetavariablePattern::new(
-            "$QUERY".to_string(),
-            vec!["$STR + $INPUT".to_string()],
-        )
-        .with_regex(r"SELECT.*FROM.*".to_string())
-        .with_type_constraint("String".to_string());
+        let metavar =
+            MetavariablePattern::new("$QUERY".to_string(), vec!["$STR + $INPUT".to_string()])
+                .with_regex(r"SELECT.*FROM.*".to_string())
+                .with_type_constraint("String".to_string());
 
         assert_eq!(metavar.metavariable, "$QUERY");
         assert_eq!(metavar.patterns.len(), 1);
@@ -599,7 +809,7 @@ mod tests {
 
     #[test]
     fn test_dataflow_spec() {
-        let dataflow = DataFlowSpec::new(
+        let dataflow = DataFlowSpec::from_strings(
             vec!["request.getParameter(...)".to_string()],
             vec!["Statement.execute(...)".to_string()],
         )
@@ -629,21 +839,14 @@ mod tests {
 
     #[test]
     fn test_rule_result() {
-        let success_result = RuleResult::success(
-            "test-rule".to_string(),
-            vec![],
-            100,
-        );
+        let success_result = RuleResult::success("test-rule".to_string(), vec![], 100);
 
         assert!(success_result.is_success());
         assert_eq!(success_result.finding_count(), 0);
         assert_eq!(success_result.execution_time_ms, 100);
 
-        let error_result = RuleResult::error(
-            "test-rule".to_string(),
-            "Parse error".to_string(),
-            50,
-        );
+        let error_result =
+            RuleResult::error("test-rule".to_string(), "Parse error".to_string(), 50);
 
         assert!(!error_result.is_success());
         assert_eq!(error_result.error, Some("Parse error".to_string()));

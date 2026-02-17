@@ -6,13 +6,27 @@ use astgrep_core::{AnalysisConfig, Language, OutputFormat, Severity, Confidence}
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+mod backup;
 mod commands;
-mod profiler;
+mod dependencies;
+mod output;
+mod profiling;
+mod progress;
+pub mod services;
 mod tree_sitter_analyzer;
+pub mod utils;
+pub mod validation;
+pub mod verification;
 pub mod vscode_integration;
 
+pub use backup::*;
 pub use commands::*;
-pub use profiler::*;
+pub use dependencies::*;
+pub use output::*;
+pub use profiling::*;
+pub use progress::*;
+pub use validation::*;
+pub use verification::*;
 pub use vscode_integration::*;
 
 /// astgrep: Multi-language Static Code Analysis Tool
@@ -122,6 +136,10 @@ pub enum Commands {
         /// SQL: constrain simple matching within single statements (semicolon delimited). YAML 'options.sql_statement_boundary' overrides this.
         #[arg(long = "sql-statement-boundary", value_enum, default_value = "on")]
         sql_statement_boundary: OnOffCli,
+
+        /// Enable constant propagation analysis (default: true)
+        #[arg(long = "constant-propagation", default_value = "true")]
+        constant_propagation: bool,
     },
 
     /// Validate rule files for syntax and semantic correctness
@@ -215,6 +233,41 @@ pub enum Commands {
 
     /// Show version information (deprecated, use --version)
     Version,
+
+    /// Migrate and reorganize test directory structure
+    Migrate {
+        /// Migration subcommand
+        #[command(subcommand)]
+        action: crate::commands::migrate::MigrationAction,
+
+        /// Enable verbose logging
+        #[arg(short, long, global = true)]
+        verbose: bool,
+
+        /// Enable dry run mode
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Output format
+        #[arg(short = 'f', long, default_value = "human")]
+        format: String,
+
+        /// Configuration file
+        #[arg(short = 'c', long)]
+        config: Option<PathBuf>,
+
+        /// Enable progress reporting
+        #[arg(long)]
+        progress: bool,
+
+        /// Create backups
+        #[arg(long)]
+        backup: bool,
+
+        /// Number of threads
+        #[arg(short = 'j', long, default_value = "4")]
+        threads: usize,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -301,6 +354,7 @@ pub async fn run() -> Result<()> {
             max_threads,
             compatible,
             sql_statement_boundary,
+            constant_propagation,
         } => {
             info!("Starting code analysis");
 
@@ -330,6 +384,7 @@ pub async fn run() -> Result<()> {
                 cli.profile,
                 compatible,
                 Some(matches!(sql_statement_boundary, OnOffCli::On)),
+                constant_propagation,
             )?;
 
             commands::analyze_enhanced::run_enhanced(config, output).await
@@ -371,6 +426,22 @@ pub async fn run() -> Result<()> {
         Commands::Version => {
             warn!("'version' command is deprecated, use '--version' flag instead");
             commands::version::run().await
+        }
+        Commands::Migrate { action, verbose, dry_run, format, config, progress, backup, threads } => {
+            info!("Starting migration operations");
+
+            let migrate_command = crate::commands::migrate::MigrateCommand {
+                action,
+                verbose: verbose || cli.verbose,
+                dry_run,
+                format,
+                config,
+                progress,
+                backup,
+                threads: if threads > 0 { threads } else { cli.threads },
+            };
+
+            crate::commands::migrate::run(migrate_command).await
         }
     }
 }
@@ -419,6 +490,7 @@ fn build_enhanced_analysis_config(
     profile: bool,
     compatible: Option<String>,
     sql_statement_boundary: Option<bool>,
+    constant_propagation: bool,
 ) -> Result<EnhancedAnalysisConfig> {
     let target_paths = if targets.is_empty() {
         vec![PathBuf::from(".")]
@@ -431,11 +503,8 @@ fn build_enhanced_analysis_config(
             Language::Java,
             Language::JavaScript,
             Language::Python,
-            Language::Php,
             Language::Sql,
             Language::Bash,
-            Language::CSharp,
-            Language::C,
         ]
     } else {
         let mut parsed = Vec::new();
@@ -474,6 +543,7 @@ fn build_enhanced_analysis_config(
         enable_profiling: profile,
         compatible_mode: compatible,
         sql_statement_boundary,
+        enable_constant_propagation: constant_propagation,
     })
 }
 
@@ -531,40 +601,37 @@ fn build_analysis_config(
             Language::Java,
             Language::JavaScript,
             Language::Python,
-            Language::Php,
-            Language::Sql,
-            Language::Bash,
-            Language::CSharp,
-            Language::C,
-        ]
-    } else {
-        let mut parsed = Vec::new();
-        for lang_str in languages {
-            match Language::from_str(&lang_str) {
-                Some(lang) => parsed.push(lang),
-                None => {
-                    warn!("Unknown language: {}, skipping", lang_str);
-                }
+        Language::Sql,
+        Language::Bash,
+    ]
+} else {
+    let mut parsed = Vec::new();
+    for lang_str in languages {
+        match Language::from_str(&lang_str) {
+            Some(lang) => parsed.push(lang),
+            None => {
+                warn!("Unknown language: {}, skipping", lang_str);
             }
         }
-        if parsed.is_empty() {
-            return Err(anyhow::anyhow!("No valid languages specified"));
-        }
-        parsed
-    };
+    }
+    if parsed.is_empty() {
+        return Err(anyhow::anyhow!("No valid languages specified"));
+    }
+    parsed
+};
 
-    let output_format = OutputFormat::from_str(&format)
-        .ok_or_else(|| anyhow::anyhow!("Unknown output format: {}", format))?;
+let output_format = OutputFormat::from_str(&format)
+    .ok_or_else(|| anyhow::anyhow!("Unknown output format: {}", format))?;
 
-    Ok(AnalysisConfig {
-        target_paths,
-        exclude_patterns: exclude,
-        languages: parsed_languages,
-        rule_files: rules,
-        output_format,
-        parallel,
-        max_threads,
-    })
+Ok(AnalysisConfig {
+    target_paths,
+    exclude_patterns: exclude,
+    languages: parsed_languages,
+    rule_files: rules,
+    output_format,
+    parallel,
+    max_threads,
+})
 }
 
 /// Enhanced analysis configuration with additional options
@@ -588,6 +655,7 @@ pub struct EnhancedAnalysisConfig {
     pub enable_profiling: bool,
     pub compatible_mode: Option<String>,
     pub sql_statement_boundary: Option<bool>,
+    pub enable_constant_propagation: bool,
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@
 use crate::*;
 use astgrep_core::{AstNode, Language, Severity, Confidence};
 use astgrep_ast::{AstBuilder, UniversalNode};
+use serde_yaml::Value;
 use std::path::Path;
 
 /// Integration example for rule execution
@@ -27,7 +28,7 @@ impl RuleExecutionExample {
                         r".*\+.*".to_string()
                     )))
             ],
-            dataflow: Some(DataFlowSpec::new(
+            dataflow: Some(DataFlowSpec::from_strings(
                 vec!["user_input".to_string(), "request_parameter".to_string()],
                 vec!["sql_execution".to_string(), "database_query".to_string()],
             ).with_sanitizers(vec!["sql_escape".to_string(), "prepared_statement".to_string()])),
@@ -36,12 +37,14 @@ impl RuleExecutionExample {
             paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
-                metadata.insert("category".to_string(), "security".to_string());
-                metadata.insert("cwe".to_string(), "89".to_string());
-                metadata.insert("owasp".to_string(), "A03:2021".to_string());
+                metadata.insert("category".to_string(), Value::String("security".to_string()));
+                metadata.insert("cwe".to_string(), Value::String("89".to_string()));
+                metadata.insert("owasp".to_string(), Value::String("A03:2021".to_string()));
                 metadata
             },
             enabled: true,
+            mode: crate::types::RuleMode::Search,
+            sql_stmt_boundary: None,
         }
     }
 
@@ -61,7 +64,7 @@ impl RuleExecutionExample {
                         r".*user.*".to_string()
                     )))
             ],
-            dataflow: Some(DataFlowSpec::new(
+            dataflow: Some(DataFlowSpec::from_strings(
                 vec!["user_input".to_string(), "url_parameter".to_string()],
                 vec!["html_output".to_string(), "dom_manipulation".to_string()],
             ).with_sanitizers(vec!["html_encode".to_string(), "sanitize_html".to_string()])),
@@ -70,12 +73,14 @@ impl RuleExecutionExample {
             paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
-                metadata.insert("category".to_string(), "security".to_string());
-                metadata.insert("cwe".to_string(), "79".to_string());
-                metadata.insert("owasp".to_string(), "A03:2021".to_string());
+                metadata.insert("category".to_string(), Value::String("security".to_string()));
+                metadata.insert("cwe".to_string(), Value::String("79".to_string()));
+                metadata.insert("owasp".to_string(), Value::String("A03:2021".to_string()));
                 metadata
             },
             enabled: true,
+            mode: crate::types::RuleMode::Search,
+            sql_stmt_boundary: None,
         }
     }
 
@@ -141,7 +146,7 @@ impl RuleExecutionExample {
             if !finding.metadata.is_empty() {
                 println!("  Metadata:");
                 for (key, value) in &finding.metadata {
-                    println!("    {}: {}", key, value);
+                    println!("    {}: {:?}", key, value);
                 }
             }
         }
@@ -181,7 +186,8 @@ impl RuleExecutionExample {
             &rules,
             &ast,
             Language::Java,
-            Some(Path::new("example.java"))
+            Some(Path::new("example.java")),
+            true, // Enable constant propagation
         )?;
 
         // Display comprehensive results

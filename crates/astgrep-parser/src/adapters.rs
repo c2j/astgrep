@@ -191,9 +191,7 @@ impl LanguageParser for BaseParser {
                 (Language::Python, "py" | "pyw") => true,
                 (Language::Sql, "sql" | "ddl" | "dml") => true,
                 (Language::Bash, "sh" | "bash" | "zsh") => true,
-                (Language::Php, "php" | "phtml" | "php3" | "php4" | "php5") => true,
-                (Language::CSharp, "cs" | "csx") => true,
-                (Language::C, "c" | "h") => true,
+
                 _ => false,
             }
         } else {
@@ -228,12 +226,6 @@ pub mod utils {
             Language::Python => PYTHON_KEYWORDS.contains(&text),
             Language::Sql => SQL_KEYWORDS.contains(&text.to_uppercase().as_str()),
             Language::Bash => BASH_KEYWORDS.contains(&text),
-            Language::Php => false, // TODO: Add PHP keywords
-            Language::CSharp => false, // TODO: Add C# keywords
-            Language::C => false, // TODO: Add C keywords
-            Language::Ruby => false, // TODO: Add Ruby keywords
-            Language::Kotlin => false, // TODO: Add Kotlin keywords
-            Language::Swift => false, // TODO: Add Swift keywords
             Language::Xml => false, // XML doesn't have keywords in the traditional sense
         }
     }

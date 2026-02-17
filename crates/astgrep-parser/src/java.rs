@@ -68,72 +68,22 @@ impl JavaAdapter {
         }
     }
 
-    /// Parse class declaration
+    /// Parse class declaration using TreeSitter for better AST quality
     fn parse_class_declaration(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
-        // Very simplified class parsing
-        let lines: Vec<&str> = source.lines().collect();
-        let mut class_name = "UnknownClass";
-        let mut is_public = false;
-        let mut is_abstract = false;
-        let mut extends_class = None;
-        let mut implements_interfaces = Vec::new();
-
-        // Find class declaration line
-        for line in &lines {
-            let trimmed = line.trim();
-            if trimmed.contains("class ") {
-                is_public = trimmed.contains("public ");
-                is_abstract = trimmed.contains("abstract ");
-                
-                // Extract class name (simplified)
-                if let Some(class_start) = trimmed.find("class ") {
-                    let after_class = &trimmed[class_start + 6..];
-                    if let Some(name_end) = after_class.find(|c: char| c.is_whitespace() || c == '{' || c == '<') {
-                        class_name = &after_class[..name_end];
-                    } else {
-                        class_name = after_class.trim_end_matches('{').trim();
-                    }
-                }
-
-                // Check for extends
-                if let Some(extends_start) = trimmed.find(" extends ") {
-                    let after_extends = &trimmed[extends_start + 9..];
-                    if let Some(extends_end) = after_extends.find(|c: char| c.is_whitespace() || c == '{' || c == '<') {
-                        extends_class = Some(after_extends[..extends_end].to_string());
-                    }
-                }
-
-                // Check for implements
-                if let Some(implements_start) = trimmed.find(" implements ") {
-                    let after_implements = &trimmed[implements_start + 12..];
-                    let interfaces_str = after_implements.split('{').next().unwrap_or("").trim();
-                    implements_interfaces = interfaces_str
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                }
-                break;
-            }
-        }
-
-        // Create class node
-        let mut class_node = AstBuilder::simple_class_declaration(class_name);
+        // Use TreeSitterParser for better AST quality
+        use crate::tree_sitter_parser::TreeSitterParser;
         
-        if is_public {
-            class_node = class_node.with_modifier("public");
-        }
-        if is_abstract {
-            class_node = class_node.with_modifier("abstract");
-        }
-        if let Some(parent) = extends_class {
-            class_node = class_node.with_parent(parent);
-        }
-        for interface in implements_interfaces {
-            class_node = class_node.with_interface(interface);
-        }
-
-        Ok(class_node.with_text(source.to_string()))
+        let mut ts_parser = TreeSitterParser::new()
+            .map_err(|e| astgrep_core::AnalysisError::parse_error(format!("Failed to create TreeSitterParser: {}", e)))?;
+        
+        let tree = ts_parser.parse(source, astgrep_core::Language::Java)
+            .map_err(|e| astgrep_core::AnalysisError::parse_error(format!("Failed to parse Java: {}", e)))?
+            .ok_or_else(|| astgrep_core::AnalysisError::parse_error("Failed to parse Java: no tree returned"))?;
+        
+        let universal_ast = ts_parser.tree_to_universal_ast(&tree, source)
+            .map_err(|e| astgrep_core::AnalysisError::parse_error(format!("Failed to convert to universal AST: {}", e)))?;
+        
+        Ok(universal_ast)
     }
 
     /// Parse method or field declaration

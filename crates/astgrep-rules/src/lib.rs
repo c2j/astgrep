@@ -129,6 +129,24 @@ impl RuleEngine {
         ast: &dyn astgrep_core::AstNode,
         context: &RuleContext,
     ) -> Result<Vec<Finding>> {
+        // Perform constant propagation analysis if enabled
+        if context.enable_constant_propagation {
+            use astgrep_dataflow::ConstantPropagator;
+            let mut propagator = ConstantPropagator::new();
+            match propagator.analyze_ast(ast) {
+                Ok(constants) => {
+                    if !constants.is_empty() {
+                        tracing::info!("Constant propagation found {} constants", constants.len());
+                        self.executor.set_constant_values(constants);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Constant propagation analysis failed: {}", e);
+                }
+            }
+        }
+        
+        // Execute rules
         let results = self.execute_rules(ast, context)?;
         let mut findings = Vec::new();
 

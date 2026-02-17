@@ -280,7 +280,7 @@ pub fn validate_request_size(content_length: Option<usize>, max_size: usize) -> 
 /// Extract and validate language parameter
 pub fn validate_language(language: &str) -> WebResult<()> {
     const SUPPORTED_LANGUAGES: &[&str] = &[
-        "java", "javascript", "typescript", "python", "sql", "bash", "c", "cpp", "csharp", "go", "rust", "php", "ruby"
+        "java", "javascript", "typescript", "python", "sql", "bash", "c", "cpp", "csharp", "php", "ruby"
     ];
     
     if !SUPPORTED_LANGUAGES.contains(&language.to_lowercase().as_str()) {

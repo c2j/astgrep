@@ -1,6 +1,7 @@
 //! Core types for astgrep
 
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -13,12 +14,6 @@ pub enum Language {
     Python,
     Sql,
     Bash,
-    Php,
-    CSharp,
-    C,
-    Ruby,
-    Kotlin,
-    Swift,
     Xml,
 }
 
@@ -31,12 +26,6 @@ impl Language {
             Language::Python => &[".py", ".pyw"],
             Language::Sql => &[".sql", ".ddl", ".dml"],
             Language::Bash => &[".sh", ".bash", ".zsh"],
-            Language::Php => &[".php", ".phtml", ".php3", ".php4", ".php5"],
-            Language::CSharp => &[".cs", ".csx"],
-            Language::C => &[".c", ".h"],
-            Language::Ruby => &[".rb", ".rbw", ".rake", ".gemspec"],
-            Language::Kotlin => &[".kt", ".kts"],
-            Language::Swift => &[".swift"],
             Language::Xml => &[".xml", ".xsd", ".xsl", ".xslt", ".svg", ".pom"],
         }
     }
@@ -49,12 +38,6 @@ impl Language {
             Language::Python => "python",
             Language::Sql => "sql",
             Language::Bash => "bash",
-            Language::Php => "php",
-            Language::CSharp => "csharp",
-            Language::C => "c",
-            Language::Ruby => "ruby",
-            Language::Kotlin => "kotlin",
-            Language::Swift => "swift",
             Language::Xml => "xml",
         }
     }
@@ -67,12 +50,6 @@ impl Language {
             "python" | "py" => Some(Language::Python),
             "sql" => Some(Language::Sql),
             "bash" | "shell" | "sh" => Some(Language::Bash),
-            "php" => Some(Language::Php),
-            "csharp" | "c#" | "cs" => Some(Language::CSharp),
-            "c" => Some(Language::C),
-            "ruby" | "rb" => Some(Language::Ruby),
-            "kotlin" | "kt" => Some(Language::Kotlin),
-            "swift" => Some(Language::Swift),
             "xml" => Some(Language::Xml),
             _ => None,
         }
@@ -172,7 +149,7 @@ pub struct Finding {
     pub severity: Severity,
     pub confidence: Confidence,
     pub location: Location,
-    pub metadata: HashMap<String, String>,
+    pub metadata: HashMap<String, Value>,
     pub fix_suggestion: Option<String>,
 }
 
@@ -197,6 +174,12 @@ impl Finding {
 
     /// Add metadata to the finding
     pub fn with_metadata(mut self, key: String, value: String) -> Self {
+        self.metadata.insert(key, Value::String(value));
+        self
+    }
+
+    /// Add metadata with any YAML value type
+    pub fn with_metadata_value(mut self, key: String, value: Value) -> Self {
         self.metadata.insert(key, value);
         self
     }
@@ -281,9 +264,6 @@ mod tests {
         assert_eq!(Language::Python.extensions(), &[".py", ".pyw"]);
         assert_eq!(Language::Sql.extensions(), &[".sql", ".ddl", ".dml"]);
         assert_eq!(Language::Bash.extensions(), &[".sh", ".bash", ".zsh"]);
-        assert_eq!(Language::Php.extensions(), &[".php", ".phtml", ".php3", ".php4", ".php5"]);
-        assert_eq!(Language::CSharp.extensions(), &[".cs", ".csx"]);
-        assert_eq!(Language::C.extensions(), &[".c", ".h"]);
     }
 
     #[test]
@@ -293,10 +273,6 @@ mod tests {
         assert_eq!(Language::from_str("python"), Some(Language::Python));
         assert_eq!(Language::from_str("sql"), Some(Language::Sql));
         assert_eq!(Language::from_str("bash"), Some(Language::Bash));
-        assert_eq!(Language::from_str("php"), Some(Language::Php));
-        assert_eq!(Language::from_str("csharp"), Some(Language::CSharp));
-        assert_eq!(Language::from_str("c#"), Some(Language::CSharp));
-        assert_eq!(Language::from_str("c"), Some(Language::C));
         assert_eq!(Language::from_str("unknown"), None);
     }
 
@@ -307,9 +283,6 @@ mod tests {
         assert_eq!(Language::from_extension(".py"), Some(Language::Python));
         assert_eq!(Language::from_extension(".sql"), Some(Language::Sql));
         assert_eq!(Language::from_extension(".sh"), Some(Language::Bash));
-        assert_eq!(Language::from_extension(".php"), Some(Language::Php));
-        assert_eq!(Language::from_extension(".cs"), Some(Language::CSharp));
-        assert_eq!(Language::from_extension(".c"), Some(Language::C));
         assert_eq!(Language::from_extension(".unknown"), None);
     }
 

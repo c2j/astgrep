@@ -110,6 +110,13 @@ impl RuleValidator {
 
     /// Validate rule patterns
     fn validate_patterns(&self, rule: &Rule) -> Result<()> {
+        // Taint mode rules use pattern-sources and pattern-sinks instead of patterns/dataflow
+        if rule.mode == crate::types::RuleMode::Taint {
+            // For taint mode, we don't require patterns or dataflow
+            // The taint analysis is handled separately
+            return Ok(());
+        }
+
         if rule.patterns.is_empty() && rule.dataflow.is_none() {
             return Err(AnalysisError::rule_validation_error(
                 "Rule must have either patterns or dataflow specification"
@@ -254,11 +261,21 @@ impl RuleValidator {
                         pattern_index, condition_index
                     )));
                 }
-                if metavar_comp.value.is_empty() {
-                    return Err(AnalysisError::rule_validation_error(format!(
-                        "Pattern {} condition {} value cannot be empty",
-                        pattern_index, condition_index
-                    )));
+                // For PythonExpression operator, the value is not required (expression is in operator)
+                // For other operators, value is required
+                use astgrep_core::ComparisonOperator;
+                match &metavar_comp.operator {
+                    ComparisonOperator::PythonExpression(_) => {
+                        // PythonExpression stores the full expression, value is not needed
+                    }
+                    _ => {
+                        if metavar_comp.value.is_empty() {
+                            return Err(AnalysisError::rule_validation_error(format!(
+                                "Pattern {} condition {} value cannot be empty",
+                                pattern_index, condition_index
+                            )));
+                        }
+                    }
                 }
             }
             Condition::NodeType(node_type) => {
@@ -301,6 +318,21 @@ impl RuleValidator {
                     )));
                 }
                 // Additional validation for analysis configuration could be added here
+            }
+            Condition::MetavariableType(metavar_type) => {
+                // Validate metavariable type constraint
+                if metavar_type.metavariable.is_empty() {
+                    return Err(AnalysisError::rule_validation_error(format!(
+                        "Pattern {} condition {} metavariable name cannot be empty",
+                        pattern_index, condition_index
+                    )));
+                }
+                if metavar_type.var_type.is_empty() {
+                    return Err(AnalysisError::rule_validation_error(format!(
+                        "Pattern {} condition {} type cannot be empty",
+                        pattern_index, condition_index
+                    )));
+                }
             }
             Condition::Custom(custom_condition) => {
                 if custom_condition.is_empty() {
@@ -347,18 +379,22 @@ impl RuleValidator {
                 return Err(AnalysisError::rule_validation_error("Metadata key cannot be empty"));
             }
 
-            if value.is_empty() {
-                return Err(AnalysisError::rule_validation_error(format!(
-                    "Metadata value for key '{}' cannot be empty", key
-                )));
-            }
+            // For string values, check if empty
+            if let Some(s) = value.as_str() {
+                if s.is_empty() {
+                    return Err(AnalysisError::rule_validation_error(format!(
+                        "Metadata value for key '{}' cannot be empty", key
+                    )));
+                }
 
-            // Validate specific metadata fields
-            if key == "cwe" && !value.starts_with("CWE-") {
-                return Err(AnalysisError::rule_validation_error(
-                    "CWE metadata should start with 'CWE-'"
-                ));
+                // Validate specific metadata fields for string values
+                if key == "cwe" && !s.starts_with("CWE-") {
+                    return Err(AnalysisError::rule_validation_error(
+                        "CWE metadata should start with 'CWE-'"
+                    ));
+                }
             }
+            // Arrays and objects are always valid (non-empty by definition when present)
         }
 
         Ok(())
@@ -534,7 +570,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
 
-        let dataflow = DataFlowSpec::new(Vec::new(), vec!["sink".to_string()]);
+        let dataflow = DataFlowSpec::from_strings(Vec::new(), vec!["sink".to_string()]);
         rule.dataflow = Some(dataflow);
 
         assert!(validator.validate_rule(&rule).is_err());
@@ -545,7 +581,7 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
 
-        let dataflow = DataFlowSpec::new(
+        let dataflow = DataFlowSpec::from_strings(
             vec!["source".to_string()],
             vec!["sink".to_string()],
         ).with_max_depth(0);

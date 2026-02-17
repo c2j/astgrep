@@ -89,6 +89,7 @@ pub enum NodeType {
     CreateTableStatement,
     CreateIndexStatement,
     CreateViewStatement,
+    CreateSequenceStatement,
     DropStatement,
     AlterStatement,
 
@@ -162,6 +163,7 @@ impl NodeType {
             NodeType::CreateTableStatement => "create_table_statement",
             NodeType::CreateIndexStatement => "create_index_statement",
             NodeType::CreateViewStatement => "create_view_statement",
+            NodeType::CreateSequenceStatement => "create_sequence_statement",
             NodeType::DropStatement => "drop_statement",
             NodeType::AlterStatement => "alter_statement",
             NodeType::Shebang => "shebang",
@@ -233,6 +235,7 @@ impl NodeType {
             "create_table_statement" => Some(NodeType::CreateTableStatement),
             "create_index_statement" => Some(NodeType::CreateIndexStatement),
             "create_view_statement" => Some(NodeType::CreateViewStatement),
+            "create_sequence_statement" => Some(NodeType::CreateSequenceStatement),
             "drop_statement" => Some(NodeType::DropStatement),
             "alter_statement" => Some(NodeType::AlterStatement),
             "shebang" => Some(NodeType::Shebang),
@@ -575,6 +578,11 @@ impl UniversalNode {
         };
         node.attributes.insert("column_definitions".to_string(), new_defs);
         node
+    }
+
+    /// Add a sequence name (for CREATE SEQUENCE)
+    pub fn with_sequence_name(self, sequence_name: String) -> Self {
+        self.with_attribute("sequence_name".to_string(), sequence_name)
     }
 
     // Bash-specific methods

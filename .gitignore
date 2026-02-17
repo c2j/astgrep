@@ -1,6 +1,7 @@
 # Rust
 /target/
 **/*.rs.bk
+**/*.rs.bak
 Cargo.lock
 
 # IDE
@@ -20,6 +21,9 @@ Thumbs.db
 # Test artifacts
 /test-results/
 /coverage/
+/tests/validation_reports
+/tests/scripts/tests/validation_reports
+/tmp
 
 # Benchmark results
 /target/criterion/
@@ -37,3 +41,17 @@ results.*
 
 dist/
 __pycache__/
+
+# Migration artifacts
+/newtest/
+/migration-backups/
+migration_*.log
+migration_state.json
+
+# Environment files
+.env.local
+.env.migration
+
+# Migration temporary files
+*.migration.tmp
+rsync_*.log

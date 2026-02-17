@@ -1630,8 +1630,6 @@ fn detect_language_from_filename(filename: &str) -> String {
         "c" => "c".to_string(),
         "cpp" | "cc" | "cxx" => "cpp".to_string(),
         "cs" => "csharp".to_string(),
-        "go" => "go".to_string(),
-        "rs" => "rust".to_string(),
         "php" => "php".to_string(),
         "rb" => "ruby".to_string(),
         "kt" | "kts" => "kotlin".to_string(),

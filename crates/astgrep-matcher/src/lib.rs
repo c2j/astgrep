@@ -8,11 +8,13 @@ pub mod metavar;
 pub mod conditions;
 pub mod advanced_matcher;
 pub mod precise_matcher;
+pub mod script_classifier;
 
 pub use matcher::*;
 pub use parser::*;
 pub use advanced_matcher::*;
 pub use precise_matcher::*;
+pub use script_classifier::*;
 pub use metavar::{MetavarBinding, MetavarConstraint, MetavarManager};
 pub use conditions::{ConditionEvaluator, ConditionType, ComparisonOp};
 
