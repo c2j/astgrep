@@ -1,5 +1,5 @@
 //! Pattern parser
-//! 
+//!
 //! This module provides functionality to parse pattern strings into structured representations.
 
 use astgrep_core::{AnalysisError, Result};
@@ -64,16 +64,12 @@ pub struct PatternParser {
 impl PatternParser {
     /// Create a new pattern parser
     pub fn new() -> Self {
-        Self {
-            strict_mode: false,
-        }
+        Self { strict_mode: false }
     }
 
     /// Create a parser in strict mode
     pub fn strict() -> Self {
-        Self {
-            strict_mode: true,
-        }
+        Self { strict_mode: true }
     }
 
     /// Parse a pattern string
@@ -90,11 +86,11 @@ impl PatternParser {
 
         while let Some(ch) = chars.next() {
             current_pos += 1;
-            
+
             match ch {
                 // Skip whitespace
                 ' ' | '\t' | '\n' | '\r' => continue,
-                
+
                 // Metavariable
                 '$' => {
                     let mut name = String::new();
@@ -121,21 +117,24 @@ impl PatternParser {
                                 }
 
                                 if name.is_empty() {
-                                    return Err(AnalysisError::pattern_match_error(
-                                        format!("Invalid ellipsis metavariable at position {}", current_pos)
-                                    ));
+                                    return Err(AnalysisError::pattern_match_error(format!(
+                                        "Invalid ellipsis metavariable at position {}",
+                                        current_pos
+                                    )));
                                 }
 
                                 tokens.push(Token::EllipsisMetavariable(name));
                             } else {
-                                return Err(AnalysisError::pattern_match_error(
-                                    format!("Invalid ellipsis pattern at position {}", current_pos)
-                                ));
+                                return Err(AnalysisError::pattern_match_error(format!(
+                                    "Invalid ellipsis pattern at position {}",
+                                    current_pos
+                                )));
                             }
                         } else {
-                            return Err(AnalysisError::pattern_match_error(
-                                format!("Invalid ellipsis pattern at position {}", current_pos)
-                            ));
+                            return Err(AnalysisError::pattern_match_error(format!(
+                                "Invalid ellipsis pattern at position {}",
+                                current_pos
+                            )));
                         }
                     } else {
                         // Regular metavariable
@@ -149,15 +148,16 @@ impl PatternParser {
                         }
 
                         if name.is_empty() {
-                            return Err(AnalysisError::pattern_match_error(
-                                format!("Invalid metavariable at position {}", current_pos)
-                            ));
+                            return Err(AnalysisError::pattern_match_error(format!(
+                                "Invalid metavariable at position {}",
+                                current_pos
+                            )));
                         }
 
                         tokens.push(Token::Metavariable(name));
                     }
                 }
-                
+
                 // Node type constraint
                 '@' => {
                     let mut name = String::new();
@@ -169,23 +169,24 @@ impl PatternParser {
                             break;
                         }
                     }
-                    
+
                     if name.is_empty() {
-                        return Err(AnalysisError::pattern_match_error(
-                            format!("Invalid node type at position {}", current_pos)
-                        ));
+                        return Err(AnalysisError::pattern_match_error(format!(
+                            "Invalid node type at position {}",
+                            current_pos
+                        )));
                     }
-                    
+
                     tokens.push(Token::NodeType(name));
                 }
-                
-                // Parentheses
+
+                // Parentheses - structural tokens for grouping
                 '(' => tokens.push(Token::LeftParen),
                 ')' => tokens.push(Token::RightParen),
-                
+
                 // Alternative operator
                 '|' => tokens.push(Token::Pipe),
-                
+
                 // Wildcard
                 '.' => {
                     if chars.peek() == Some(&'.') {
@@ -196,24 +197,25 @@ impl PatternParser {
                             current_pos += 1;
                             tokens.push(Token::Wildcard);
                         } else {
-                            return Err(AnalysisError::pattern_match_error(
-                                format!("Invalid wildcard at position {}", current_pos)
-                            ));
+                            return Err(AnalysisError::pattern_match_error(format!(
+                                "Invalid wildcard at position {}",
+                                current_pos
+                            )));
                         }
                     } else {
                         // Single dot is treated as literal
                         tokens.push(Token::Literal(".".to_string()));
                     }
                 }
-                
+
                 // String literals
                 '"' => {
                     let mut literal = String::new();
                     let mut escaped = false;
-                    
+
                     while let Some(next_ch) = chars.next() {
                         current_pos += 1;
-                        
+
                         if escaped {
                             match next_ch {
                                 'n' => literal.push('\n'),
@@ -235,15 +237,15 @@ impl PatternParser {
                             literal.push(next_ch);
                         }
                     }
-                    
+
                     tokens.push(Token::Literal(literal));
                 }
-                
+
                 // Regular characters (treated as literal)
                 _ => {
                     let mut literal = String::new();
                     literal.push(ch);
-                    
+
                     // Continue collecting literal characters
                     while let Some(&next_ch) = chars.peek() {
                         if next_ch.is_alphanumeric() || "_-+*=<>!&^%#".contains(next_ch) {
@@ -253,7 +255,7 @@ impl PatternParser {
                             break;
                         }
                     }
-                    
+
                     tokens.push(Token::Literal(literal));
                 }
             }
@@ -268,7 +270,8 @@ impl PatternParser {
             return Ok(ParsedPattern::Wildcard);
         }
 
-        self.parse_alternative(tokens, 0).map(|(pattern, _)| pattern)
+        self.parse_alternative(tokens, 0)
+            .map(|(pattern, _)| pattern)
     }
 
     /// Parse alternative patterns (lowest precedence)
@@ -300,8 +303,47 @@ impl PatternParser {
         let mut pos = start;
 
         while pos < tokens.len() {
+            // Stop at Pipe (for alternatives) or closing paren (end of grouping)
             match &tokens[pos] {
-                Token::RightParen | Token::Pipe => break,
+                Token::Pipe => break,
+                Token::RightParen => {
+                    // Check if we're inside a method call pattern
+                    // (i.e., previous token was a Literal and we saw a "(" earlier)
+                    if pos > start
+                        && patterns.len() > 0
+                        && matches!(&patterns[patterns.len() - 1], ParsedPattern::Literal(_))
+                    {
+                        // Check if there's a "(" in the patterns (indicating method call)
+                        let has_open_paren = patterns
+                            .iter()
+                            .any(|p| matches!(p, ParsedPattern::Literal(s) if s == "("));
+                        if has_open_paren {
+                            // This is closing a method call, treat as literal
+                            patterns.push(ParsedPattern::Literal(")".to_string()));
+                            pos += 1;
+                            continue;
+                        }
+                    }
+                    // Otherwise, break (end of grouping)
+                    break;
+                }
+                Token::LeftParen => {
+                    // Check if this looks like a method call pattern (Literal followed by LeftParen)
+                    // If so, keep the parenthesis as a literal token
+                    if pos > start && matches!(tokens[pos - 1], Token::Literal(_)) {
+                        // This is a method call like "foo(", treat as literal
+                        patterns.push(ParsedPattern::Literal("(".to_string()));
+                        pos += 1;
+                        // Continue parsing the content inside the parens
+                        continue;
+                    } else {
+                        // This is a grouping parenthesis like "(a | b)"
+                        let (nested_pattern, new_pos) =
+                            self.parse_parenthesized_group(tokens, pos)?;
+                        patterns.push(nested_pattern);
+                        pos = new_pos;
+                    }
+                }
                 _ => {
                     let (pattern, new_pos) = self.parse_primary(tokens, pos)?;
                     patterns.push(pattern);
@@ -319,27 +361,118 @@ impl PatternParser {
         }
     }
 
+    /// Parse a parenthesized group - handles (a | b) alternatives or just (内容)
+    fn parse_parenthesized_group(
+        &self,
+        tokens: &[Token],
+        start: usize,
+    ) -> Result<(ParsedPattern, usize)> {
+        if start >= tokens.len() {
+            return Err(AnalysisError::pattern_match_error(
+                "Unexpected end of pattern",
+            ));
+        }
+
+        if !matches!(tokens[start], Token::LeftParen) {
+            return Err(AnalysisError::pattern_match_error(
+                "Expected opening parenthesis",
+            ));
+        }
+
+        let mut pos = start + 1;
+        let mut patterns = Vec::new();
+
+        // Collect patterns until we hit a closing paren
+        while pos < tokens.len() {
+            match &tokens[pos] {
+                Token::RightParen => {
+                    // End of group
+                    pos += 1;
+                    break;
+                }
+                Token::Pipe => {
+                    // This is an alternative: (a | b | c)
+                    // Convert collected patterns to Alternative
+                    if patterns.len() == 1 {
+                        // Single pattern before pipe, continue collecting alternatives
+                        pos += 1;
+                        continue;
+                    } else if patterns.len() > 1 {
+                        // Multiple patterns in first alternative
+                        let first_alt = ParsedPattern::Sequence(patterns);
+                        pos += 1;
+
+                        // Collect remaining alternatives
+                        let mut alternatives = vec![first_alt];
+                        while pos < tokens.len() {
+                            match &tokens[pos] {
+                                Token::RightParen => {
+                                    pos += 1;
+                                    break;
+                                }
+                                Token::Pipe => {
+                                    pos += 1;
+                                    continue;
+                                }
+                                _ => {
+                                    let (pattern, new_pos) = self.parse_primary(tokens, pos)?;
+                                    alternatives.push(ParsedPattern::Sequence(vec![pattern]));
+                                    pos = new_pos;
+                                }
+                            }
+                        }
+                        return Ok((ParsedPattern::Alternative(alternatives), pos));
+                    } else {
+                        // Empty before pipe - error
+                        return Err(AnalysisError::pattern_match_error(
+                            "Invalid alternative pattern",
+                        ));
+                    }
+                }
+                _ => {
+                    let (pattern, new_pos) = self.parse_primary(tokens, pos)?;
+                    patterns.push(pattern);
+                    pos = new_pos;
+                }
+            }
+        }
+
+        if patterns.is_empty() {
+            Ok((ParsedPattern::Sequence(vec![]), pos))
+        } else if patterns.len() == 1 {
+            Ok((patterns.into_iter().next().unwrap(), pos))
+        } else {
+            Ok((ParsedPattern::Sequence(patterns), pos))
+        }
+    }
+
     /// Parse primary patterns (highest precedence)
     fn parse_primary(&self, tokens: &[Token], start: usize) -> Result<(ParsedPattern, usize)> {
         if start >= tokens.len() {
-            return Err(AnalysisError::pattern_match_error("Unexpected end of pattern"));
+            return Err(AnalysisError::pattern_match_error(
+                "Unexpected end of pattern",
+            ));
         }
 
         match &tokens[start] {
             Token::Literal(s) => Ok((ParsedPattern::Literal(s.clone()), start + 1)),
             Token::Metavariable(s) => Ok((ParsedPattern::Metavariable(s.clone()), start + 1)),
-            Token::EllipsisMetavariable(s) => Ok((ParsedPattern::EllipsisMetavariable(s.clone()), start + 1)),
+            Token::EllipsisMetavariable(s) => {
+                Ok((ParsedPattern::EllipsisMetavariable(s.clone()), start + 1))
+            }
             Token::NodeType(s) => Ok((ParsedPattern::NodeType(s.clone()), start + 1)),
             Token::Wildcard => Ok((ParsedPattern::Wildcard, start + 1)),
-            Token::LeftParen => {
-                let (pattern, pos) = self.parse_alternative(tokens, start + 1)?;
-                if pos >= tokens.len() || !matches!(tokens[pos], Token::RightParen) {
-                    return Err(AnalysisError::pattern_match_error("Missing closing parenthesis"));
-                }
-                Ok((pattern, pos + 1))
-            }
-            Token::RightParen => Err(AnalysisError::pattern_match_error("Unexpected closing parenthesis")),
-            Token::Pipe => Err(AnalysisError::pattern_match_error("Unexpected pipe operator")),
+            // LeftParen and RightParen are now treated as literals (their content was consumed)
+            // So just return an error for unexpected
+            Token::LeftParen => Err(AnalysisError::pattern_match_error(
+                "Unexpected opening parenthesis",
+            )),
+            Token::RightParen => Err(AnalysisError::pattern_match_error(
+                "Unexpected closing parenthesis",
+            )),
+            Token::Pipe => Err(AnalysisError::pattern_match_error(
+                "Unexpected pipe operator",
+            )),
         }
     }
 }

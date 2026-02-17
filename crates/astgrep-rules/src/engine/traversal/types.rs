@@ -159,20 +159,22 @@ impl RuleExecutionEngine {
     /// Execute taint mode analysis
     pub(crate) fn execute_taint_mode(
         &self,
-        _dataflow: &crate::types::DataFlowSpec,
-        _ast: &dyn AstNode,
+        dataflow: &crate::types::DataFlowSpec,
+        ast: &dyn AstNode,
         rule: &Rule,
-        _context: &RuleContext,
+        context: &RuleContext,
     ) -> Result<Vec<Finding>> {
-        // TODO: Implement taint analysis using the dataflow crate
-        // For now, return an empty result with a note that taint analysis is not yet implemented
-        let findings = Vec::new();
+        use crate::executor::AdvancedRuleExecutor;
 
-        // Log that taint analysis is not implemented
-        eprintln!(
-            "Taint analysis for rule '{}' is not yet implemented",
-            rule.id
-        );
+        let mut executor = AdvancedRuleExecutor::new();
+
+        let findings = executor.execute_taint_analysis(
+            rule,
+            dataflow,
+            ast,
+            None,
+            Some(std::path::Path::new(&context.file_path)),
+        )?;
 
         Ok(findings)
     }

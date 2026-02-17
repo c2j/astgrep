@@ -233,6 +233,22 @@ impl AdvancedRuleExecutor {
     ) -> Result<Vec<Finding>> {
         let mut findings = Vec::new();
 
+        // Handle Either patterns by recursively processing each alternative
+        // so each inner pattern's conditions are checked
+        if let PatternType::Either(inner_patterns) = &pattern.pattern_type {
+            for inner_pattern in inner_patterns {
+                let inner_findings = self.execute_pattern_analysis(
+                    rule,
+                    inner_pattern,
+                    ast,
+                    dataflow_analysis,
+                    file_path,
+                )?;
+                findings.extend(inner_findings);
+            }
+            return Ok(findings);
+        }
+
         // Preprocess pattern to handle typed metavariable syntax like "($TYPE $VAR).method()"
         let (processed_pattern, type_constraints) = self.preprocess_typed_metavariables(pattern);
 
@@ -318,6 +334,11 @@ impl AdvancedRuleExecutor {
 
         // Get full source code from the root AST node
         let full_source = ast.text().unwrap_or("").to_string();
+
+        eprintln!(
+            "DEBUG execute_pattern_analysis: {} matches after dedup",
+            filtered.len()
+        );
 
         for match_result in filtered {
             // Check pattern conditions with full source code
@@ -848,5 +869,18 @@ impl Rule {
         }
         // For taint mode rules, enable symbolic propagation by default
         self.mode == crate::types::RuleMode::Taint
+    }
+
+    /// Check if this rule has constant propagation enabled
+    pub fn has_constant_propagation(&self) -> bool {
+        // Check metadata for constant_propagation option
+        if let Some(Value::String(val)) = self.metadata.get("constant_propagation") {
+            return val == "true" || val == "on" || val == "yes" || val == "1";
+        }
+        if let Some(Value::Bool(val)) = self.metadata.get("constant_propagation") {
+            return *val;
+        }
+        // Default to true for constant propagation
+        true
     }
 }

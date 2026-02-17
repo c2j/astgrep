@@ -184,7 +184,19 @@ impl AdvancedRuleExecutor {
                     "[DEBUG] Found {} annotated method parameter sources",
                     annotation_sources.len()
                 );
+                for src in &annotation_sources {
+                    eprintln!(
+                        "[DEBUG] Annotation source: var_name={:?}, bindings={:?}",
+                        src.var_name, src.bindings
+                    );
+                }
                 sources.extend(annotation_sources);
+            }
+
+            // Skip pattern matching if we already have sources from annotation detection
+            // This avoids issues with complex patterns
+            if !sources.is_empty() {
+                continue;
             }
 
             // Normalize pattern: remove trailing semicolons and whitespace for more flexible matching
@@ -419,6 +431,10 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        eprintln!(
+            "[DEBUG] find_taint_sources: returning {} sources",
+            sources.len()
+        );
         Ok(sources)
     }
 
@@ -432,190 +448,162 @@ impl AdvancedRuleExecutor {
         let mut sinks = Vec::new();
 
         for sink_pattern in &dataflow_spec.sinks {
-            // Normalize pattern: remove trailing semicolons and whitespace for more flexible matching
-            let original_pattern = sink_pattern.pattern_text();
-            let normalized_pattern = original_pattern
-                .trim_end_matches(';')
-                .trim_end_matches('\n')
-                .trim();
+            eprintln!("[DEBUG] find_taint_sinks: processing sink pattern");
+            // Recursively collect all simple patterns from the pattern tree
+            let simple_patterns = self.collect_simple_patterns(&sink_pattern.pattern);
             eprintln!(
-                "[DEBUG] Normalizing sink pattern: '{:?}' -> '{}'",
-                original_pattern, normalized_pattern
+                "[DEBUG] find_taint_sinks: collected {} simple patterns",
+                simple_patterns.len()
+            );
+            for pattern_str in &simple_patterns {
+                eprintln!("[DEBUG] find_taint_sinks: trying pattern '{}'", pattern_str);
+                let matches = self.find_sink_matches_for_pattern(
+                    &pattern_str,
+                    ast,
+                    source_text,
+                    &sink_pattern.focus_metavariables,
+                )?;
+                eprintln!(
+                    "[DEBUG] find_taint_sinks: pattern '{}' found {} matches",
+                    pattern_str,
+                    matches.len()
+                );
+                sinks.extend(matches);
+            }
+        }
+
+        Ok(sinks)
+    }
+
+    /// Recursively collect all simple pattern strings from a pattern tree
+    fn collect_simple_patterns(&self, pattern: &Pattern) -> Vec<String> {
+        let mut result = Vec::new();
+        match &pattern.pattern_type {
+            PatternType::Simple(s) => {
+                result.push(s.clone());
+            }
+            PatternType::Either(inner_patterns) => {
+                for inner in inner_patterns {
+                    result.extend(self.collect_simple_patterns(inner));
+                }
+            }
+            _ => {}
+        }
+        result
+    }
+
+    fn find_sink_matches_for_pattern(
+        &mut self,
+        pattern_str: &str,
+        ast: &dyn AstNode,
+        source_text: &str,
+        focus_metavariables: &[String],
+    ) -> Result<Vec<TaintMatch>> {
+        let mut sinks = Vec::new();
+
+        let normalized_pattern = pattern_str.trim().trim_end_matches(';');
+        eprintln!(
+            "[DEBUG] Normalizing sink pattern: '{:?}' -> '{}'",
+            pattern_str, normalized_pattern
+        );
+
+        let semgrep_pattern = astgrep_core::SemgrepPattern {
+            pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
+
+        // Find matches
+        let mut matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+
+        // If no matches and pattern looks like a fully qualified name, try matching just the class and method
+        if matches.is_empty() && pattern_str.contains('.') {
+            if let Some(simplified) = Self::simplify_fully_qualified_pattern(pattern_str) {
+                eprintln!(
+                    "[DEBUG] No matches with full sink pattern, trying simplified: '{}'",
+                    simplified
+                );
+                let simplified_semgrep_pattern = astgrep_core::SemgrepPattern {
+                    pattern_type: astgrep_core::PatternType::Simple(simplified),
+                    metavariable_pattern: None,
+                    conditions: Vec::new(),
+                    focus: None,
+                };
+                matches = self
+                    .pattern_matcher
+                    .find_matches(&simplified_semgrep_pattern, ast)?;
+            }
+        }
+
+        eprintln!("[DEBUG] Sink matches found: {}", matches.len());
+        for m in matches {
+            eprintln!(
+                "[DEBUG] Sink match: bindings={:?}, text={:?}",
+                m.bindings,
+                m.node.text()
             );
 
-            // Convert sink pattern to SemgrepPattern
-            let semgrep_pattern = astgrep_core::SemgrepPattern {
-                pattern_type: astgrep_core::PatternType::Simple(normalized_pattern.to_string()),
-                metavariable_pattern: None,
-                conditions: Vec::new(),
-                focus: None,
+            // Extract method name for scope isolation using source location
+            let node = m.node.as_ref();
+            let method_name = if let Some((start_line, _, _, _)) = node.location() {
+                self.find_method_name_by_line(source_text, start_line)
+            } else {
+                None
             };
 
-            // Find matches
-            let mut matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+            // Extract variable name from focus-metavariable if specified
+            let mut var_name = None;
 
-            // If no matches and pattern looks like a fully qualified name, try matching just the class and method
-            if matches.is_empty() && normalized_pattern.contains('.') {
-                if let Some(simplified) = Self::simplify_fully_qualified_pattern(normalized_pattern)
-                {
-                    eprintln!(
-                        "[DEBUG] No matches with full sink pattern, trying simplified: '{}'",
-                        simplified
-                    );
-                    let simplified_semgrep_pattern = astgrep_core::SemgrepPattern {
-                        pattern_type: astgrep_core::PatternType::Simple(simplified),
-                        metavariable_pattern: None,
-                        conditions: Vec::new(),
-                        focus: None,
-                    };
-                    matches = self
-                        .pattern_matcher
-                        .find_matches(&simplified_semgrep_pattern, ast)?;
+            if !focus_metavariables.is_empty() {
+                for focus_var in focus_metavariables {
+                    let focus_var_no_dollar = focus_var.trim_start_matches('$');
+                    if let Some(value) = m.bindings.get(focus_var_no_dollar) {
+                        var_name = Some(value.clone());
+                        break;
+                    }
                 }
             }
 
-            eprintln!("[DEBUG] Sink matches found: {}", matches.len());
-            for m in matches {
-                eprintln!(
-                    "[DEBUG] Sink match: bindings={:?}, text={:?}",
-                    m.bindings,
-                    m.node.text()
-                );
-
-                // Extract method name for scope isolation using source location
-                let node = m.node.as_ref();
-                let method_name = if let Some((start_line, _, _, _)) = node.location() {
-                    self.find_method_name_by_line(source_text, start_line)
-                } else {
-                    None
-                };
-
-                // Extract variable name from focus-metavariable if specified
-                let mut var_name = None;
-
-                // First, check if the sink pattern has focus_metavariables defined
-                // and try to extract the value from the match bindings
-                if !sink_pattern.focus_metavariables.is_empty() {
-                    for focus_var in &sink_pattern.focus_metavariables {
-                        // Try with the $ prefix first (e.g., "$SQL")
-                        if let Some(value) = m.bindings.get(focus_var) {
-                            eprintln!(
-                                "[DEBUG] Extracted var_name from focus-metavariable '{}': {}",
-                                focus_var, value
-                            );
-                            var_name = Some(value.clone());
-                            break;
-                        }
-                        // Also try without the $ prefix (e.g., "SQL")
-                        let focus_var_no_dollar = focus_var.trim_start_matches('$');
-                        if let Some(value) = m.bindings.get(focus_var_no_dollar) {
-                            eprintln!(
-                                "[DEBUG] Extracted var_name from focus-metavariable '{}': {}",
-                                focus_var, value
-                            );
-                            var_name = Some(value.clone());
-                            break;
-                        }
-                    }
-                }
-
-                // If no var_name from focus-metavariables, check bindings for any metavariable
-                if var_name.is_none() {
-                    for (key, value) in &m.bindings {
-                        if key.starts_with("$")
-                            || !key
-                                .chars()
-                                .next()
-                                .map(|c| c.is_ascii_lowercase())
-                                .unwrap_or(false)
-                        {
-                            // This is likely a metavariable binding
-                            var_name = Some(value.clone());
-                            break;
-                        }
-                    }
-                }
-
-                // If we have a focus-metavariable but the extracted value looks incomplete
-                // (e.g., "toString" instead of "sqlBuilder.toString()"), try to extract
-                // the full first argument from the method call
-                if var_name.is_some() && sink_pattern.focus_metavariables.is_empty() == false {
-                    if let Some(ref v) = var_name {
-                        // If the extracted value is just a simple identifier that could be a method name
-                        // and doesn't contain a dot (receiver), try to get the full argument
-                        if !v.contains('.') && !v.contains('(') {
-                            if let Some(text) = m.node.text() {
-                                if let Some(args) = Self::extract_last_call_args(text.trim()) {
-                                    let arg_parts: Vec<&str> = args.split(',').collect();
-                                    if !arg_parts.is_empty() {
-                                        let first_arg = arg_parts[0].trim();
-                                        if first_arg.contains(v) && first_arg != *v {
-                                            eprintln!("[DEBUG] Replacing incomplete var_name '{}' with full argument '{}'", v, first_arg);
-                                            var_name = Some(first_arg.to_string());
-                                        }
-                                    }
-                                }
+            // If no var_name from focus-metavariables, extract from sink call
+            if var_name.is_none() {
+                if let Some(text) = m.node.text() {
+                    let text = text.trim();
+                    if let Some(args) = Self::extract_last_call_args(text) {
+                        let arg_parts: Vec<&str> = args.split(',').collect();
+                        if arg_parts.len() == 1 {
+                            let arg = arg_parts[0].trim();
+                            if !arg.is_empty() && !arg.contains('"') && !arg.contains('\'') {
+                                var_name = Some(arg.to_string());
+                            }
+                        } else if arg_parts.len() >= 2 {
+                            let last_arg = arg_parts.last().unwrap().trim();
+                            if !last_arg.is_empty()
+                                && !last_arg.contains('"')
+                                && !last_arg.contains('\'')
+                            {
+                                var_name = Some(last_arg.to_string());
                             }
                         }
                     }
                 }
-
-                // If no var_name from bindings, try to extract from sink call argument
-                // e.g., sink(w) -> extract "w"
-                if var_name.is_none() {
-                    if let Some(text) = m.node.text() {
-                        let text = text.trim();
-                        // Pattern: sink(arg), Runtime.getRuntime().exec(arg), etc.
-                        // Find the matching opening paren for the last closing paren
-                        // This handles nested calls like sink(obj.getX())
-                        if let Some(args) = Self::extract_last_call_args(text) {
-                            // For simple case sink(w), extract w
-                            // For sink1("Abc", w), extract w (second argument)
-                            let arg_parts: Vec<&str> = args.split(',').collect();
-                            if arg_parts.len() == 1 {
-                                // Single argument: sink(w)
-                                let arg = arg_parts[0].trim();
-                                if !arg.is_empty() && !arg.contains('"') && !arg.contains('\'') {
-                                    var_name = Some(arg.to_string());
-                                }
-                            } else if arg_parts.len() >= 2 {
-                                // Multiple arguments: sink1("...", w), take the last one
-                                let last_arg = arg_parts.last().unwrap().trim();
-                                if !last_arg.is_empty()
-                                    && !last_arg.contains('"')
-                                    && !last_arg.contains('\'')
-                                {
-                                    var_name = Some(last_arg.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-
-                eprintln!(
-                    "[DEBUG] Creating sink TaintMatch: var_name={:?}, method_name={:?}",
-                    var_name, method_name
-                );
-
-                // Check if this sink is in a method that contains sanitization
-                // For example: applicationJdbcTemplate.query() followed by setString()
-                if let Some(ref mname) = method_name {
-                    if let Some(method_body) = self.extract_method_body(source_text, mname) {
-                        // Check if method contains .setString() or other sanitization patterns
-                        if self.contains_sanitization_in_scope(&method_body, var_name.as_deref()) {
-                            eprintln!("[DEBUG] Skipping sink in sanitized method: {}", mname);
-                            continue;
-                        }
-                    }
-                }
-
-                sinks.push(TaintMatch {
-                    node: m.node,
-                    bindings: m.bindings,
-                    var_name,
-                    method_name,
-                });
             }
+
+            // Check if this sink is in a method that contains sanitization
+            if let Some(ref mname) = method_name {
+                if let Some(method_body) = self.extract_method_body(source_text, mname) {
+                    if self.contains_sanitization_in_scope(&method_body, var_name.as_deref()) {
+                        continue;
+                    }
+                }
+            }
+
+            sinks.push(TaintMatch {
+                node: m.node,
+                bindings: m.bindings,
+                var_name,
+                method_name,
+            });
         }
 
         Ok(sinks)

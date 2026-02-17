@@ -1,6 +1,6 @@
 # Java Rules Comparison Report
 
-Generated on: 2026年 2月17日 星期二 10时54分43秒 CST
+Generated on: 2026年 2月15日 星期日 17时57分41秒 CST
 
 ## Test Summary
 
@@ -21,23 +21,23 @@ Generated on: 2026年 2月17日 星期二 10时54分43秒 CST
 
 | Test File | Rule Type | Semgrep Matches | CR-SemService Matches | Status |
 |-----------|-----------|-----------------|----------------------|--------|
-| cp_private_class_attr |  | 2 | 2 | ✅ MATCH |
+| cp_private_class_attr |  | 2 | 00 | ❌ DIFFER |
 | cp_private_class_attr1 |  | 00 | 00 | ✅ MATCH |
-| cp_private_class_attr2 |  | 1 | 1 | ✅ MATCH |
-| cp_private_class_attr3 |  | 1 | 1 | ✅ MATCH |
+| cp_private_class_attr2 |  | 1 | 00 | ❌ DIFFER |
+| cp_private_class_attr3 |  | 1 | 00 | ❌ DIFFER |
 | metavar_comparison_bitand |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitnot |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitor |  | 1 | 1 | ✅ MATCH |
 | metavar_comparison_bitxor |  | 1 | 1 | ✅ MATCH |
-| metavar_name_imported_entity_java |  | 2 | 2 | ✅ MATCH |
+| metavar_name_imported_entity_java |  | 2 | 00 | ❌ DIFFER |
 | metavar_type_not_java |  | 1 | 1 | ✅ MATCH |
 | metavar_type_str_eq_java |  | 2 | 2 | ✅ MATCH |
 | metavariable_name_resolution |  | 1 | 1 | ✅ MATCH |
 | misc_name_and_neg |  | 00 | 00 | ✅ MATCH |
 | naming_class_attribute |  | 2 | 2 | ✅ MATCH |
-| non_irrelevant_rule |  | 1 | 1 | ✅ MATCH |
+| non_irrelevant_rule |  | 1 | 00 | ❌ DIFFER |
 | sym_prop_class_attr | taint | 2 | 2 | ✅ MATCH |
-| sym_prop_deep |  | 1 | 1 | ✅ MATCH |
+| sym_prop_deep |  | 1 | 3 | ❌ DIFFER |
 | sym_prop_merge1 |  | 2 | 2 | ✅ MATCH |
 | sym_prop_merge2 |  | 1 | 1 | ✅ MATCH |
 | sym_prop_new |  | 1 | 1 | ✅ MATCH |
@@ -62,10 +62,10 @@ Generated on: 2026年 2月17日 星期二 10时54分43秒 CST
 
 ### Summary Statistics
 
-- **Matching results**: 38 tests
-- **Differing results**: 0 tests
+- **Matching results**: 32 tests
+- **Differing results**: 6 tests
 - **Missing rules**: 0 tests
-- **Compatibility rate**: 100%
+- **Compatibility rate**: 84%
 
 ### Test Categories Analysis
 
@@ -118,6 +118,6 @@ Key patterns tested:
 
 ---
 
-**Report Generated**: 2026年 2月17日 星期二 10时56分22秒 CST
+**Report Generated**: 2026年 2月15日 星期日 17时59分09秒 CST
 **Total Tests Analyzed**: 38
 **Compatibility Status**: In Development

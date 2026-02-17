@@ -512,7 +512,31 @@ impl AdvancedRuleExecutor {
         }
 
         // If we found bindings for all type constraints, create a match result
-        if bindings.len() == type_constraints.len() {
+        // Special case: if no type constraints but pattern has required elements,
+        // verify that condition variables match the pattern semantics
+        let all_constraints_satisfied =
+            type_constraints.is_empty() || bindings.len() == type_constraints.len();
+        let meaningful_match = if type_constraints.is_empty() {
+            let condition_vars = self.extract_variables_from_condition(&condition);
+            let mut found = false;
+            for cond_var in &condition_vars {
+                let has_contains = self.variable_involves_contains(cond_var, &full_source);
+                let has_class_type = self.traces_to_class_type(cond_var, propagator, &full_source);
+                eprintln!(
+                    "DEBUG: cond_var='{}', has_contains={}, has_class_type={}",
+                    cond_var, has_contains, has_class_type
+                );
+                if has_contains && has_class_type {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        } else {
+            true
+        };
+
+        if all_constraints_satisfied && meaningful_match {
             eprintln!(
                 "DEBUG: Creating symbolic match result with bindings: {:?}",
                 bindings
@@ -782,6 +806,115 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        false
+    }
+
+    /// Check if a variable traces back to a class-typed variable (not a primitive)
+    pub(super) fn traces_to_class_type(
+        &self,
+        var_name: &str,
+        propagator: &astgrep_dataflow::SymbolicPropagator,
+        full_source: &str,
+    ) -> bool {
+        let state = propagator.state();
+
+        // Check if the variable itself is class-typed
+        if self.is_class_typed_variable(var_name, full_source) {
+            eprintln!(
+                "DEBUG traces_to_class_type: '{}' is directly class-typed",
+                var_name
+            );
+            return true;
+        }
+
+        // Check symbolic value - if the variable has a symbolic value, trace its root
+        if let Some(symbolic_value) = state.get(var_name) {
+            eprintln!(
+                "DEBUG traces_to_class_type: '{}' has symbolic value {:?}",
+                var_name, symbolic_value
+            );
+            if let Some(root_var) = symbolic_value.root_variable() {
+                eprintln!("DEBUG traces_to_class_type: root_var='{}'", root_var);
+                if self.is_class_typed_variable(&root_var, full_source) {
+                    return true;
+                }
+                // Recursively check if the root traces to another class-typed variable
+                if root_var != var_name {
+                    return self.traces_to_class_type(&root_var, propagator, full_source);
+                }
+            }
+        }
+
+        // Check aliases
+        for alias in state.get_all_aliases(var_name) {
+            if self.is_class_typed_variable(&alias, full_source) {
+                return true;
+            }
+            // Recursively check
+            if alias != var_name {
+                if self.traces_to_class_type(&alias, propagator, full_source) {
+                    return true;
+                }
+            }
+        }
+
+        // Check if the variable's declaration references a class-typed variable
+        // e.g., "boolean b1 = !name.contains()" - check if 'name' is class-typed
+        let decl_pattern = format!(r"{}\s*=\s*([^;]+)", regex::escape(var_name));
+        if let Ok(regex) = regex::Regex::new(&decl_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(rhs) = captures.get(1) {
+                    let rhs_text = rhs.as_str();
+                    // Extract variable names from the RHS
+                    let var_pattern = regex::Regex::new(r"\b([a-z][a-zA-Z0-9]*)\b").unwrap();
+                    for var_cap in var_pattern.captures_iter(rhs_text) {
+                        if let Some(rhs_var) = var_cap.get(1) {
+                            let rhs_var_name = rhs_var.as_str();
+                            // Skip keywords and operators
+                            if ![
+                                "if", "else", "for", "while", "return", "new", "true", "false",
+                                "null",
+                            ]
+                            .contains(&rhs_var_name)
+                            {
+                                if self.is_class_typed_variable(rhs_var_name, full_source) {
+                                    eprintln!("DEBUG traces_to_class_type: found class-typed var '{}' in RHS of '{}'", rhs_var_name, var_name);
+                                    return true;
+                                }
+                                // Recursively check
+                                if rhs_var_name != var_name {
+                                    if self.traces_to_class_type(
+                                        rhs_var_name,
+                                        propagator,
+                                        full_source,
+                                    ) {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Check if a variable is declared with a class type (not primitive)
+    fn is_class_typed_variable(&self, var_name: &str, full_source: &str) -> bool {
+        let decl_pattern = format!(r"(\w+)\s+{}\s*[=;]", regex::escape(var_name));
+        if let Ok(regex) = regex::Regex::new(&decl_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(type_match) = captures.get(1) {
+                    let primitives = [
+                        "int", "long", "short", "byte", "float", "double", "boolean", "char",
+                        "void", "String",
+                    ];
+                    return !primitives.contains(&type_match.as_str());
+                }
+            }
+        }
         false
     }
 }

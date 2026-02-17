@@ -5,7 +5,6 @@
 use super::*;
 
 impl AdvancedRuleExecutor {
-    /// Check if pattern conditions are satisfied
     pub(super) fn check_pattern_conditions(
         &self,
         pattern: &Pattern,
@@ -13,8 +12,17 @@ impl AdvancedRuleExecutor {
         dataflow_analysis: Option<&DataFlowAnalysis>,
         full_source: &str,
     ) -> Result<bool> {
+        eprintln!(
+            "DEBUG check_pattern_conditions: {} conditions to check, bindings={:?}",
+            pattern.conditions.len(),
+            match_result.bindings
+        );
         for condition in &pattern.conditions {
             if !self.evaluate_condition(condition, match_result, dataflow_analysis, full_source)? {
+                eprintln!(
+                    "DEBUG check_pattern_conditions: condition {:?} FAILED",
+                    condition
+                );
                 return Ok(false);
             }
         }
@@ -117,9 +125,13 @@ impl AdvancedRuleExecutor {
                 Ok(match_result.node.text().unwrap_or("").contains(attr_value))
             }
             Condition::MetavariableName(metavar_name) => {
-                // Evaluate metavariable name constraint
-                if let Some(metavar_value) = match_result.bindings.get(&metavar_name.metavariable) {
-                    self.evaluate_name_constraint(metavar_value, &metavar_name.name_pattern)
+                let key = metavar_name.metavariable.trim_start_matches('$');
+                if let Some(metavar_value) = match_result.bindings.get(key) {
+                    self.evaluate_name_constraint(
+                        metavar_value,
+                        &metavar_name.name_pattern,
+                        full_source,
+                    )
                 } else {
                     Ok(false)
                 }
@@ -356,21 +368,49 @@ impl AdvancedRuleExecutor {
         }
     }
 
-    /// Evaluate name constraint (module/namespace patterns)
-    pub(super) fn evaluate_name_constraint(&self, value: &str, name_pattern: &str) -> Result<bool> {
-        // Support glob-like patterns for module/namespace matching
+    /// Evaluate name constraint with FQN resolution using imports.
+    pub(super) fn evaluate_name_constraint(
+        &self,
+        value: &str,
+        name_pattern: &str,
+        full_source: &str,
+    ) -> Result<bool> {
+        let import_map = self.build_import_map(full_source);
+        let resolved_value = self.resolve_name_to_fqn(value, &import_map);
+
+        eprintln!(
+            "DEBUG evaluate_name_constraint: value='{}', resolved='{}', pattern='{}'",
+            value, resolved_value, name_pattern
+        );
+
         if name_pattern.contains("*") {
-            // Convert glob pattern to regex
             let regex_pattern = name_pattern.replace(".", "\\.").replace("*", ".*");
             if let Ok(regex) = regex::Regex::new(&regex_pattern) {
-                Ok(regex.is_match(value))
+                Ok(regex.is_match(&resolved_value))
             } else {
                 Ok(false)
             }
+        } else if resolved_value == name_pattern {
+            Ok(true)
+        } else if name_pattern.ends_with(&format!(".{}", value)) {
+            Ok(import_map
+                .get(value)
+                .map_or(false, |fqn| fqn == name_pattern))
+        } else if resolved_value.ends_with(&format!(".{}", name_pattern)) {
+            Ok(true)
         } else {
-            // Exact match
-            Ok(value == name_pattern)
+            Ok(resolved_value == name_pattern)
         }
+    }
+
+    fn resolve_name_to_fqn(&self, name: &str, import_map: &HashMap<String, String>) -> String {
+        if name.contains('.') {
+            return name.to_string();
+        }
+        import_map
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string())
     }
 
     /// Evaluate analysis constraint (entropy, type, complexity)

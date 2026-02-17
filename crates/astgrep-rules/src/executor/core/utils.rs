@@ -160,8 +160,17 @@ impl AdvancedRuleExecutor {
         ast: &dyn AstNode,
         param_name: &str,
     ) -> Option<Box<dyn AstNode>> {
+        eprintln!(
+            "[DEBUG] find_param_node_by_name: looking for '{}'",
+            param_name
+        );
         // Try to find a formal_parameter or identifier node with the given name
-        self.find_node_by_type_and_text(ast, "identifier", param_name)
+        let result = self.find_node_by_type_and_text(ast, "identifier", param_name);
+        eprintln!(
+            "[DEBUG] find_param_node_by_name: result = {:?}",
+            result.as_ref().map(|n| n.text())
+        );
+        result
     }
 
     /// Find a node by type and text content

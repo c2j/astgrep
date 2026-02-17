@@ -125,7 +125,25 @@ impl RuleExecutionEngine {
         // If pattern has conditions or requires symbolic propagation, use AdvancedRuleExecutor
         let requires_advanced =
             !pattern.conditions.is_empty() || rule.requires_symbolic_propagation();
-        if requires_advanced {
+
+        // Also use advanced executor if pattern contains literals that might need constant propagation
+        // This handles cases like "return 5;" which should match "return x;" where x = 5
+        // Also handle patterns like "foo(42)" where 42 is inside parentheses
+        let has_literal = pattern_str.trim().split_whitespace().any(|tok| {
+            // Try to parse as i64 after trimming punctuation
+            let cleaned = tok.trim().trim_end_matches(';').trim_end_matches(',');
+            cleaned.parse::<i64>().is_ok()
+                || (tok.starts_with('"') && tok.ends_with('"'))
+                || (tok.starts_with('\'') && tok.ends_with('\''))
+        });
+
+        // Also check for literals inside parentheses like "foo(42)"
+        let has_paren_literal = pattern_str.contains('(') && pattern_str.contains(')');
+
+        let needs_constant_prop =
+            (has_literal || has_paren_literal) && rule.has_constant_propagation();
+
+        if requires_advanced || needs_constant_prop {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
@@ -261,6 +279,12 @@ impl RuleExecutionEngine {
         let mut seen: HashSet<(usize, usize)> = HashSet::new();
 
         for sub in subs {
+            // If sub-pattern has conditions, use advanced executor
+            if !sub.conditions.is_empty() {
+                let sub_findings = self.execute_advanced_pattern(sub, rule, context, _ast)?;
+                findings.extend(sub_findings);
+                continue;
+            }
             match &sub.pattern_type {
                 PatternType::Regex(r) => {
                     self.execute_regex_subpattern(r, rule, context, &mut findings, &mut seen)?;
