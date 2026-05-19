@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
 };
 use chrono::{DateTime, Utc};
 
@@ -411,7 +410,7 @@ impl TestCase {
     }
 
     /// Mark test case as failed
-    pub fn mark_failed(&mut self, error: &str) {
+    pub fn mark_failed(&mut self, _error: &str) {
         self.status = TestCaseStatus::Failed;
         // Add error information to metadata if needed
     }
@@ -422,7 +421,7 @@ impl TestCase {
     }
 
     /// Mark test case as requiring manual action
-    pub fn mark_requires_manual_action(&mut self, reason: &str) {
+    pub fn mark_requires_manual_action(&mut self, _reason: &str) {
         self.status = TestCaseStatus::RequiresManualAction;
         // Add reason to metadata if needed
     }
@@ -815,7 +814,7 @@ mod tests {
         let mut test_case = TestCase::new(
             "tc-003".to_string(),
             "Lifecycle Test".to_string(),
-            TestType::Basic,
+            TestType::PatternMatching,
             PathBuf::from("/tests/BasicTest.java"),
             PathBuf::from("/newtest/testcases/java/basic/BasicTest.java"),
         );
@@ -863,7 +862,7 @@ mod tests {
         let easy_test = TestCase::new(
             "tc-005".to_string(),
             "Easy Test".to_string(),
-            TestType::Basic,
+            TestType::PatternMatching,
             PathBuf::from("/tests/EasyTest.java"),
             PathBuf::from("/newtest/testcases/java/basic/EasyTest.java"),
         ).with_complexity(TestComplexity::Simple);

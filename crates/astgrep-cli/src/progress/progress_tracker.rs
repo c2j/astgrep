@@ -1,12 +1,11 @@
 //! Progress tracking and reporting infrastructure for migration operations
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
@@ -312,7 +311,7 @@ impl ProgressTracker {
             return Ok(());
         }
 
-        let migration_id = self.progress.lock().unwrap().migration_id.clone();
+        let _migration_id = self.progress.lock().unwrap().migration_id.clone();
 
         // Update current operation progress
         let mut progress = self.progress.lock().unwrap();
@@ -662,7 +661,7 @@ mod tests {
     #[tokio::test]
     async fn test_progress_tracker_initialization() {
         let config = ProgressConfig::default();
-        let tracker = ProgressTracker::new(config);
+        let mut tracker = ProgressTracker::new(config);
 
         let migration_id = "test-migration".to_string();
         tracker.initialize_migration(migration_id.clone(), 10).unwrap();
@@ -676,7 +675,7 @@ mod tests {
     #[tokio::test]
     async fn test_phase_tracking() {
         let config = ProgressConfig::default();
-        let tracker = ProgressTracker::new(config);
+        let mut tracker = ProgressTracker::new(config);
 
         tracker.initialize_migration("test".to_string(), 5).unwrap();
         tracker.start_phase("test-phase".to_string(), 10).unwrap();
@@ -690,7 +689,7 @@ mod tests {
     #[tokio::test]
     async fn test_operation_tracking() {
         let config = ProgressConfig::default();
-        let tracker = ProgressTracker::new(config);
+        let mut tracker = ProgressTracker::new(config);
 
         tracker.initialize_migration("test".to_string(), 1).unwrap();
 

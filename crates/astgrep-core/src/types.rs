@@ -205,7 +205,7 @@ pub struct AnalysisConfig {
 
 impl Default for AnalysisConfig {
     fn default() -> Self {
-        use crate::constants::{defaults, paths, languages};
+        use crate::constants::{paths, languages};
 
         Self {
             target_paths: vec![PathBuf::from(".")],
@@ -348,7 +348,7 @@ mod tests {
         .with_metadata("cwe".to_string(), "CWE-89".to_string())
         .with_fix("Use prepared statements".to_string());
 
-        assert_eq!(finding.metadata.get("cwe"), Some(&"CWE-89".to_string()));
+        assert_eq!(finding.metadata.get("cwe"), Some(&serde_yaml::Value::String("CWE-89".to_string())));
         assert_eq!(finding.fix_suggestion, Some("Use prepared statements".to_string()));
     }
 

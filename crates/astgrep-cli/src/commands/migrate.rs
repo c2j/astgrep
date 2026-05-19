@@ -3,13 +3,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 use tracing::{info, warn, error, debug};
 
 // Import our migration modules
 use crate::commands::migrate_scripts::{ScriptMigrator, ScriptMigrationConfig};
 use crate::dependencies::{ScriptDependencyResolver, DependencyResolutionConfig};
-use crate::commands::validate_scripts::{ScriptValidator, ScriptValidationConfig};
 
 /// Migration subcommand for test directory reorganization
 #[derive(Parser)]
@@ -208,7 +207,7 @@ pub async fn run(command: MigrateCommand) -> Result<()> {
     setup_logging(command.verbose);
 
     // Parse output format
-    let output_format = match command.format.to_lowercase().as_str() {
+    let _output_format = match command.format.to_lowercase().as_str() {
         "human" => OutputFormat::Human,
         "json" => OutputFormat::Json,
         "yaml" => OutputFormat::Yaml,
@@ -241,7 +240,7 @@ pub async fn run(command: MigrateCommand) -> Result<()> {
 }
 
 fn setup_logging(verbose: bool) {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::EnvFilter;
 
     let level = if verbose {
         tracing::Level::DEBUG
@@ -352,12 +351,12 @@ async fn handle_analyze(output: Option<PathBuf>, detailed: bool) -> Result<()> {
 }
 
 async fn handle_validate(
-    asset_ids: Vec<String>,
+    _asset_ids: Vec<String>,
     level: String,
-    check_dependencies: bool,
-    check_disk_space: bool
+    _check_dependencies: bool,
+    _check_disk_space: bool
 ) -> Result<()> {
-    let validation_level = match level.to_lowercase().as_str() {
+    let _validation_level = match level.to_lowercase().as_str() {
         "basic" => ValidationLevel::Basic,
         "comprehensive" => ValidationLevel::Comprehensive,
         "strict" => ValidationLevel::Strict,
@@ -373,13 +372,13 @@ async fn handle_validate(
 
 async fn handle_migrate(
     asset_ids: Vec<String>,
-    category: Option<String>,
-    language: Option<String>,
+    _category: Option<String>,
+    _language: Option<String>,
     dry_run: bool,
     backup: bool,
     threads: usize,
     progress: bool,
-    json: bool,
+    _json: bool,
 ) -> Result<()> {
     info!("Starting migration operation");
 
@@ -450,7 +449,7 @@ async fn handle_migrate(
     Ok(())
 }
 
-async fn handle_rollback(migration_id: String, force: bool) -> Result<()> {
+async fn handle_rollback(migration_id: String, _force: bool) -> Result<()> {
     info!("Starting rollback for migration: {}", migration_id);
 
     // TODO: Implement rollback logic
@@ -459,7 +458,7 @@ async fn handle_rollback(migration_id: String, force: bool) -> Result<()> {
     Ok(())
 }
 
-async fn handle_status(detailed: bool, migration_id: Option<String>) -> Result<()> {
+async fn handle_status(_detailed: bool, _migration_id: Option<String>) -> Result<()> {
     info!("Checking migration status");
 
     // TODO: Implement status checking logic
@@ -468,7 +467,7 @@ async fn handle_status(detailed: bool, migration_id: Option<String>) -> Result<(
     Ok(())
 }
 
-async fn handle_test(new_structure: bool, all: bool, category: Option<String>) -> Result<()> {
+async fn handle_test(new_structure: bool, _all: bool, _category: Option<String>) -> Result<()> {
     info!("Running test execution");
 
     if new_structure {
@@ -623,7 +622,7 @@ mod tests {
 
         match cmd.action {
             MigrationAction::Validate { level, check_dependencies, .. } => {
-                assert!(matches!(level, ValidationLevel::Comprehensive));
+                assert_eq!(level, "comprehensive");
                 assert!(check_dependencies);
             }
             _ => panic!("Expected Validate action"),
@@ -631,7 +630,7 @@ mod tests {
     }
 
     #[test]
-    fn test_migrate_command_parsing() {
+    fn test_migrate_subcommand_parsing() {
         let cmd = MigrateCommand::try_parse_from(&[
             "migrate", "migrate", "--dry-run", "--backup", "--threads", "8"
         ]).unwrap();
