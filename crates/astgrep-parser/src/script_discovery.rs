@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs::{self};
 use std::time::SystemTime;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use tracing::{debug, info, warn, error};
 use walkdir::{DirEntry, WalkDir};
