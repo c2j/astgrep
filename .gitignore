@@ -35,6 +35,15 @@ Thumbs.db
 # Output files
 *.sarif
 results.*
+astgrep_output.txt
+astgrep_debug_output.txt
+
+# Scratch / ad-hoc files
+/scratch/
+
+# Compiled binaries at root
+/rust_out
+/test_debug
 
 # Python
 .venv/
