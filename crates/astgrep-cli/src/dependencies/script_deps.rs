@@ -4,15 +4,15 @@
 //! between test scripts, ensuring proper execution order and identifying
 //! circular dependencies.
 
+use anyhow::Result;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
     fmt,
+    path::{Path, PathBuf},
 };
 use tracing::{debug, info, instrument};
-use regex::Regex;
-use anyhow::Result;
 
 /// Types of script dependencies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,17 +194,27 @@ impl ScriptDependencyResolver {
     /// Initialize regex patterns for dependency detection
     fn initialize_patterns(&mut self) {
         // Script sourcing patterns (source, include, etc.)
-        self.script_patterns.insert("bash".to_string(), vec![
-            Regex::new(r#"source\s+["']([^"']+)["']"#).unwrap(),
-            Regex::new(r#"\.\s+["']([^"']+)["']"#).unwrap(),
-            Regex::new(r#"source\s+([^"'\s]+)"#).unwrap(),
-        ]);
+        self.script_patterns.insert(
+            "bash".to_string(),
+            vec![
+                Regex::new(r#"source\s+["']([^"']+)["']"#).unwrap(),
+                Regex::new(r#"\.\s+["']([^"']+)["']"#).unwrap(),
+                Regex::new(r#"source\s+([^"'\s]+)"#).unwrap(),
+            ],
+        );
 
-        self.script_patterns.insert("python".to_string(), vec![
-            Regex::new(r#"import\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)"#).unwrap(),
-            Regex::new(r#"from\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s+import"#).unwrap(),
-            Regex::new(r#"exec\s*\(\s*open\s*\(\s*["']([^"']+)["']\s*\)"#).unwrap(),
-        ]);
+        self.script_patterns.insert(
+            "python".to_string(),
+            vec![
+                Regex::new(r#"import\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)"#)
+                    .unwrap(),
+                Regex::new(
+                    r#"from\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\s+import"#,
+                )
+                .unwrap(),
+                Regex::new(r#"exec\s*\(\s*open\s*\(\s*["']([^"']+)["']\s*\)"#).unwrap(),
+            ],
+        );
 
         // External tool/command patterns
         self.tool_patterns.extend_from_slice(&[
@@ -217,7 +227,8 @@ impl ScriptDependencyResolver {
 
         // File dependency patterns
         self.file_patterns.extend_from_slice(&[
-            Regex::new(r#"["']([^"']+\.(?:txt|json|yaml|yml|xml|csv|data|config|conf|ini))["']"#).unwrap(),
+            Regex::new(r#"["']([^"']+\.(?:txt|json|yaml|yml|xml|csv|data|config|conf|ini))["']"#)
+                .unwrap(),
             Regex::new(r#"open\s*\(\s*["']([^"']+)["']"#).unwrap(),
             Regex::new(r#"cat\s+["']([^"']+)["']"#).unwrap(),
             Regex::new(r#"read\s+.*<\s*["']?([^"'\s]+)"#).unwrap(),
@@ -236,7 +247,8 @@ impl ScriptDependencyResolver {
             Regex::new(r"https?://[^\s]+").unwrap(),
             Regex::new(r#"curl\s+["']([^"']+)["']"#).unwrap(),
             Regex::new(r#"wget\s+["']([^"']+)["']"#).unwrap(),
-            Regex::new(r#"requests\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#).unwrap(),
+            Regex::new(r#"requests\.(?:get|post|put|delete|patch)\s*\(\s*["']([^"']+)["']"#)
+                .unwrap(),
         ]);
     }
 
@@ -246,7 +258,10 @@ impl ScriptDependencyResolver {
         &self,
         scripts: &[PathBuf],
     ) -> Result<DependencyResolutionResult> {
-        info!("Starting dependency resolution for {} scripts", scripts.len());
+        info!(
+            "Starting dependency resolution for {} scripts",
+            scripts.len()
+        );
 
         // Step 1: Build dependency nodes for all scripts
         let mut nodes = HashMap::new();
@@ -262,8 +277,7 @@ impl ScriptDependencyResolver {
         let (execution_order, circular_dependencies) = self.topological_sort(&nodes)?;
 
         // Step 4: Identify missing and optional dependencies
-        let (missing_dependencies, optional_dependencies) =
-            self.categorize_dependencies(&nodes);
+        let (missing_dependencies, optional_dependencies) = self.categorize_dependencies(&nodes);
 
         // Step 5: Generate summary statistics
         let summary = self.generate_summary(&nodes, &execution_order, &circular_dependencies);
@@ -286,7 +300,10 @@ impl ScriptDependencyResolver {
     }
 
     /// Analyze dependencies for a single script
-    async fn analyze_script_dependencies(&self, script_path: &PathBuf) -> Result<ScriptDependencyNode> {
+    async fn analyze_script_dependencies(
+        &self,
+        script_path: &PathBuf,
+    ) -> Result<ScriptDependencyNode> {
         debug!("Analyzing dependencies for: {}", script_path.display());
 
         let content = std::fs::read_to_string(script_path)?;
@@ -335,7 +352,8 @@ impl ScriptDependencyResolver {
 
         let node = ScriptDependencyNode {
             script_path: script_path.clone(),
-            name: script_path.file_stem()
+            name: script_path
+                .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("unknown")
                 .to_string(),
@@ -379,12 +397,19 @@ impl ScriptDependencyResolver {
     }
 
     /// Analyze tool dependencies
-    fn analyze_tool_dependencies(&self, content: &str, dependencies: &mut Vec<Dependency>) -> Result<()> {
+    fn analyze_tool_dependencies(
+        &self,
+        content: &str,
+        dependencies: &mut Vec<Dependency>,
+    ) -> Result<()> {
         for (line_num, line) in content.lines().enumerate() {
             for pattern in &self.tool_patterns {
                 for caps in pattern.captures_iter(line) {
                     if let Some(tool_match) = caps.get(1) {
-                        let tool_name = tool_match.as_str().split_whitespace().next()
+                        let tool_name = tool_match
+                            .as_str()
+                            .split_whitespace()
+                            .next()
                             .unwrap_or(tool_match.as_str());
 
                         let dependency = Dependency {
@@ -408,7 +433,12 @@ impl ScriptDependencyResolver {
     }
 
     /// Analyze file dependencies
-    fn analyze_file_dependencies(&self, script_path: &PathBuf, content: &str, dependencies: &mut Vec<Dependency>) -> Result<()> {
+    fn analyze_file_dependencies(
+        &self,
+        script_path: &PathBuf,
+        content: &str,
+        dependencies: &mut Vec<Dependency>,
+    ) -> Result<()> {
         for (line_num, line) in content.lines().enumerate() {
             for pattern in &self.file_patterns {
                 for caps in pattern.captures_iter(line) {
@@ -423,7 +453,8 @@ impl ScriptDependencyResolver {
                         let resolved_path = if file_path.starts_with('/') {
                             PathBuf::from(file_path)
                         } else {
-                            script_path.parent()
+                            script_path
+                                .parent()
                                 .unwrap_or_else(|| Path::new("."))
                                 .join(file_path)
                         };
@@ -449,7 +480,11 @@ impl ScriptDependencyResolver {
     }
 
     /// Analyze environment variable dependencies
-    fn analyze_environment_dependencies(&self, content: &str, dependencies: &mut Vec<Dependency>) -> Result<()> {
+    fn analyze_environment_dependencies(
+        &self,
+        content: &str,
+        dependencies: &mut Vec<Dependency>,
+    ) -> Result<()> {
         let mut env_vars = HashSet::new();
 
         for (line_num, line) in content.lines().enumerate() {
@@ -486,7 +521,8 @@ impl ScriptDependencyResolver {
         for (script_path, node) in nodes.iter() {
             for dependency in &node.dependencies {
                 if dependency.dependency_type == DependencyType::ScriptDependency {
-                    let dep_path = script_path.parent()
+                    let dep_path = script_path
+                        .parent()
                         .unwrap_or_else(|| Path::new("."))
                         .join(&dependency.name);
 
@@ -529,7 +565,8 @@ impl ScriptDependencyResolver {
         for (script_path, node) in nodes {
             for dependency in &node.dependencies {
                 if dependency.dependency_type == DependencyType::ScriptDependency {
-                    let dep_path = script_path.parent()
+                    let dep_path = script_path
+                        .parent()
                         .unwrap_or_else(|| Path::new("."))
                         .join(&dependency.name);
                     let normalized_dep = dep_path.canonicalize().unwrap_or(dep_path);
@@ -547,7 +584,8 @@ impl ScriptDependencyResolver {
         }
 
         // Kahn's algorithm for topological sort with cycle detection
-        let mut queue: Vec<PathBuf> = in_degree.iter()
+        let mut queue: Vec<PathBuf> = in_degree
+            .iter()
             .filter(|(_, &degree)| degree == 0)
             .map(|(path, _)| path.clone())
             .collect();
@@ -576,7 +614,8 @@ impl ScriptDependencyResolver {
         // Detect circular dependencies
         let mut circular_dependencies = Vec::new();
         if result.len() != all_scripts.len() {
-            let remaining_scripts: HashSet<PathBuf> = all_scripts.difference(&visited).cloned().collect();
+            let remaining_scripts: HashSet<PathBuf> =
+                all_scripts.difference(&visited).cloned().collect();
             if !remaining_scripts.is_empty() {
                 let cycle = self.detect_cycle(nodes, &remaining_scripts)?;
                 circular_dependencies.push(cycle);
@@ -598,7 +637,10 @@ impl ScriptDependencyResolver {
         Ok(CircularDependency {
             scripts: cycle_scripts.clone(),
             cycle_length: cycle_scripts.len(),
-            description: format!("Circular dependency detected among {} scripts", cycle_scripts.len()),
+            description: format!(
+                "Circular dependency detected among {} scripts",
+                cycle_scripts.len()
+            ),
         })
     }
 
@@ -667,10 +709,22 @@ impl fmt::Display for DependencyResolutionResult {
         writeln!(f, "=============================")?;
         writeln!(f, "Total Scripts: {}", self.summary.total_scripts)?;
         writeln!(f, "Total Dependencies: {}", self.summary.total_dependencies)?;
-        writeln!(f, "Independent Scripts: {}", self.summary.independent_scripts)?;
+        writeln!(
+            f,
+            "Independent Scripts: {}",
+            self.summary.independent_scripts
+        )?;
         writeln!(f, "Dependent Scripts: {}", self.summary.dependent_scripts)?;
-        writeln!(f, "Max Execution Depth: {}", self.summary.max_dependency_depth)?;
-        writeln!(f, "Circular Dependencies: {}", self.summary.circular_dependency_count)?;
+        writeln!(
+            f,
+            "Max Execution Depth: {}",
+            self.summary.max_dependency_depth
+        )?;
+        writeln!(
+            f,
+            "Circular Dependencies: {}",
+            self.summary.circular_dependency_count
+        )?;
 
         if !self.circular_dependencies.is_empty() {
             writeln!(f, "\nCircular Dependencies:")?;
@@ -686,8 +740,8 @@ impl fmt::Display for DependencyResolutionResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_dependency_resolution_config_default() {
@@ -705,15 +759,27 @@ mod tests {
 
         // Test bash script detection
         let bash_content = "#!/bin/bash\necho 'test'";
-        assert_eq!(resolver.detect_script_type(&PathBuf::from("test.sh"), bash_content), "bash");
+        assert_eq!(
+            resolver.detect_script_type(&PathBuf::from("test.sh"), bash_content),
+            "bash"
+        );
 
         // Test python script detection
         let python_content = "#!/usr/bin/env python3\nprint('test')";
-        assert_eq!(resolver.detect_script_type(&PathBuf::from("test.py"), python_content), "python");
+        assert_eq!(
+            resolver.detect_script_type(&PathBuf::from("test.py"), python_content),
+            "python"
+        );
 
         // Test extension-based detection
-        assert_eq!(resolver.detect_script_type(&PathBuf::from("test.js"), ""), "javascript");
-        assert_eq!(resolver.detect_script_type(&PathBuf::from("unknown.xyz"), ""), "unknown");
+        assert_eq!(
+            resolver.detect_script_type(&PathBuf::from("test.js"), ""),
+            "javascript"
+        );
+        assert_eq!(
+            resolver.detect_script_type(&PathBuf::from("unknown.xyz"), ""),
+            "unknown"
+        );
     }
 
     #[tokio::test]
@@ -723,11 +789,18 @@ mod tests {
         let script2_path = temp_dir.path().join("script2.sh");
 
         // Create test scripts with dependencies
-        fs::write(&script1_path, "#!/bin/bash\nsource script2.sh\necho 'test1'").unwrap();
+        fs::write(
+            &script1_path,
+            "#!/bin/bash\nsource script2.sh\necho 'test1'",
+        )
+        .unwrap();
         fs::write(&script2_path, "#!/bin/bash\necho 'test2'").unwrap();
 
         let resolver = ScriptDependencyResolver::new(DependencyResolutionConfig::default());
-        let result = resolver.resolve_dependencies(&[script1_path, script2_path]).await.unwrap();
+        let result = resolver
+            .resolve_dependencies(&[script1_path, script2_path])
+            .await
+            .unwrap();
 
         assert_eq!(result.summary.total_scripts, 2);
         assert!(result.summary.total_dependencies > 0);

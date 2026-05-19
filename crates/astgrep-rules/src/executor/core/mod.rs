@@ -6,8 +6,8 @@ use crate::executor::dependency::VariableDependencyGraph;
 use crate::executor::types::{is_operator_node, TaintMatch};
 use crate::types::*;
 use astgrep_core::{
-    AstNode, ComparisonOperator, Finding, Language, Location, MatchBinding,
-    MetavariableAnalysis, Result, SemgrepMatchResult, Severity,
+    AstNode, ComparisonOperator, Finding, Language, Location, MatchBinding, MetavariableAnalysis,
+    Result, SemgrepMatchResult, Severity,
 };
 use astgrep_dataflow::{DataFlowAnalysis, DataFlowAnalyzer};
 use astgrep_matcher::AdvancedSemgrepMatcher;
@@ -19,7 +19,6 @@ mod conditions;
 mod symbolic;
 mod taint;
 mod utils;
-
 
 pub struct AdvancedRuleExecutor {
     pattern_matcher: AdvancedSemgrepMatcher,
@@ -671,7 +670,9 @@ impl AdvancedRuleExecutor {
             Condition::MetavariablePattern(_) => {
                 // MetavariablePattern is handled directly in the executor conditions,
                 // not converted to core Condition. Return a no-op.
-                Ok(CoreCondition::Custom("metavariable_pattern_handled".to_string()))
+                Ok(CoreCondition::Custom(
+                    "metavariable_pattern_handled".to_string(),
+                ))
             }
         }
     }

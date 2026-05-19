@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tracing::{debug, info};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tracing::{debug, info};
 
 use crate::services::migration_orchestrator::MigrationOperation;
 
@@ -174,7 +174,8 @@ impl PerformanceProfiler {
             return Ok(self.metrics.lock().unwrap().clone());
         }
 
-        let duration = self.start_time
+        let duration = self
+            .start_time
             .ok_or_else(|| anyhow::anyhow!("Profiling was not started"))?
             .elapsed();
 
@@ -204,22 +205,35 @@ impl PerformanceProfiler {
             return;
         }
 
-        self.active_operations.lock().unwrap().insert(operation_id.clone(), Instant::now());
+        self.active_operations
+            .lock()
+            .unwrap()
+            .insert(operation_id.clone(), Instant::now());
 
         if self.config.detailed_tracing {
-            debug!("Started profiling operation: {} ({})", operation_id, operation_type);
+            debug!(
+                "Started profiling operation: {} ({})",
+                operation_id, operation_type
+            );
         }
     }
 
     /// Record the completion of an operation
-    pub fn end_operation(&self, operation: &MigrationOperation, bytes_processed: u64, success: bool) {
+    pub fn end_operation(
+        &self,
+        operation: &MigrationOperation,
+        bytes_processed: u64,
+        success: bool,
+    ) {
         if !self.config.enabled {
             return;
         }
 
         let start_time = {
             let mut active = self.active_operations.lock().unwrap();
-            active.remove(&operation.id).unwrap_or_else(|| Instant::now())
+            active
+                .remove(&operation.id)
+                .unwrap_or_else(|| Instant::now())
         };
 
         let duration = start_time.elapsed();
@@ -248,8 +262,8 @@ impl PerformanceProfiler {
         }
 
         match operation.operation_type {
-            crate::services::migration_orchestrator::OperationType::Copy |
-            crate::services::migration_orchestrator::OperationType::Move => {
+            crate::services::migration_orchestrator::OperationType::Copy
+            | crate::services::migration_orchestrator::OperationType::Move => {
                 metrics.files_processed += 1;
             }
             crate::services::migration_orchestrator::OperationType::CreateDirectory => {
@@ -259,7 +273,10 @@ impl PerformanceProfiler {
         }
 
         if self.config.detailed_tracing {
-            debug!("Completed profiling operation: {} in {:?}", operation.id, duration);
+            debug!(
+                "Completed profiling operation: {} in {:?}",
+                operation.id, duration
+            );
         }
     }
 
@@ -290,7 +307,13 @@ impl PerformanceProfiler {
     }
 
     /// Update I/O statistics
-    pub fn update_io_stats(&self, bytes_read: u64, bytes_written: u64, read_ops: u64, write_ops: u64) {
+    pub fn update_io_stats(
+        &self,
+        bytes_read: u64,
+        bytes_written: u64,
+        read_ops: u64,
+        write_ops: u64,
+    ) {
         if !self.config.enabled || !self.config.include_io_stats {
             return;
         }
@@ -303,14 +326,21 @@ impl PerformanceProfiler {
     }
 
     /// Update thread metrics
-    pub fn update_thread_metrics(&self, concurrent_threads: usize, utilization: f64, efficiency: f64) {
+    pub fn update_thread_metrics(
+        &self,
+        concurrent_threads: usize,
+        utilization: f64,
+        efficiency: f64,
+    ) {
         if !self.config.enabled {
             return;
         }
 
         let mut metrics = self.metrics.lock().unwrap();
-        metrics.thread_metrics.max_concurrent_threads =
-            metrics.thread_metrics.max_concurrent_threads.max(concurrent_threads);
+        metrics.thread_metrics.max_concurrent_threads = metrics
+            .thread_metrics
+            .max_concurrent_threads
+            .max(concurrent_threads);
         metrics.thread_metrics.average_thread_utilization =
             (metrics.thread_metrics.average_thread_utilization + utilization) / 2.0;
         metrics.thread_metrics.thread_pool_efficiency =
@@ -455,14 +485,20 @@ impl PerformanceProfiler {
     }
 
     /// Write profiling report to file
-    async fn write_profile_report(&self, metrics: &ProfileMetrics, output_file: &str) -> Result<()> {
+    async fn write_profile_report(
+        &self,
+        metrics: &ProfileMetrics,
+        output_file: &str,
+    ) -> Result<()> {
         let json = serde_json::to_string_pretty(metrics)
             .with_context(|| "Failed to serialize profiling metrics")?;
 
-        let mut file = fs::File::create(output_file).await
+        let mut file = fs::File::create(output_file)
+            .await
             .with_context(|| format!("Failed to create profiling report file: {}", output_file))?;
 
-        file.write_all(json.as_bytes()).await
+        file.write_all(json.as_bytes())
+            .await
             .with_context(|| "Failed to write profiling report")?;
 
         info!("Profiling report written to: {}", output_file);

@@ -10,12 +10,12 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::{
     api::PaginatedResponse,
-    models::{JobStatus, AnalysisResponse, AnalysisResults},
+    models::{AnalysisResponse, AnalysisResults, JobStatus},
     WebConfig, WebError, WebResult,
 };
 
@@ -93,7 +93,10 @@ impl RequestValidator {
     /// Validate that a string field is not empty
     pub fn validate_non_empty(field: &str, field_name: &str) -> WebResult<()> {
         if field.trim().is_empty() {
-            return Err(WebError::bad_request(format!("{} cannot be empty", field_name)));
+            return Err(WebError::bad_request(format!(
+                "{} cannot be empty",
+                field_name
+            )));
         }
         Ok(())
     }
@@ -113,7 +116,7 @@ impl RequestValidator {
     /// Validate base64 content and decode
     pub fn validate_and_decode_base64(content: &str) -> WebResult<Vec<u8>> {
         use base64::{engine::general_purpose, Engine as _};
-        
+
         general_purpose::STANDARD
             .decode(content)
             .map_err(|e| WebError::bad_request(format!("Invalid base64 content: {}", e)))
@@ -188,12 +191,12 @@ impl ErrorHandler {
 macro_rules! handler_with_logging {
     ($operation:expr, $details:expr, $body:block) => {{
         use crate::handlers::common::{HandlerLogger, AnalysisResponseBuilder};
-        
+
         let start_time = std::time::Instant::now();
         HandlerLogger::log_request_start($operation, $details);
-        
+
         let result = async move $body.await;
-        
+
         match &result {
             Ok(_) => {
                 let duration = start_time.elapsed();
@@ -203,7 +206,7 @@ macro_rules! handler_with_logging {
                 HandlerLogger::log_request_error($operation, e);
             }
         }
-        
+
         result
     }};
 }
@@ -216,13 +219,9 @@ pub fn paginate_results<T>(
     let total = items.len();
     let offset = query.offset();
     let limit = query.limit();
-    
-    let paginated_items = items
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
-    
+
+    let paginated_items = items.into_iter().skip(offset).take(limit).collect();
+
     let page = (offset / limit) + 1;
     let total_pages = (total + limit - 1) / limit; // Ceiling division
 
@@ -234,6 +233,6 @@ pub fn paginate_results<T>(
         has_next: offset + limit < total,
         has_prev: offset > 0,
     };
-    
+
     (paginated_items, pagination)
 }

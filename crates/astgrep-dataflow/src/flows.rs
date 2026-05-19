@@ -1,8 +1,8 @@
 //! Data flow analysis utilities
-//! 
+//!
 //! This module provides utilities for analyzing and reporting data flows.
 
-use crate::taint::{TaintFlow, FlowSeverity};
+use crate::taint::{FlowSeverity, TaintFlow};
 use std::collections::{HashMap, HashSet};
 
 /// Flow analyzer for analyzing patterns in data flows
@@ -117,7 +117,8 @@ impl FlowAnalyzer {
 
     /// Add custom vulnerability pattern
     pub fn add_pattern(&mut self, vulnerability_type: String, pattern: VulnerabilityPattern) {
-        self.vulnerability_patterns.insert(vulnerability_type, pattern);
+        self.vulnerability_patterns
+            .insert(vulnerability_type, pattern);
     }
 }
 
@@ -205,9 +206,15 @@ impl FlowAnalysisResult {
             }
         }
 
-        stats.total_flows = stats.critical_count + stats.high_count + stats.medium_count + 
-                           stats.low_count + stats.info_count + stats.sanitized_count + stats.unknown_count;
-        stats.vulnerable_flows = stats.critical_count + stats.high_count + stats.medium_count + stats.low_count;
+        stats.total_flows = stats.critical_count
+            + stats.high_count
+            + stats.medium_count
+            + stats.low_count
+            + stats.info_count
+            + stats.sanitized_count
+            + stats.unknown_count;
+        stats.vulnerable_flows =
+            stats.critical_count + stats.high_count + stats.medium_count + stats.low_count;
 
         self.statistics = stats;
     }
@@ -316,8 +323,14 @@ impl FlowReporter {
         report.push_str("=== Data Flow Analysis Summary ===\n");
         report.push_str(&format!("Total flows: {}\n", stats.total_flows));
         report.push_str(&format!("Vulnerable flows: {}\n", stats.vulnerable_flows));
-        report.push_str(&format!("Vulnerability rate: {:.1}%\n", stats.vulnerability_rate() * 100.0));
-        report.push_str(&format!("Sanitization rate: {:.1}%\n", stats.sanitization_rate() * 100.0));
+        report.push_str(&format!(
+            "Vulnerability rate: {:.1}%\n",
+            stats.vulnerability_rate() * 100.0
+        ));
+        report.push_str(&format!(
+            "Sanitization rate: {:.1}%\n",
+            stats.sanitization_rate() * 100.0
+        ));
         report.push_str("\n");
 
         report.push_str("Severity breakdown:\n");
@@ -341,11 +354,14 @@ impl FlowReporter {
     }
 
     /// Generate a detailed report
-    pub fn generate_detailed_report(result: &FlowAnalysisResult, analyzer: &FlowAnalyzer) -> String {
+    pub fn generate_detailed_report(
+        result: &FlowAnalysisResult,
+        analyzer: &FlowAnalyzer,
+    ) -> String {
         let mut report = Self::generate_summary(result);
-        
+
         report.push_str("\n=== Detailed Findings ===\n");
-        
+
         for category in [
             VulnerabilityCategory::Critical,
             VulnerabilityCategory::High,
@@ -354,21 +370,27 @@ impl FlowReporter {
         ] {
             let flows = result.get_flows(&category);
             if !flows.is_empty() {
-                report.push_str(&format!("\n{} Severity Issues:\n", category.as_str().to_uppercase()));
-                
+                report.push_str(&format!(
+                    "\n{} Severity Issues:\n",
+                    category.as_str().to_uppercase()
+                ));
+
                 for (i, flow) in flows.iter().enumerate() {
                     report.push_str(&format!("  {}. {}\n", i + 1, flow.vulnerability_type));
-                    
+
                     if let Some(pattern) = analyzer.get_pattern(&flow.vulnerability_type) {
                         report.push_str(&format!("     Description: {}\n", pattern.description));
                         if let Some(cwe) = pattern.cwe_id {
                             report.push_str(&format!("     CWE-{}\n", cwe));
                         }
                     }
-                    
-                    report.push_str(&format!("     Confidence: {:.1}%\n", flow.confidence * 100.0));
+
+                    report.push_str(&format!(
+                        "     Confidence: {:.1}%\n",
+                        flow.confidence * 100.0
+                    ));
                     report.push_str(&format!("     Path length: {} nodes\n", flow.path_length()));
-                    
+
                     if !flow.sanitizers.is_empty() {
                         report.push_str("     Sanitizers: ");
                         for sanitizer in &flow.sanitizers {
@@ -376,12 +398,12 @@ impl FlowReporter {
                         }
                         report.push_str("\n");
                     }
-                    
+
                     report.push_str("\n");
                 }
             }
         }
-        
+
         report
     }
 }
@@ -389,8 +411,8 @@ impl FlowReporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sources::Source;
     use crate::sinks::Sink;
+    use crate::sources::Source;
 
     #[test]
     fn test_flow_analyzer_creation() {
@@ -403,7 +425,7 @@ mod tests {
     fn test_vulnerability_pattern() {
         let analyzer = FlowAnalyzer::new();
         let pattern = analyzer.get_pattern("XSS").unwrap();
-        
+
         assert_eq!(pattern.name, "Cross-Site Scripting");
         assert_eq!(pattern.cwe_id, Some(79));
         assert_eq!(pattern.severity, FlowSeverity::High);
@@ -412,10 +434,15 @@ mod tests {
     #[test]
     fn test_flow_analysis_result() {
         let mut result = FlowAnalysisResult::new();
-        
+
         let source = Source::new(0, SourceType::UserInput, "Test source".to_string());
-        let sink = Sink::new(1, SinkType::SqlExecution, "SQL_INJECTION".to_string(), "Test sink".to_string());
-        
+        let sink = Sink::new(
+            1,
+            SinkType::SqlExecution,
+            "SQL_INJECTION".to_string(),
+            "Test sink".to_string(),
+        );
+
         let flow = TaintFlow {
             source,
             sink,
@@ -427,10 +454,10 @@ mod tests {
             transformations: Vec::new(),
             flow_type: crate::taint::FlowType::Direct,
         };
-        
+
         result.add_flow(flow, VulnerabilityCategory::Critical);
         result.calculate_statistics();
-        
+
         assert_eq!(result.statistics.critical_count, 1);
         assert_eq!(result.statistics.total_flows, 1);
         assert!(result.has_critical_vulnerabilities());
@@ -442,7 +469,7 @@ mod tests {
         stats.total_flows = 10;
         stats.vulnerable_flows = 3;
         stats.sanitized_count = 5;
-        
+
         assert_eq!(stats.vulnerability_rate(), 0.3);
         assert_eq!(stats.sanitization_rate(), 0.5);
     }
@@ -454,7 +481,7 @@ mod tests {
         result.statistics.vulnerable_flows = 2;
         result.statistics.critical_count = 1;
         result.statistics.high_count = 1;
-        
+
         let report = FlowReporter::generate_summary(&result);
         assert!(report.contains("Total flows: 5"));
         assert!(report.contains("Vulnerable flows: 2"));

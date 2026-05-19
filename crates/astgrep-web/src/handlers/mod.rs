@@ -39,14 +39,11 @@ pub struct UserInfo {
 /// Common response headers
 pub fn add_common_headers(headers: &mut HeaderMap) {
     use axum::http::{header, HeaderValue};
-    
+
     headers.insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("application/json"),
     );
-    
-    headers.insert(
-        "X-API-Version",
-        HeaderValue::from_static("v1"),
-    );
+
+    headers.insert("X-API-Version", HeaderValue::from_static("v1"));
 }

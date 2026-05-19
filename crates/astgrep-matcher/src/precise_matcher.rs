@@ -4,10 +4,12 @@
 //! operates on AST structures rather than text, providing much higher
 //! precision for semgrep-style pattern matching.
 
-use crate::parser::{PatternParser, ParsedPattern};
 use crate::metavar::MetavarManager;
-use astgrep_core::{AstNode, Result, AnalysisError, SemgrepPattern, PatternType, constants::defaults::analysis};
+use crate::parser::{ParsedPattern, PatternParser};
 use astgrep_ast::NodeType;
+use astgrep_core::{
+    constants::defaults::analysis, AnalysisError, AstNode, PatternType, Result, SemgrepPattern,
+};
 use std::collections::{HashMap, HashSet};
 
 /// Precise AST-based pattern matcher
@@ -90,13 +92,9 @@ pub enum PatternNode {
         attributes: HashMap<String, String>,
     },
     /// Alternative patterns (OR)
-    Alternative {
-        patterns: Vec<PatternNode>,
-    },
+    Alternative { patterns: Vec<PatternNode> },
     /// Sequence patterns (AND)
-    Sequence {
-        patterns: Vec<PatternNode>,
-    },
+    Sequence { patterns: Vec<PatternNode> },
 }
 
 /// Constraints on metavariables
@@ -213,7 +211,8 @@ impl PreciseExpressionMatcher {
                 let ast_pattern = self.convert_parsed_pattern_to_ast(&parsed)?;
 
                 // Cache the result
-                self.pattern_cache.insert(pattern_str.clone(), ast_pattern.clone());
+                self.pattern_cache
+                    .insert(pattern_str.clone(), ast_pattern.clone());
                 Ok(ast_pattern)
             }
             PatternType::Either(patterns) => {
@@ -223,7 +222,9 @@ impl PreciseExpressionMatcher {
                     alt_patterns.push(ast_pattern.root);
                 }
                 Ok(AstPattern {
-                    root: PatternNode::Alternative { patterns: alt_patterns },
+                    root: PatternNode::Alternative {
+                        patterns: alt_patterns,
+                    },
                     metavariables: HashSet::new(),
                     constraints: Vec::new(),
                 })
@@ -264,7 +265,7 @@ impl PreciseExpressionMatcher {
     fn convert_parsed_pattern_to_ast(&self, parsed: &ParsedPattern) -> Result<AstPattern> {
         let root = self.convert_parsed_node_to_pattern_node(parsed)?;
         let metavariables = self.extract_metavariables(&root);
-        
+
         Ok(AstPattern {
             root,
             metavariables,
@@ -302,14 +303,18 @@ impl PreciseExpressionMatcher {
                 for pattern in patterns {
                     pattern_nodes.push(self.convert_parsed_node_to_pattern_node(pattern)?);
                 }
-                Ok(PatternNode::Sequence { patterns: pattern_nodes })
+                Ok(PatternNode::Sequence {
+                    patterns: pattern_nodes,
+                })
             }
             ParsedPattern::Alternative(patterns) => {
                 let mut pattern_nodes = Vec::new();
                 for pattern in patterns {
                     pattern_nodes.push(self.convert_parsed_node_to_pattern_node(pattern)?);
                 }
-                Ok(PatternNode::Alternative { patterns: pattern_nodes })
+                Ok(PatternNode::Alternative {
+                    patterns: pattern_nodes,
+                })
             }
             ParsedPattern::Wildcard => Ok(PatternNode::Metavariable {
                 name: "$_".to_string(),
@@ -320,8 +325,9 @@ impl PreciseExpressionMatcher {
 
     /// Parse node type string to NodeType enum
     fn parse_node_type(&self, node_type_str: &str) -> Result<NodeType> {
-        NodeType::from_str(node_type_str)
-            .ok_or_else(|| AnalysisError::pattern_match_error(format!("Unknown node type: {}", node_type_str)))
+        NodeType::from_str(node_type_str).ok_or_else(|| {
+            AnalysisError::pattern_match_error(format!("Unknown node type: {}", node_type_str))
+        })
     }
 
     /// Extract metavariables from pattern node
@@ -337,7 +343,9 @@ impl PreciseExpressionMatcher {
             PatternNode::Metavariable { name, .. } => {
                 metavars.insert(name.clone());
             }
-            PatternNode::Ellipsis { name: Some(name), .. } => {
+            PatternNode::Ellipsis {
+                name: Some(name), ..
+            } => {
                 metavars.insert(name.clone());
             }
             PatternNode::Composite { children, .. } => {
@@ -385,25 +393,41 @@ impl PreciseExpressionMatcher {
     }
 
     /// Try to match a pattern against a node
-    fn try_match_node(&mut self, _pattern: &AstPattern, _node: &dyn AstNode) -> Result<Option<PreciseMatchResult>> {
+    fn try_match_node(
+        &mut self,
+        _pattern: &AstPattern,
+        _node: &dyn AstNode,
+    ) -> Result<Option<PreciseMatchResult>> {
         // Simplified implementation
         Ok(None)
     }
 
     /// Check if a pattern node matches an AST node
-    fn matches_pattern_node(&mut self, _pattern_node: &PatternNode, _ast_node: &dyn AstNode) -> Result<bool> {
+    fn matches_pattern_node(
+        &mut self,
+        _pattern_node: &PatternNode,
+        _ast_node: &dyn AstNode,
+    ) -> Result<bool> {
         // Simplified implementation
         Ok(false)
     }
 
     /// Check metavariable constraints
-    fn check_metavar_constraint(&self, _constraint: &MetavarConstraint, _node: &dyn AstNode) -> Result<bool> {
+    fn check_metavar_constraint(
+        &self,
+        _constraint: &MetavarConstraint,
+        _node: &dyn AstNode,
+    ) -> Result<bool> {
         // Simplified implementation
         Ok(true)
     }
 
     /// Check pattern constraints
-    fn check_pattern_constraints(&self, constraints: &[PatternConstraint], _node: &dyn AstNode) -> Result<bool> {
+    fn check_pattern_constraints(
+        &self,
+        constraints: &[PatternConstraint],
+        _node: &dyn AstNode,
+    ) -> Result<bool> {
         for constraint in constraints {
             match constraint {
                 PatternConstraint::Inside(_) => {
@@ -428,16 +452,27 @@ impl PreciseExpressionMatcher {
     }
 
     /// Try fuzzy matching
-    fn try_fuzzy_match(&self, _pattern: &AstPattern, _node: &dyn AstNode) -> Result<Option<PreciseMatchResult>> {
+    fn try_fuzzy_match(
+        &self,
+        _pattern: &AstPattern,
+        _node: &dyn AstNode,
+    ) -> Result<Option<PreciseMatchResult>> {
         // Simplified fuzzy matching - would implement more sophisticated
         // similarity algorithms in practice
         Ok(None)
     }
 
     /// Post-process matches to remove duplicates and rank by confidence
-    fn post_process_matches(&self, mut matches: Vec<PreciseMatchResult>) -> Result<Vec<PreciseMatchResult>> {
+    fn post_process_matches(
+        &self,
+        mut matches: Vec<PreciseMatchResult>,
+    ) -> Result<Vec<PreciseMatchResult>> {
         // Sort by confidence (descending)
-        matches.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        matches.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Remove duplicates based on node identity
         matches.dedup_by(|a, b| {

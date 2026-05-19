@@ -4,17 +4,17 @@ use axum::{
     extract::{Path, Query, State},
     response::Json,
 };
+use chrono::Utc;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use uuid::Uuid;
-use tokio::sync::RwLock;
-use chrono::Utc;
 use std::sync::OnceLock;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::{
-    models::{Job, JobStatus},
     api::PaginatedResponse,
+    models::{Job, JobStatus},
     WebConfig, WebError, WebResult,
 };
 
@@ -112,8 +112,14 @@ fn sample_jobs() -> Vec<Job> {
             error: None,
             metadata: {
                 let mut map = HashMap::new();
-                map.insert("language".to_string(), serde_json::Value::String("java".to_string()));
-                map.insert("file_count".to_string(), serde_json::Value::String("15".to_string()));
+                map.insert(
+                    "language".to_string(),
+                    serde_json::Value::String("java".to_string()),
+                );
+                map.insert(
+                    "file_count".to_string(),
+                    serde_json::Value::String("15".to_string()),
+                );
                 map
             },
         },
@@ -128,8 +134,14 @@ fn sample_jobs() -> Vec<Job> {
             error: None,
             metadata: {
                 let mut map = HashMap::new();
-                map.insert("scan_type".to_string(), serde_json::Value::String("vulnerability".to_string()));
-                map.insert("target".to_string(), serde_json::Value::String("web_app".to_string()));
+                map.insert(
+                    "scan_type".to_string(),
+                    serde_json::Value::String("vulnerability".to_string()),
+                );
+                map.insert(
+                    "target".to_string(),
+                    serde_json::Value::String("web_app".to_string()),
+                );
                 map
             },
         },
@@ -144,8 +156,14 @@ fn sample_jobs() -> Vec<Job> {
             error: Some("Parser error: Unsupported file format".to_string()),
             metadata: {
                 let mut map = HashMap::new();
-                map.insert("language".to_string(), serde_json::Value::String("unknown".to_string()));
-                map.insert("error_code".to_string(), serde_json::Value::String("PARSE_001".to_string()));
+                map.insert(
+                    "language".to_string(),
+                    serde_json::Value::String("unknown".to_string()),
+                );
+                map.insert(
+                    "error_code".to_string(),
+                    serde_json::Value::String("PARSE_001".to_string()),
+                );
                 map
             },
         },
@@ -160,8 +178,14 @@ fn sample_jobs() -> Vec<Job> {
             error: None,
             metadata: {
                 let mut map = HashMap::new();
-                map.insert("package_manager".to_string(), serde_json::Value::String("npm".to_string()));
-                map.insert("priority".to_string(), serde_json::Value::String("high".to_string()));
+                map.insert(
+                    "package_manager".to_string(),
+                    serde_json::Value::String("npm".to_string()),
+                );
+                map.insert(
+                    "priority".to_string(),
+                    serde_json::Value::String("high".to_string()),
+                );
                 map
             },
         },
@@ -186,8 +210,9 @@ pub async fn get_job_status(
 ) -> WebResult<Json<Job>> {
     // This is a simplified implementation
     // In a real application, you would query the job storage
-    
-    let job = get_job_from_storage(job_id).await
+
+    let job = get_job_from_storage(job_id)
+        .await
         .ok_or_else(|| WebError::not_found(format!("Job not found: {}", job_id)))?;
 
     Ok(Json(job))
@@ -223,11 +248,7 @@ pub async fn list_jobs(
     let limit = params.limit.unwrap_or(50).min(100); // Max 100 jobs per request
 
     let total_jobs = jobs.len();
-    let paginated_jobs: Vec<Job> = jobs
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
+    let paginated_jobs: Vec<Job> = jobs.into_iter().skip(offset).take(limit).collect();
 
     let page = (offset / limit) + 1;
     let total_pages = (total_jobs as f64 / limit as f64).ceil() as u32;
@@ -272,7 +293,10 @@ async fn get_job_from_storage(job_id: Uuid) -> Option<Job> {
 async fn get_all_jobs_from_storage(status: Option<JobStatus>) -> Vec<Job> {
     // Always include sample jobs (not persisted) to provide stable test fixtures
     let mut jobs: Vec<Job> = match status.as_ref() {
-        Some(s) => sample_jobs().into_iter().filter(|j| &j.status == s).collect(),
+        Some(s) => sample_jobs()
+            .into_iter()
+            .filter(|j| &j.status == s)
+            .collect(),
         None => sample_jobs(),
     };
 
@@ -359,10 +383,10 @@ mod tests {
     async fn test_get_job_status_existing() {
         let config = Arc::new(WebConfig::default());
         let job_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
-        
+
         let result = get_job_status(State(config), Path(job_id)).await;
         assert!(result.is_ok());
-        
+
         let job = result.unwrap().0;
         assert_eq!(job.id, job_id);
         assert_eq!(job.status, JobStatus::Completed);
@@ -372,10 +396,10 @@ mod tests {
     async fn test_get_job_status_not_found() {
         let config = Arc::new(WebConfig::default());
         let job_id = Uuid::new_v4(); // Random UUID that doesn't exist
-        
+
         let result = get_job_status(State(config), Path(job_id)).await;
         assert!(result.is_err());
-        
+
         if let Err(WebError::NotFound { message }) = result {
             assert!(message.contains("Job not found"));
         } else {
@@ -391,7 +415,7 @@ mod tests {
             limit: None,
             offset: None,
         };
-        
+
         let result = list_jobs(State(config), Query(query)).await;
         assert!(result.is_ok());
 
@@ -408,7 +432,7 @@ mod tests {
             limit: None,
             offset: None,
         };
-        
+
         let result = list_jobs(State(config), Query(query)).await;
         assert!(result.is_ok());
 
@@ -425,7 +449,7 @@ mod tests {
             limit: Some(2),
             offset: Some(1),
         };
-        
+
         let result = list_jobs(State(config), Query(query)).await;
         assert!(result.is_ok());
 
@@ -436,10 +460,15 @@ mod tests {
     #[tokio::test]
     async fn test_create_and_update_job() {
         let mut metadata = HashMap::new();
-        metadata.insert("language".to_string(), serde_json::Value::String("rust".to_string()));
+        metadata.insert(
+            "language".to_string(),
+            serde_json::Value::String("rust".to_string()),
+        );
 
         // Create a new job
-        let job_id = create_analysis_job("test_analysis".to_string(), metadata).await.unwrap();
+        let job_id = create_analysis_job("test_analysis".to_string(), metadata)
+            .await
+            .unwrap();
 
         // Verify job was created
         let job = get_job_from_storage(job_id).await.unwrap();
@@ -447,7 +476,9 @@ mod tests {
         assert_eq!(job.progress, 0);
 
         // Update job status
-        update_job_status(job_id, JobStatus::Running, 50, None).await.unwrap();
+        update_job_status(job_id, JobStatus::Running, 50, None)
+            .await
+            .unwrap();
 
         // Verify job was updated
         let updated_job = get_job_from_storage(job_id).await.unwrap();
@@ -456,7 +487,9 @@ mod tests {
         assert!(updated_job.started_at.is_some());
 
         // Complete the job
-        update_job_status(job_id, JobStatus::Completed, 100, None).await.unwrap();
+        update_job_status(job_id, JobStatus::Completed, 100, None)
+            .await
+            .unwrap();
 
         // Verify job completion
         let completed_job = get_job_from_storage(job_id).await.unwrap();

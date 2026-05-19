@@ -1,8 +1,8 @@
 //! Command-line interface for astgrep
 
 use anyhow::Result;
+use astgrep_core::{AnalysisConfig, Confidence, Language, OutputFormat, Severity};
 use clap::{Parser, Subcommand, ValueEnum};
-use astgrep_core::{AnalysisConfig, Language, OutputFormat, Severity, Confidence};
 use std::path::PathBuf;
 use tracing::{info, warn};
 
@@ -34,8 +34,10 @@ pub use vscode_integration::*;
 #[command(name = "astgrep")]
 #[command(about = "A comprehensive static analysis tool for code review and security scanning")]
 #[command(version)]
-#[command(long_about = "astgrep provides advanced static analysis capabilities for multiple programming languages, \
-featuring pattern matching, data flow analysis, and comprehensive security vulnerability detection.")]
+#[command(
+    long_about = "astgrep provides advanced static analysis capabilities for multiple programming languages, \
+featuring pattern matching, data flow analysis, and comprehensive security vulnerability detection."
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -380,7 +382,11 @@ pub async fn run() -> Result<()> {
                 baseline,
                 fail_on_findings,
                 !no_parallel,
-                max_threads.or(if cli.threads > 0 { Some(cli.threads) } else { None }),
+                max_threads.or(if cli.threads > 0 {
+                    Some(cli.threads)
+                } else {
+                    None
+                }),
                 cli.profile,
                 compatible,
                 Some(matches!(sql_statement_boundary, OnOffCli::On)),
@@ -389,33 +395,64 @@ pub async fn run() -> Result<()> {
 
             commands::analyze_enhanced::run_enhanced(config, output).await
         }
-        Commands::Validate { rule_files, format, language, performance } => {
+        Commands::Validate {
+            rule_files,
+            format,
+            language,
+            performance,
+        } => {
             info!("Validating rule files");
             // Use --config parameter if provided and no rule_files specified, otherwise use rule_files
             let files_to_validate = if rule_files.is_empty() && cli.config.is_some() {
                 vec![cli.config.unwrap()]
             } else if rule_files.is_empty() {
-                return Err(anyhow::anyhow!("No rule files specified. Use --config or provide rule file paths."));
+                return Err(anyhow::anyhow!(
+                    "No rule files specified. Use --config or provide rule file paths."
+                ));
             } else {
                 rule_files
             };
-            commands::validate_enhanced::run_enhanced(files_to_validate, format, language, performance).await
+            commands::validate_enhanced::run_enhanced(
+                files_to_validate,
+                format,
+                language,
+                performance,
+            )
+            .await
         }
-        Commands::List { rules, language, category, detailed, format } => {
+        Commands::List {
+            rules,
+            language,
+            category,
+            detailed,
+            format,
+        } => {
             info!("Listing available rules");
             // Use --config parameter if provided, otherwise use --rules parameter
             let rules_dir = cli.config.or(rules);
             commands::list::run(rules_dir, language, category, detailed, format).await
         }
-        Commands::Init { output, template, force } => {
+        Commands::Init {
+            output,
+            template,
+            force,
+        } => {
             info!("Initializing configuration file");
             commands::init::run(output, template, force).await
         }
-        Commands::Info { language, extensions, categories } => {
+        Commands::Info {
+            language,
+            extensions,
+            categories,
+        } => {
             info!("Showing system information");
             commands::info::run(language, extensions, categories).await
         }
-        Commands::Update { repository, directory, force } => {
+        Commands::Update {
+            repository,
+            directory,
+            force,
+        } => {
             info!("Updating rules");
             commands::update::run(repository, directory, force).await
         }
@@ -427,7 +464,16 @@ pub async fn run() -> Result<()> {
             warn!("'version' command is deprecated, use '--version' flag instead");
             commands::version::run().await
         }
-        Commands::Migrate { action, verbose, dry_run, format, config, progress, backup, threads } => {
+        Commands::Migrate {
+            action,
+            verbose,
+            dry_run,
+            format,
+            config,
+            progress,
+            backup,
+            threads,
+        } => {
             info!("Starting migration operations");
 
             let migrate_command = crate::commands::migrate::MigrateCommand {
@@ -535,7 +581,11 @@ fn build_enhanced_analysis_config(
         severity_filter: convert_severity_filter(severity),
         confidence_filter: convert_confidence_filter(confidence),
         include_metrics: metrics,
-        max_findings: if max_findings == 0 { None } else { Some(max_findings) },
+        max_findings: if max_findings == 0 {
+            None
+        } else {
+            Some(max_findings)
+        },
         enable_dataflow: dataflow,
         baseline_file: baseline,
         fail_on_findings,
@@ -602,37 +652,37 @@ fn build_analysis_config(
             Language::Java,
             Language::JavaScript,
             Language::Python,
-        Language::Sql,
-        Language::Bash,
-    ]
-} else {
-    let mut parsed = Vec::new();
-    for lang_str in languages {
-        match Language::from_str(&lang_str) {
-            Some(lang) => parsed.push(lang),
-            None => {
-                warn!("Unknown language: {}, skipping", lang_str);
+            Language::Sql,
+            Language::Bash,
+        ]
+    } else {
+        let mut parsed = Vec::new();
+        for lang_str in languages {
+            match Language::from_str(&lang_str) {
+                Some(lang) => parsed.push(lang),
+                None => {
+                    warn!("Unknown language: {}, skipping", lang_str);
+                }
             }
         }
-    }
-    if parsed.is_empty() {
-        return Err(anyhow::anyhow!("No valid languages specified"));
-    }
-    parsed
-};
+        if parsed.is_empty() {
+            return Err(anyhow::anyhow!("No valid languages specified"));
+        }
+        parsed
+    };
 
-let output_format = OutputFormat::from_str(&format)
-    .ok_or_else(|| anyhow::anyhow!("Unknown output format: {}", format))?;
+    let output_format = OutputFormat::from_str(&format)
+        .ok_or_else(|| anyhow::anyhow!("Unknown output format: {}", format))?;
 
-Ok(AnalysisConfig {
-    target_paths,
-    exclude_patterns: exclude,
-    languages: parsed_languages,
-    rule_files: rules,
-    output_format,
-    parallel,
-    max_threads,
-})
+    Ok(AnalysisConfig {
+        target_paths,
+        exclude_patterns: exclude,
+        languages: parsed_languages,
+        rule_files: rules,
+        output_format,
+        parallel,
+        max_threads,
+    })
 }
 
 /// Enhanced analysis configuration with additional options
@@ -673,7 +723,8 @@ mod tests {
             "json".to_string(),
             true,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(config.target_paths, vec![PathBuf::from(".")]);
         assert_eq!(config.languages.len(), 5);
@@ -692,7 +743,8 @@ mod tests {
             "sarif".to_string(),
             false,
             Some(4),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(config.target_paths, vec![PathBuf::from("src")]);
         assert_eq!(config.rule_files, vec![PathBuf::from("rules.yml")]);
@@ -716,7 +768,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No valid languages specified"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No valid languages specified"));
     }
 
     #[test]
@@ -732,6 +787,9 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unknown output format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown output format"));
     }
 }

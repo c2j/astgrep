@@ -424,7 +424,9 @@ impl AdvancedRuleExecutor {
                     None
                 };
 
-                let str_bindings: HashMap<String, String> = m.bindings.iter()
+                let str_bindings: HashMap<String, String> = m
+                    .bindings
+                    .iter()
                     .map(|(k, v)| (k.clone(), v.value.clone()))
                     .collect();
                 sources.push(TaintMatch {
@@ -603,7 +605,9 @@ impl AdvancedRuleExecutor {
                 }
             }
 
-            let str_bindings: HashMap<String, String> = m.bindings.iter()
+            let str_bindings: HashMap<String, String> = m
+                .bindings
+                .iter()
                 .map(|(k, v)| (k.clone(), v.value.clone()))
                 .collect();
             sinks.push(TaintMatch {

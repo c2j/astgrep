@@ -26,7 +26,10 @@ pub async fn run(rule_files: Vec<PathBuf>) -> Result<()> {
 
         match validate_rule_file(rule_file).await {
             Ok(rule_count) => {
-                info!("✓ Rule file {:?} is valid ({} rules)", rule_file, rule_count);
+                info!(
+                    "✓ Rule file {:?} is valid ({} rules)",
+                    rule_file, rule_count
+                );
                 total_rules += rule_count;
             }
             Err(e) => {
@@ -61,8 +64,8 @@ async fn validate_rule_file(rule_file: &PathBuf) -> Result<usize> {
     let content = std::fs::read_to_string(rule_file)?;
 
     // Basic YAML syntax validation
-    let yaml_value: serde_yaml::Value = serde_yaml::from_str(&content)
-        .map_err(|e| anyhow::anyhow!("YAML syntax error: {}", e))?;
+    let yaml_value: serde_yaml::Value =
+        serde_yaml::from_str(&content).map_err(|e| anyhow::anyhow!("YAML syntax error: {}", e))?;
 
     // Check if it's a rules file with the expected structure
     let rules = yaml_value
@@ -163,7 +166,10 @@ mod tests {
     async fn test_validate_empty_rule_files() {
         let result = run(vec![]).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No rule files specified"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No rule files specified"));
     }
 
     #[tokio::test]
@@ -177,7 +183,7 @@ mod tests {
     async fn test_validate_valid_rule_file() {
         let temp_dir = tempdir().unwrap();
         let rule_file = temp_dir.path().join("valid_rules.yml");
-        
+
         let valid_rules = r#"
 rules:
   - id: test-rule
@@ -188,9 +194,9 @@ rules:
     patterns:
       - pattern: "test"
 "#;
-        
+
         std::fs::write(&rule_file, valid_rules).unwrap();
-        
+
         let result = validate_rule_file(&rule_file).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1);
@@ -200,45 +206,51 @@ rules:
     async fn test_validate_invalid_yaml() {
         let temp_dir = tempdir().unwrap();
         let rule_file = temp_dir.path().join("invalid_yaml.yml");
-        
+
         let invalid_yaml = r#"
 rules:
   - id: test-rule
     name: Test Rule
     description: "Unclosed quote
 "#;
-        
+
         std::fs::write(&rule_file, invalid_yaml).unwrap();
-        
+
         let result = validate_rule_file(&rule_file).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("YAML syntax error"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("YAML syntax error"));
     }
 
     #[tokio::test]
     async fn test_validate_missing_required_field() {
         let temp_dir = tempdir().unwrap();
         let rule_file = temp_dir.path().join("missing_field.yml");
-        
+
         let missing_field_rules = r#"
 rules:
   - id: test-rule
     name: Test Rule
     # Missing description, severity, and languages
 "#;
-        
+
         std::fs::write(&rule_file, missing_field_rules).unwrap();
-        
+
         let result = validate_rule_file(&rule_file).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("missing required field"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("missing required field"));
     }
 
     #[tokio::test]
     async fn test_validate_invalid_severity() {
         let temp_dir = tempdir().unwrap();
         let rule_file = temp_dir.path().join("invalid_severity.yml");
-        
+
         let invalid_severity_rules = r#"
 rules:
   - id: test-rule
@@ -247,9 +259,9 @@ rules:
     severity: INVALID
     languages: [java]
 "#;
-        
+
         std::fs::write(&rule_file, invalid_severity_rules).unwrap();
-        
+
         let result = validate_rule_file(&rule_file).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("invalid severity"));
@@ -259,13 +271,13 @@ rules:
     async fn test_validate_empty_rules() {
         let temp_dir = tempdir().unwrap();
         let rule_file = temp_dir.path().join("empty_rules.yml");
-        
+
         let empty_rules = r#"
 rules: []
 "#;
-        
+
         std::fs::write(&rule_file, empty_rules).unwrap();
-        
+
         let result = validate_rule_file(&rule_file).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0);

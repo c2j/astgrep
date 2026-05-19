@@ -1,7 +1,7 @@
 //! HTML output formatter
 
-use crate::output::analysis::{AnalysisStatistics, Finding, OutputFormatter};
 use crate::output::analysis::Severity;
+use crate::output::analysis::{AnalysisStatistics, Finding, OutputFormatter};
 use anyhow::Result;
 use std::time::Duration;
 
@@ -36,7 +36,10 @@ impl OutputFormatter for HtmlFormatter {
 
         html.push_str("<h2>Summary</h2>\n");
         html.push_str(&format!("<p>Total findings: {}</p>\n", findings.len()));
-        html.push_str(&format!("<p>Files analyzed: {}</p>\n", stats.files_analyzed));
+        html.push_str(&format!(
+            "<p>Files analyzed: {}</p>\n",
+            stats.files_analyzed
+        ));
         html.push_str(&format!("<p>Analysis time: {:?}</p>\n", total_time));
 
         if !findings.is_empty() {
@@ -50,10 +53,7 @@ impl OutputFormatter for HtmlFormatter {
                     Severity::Info => "info",
                 };
 
-                html.push_str(&format!(
-                    "<div class=\"finding {}\">\n",
-                    severity_class
-                ));
+                html.push_str(&format!("<div class=\"finding {}\">\n", severity_class));
                 html.push_str(&format!("<h3>{}</h3>\n", finding.message));
                 html.push_str(&format!(
                     "<p><strong>Rule:</strong> {}</p>\n",

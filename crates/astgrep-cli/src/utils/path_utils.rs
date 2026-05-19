@@ -1,9 +1,9 @@
 //! Cross-platform path handling utilities
 
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
-use std::fs;
 use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
 use tracing::debug;
 
 /// Cross-platform path normalizer and validator
@@ -27,7 +27,8 @@ pub enum Platform {
 impl PathHandler {
     pub fn new() -> Self {
         let current_platform = detect_platform();
-        let (preserve_case, normalize_slashes, max_path_length) = platform_defaults(&current_platform);
+        let (preserve_case, normalize_slashes, max_path_length) =
+            platform_defaults(&current_platform);
 
         Self {
             current_platform,
@@ -38,7 +39,11 @@ impl PathHandler {
     }
 
     /// Create a path handler with custom configuration
-    pub fn with_config(preserve_case: bool, normalize_slashes: bool, max_path_length: usize) -> Self {
+    pub fn with_config(
+        preserve_case: bool,
+        normalize_slashes: bool,
+        max_path_length: usize,
+    ) -> Self {
         Self {
             current_platform: detect_platform(),
             preserve_case,
@@ -80,9 +85,7 @@ impl PathHandler {
         let separator = std::path::MAIN_SEPARATOR.to_string();
 
         // Replace both forward and backward slashes with platform separator
-        let normalized = path_str
-            .replace('/', &separator)
-            .replace('\\', &separator);
+        let normalized = path_str.replace('/', &separator).replace('\\', &separator);
 
         PathBuf::from(normalized)
     }
@@ -109,7 +112,8 @@ impl PathHandler {
 
     /// Clean up path components (remove redundant separators, empty components)
     fn clean_path(&self, path: &Path) -> PathBuf {
-        let components: Vec<_> = path.components()
+        let components: Vec<_> = path
+            .components()
             .filter(|comp| {
                 !matches!(comp, std::path::Component::CurDir) // Skip "."
             })
@@ -153,21 +157,28 @@ impl PathHandler {
         for (i, ch) in path_str.chars().enumerate() {
             if reserved_chars.contains(&ch) {
                 // Allow colon in drive letter (e.g., "C:")
-                if ch == ':' && i == 1 && path_str.chars().nth(0).map_or(false, |c| c.is_ascii_alphabetic()) {
+                if ch == ':'
+                    && i == 1
+                    && path_str
+                        .chars()
+                        .nth(0)
+                        .map_or(false, |c| c.is_ascii_alphabetic())
+                {
                     continue;
                 }
                 return Err(anyhow::anyhow!(
                     "Path contains reserved character '{}' at position {}: {}",
-                    ch, i, path_str
+                    ch,
+                    i,
+                    path_str
                 ));
             }
         }
 
         // Check for reserved device names
         let reserved_names = [
-            "CON", "PRN", "AUX", "NUL",
-            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+            "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
         ];
 
         if let Some(file_name) = path.file_name() {
@@ -230,9 +241,7 @@ impl PathHandler {
                     Ok(format!("file:/{}", path_str.replace('\\', "/")))
                 }
             }
-            _ => {
-                Ok(format!("file://{}", path_str))
-            }
+            _ => Ok(format!("file://{}", path_str)),
         }
     }
 
@@ -249,16 +258,17 @@ impl PathHandler {
                 if path_part.starts_with("//") {
                     // UNC path or absolute path with leading slash
                     path_part[2..].replace('/', "\\")
-                } else if path_part.starts_with('/') && path_part.len() > 3 && path_part.chars().nth(1) == Some(':') {
+                } else if path_part.starts_with('/')
+                    && path_part.len() > 3
+                    && path_part.chars().nth(1) == Some(':')
+                {
                     // Convert /C:/path to C:\path
                     path_part[1..].replace('/', "\\")
                 } else {
                     path_part.replace('/', "\\")
                 }
             }
-            _ => {
-                path_part.to_string()
-            }
+            _ => path_part.to_string(),
         };
 
         Ok(PathBuf::from(path_str))
@@ -360,29 +370,29 @@ fn detect_platform() -> Platform {
 fn platform_defaults(platform: &Platform) -> (bool, bool, usize) {
     match platform {
         Platform::Windows => (
-            false,  // Don't preserve case (case-insensitive)
-            true,   // Normalize slashes
-            260,    // Traditional Windows path limit (though extended paths support longer)
+            false, // Don't preserve case (case-insensitive)
+            true,  // Normalize slashes
+            260,   // Traditional Windows path limit (though extended paths support longer)
         ),
         Platform::MacOS => (
-            true,   // Preserve case (though HFS+ is case-insensitive)
-            true,   // Normalize slashes for consistency
-            1024,   // macOS has higher path limits
+            true, // Preserve case (though HFS+ is case-insensitive)
+            true, // Normalize slashes for consistency
+            1024, // macOS has higher path limits
         ),
         Platform::Linux => (
-            true,   // Preserve case (case-sensitive)
-            true,   // Normalize slashes for consistency
-            4096,   // Linux typically supports 4096+
+            true, // Preserve case (case-sensitive)
+            true, // Normalize slashes for consistency
+            4096, // Linux typically supports 4096+
         ),
         Platform::Unix => (
-            true,   // Preserve case (case-sensitive)
-            true,   // Normalize slashes for consistency
-            1024,   // Conservative estimate
+            true, // Preserve case (case-sensitive)
+            true, // Normalize slashes for consistency
+            1024, // Conservative estimate
         ),
         Platform::Unknown => (
-            true,   // Default to preserving case
-            true,   // Normalize slashes
-            255,    // Conservative limit
+            true, // Default to preserving case
+            true, // Normalize slashes
+            255,  // Conservative limit
         ),
     }
 }
@@ -408,7 +418,10 @@ mod tests {
     fn test_platform_detection() {
         let platform = detect_platform();
         // Should not panic on current platform
-        assert!(matches!(platform, Platform::Windows | Platform::MacOS | Platform::Linux | Platform::Unix));
+        assert!(matches!(
+            platform,
+            Platform::Windows | Platform::MacOS | Platform::Linux | Platform::Unix
+        ));
     }
 
     #[test]

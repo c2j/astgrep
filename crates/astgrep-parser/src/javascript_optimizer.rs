@@ -3,10 +3,10 @@
 //! This module provides JavaScript-specific optimizations to improve
 //! the accuracy of semgrep-style pattern matching for JavaScript/TypeScript code.
 
-use astgrep_ast::{UniversalNode, NodeType};
-use astgrep_core::{Result, AstNode};
-use std::collections::{HashMap, HashSet};
+use astgrep_ast::{NodeType, UniversalNode};
+use astgrep_core::{AstNode, Result};
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 
 /// JavaScript-specific AST optimizer
 pub struct JavaScriptOptimizer {
@@ -139,7 +139,7 @@ impl JavaScriptOptimizer {
             module_tracker: ModuleTracker::new(),
             framework_detector: FrameworkDetector::new(),
         };
-        
+
         optimizer.initialize_patterns();
         optimizer
     }
@@ -287,7 +287,11 @@ impl JavaScriptOptimizer {
     }
 
     /// Optimize JavaScript AST for better pattern matching
-    pub fn optimize_js_ast(&mut self, mut ast: UniversalNode, source: &str) -> Result<UniversalNode> {
+    pub fn optimize_js_ast(
+        &mut self,
+        mut ast: UniversalNode,
+        source: &str,
+    ) -> Result<UniversalNode> {
         // Phase 1: Detect framework
         self.framework_detector.detect_frameworks(source);
 
@@ -323,13 +327,18 @@ impl JavaScriptOptimizer {
 
             for (name, pattern) in updates {
                 // Update node type if more specific
-                if ast.node_type() == NodeType::Literal.as_str() && pattern.node_type != NodeType::Literal {
+                if ast.node_type() == NodeType::Literal.as_str()
+                    && pattern.node_type != NodeType::Literal
+                {
                     *ast.node_type_mut() = pattern.node_type.clone();
                 }
 
                 // Add pattern metadata
                 ast.add_attribute(format!("js_pattern_{}", name), "true".to_string());
-                ast.add_attribute("js_security_impact".to_string(), format!("{:?}", pattern.security_impact));
+                ast.add_attribute(
+                    "js_security_impact".to_string(),
+                    format!("{:?}", pattern.security_impact),
+                );
 
                 // Add vulnerability information
                 self.add_js_vulnerability_metadata(ast, &pattern.pattern_type)?;
@@ -447,25 +456,41 @@ impl JavaScriptOptimizer {
     }
 
     /// Add vulnerability metadata for JavaScript patterns
-    fn add_js_vulnerability_metadata(&self, ast: &mut UniversalNode, pattern_type: &JsPatternType) -> Result<()> {
+    fn add_js_vulnerability_metadata(
+        &self,
+        ast: &mut UniversalNode,
+        pattern_type: &JsPatternType,
+    ) -> Result<()> {
         match pattern_type {
             JsPatternType::InnerHtml | JsPatternType::DocumentWrite => {
                 ast.add_attribute("vulnerability_risk".to_string(), "xss".to_string());
             }
             JsPatternType::Eval => {
-                ast.add_attribute("vulnerability_risk".to_string(), "code_injection".to_string());
+                ast.add_attribute(
+                    "vulnerability_risk".to_string(),
+                    "code_injection".to_string(),
+                );
             }
             JsPatternType::PostMessage => {
-                ast.add_attribute("vulnerability_risk".to_string(), "postmessage_xss".to_string());
+                ast.add_attribute(
+                    "vulnerability_risk".to_string(),
+                    "postmessage_xss".to_string(),
+                );
             }
             JsPatternType::LocalStorage | JsPatternType::SessionStorage => {
-                ast.add_attribute("vulnerability_risk".to_string(), "sensitive_data_exposure".to_string());
+                ast.add_attribute(
+                    "vulnerability_risk".to_string(),
+                    "sensitive_data_exposure".to_string(),
+                );
             }
             JsPatternType::FetchApi | JsPatternType::XmlHttpRequest => {
                 ast.add_attribute("vulnerability_risk".to_string(), "ssrf".to_string());
             }
             JsPatternType::TemplateString => {
-                ast.add_attribute("vulnerability_risk".to_string(), "template_injection".to_string());
+                ast.add_attribute(
+                    "vulnerability_risk".to_string(),
+                    "template_injection".to_string(),
+                );
             }
             _ => {}
         }
@@ -478,9 +503,11 @@ impl JavaScriptOptimizer {
         if let Some(from_pos) = text.find(" from ") {
             let import_part = &text[6..from_pos].trim(); // Skip "import "
             let module_part = &text[from_pos + 6..].trim(); // Skip " from "
-            
+
             Some(ImportInfo {
-                module_name: module_part.trim_matches(|c| c == '"' || c == '\'' || c == ';').to_string(),
+                module_name: module_part
+                    .trim_matches(|c| c == '"' || c == '\'' || c == ';')
+                    .to_string(),
                 imported_names: vec![import_part.to_string()], // Simplified
                 is_default: !import_part.contains('{'),
                 is_namespace: import_part.contains('*'),
@@ -580,15 +607,18 @@ impl ModuleTracker {
     }
 
     fn add_import(&mut self, import_info: ImportInfo) {
-        self.imports.insert(import_info.module_name.clone(), import_info);
+        self.imports
+            .insert(import_info.module_name.clone(), import_info);
     }
 
     fn add_export(&mut self, export_info: ExportInfo) {
-        self.exports.insert(export_info.exported_name.clone(), export_info);
+        self.exports
+            .insert(export_info.exported_name.clone(), export_info);
     }
 
     fn add_require(&mut self, require_info: RequireInfo) {
-        self.requires.insert(require_info.module_name.clone(), require_info);
+        self.requires
+            .insert(require_info.module_name.clone(), require_info);
     }
 }
 
@@ -603,14 +633,22 @@ impl FrameworkDetector {
     }
 
     fn initialize_framework_patterns(&mut self) {
-        self.framework_patterns.insert("React".to_string(), 
-            Regex::new(r"(import.*react|React\.|jsx|useState|useEffect)").unwrap());
-        self.framework_patterns.insert("Vue".to_string(), 
-            Regex::new(r"(Vue\.|new Vue|v-|@click|<template>)").unwrap());
-        self.framework_patterns.insert("Angular".to_string(), 
-            Regex::new(r"(@Component|@Injectable|angular|ng-)").unwrap());
-        self.framework_patterns.insert("jQuery".to_string(), 
-            Regex::new(r"(\$\(|\$\.|\$\.|jQuery)").unwrap());
+        self.framework_patterns.insert(
+            "React".to_string(),
+            Regex::new(r"(import.*react|React\.|jsx|useState|useEffect)").unwrap(),
+        );
+        self.framework_patterns.insert(
+            "Vue".to_string(),
+            Regex::new(r"(Vue\.|new Vue|v-|@click|<template>)").unwrap(),
+        );
+        self.framework_patterns.insert(
+            "Angular".to_string(),
+            Regex::new(r"(@Component|@Injectable|angular|ng-)").unwrap(),
+        );
+        self.framework_patterns.insert(
+            "jQuery".to_string(),
+            Regex::new(r"(\$\(|\$\.|\$\.|jQuery)").unwrap(),
+        );
     }
 
     fn detect_frameworks(&mut self, source: &str) {

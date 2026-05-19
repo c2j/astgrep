@@ -1,5 +1,5 @@
 //! AST builder utilities
-//! 
+//!
 //! This module provides convenient builders for creating AST nodes.
 
 use crate::nodes::{BinaryOperator, LiteralValue, NodeType, UnaryOperator, UniversalNode};
@@ -98,9 +98,9 @@ impl AstBuilder {
         parameters: Vec<UniversalNode>,
         body: UniversalNode,
     ) -> UniversalNode {
-        let mut node = UniversalNode::new(NodeType::FunctionDeclaration)
-            .with_identifier(name.to_string());
-        
+        let mut node =
+            UniversalNode::new(NodeType::FunctionDeclaration).with_identifier(name.to_string());
+
         for param in parameters {
             node = node.add_child(param);
         }
@@ -109,14 +109,12 @@ impl AstBuilder {
 
     /// Create a simple function declaration (for parsers)
     pub fn simple_function_declaration(name: &str) -> UniversalNode {
-        UniversalNode::new(NodeType::FunctionDeclaration)
-            .with_identifier(name.to_string())
+        UniversalNode::new(NodeType::FunctionDeclaration).with_identifier(name.to_string())
     }
 
     /// Create a simple class declaration (for parsers)
     pub fn simple_class_declaration(name: &str) -> UniversalNode {
-        UniversalNode::new(NodeType::ClassDeclaration)
-            .with_identifier(name.to_string())
+        UniversalNode::new(NodeType::ClassDeclaration).with_identifier(name.to_string())
     }
 
     /// Create a simple if statement (for parsers)
@@ -139,9 +137,9 @@ impl AstBuilder {
 
     /// Create a variable declaration node
     pub fn variable_declaration(name: &str, initializer: Option<UniversalNode>) -> UniversalNode {
-        let mut node = UniversalNode::new(NodeType::VariableDeclaration)
-            .with_identifier(name.to_string());
-        
+        let mut node =
+            UniversalNode::new(NodeType::VariableDeclaration).with_identifier(name.to_string());
+
         if let Some(init) = initializer {
             node = node.add_child(init);
         }
@@ -154,13 +152,13 @@ impl AstBuilder {
         superclass: Option<UniversalNode>,
         body: Vec<UniversalNode>,
     ) -> UniversalNode {
-        let mut node = UniversalNode::new(NodeType::ClassDeclaration)
-            .with_identifier(name.to_string());
-        
+        let mut node =
+            UniversalNode::new(NodeType::ClassDeclaration).with_identifier(name.to_string());
+
         if let Some(super_class) = superclass {
             node = node.add_child(super_class);
         }
-        
+
         for member in body {
             node = node.add_child(member);
         }
@@ -176,7 +174,7 @@ impl AstBuilder {
         let mut node = UniversalNode::new(NodeType::IfStatement)
             .add_child(condition)
             .add_child(then_branch);
-        
+
         if let Some(else_stmt) = else_branch {
             node = node.add_child(else_stmt);
         }
@@ -198,7 +196,7 @@ impl AstBuilder {
         body: UniversalNode,
     ) -> UniversalNode {
         let mut node = UniversalNode::new(NodeType::ForStatement);
-        
+
         if let Some(init_stmt) = init {
             node = node.add_child(init_stmt);
         }
@@ -231,8 +229,7 @@ impl AstBuilder {
 
     /// Create an expression statement node
     pub fn expression_statement(expression: UniversalNode) -> UniversalNode {
-        UniversalNode::new(NodeType::ExpressionStatement)
-            .add_child(expression)
+        UniversalNode::new(NodeType::ExpressionStatement).add_child(expression)
     }
 
     /// Create a program/module root node
@@ -280,8 +277,7 @@ impl AstBuilder {
 
     /// Create a decorator
     pub fn decorator(name: &str) -> UniversalNode {
-        UniversalNode::new(NodeType::Decorator)
-            .with_attribute("name".to_string(), name.to_string())
+        UniversalNode::new(NodeType::Decorator).with_attribute("name".to_string(), name.to_string())
     }
 
     /// Create an elif statement
@@ -379,8 +375,7 @@ impl AstBuilder {
 
     /// Create a shebang
     pub fn shebang(line: &str) -> UniversalNode {
-        UniversalNode::new(NodeType::Shebang)
-            .with_attribute("line".to_string(), line.to_string())
+        UniversalNode::new(NodeType::Shebang).with_attribute("line".to_string(), line.to_string())
     }
 
     /// Create a case statement
@@ -403,8 +398,7 @@ impl AstBuilder {
 
     /// Create a command
     pub fn command(name: &str) -> UniversalNode {
-        UniversalNode::new(NodeType::Command)
-            .with_attribute("name".to_string(), name.to_string())
+        UniversalNode::new(NodeType::Command).with_attribute("name".to_string(), name.to_string())
     }
 }
 
@@ -430,12 +424,20 @@ impl AstBuilder {
     }
 
     /// Create an arithmetic expression: left op right
-    pub fn arithmetic(left: UniversalNode, op: BinaryOperator, right: UniversalNode) -> UniversalNode {
+    pub fn arithmetic(
+        left: UniversalNode,
+        op: BinaryOperator,
+        right: UniversalNode,
+    ) -> UniversalNode {
         Self::binary_expression(op, left, right)
     }
 
     /// Create a comparison expression: left op right
-    pub fn comparison(left: UniversalNode, op: BinaryOperator, right: UniversalNode) -> UniversalNode {
+    pub fn comparison(
+        left: UniversalNode,
+        op: BinaryOperator,
+        right: UniversalNode,
+    ) -> UniversalNode {
         Self::binary_expression(op, left, right)
     }
 }
@@ -457,7 +459,10 @@ mod tests {
     fn test_literal_builders() {
         let string_node = AstBuilder::string_literal("hello");
         assert_eq!(string_node.node_type(), "literal");
-        assert_eq!(string_node.literal(), Some(&LiteralValue::String("hello".to_string())));
+        assert_eq!(
+            string_node.literal(),
+            Some(&LiteralValue::String("hello".to_string()))
+        );
 
         let number_node = AstBuilder::number_literal(42.5);
         assert_eq!(number_node.literal(), Some(&LiteralValue::Number(42.5)));
@@ -488,9 +493,9 @@ mod tests {
         let param1 = AstBuilder::identifier("a");
         let param2 = AstBuilder::identifier("b");
         let body = AstBuilder::block_statement(vec![]);
-        
+
         let func = AstBuilder::function_declaration("add", vec![param1, param2], body);
-        
+
         assert_eq!(func.node_type(), "function_declaration");
         assert_eq!(func.identifier(), Some(&"add".to_string()));
         assert_eq!(func.child_count(), 3); // 2 params + 1 body
@@ -528,9 +533,9 @@ mod tests {
         let condition = AstBuilder::boolean_literal(true);
         let then_branch = AstBuilder::block_statement(vec![]);
         let else_branch = AstBuilder::block_statement(vec![]);
-        
+
         let if_stmt = AstBuilder::if_statement(condition, then_branch, Some(else_branch));
-        
+
         assert_eq!(if_stmt.node_type(), "if_statement");
         assert_eq!(if_stmt.child_count(), 3); // condition + then + else
     }

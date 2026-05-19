@@ -3,26 +3,26 @@
 //! This crate provides the fundamental types, traits, and error handling
 //! used throughout the astgrep ecosystem.
 
+pub mod config;
+pub mod constants;
 pub mod error;
 pub mod error_handling;
-pub mod types;
-pub mod traits;
+pub mod execution;
+pub mod models;
 pub mod optimization;
 pub mod patterns;
-pub mod constants;
-pub mod models;
-pub mod execution;
-pub mod config;
+pub mod traits;
+pub mod types;
 
 // Re-export commonly used types
+pub use constants::*;
 pub use error::{AnalysisError, Result};
 pub use error_handling::*;
-pub use types::*;
-pub use optimization::*;
-pub use traits::*;
-pub use patterns::*;
-pub use constants::*;
 pub use models::*;
+pub use optimization::*;
+pub use patterns::*;
+pub use traits::*;
+pub use types::*;
 
 #[cfg(test)]
 mod tests {

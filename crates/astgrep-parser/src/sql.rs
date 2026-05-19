@@ -17,7 +17,11 @@ impl SqlAdapter {
     }
 
     /// Parse SQL-specific constructs
-    fn parse_sql_construct(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_sql_construct(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         let trimmed = source.trim().to_uppercase();
 
         if trimmed.starts_with("SELECT ") {
@@ -36,8 +40,7 @@ impl SqlAdapter {
             self.parse_alter_statement(source)
         } else {
             // Default to SQL expression
-            Ok(AstBuilder::sql_expression(source.trim())
-                .with_text(source.to_string()))
+            Ok(AstBuilder::sql_expression(source.trim()).with_text(source.to_string()))
         }
     }
 
@@ -74,13 +77,14 @@ impl SqlAdapter {
             // Parse WHERE clause
             if let Some(where_pos) = from_part.to_uppercase().find(" WHERE ") {
                 let where_part = &from_part[where_pos + 7..]; // Skip " WHERE "
-                let condition = if let Some(group_pos) = where_part.to_uppercase().find(" GROUP BY ") {
-                    &where_part[..group_pos]
-                } else if let Some(order_pos) = where_part.to_uppercase().find(" ORDER BY ") {
-                    &where_part[..order_pos]
-                } else {
-                    where_part
-                };
+                let condition =
+                    if let Some(group_pos) = where_part.to_uppercase().find(" GROUP BY ") {
+                        &where_part[..group_pos]
+                    } else if let Some(order_pos) = where_part.to_uppercase().find(" ORDER BY ") {
+                        &where_part[..order_pos]
+                    } else {
+                        where_part
+                    };
 
                 select_node = select_node.with_where(condition.trim().to_string());
             }
@@ -191,8 +195,7 @@ impl SqlAdapter {
         } else if upper_source.contains("CREATE SEQUENCE ") {
             self.parse_create_sequence(source)
         } else {
-            Ok(AstBuilder::create_statement("unknown")
-                .with_text(source.to_string()))
+            Ok(AstBuilder::create_statement("unknown").with_text(source.to_string()))
         }
     }
 
@@ -213,7 +216,8 @@ impl SqlAdapter {
                     for column_def in columns_str.split(',') {
                         let column_def = column_def.trim();
                         if !column_def.is_empty() {
-                            create_table_node = create_table_node.with_column_definition(column_def.to_string());
+                            create_table_node =
+                                create_table_node.with_column_definition(column_def.to_string());
                         }
                     }
                 }
@@ -225,14 +229,12 @@ impl SqlAdapter {
 
     /// Parse CREATE INDEX statement
     fn parse_create_index(&self, source: &str) -> Result<UniversalNode> {
-        Ok(AstBuilder::create_index_statement()
-            .with_text(source.to_string()))
+        Ok(AstBuilder::create_index_statement().with_text(source.to_string()))
     }
 
     /// Parse CREATE VIEW statement
     fn parse_create_view(&self, source: &str) -> Result<UniversalNode> {
-        Ok(AstBuilder::create_view_statement()
-            .with_text(source.to_string()))
+        Ok(AstBuilder::create_view_statement().with_text(source.to_string()))
     }
 
     /// Parse CREATE SEQUENCE statement
@@ -263,7 +265,8 @@ impl SqlAdapter {
             let has_cycle = options_part.to_uppercase().contains("CYCLE");
 
             // Add options as attribute for pattern matching
-            sequence_node = sequence_node.with_attribute("options".to_string(), options_part)
+            sequence_node = sequence_node
+                .with_attribute("options".to_string(), options_part)
                 .with_attribute("has_cycle".to_string(), has_cycle.to_string());
         }
 
@@ -272,19 +275,21 @@ impl SqlAdapter {
 
     /// Parse DROP statement
     fn parse_drop_statement(&self, source: &str) -> Result<UniversalNode> {
-        Ok(AstBuilder::drop_statement()
-            .with_text(source.to_string()))
+        Ok(AstBuilder::drop_statement().with_text(source.to_string()))
     }
 
     /// Parse ALTER statement
     fn parse_alter_statement(&self, source: &str) -> Result<UniversalNode> {
-        Ok(AstBuilder::alter_statement()
-            .with_text(source.to_string()))
+        Ok(AstBuilder::alter_statement().with_text(source.to_string()))
     }
 }
 
 impl AstAdapter for SqlAdapter {
-    fn adapt_node(&self, _node: &dyn std::any::Any, context: &AdapterContext) -> Result<UniversalNode> {
+    fn adapt_node(
+        &self,
+        _node: &dyn std::any::Any,
+        context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         self.parse_sql_construct(&context.source_code, context)
     }
 
@@ -401,7 +406,9 @@ mod tests {
     fn test_parse_insert_statement() {
         let adapter = SqlAdapter::new();
 
-        let result = adapter.parse_insert_statement("INSERT INTO users (name, email) VALUES ('John', 'john@example.com')");
+        let result = adapter.parse_insert_statement(
+            "INSERT INTO users (name, email) VALUES ('John', 'john@example.com')",
+        );
         assert!(result.is_ok());
         let node = result.unwrap();
         assert_eq!(node.node_type(), "insert_statement");
@@ -431,7 +438,8 @@ mod tests {
     fn test_parse_create_table() {
         let adapter = SqlAdapter::new();
 
-        let result = adapter.parse_create_table("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))");
+        let result = adapter
+            .parse_create_table("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))");
         assert!(result.is_ok());
         let node = result.unwrap();
         assert_eq!(node.node_type(), "create_table_statement");
@@ -443,8 +451,12 @@ mod tests {
         let metadata = adapter.metadata();
 
         assert_eq!(metadata.name, "SqlAdapter");
-        assert!(metadata.supported_features.contains(&"select_statements".to_string()));
-        assert!(metadata.supported_features.contains(&"create_statements".to_string()));
+        assert!(metadata
+            .supported_features
+            .contains(&"select_statements".to_string()));
+        assert!(metadata
+            .supported_features
+            .contains(&"create_statements".to_string()));
     }
 
     #[test]
@@ -457,7 +469,10 @@ mod tests {
             .parse(source, Path::new("query.sql"))
             .expect("parse ok");
         // Tree-sitter path attaches original ts_kind metadata on the root node
-        assert!(node.get_attribute("ts_kind").is_some(), "expected ts_kind metadata when using tree-sitter path");
+        assert!(
+            node.get_attribute("ts_kind").is_some(),
+            "expected ts_kind metadata when using tree-sitter path"
+        );
     }
 
     #[test]
@@ -470,10 +485,12 @@ mod tests {
             .parse(source, Path::new("query.sql"))
             .expect("parse ok");
         // Manual path should not have ts_kind metadata and should produce SQL-specific node types
-        assert!(node.get_attribute("ts_kind").is_none(), "manual path should not include ts_kind metadata");
+        assert!(
+            node.get_attribute("ts_kind").is_none(),
+            "manual path should not include ts_kind metadata"
+        );
         assert_eq!(node.node_type(), "select_statement");
         // Cleanup
         std::env::remove_var("ASTGREP_SQL_PARSER");
     }
-
 }

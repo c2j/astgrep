@@ -4,9 +4,9 @@ use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{info, error};
+use tracing::{error, info};
 
-use crate::{WebConfig, WebResult, WebError};
+use crate::{WebConfig, WebError, WebResult};
 
 /// Web server instance
 pub struct WebServer {
@@ -19,16 +19,22 @@ impl WebServer {
     /// Create a new web server instance
     pub async fn new(app: Router, config: Arc<WebConfig>) -> WebResult<Self> {
         // Ensure temp directory exists
-        config.ensure_temp_directory()
-            .map_err(|e| WebError::internal_server_error(format!("Failed to create temp directory: {}", e)))?;
+        config.ensure_temp_directory().map_err(|e| {
+            WebError::internal_server_error(format!("Failed to create temp directory: {}", e))
+        })?;
 
         // Validate configuration
-        config.validate()
-            .map_err(|e| WebError::internal_server_error(format!("Invalid configuration: {}", e)))?;
+        config.validate().map_err(|e| {
+            WebError::internal_server_error(format!("Invalid configuration: {}", e))
+        })?;
 
         // Bind to the configured address
-        let listener = TcpListener::bind(&config.bind_address).await
-            .map_err(|e| WebError::internal_server_error(format!("Failed to bind to {}: {}", config.bind_address, e)))?;
+        let listener = TcpListener::bind(&config.bind_address).await.map_err(|e| {
+            WebError::internal_server_error(format!(
+                "Failed to bind to {}: {}",
+                config.bind_address, e
+            ))
+        })?;
 
         info!("Server bound to {}", config.bind_address);
 
@@ -41,12 +47,16 @@ impl WebServer {
 
     /// Start the web server
     pub async fn serve(self) -> WebResult<()> {
-        let addr = self.listener.local_addr()
-            .map_err(|e| WebError::internal_server_error(format!("Failed to get local address: {}", e)))?;
+        let addr = self.listener.local_addr().map_err(|e| {
+            WebError::internal_server_error(format!("Failed to get local address: {}", e))
+        })?;
 
         info!("🚀 astgrep web server starting on {}", addr);
         info!("📖 API documentation available at http://{}/docs", addr);
-        info!("❤️  Health check available at http://{}/api/v1/health", addr);
+        info!(
+            "❤️  Health check available at http://{}/api/v1/health",
+            addr
+        );
 
         // Start background tasks
         let config_clone = self.config.clone();
@@ -55,11 +65,10 @@ impl WebServer {
         });
 
         // Serve the application
-        axum::serve(self.listener, self.app).await
-            .map_err(|e| {
-                error!("Server error: {}", e);
-                WebError::internal_server_error(format!("Server error: {}", e))
-            })?;
+        axum::serve(self.listener, self.app).await.map_err(|e| {
+            error!("Server error: {}", e);
+            WebError::internal_server_error(format!("Server error: {}", e))
+        })?;
 
         Ok(())
     }
@@ -104,10 +113,10 @@ async fn start_background_tasks(config: Arc<WebConfig>) {
 /// Background task for cleaning up old jobs
 async fn job_cleanup_task(config: Arc<WebConfig>) {
     let mut interval = tokio::time::interval(config.job_cleanup_interval);
-    
+
     loop {
         interval.tick().await;
-        
+
         match cleanup_old_jobs(&config).await {
             Ok(cleaned_count) => {
                 if cleaned_count > 0 {
@@ -125,10 +134,10 @@ async fn job_cleanup_task(config: Arc<WebConfig>) {
 #[cfg(feature = "metrics")]
 async fn metrics_collection_task(config: Arc<WebConfig>) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(60)); // Collect every minute
-    
+
     loop {
         interval.tick().await;
-        
+
         if let Err(e) = collect_metrics(&config).await {
             error!("Failed to collect metrics: {}", e);
         }
@@ -138,10 +147,10 @@ async fn metrics_collection_task(config: Arc<WebConfig>) {
 /// Background task for periodic health checks
 async fn health_check_task(config: Arc<WebConfig>) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(300)); // Check every 5 minutes
-    
+
     loop {
         interval.tick().await;
-        
+
         if let Err(e) = perform_health_check(&config).await {
             error!("Health check failed: {}", e);
         }
@@ -152,17 +161,22 @@ async fn health_check_task(config: Arc<WebConfig>) {
 async fn cleanup_old_jobs(config: &WebConfig) -> WebResult<usize> {
     // This is a simplified implementation
     // In a real application, you would query the job storage and remove old jobs
-    
-    let cutoff_time = chrono::Utc::now() - chrono::Duration::from_std(config.job_retention_duration)
-        .map_err(|e| WebError::internal_server_error(format!("Invalid retention duration: {}", e)))?;
-    
+
+    let cutoff_time = chrono::Utc::now()
+        - chrono::Duration::from_std(config.job_retention_duration).map_err(|e| {
+            WebError::internal_server_error(format!("Invalid retention duration: {}", e))
+        })?;
+
     // Mock cleanup - in reality, you would query and delete from storage
     let cleaned_count = 0; // Mock: no jobs to clean
-    
+
     if cleaned_count > 0 {
-        info!("Cleaned up {} jobs older than {}", cleaned_count, cutoff_time);
+        info!(
+            "Cleaned up {} jobs older than {}",
+            cleaned_count, cutoff_time
+        );
     }
-    
+
     Ok(cleaned_count)
 }
 
@@ -171,33 +185,38 @@ async fn cleanup_old_jobs(config: &WebConfig) -> WebResult<usize> {
 async fn collect_metrics(_config: &WebConfig) -> WebResult<()> {
     // This is a simplified implementation
     // In a real application, you would collect and store metrics
-    
+
     // Mock metrics collection
     info!("Collecting metrics");
-    
+
     Ok(())
 }
 
 /// Perform periodic health check
 async fn perform_health_check(config: &WebConfig) -> WebResult<()> {
     // Check critical dependencies
-    
+
     // Check rules directory
     if !config.rules_directory.exists() {
-        return Err(WebError::internal_server_error("Rules directory not accessible"));
+        return Err(WebError::internal_server_error(
+            "Rules directory not accessible",
+        ));
     }
-    
+
     // Check temp directory
     if let Err(e) = tokio::fs::create_dir_all(&config.temp_directory).await {
-        return Err(WebError::internal_server_error(format!("Cannot access temp directory: {}", e)));
+        return Err(WebError::internal_server_error(format!(
+            "Cannot access temp directory: {}",
+            e
+        )));
     }
-    
+
     // Check database if enabled
     #[cfg(feature = "database")]
     if let Some(ref _db_config) = config.database {
         // In a real implementation, you would check database connectivity
     }
-    
+
     Ok(())
 }
 

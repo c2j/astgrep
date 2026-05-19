@@ -186,7 +186,13 @@ impl ProgressTracker {
         // Spawn event processing task
         tokio::spawn(async move {
             while let Some(event) = event_receiver.recv().await {
-                Self::handle_progress_event(event, &progress_clone, &operation_times_clone, &config_clone).await;
+                Self::handle_progress_event(
+                    event,
+                    &progress_clone,
+                    &operation_times_clone,
+                    &config_clone,
+                )
+                .await;
             }
         });
 
@@ -202,7 +208,11 @@ impl ProgressTracker {
     }
 
     /// Initialize migration progress tracking
-    pub fn initialize_migration(&mut self, migration_id: String, total_operations: usize) -> Result<()> {
+    pub fn initialize_migration(
+        &mut self,
+        migration_id: String,
+        total_operations: usize,
+    ) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
         }
@@ -219,10 +229,14 @@ impl ProgressTracker {
         }
 
         // Send migration started event
-        let _ = self.event_sender.send(ProgressEvent::MigrationStarted(migration_id.clone()));
+        let _ = self
+            .event_sender
+            .send(ProgressEvent::MigrationStarted(migration_id.clone()));
 
-        info!("Progress tracking initialized for migration: {} ({} operations)",
-              migration_id, total_operations);
+        info!(
+            "Progress tracking initialized for migration: {} ({} operations)",
+            migration_id, total_operations
+        );
 
         Ok(())
     }
@@ -247,7 +261,9 @@ impl ProgressTracker {
         });
 
         // Send phase started event
-        let _ = self.event_sender.send(ProgressEvent::PhaseStarted(migration_id, phase_name));
+        let _ = self
+            .event_sender
+            .send(ProgressEvent::PhaseStarted(migration_id, phase_name));
 
         Ok(())
     }
@@ -262,14 +278,20 @@ impl ProgressTracker {
         let mut progress = self.progress.lock().unwrap();
         let migration_id = progress.migration_id.clone();
 
-        if let Some(phase) = progress.phases.iter_mut().find(|p| p.phase_name == phase_name) {
+        if let Some(phase) = progress
+            .phases
+            .iter_mut()
+            .find(|p| p.phase_name == phase_name)
+        {
             phase.status = PhaseStatus::Completed;
             phase.completed_at = Some(Utc::now());
             phase.completed_items = phase.total_items;
         }
 
         // Send phase completed event
-        let _ = self.event_sender.send(ProgressEvent::PhaseCompleted(migration_id, phase_name));
+        let _ = self
+            .event_sender
+            .send(ProgressEvent::PhaseCompleted(migration_id, phase_name));
 
         Ok(())
     }
@@ -306,7 +328,13 @@ impl ProgressTracker {
     }
 
     /// Update operation progress
-    pub fn update_operation_progress(&self, operation_id: String, progress_percentage: f64, bytes_processed: u64, bytes_total: u64) -> Result<()> {
+    pub fn update_operation_progress(
+        &self,
+        operation_id: String,
+        progress_percentage: f64,
+        bytes_processed: u64,
+        bytes_total: u64,
+    ) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
         }
@@ -325,9 +353,14 @@ impl ProgressTracker {
 
         // Update progress bar
         if let Some(ref bar) = self.progress_bar {
-            let total_progress = (progress.completed_operations as f64 + progress_percentage) / progress.total_operations as f64 * 100.0;
+            let total_progress = (progress.completed_operations as f64 + progress_percentage)
+                / progress.total_operations as f64
+                * 100.0;
             bar.set_position(total_progress as u64);
-            bar.set_message(format!("Processing {} ({:.1}%)", operation_id, progress_percentage));
+            bar.set_message(format!(
+                "Processing {} ({:.1}%)",
+                operation_id, progress_percentage
+            ));
         }
 
         // Send operation progress event
@@ -342,7 +375,11 @@ impl ProgressTracker {
     }
 
     /// Complete an operation successfully
-    pub fn complete_operation(&self, operation: &MigrationOperation, duration: Duration) -> Result<()> {
+    pub fn complete_operation(
+        &self,
+        operation: &MigrationOperation,
+        duration: Duration,
+    ) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
         }
@@ -363,12 +400,13 @@ impl ProgressTracker {
         // Update progress bar
         if let Some(ref bar) = self.progress_bar {
             let progress = self.progress.lock().unwrap();
-            let percentage = progress.completed_operations as f64 / progress.total_operations as f64 * 100.0;
+            let percentage =
+                progress.completed_operations as f64 / progress.total_operations as f64 * 100.0;
             bar.set_position(percentage as u64);
-            bar.set_message(format!("Completed {} ({}/{})",
-                                   operation.id,
-                                   progress.completed_operations,
-                                   progress.total_operations));
+            bar.set_message(format!(
+                "Completed {} ({}/{})",
+                operation.id, progress.completed_operations, progress.total_operations
+            ));
         }
 
         // Send operation completed event
@@ -382,7 +420,12 @@ impl ProgressTracker {
     }
 
     /// Mark an operation as failed
-    pub fn fail_operation(&self, operation: &MigrationOperation, error_message: &str, duration: Duration) -> Result<()> {
+    pub fn fail_operation(
+        &self,
+        operation: &MigrationOperation,
+        error_message: &str,
+        duration: Duration,
+    ) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
         }
@@ -431,7 +474,9 @@ impl ProgressTracker {
         }
 
         // Send migration completed event
-        let _ = self.event_sender.send(ProgressEvent::MigrationCompleted(migration_id));
+        let _ = self
+            .event_sender
+            .send(ProgressEvent::MigrationCompleted(migration_id));
 
         info!("Migration completed successfully");
         Ok(())
@@ -555,44 +600,56 @@ impl ProgressTracker {
         Self::log_progress(&progress, config);
     }
 
-    fn update_derived_metrics(progress: &mut MigrationProgress, operation_times: &Arc<Mutex<Vec<Duration>>>) {
+    fn update_derived_metrics(
+        progress: &mut MigrationProgress,
+        operation_times: &Arc<Mutex<Vec<Duration>>>,
+    ) {
         let times = operation_times.lock().unwrap();
 
         if !times.is_empty() {
             let total_time: Duration = times.iter().sum();
-            progress.metrics.average_operation_time_ms = total_time.as_millis() as f64 / times.len() as f64;
-            progress.metrics.fastest_operation_time_ms = times.iter()
+            progress.metrics.average_operation_time_ms =
+                total_time.as_millis() as f64 / times.len() as f64;
+            progress.metrics.fastest_operation_time_ms = times
+                .iter()
                 .min()
                 .map(|d| d.as_millis() as f64)
                 .unwrap_or(0.0);
-            progress.metrics.slowest_operation_time_ms = times.iter()
+            progress.metrics.slowest_operation_time_ms = times
+                .iter()
                 .max()
                 .map(|d| d.as_millis() as f64)
                 .unwrap_or(0.0);
         }
 
         // Calculate operations per second
-        let elapsed = progress.updated_at.signed_duration_since(progress.started_at);
+        let elapsed = progress
+            .updated_at
+            .signed_duration_since(progress.started_at);
         if elapsed.num_milliseconds() > 0 {
-            progress.metrics.operations_per_second = progress.completed_operations as f64 / (elapsed.num_milliseconds() as f64 / 1000.0);
-            progress.metrics.bytes_per_second = progress.metrics.total_bytes_migrated as f64 / (elapsed.num_milliseconds() as f64 / 1000.0);
+            progress.metrics.operations_per_second =
+                progress.completed_operations as f64 / (elapsed.num_milliseconds() as f64 / 1000.0);
+            progress.metrics.bytes_per_second = progress.metrics.total_bytes_migrated as f64
+                / (elapsed.num_milliseconds() as f64 / 1000.0);
         }
 
         // Calculate error rate
         let total_processed = progress.completed_operations + progress.failed_operations;
         if total_processed > 0 {
-            progress.metrics.error_rate = progress.failed_operations as f64 / total_processed as f64;
+            progress.metrics.error_rate =
+                progress.failed_operations as f64 / total_processed as f64;
         }
 
         // Estimate completion time
-        if progress.completed_operations > 0 && progress.total_operations > progress.completed_operations {
+        if progress.completed_operations > 0
+            && progress.total_operations > progress.completed_operations
+        {
             let remaining_operations = progress.total_operations - progress.completed_operations;
             let operations_per_second = progress.metrics.operations_per_second;
             if operations_per_second > 0.0 {
                 let estimated_seconds = remaining_operations as f64 / operations_per_second;
-                progress.metrics.estimated_completion_time = Some(
-                    progress.updated_at + chrono::Duration::seconds(estimated_seconds as i64)
-                );
+                progress.metrics.estimated_completion_time =
+                    Some(progress.updated_at + chrono::Duration::seconds(estimated_seconds as i64));
             }
         }
     }
@@ -664,12 +721,17 @@ mod tests {
         let mut tracker = ProgressTracker::new(config);
 
         let migration_id = "test-migration".to_string();
-        tracker.initialize_migration(migration_id.clone(), 10).unwrap();
+        tracker
+            .initialize_migration(migration_id.clone(), 10)
+            .unwrap();
 
         let progress = tracker.get_progress();
         assert_eq!(progress.migration_id, migration_id);
         assert_eq!(progress.total_operations, 10);
-        assert!(matches!(progress.status, MigrationProgressStatus::Initializing));
+        assert!(matches!(
+            progress.status,
+            MigrationProgressStatus::Initializing
+        ));
     }
 
     #[tokio::test]
@@ -707,7 +769,9 @@ mod tests {
         };
 
         tracker.start_operation(&operation).unwrap();
-        tracker.complete_operation(&operation, Duration::from_millis(100)).unwrap();
+        tracker
+            .complete_operation(&operation, Duration::from_millis(100))
+            .unwrap();
 
         let progress = tracker.get_progress();
         assert_eq!(progress.completed_operations, 1);

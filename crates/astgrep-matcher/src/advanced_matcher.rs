@@ -7,8 +7,8 @@
 use crate::metavar::MetavarManager;
 use crate::parser::{ParsedPattern, PatternParser};
 use astgrep_core::{
-    AnalysisError, AstNode, ComparisonOperator, Condition, MatchBinding, PatternType, Result, SemgrepMatchResult,
-    SemgrepPattern,
+    AnalysisError, AstNode, ComparisonOperator, Condition, MatchBinding, PatternType, Result,
+    SemgrepMatchResult, SemgrepPattern,
 };
 use astgrep_core::{ComplexityAnalysis, EntropyAnalysis, MetavariableAnalysis, TypeAnalysis};
 // Note: These types are defined in cr_rules but we'll use them through cr_core for now
@@ -1249,7 +1249,6 @@ impl AdvancedSemgrepMatcher {
 
     /// Convert a symbolic value to a list of tokens
     fn symbolic_value_to_tokens(&self, value: &astgrep_dataflow::SymbolicValue) -> Vec<String> {
-        
         let mut visited = HashSet::new();
         self.symbolic_value_to_tokens_inner(value, &mut visited)
     }

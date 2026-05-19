@@ -1,5 +1,5 @@
 //! Bash language parser and adapter
-//! 
+//!
 //! This module provides Bash-specific parsing and AST adaptation.
 
 use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
@@ -17,9 +17,13 @@ impl BashAdapter {
     }
 
     /// Parse Bash-specific constructs
-    fn parse_bash_construct(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_bash_construct(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         let trimmed = source.trim();
-        
+
         if trimmed.starts_with("#!/") {
             self.parse_shebang(trimmed)
         } else if trimmed.starts_with("if ") || trimmed.starts_with("if[") {
@@ -46,15 +50,14 @@ impl BashAdapter {
 
     /// Parse shebang line
     fn parse_shebang(&self, source: &str) -> Result<UniversalNode> {
-        Ok(AstBuilder::shebang(source)
-            .with_text(source.to_string()))
+        Ok(AstBuilder::shebang(source).with_text(source.to_string()))
     }
 
     /// Parse if statement
     fn parse_if_statement(&self, source: &str) -> Result<UniversalNode> {
         // if [ condition ]; then ... fi
         let mut condition = "";
-        
+
         if let Some(then_pos) = source.find("; then") {
             let condition_part = &source[3..then_pos]; // Skip "if "
             condition = condition_part.trim();
@@ -63,8 +66,7 @@ impl BashAdapter {
             condition = condition_part.trim();
         }
 
-        Ok(AstBuilder::simple_if_statement(condition)
-            .with_text(source.to_string()))
+        Ok(AstBuilder::simple_if_statement(condition).with_text(source.to_string()))
     }
 
     /// Parse for loop
@@ -72,11 +74,11 @@ impl BashAdapter {
         // for var in list; do ... done
         let mut variable = "";
         let mut iterable = "";
-        
+
         if let Some(in_pos) = source.find(" in ") {
             let var_part = &source[4..in_pos]; // Skip "for "
             variable = var_part.trim();
-            
+
             if let Some(do_pos) = source[in_pos..].find("; do") {
                 let iter_part = &source[in_pos + 4..in_pos + do_pos]; // Skip " in "
                 iterable = iter_part.trim();
@@ -86,15 +88,17 @@ impl BashAdapter {
             }
         }
 
-        Ok(AstBuilder::simple_for_statement(&format!("{} in {}", variable, iterable))
-            .with_text(source.to_string()))
+        Ok(
+            AstBuilder::simple_for_statement(&format!("{} in {}", variable, iterable))
+                .with_text(source.to_string()),
+        )
     }
 
     /// Parse while loop
     fn parse_while_loop(&self, source: &str) -> Result<UniversalNode> {
         // while [ condition ]; do ... done
         let mut condition = "";
-        
+
         if let Some(do_pos) = source.find("; do") {
             let condition_part = &source[6..do_pos]; // Skip "while "
             condition = condition_part.trim();
@@ -103,14 +107,13 @@ impl BashAdapter {
             condition = condition_part.trim();
         }
 
-        Ok(AstBuilder::simple_while_statement(condition)
-            .with_text(source.to_string()))
+        Ok(AstBuilder::simple_while_statement(condition).with_text(source.to_string()))
     }
 
     /// Parse function definition
     fn parse_function_definition(&self, source: &str) -> Result<UniversalNode> {
         let mut function_name = "unknown";
-        
+
         if source.starts_with("function ") {
             // function name() { ... }
             if let Some(paren_pos) = source.find("()") {
@@ -122,22 +125,20 @@ impl BashAdapter {
             function_name = source[..paren_pos].trim();
         }
 
-        Ok(AstBuilder::simple_function_declaration(function_name)
-            .with_text(source.to_string()))
+        Ok(AstBuilder::simple_function_declaration(function_name).with_text(source.to_string()))
     }
 
     /// Parse case statement
     fn parse_case_statement(&self, source: &str) -> Result<UniversalNode> {
         // case $var in ... esac
         let mut variable = "";
-        
+
         if let Some(in_pos) = source.find(" in") {
             let var_part = &source[5..in_pos]; // Skip "case "
             variable = var_part.trim();
         }
 
-        Ok(AstBuilder::case_statement(variable)
-            .with_text(source.to_string()))
+        Ok(AstBuilder::case_statement(variable).with_text(source.to_string()))
     }
 
     /// Parse variable assignment
@@ -146,13 +147,15 @@ impl BashAdapter {
         if let Some(eq_pos) = source.find('=') {
             let var_name = &source[..eq_pos];
             let var_value = &source[eq_pos + 1..];
-            
+
             Ok(AstBuilder::variable_declaration(var_name, None)
                 .with_attribute("type".to_string(), "bash_var".to_string())
                 .with_value(var_value.to_string())
                 .with_text(source.to_string()))
         } else {
-            Err(astgrep_core::AnalysisError::parse_error("Invalid variable assignment"))
+            Err(astgrep_core::AnalysisError::parse_error(
+                "Invalid variable assignment",
+            ))
         }
     }
 
@@ -160,23 +163,24 @@ impl BashAdapter {
     fn parse_export_statement(&self, source: &str) -> Result<UniversalNode> {
         // export VAR=value or export VAR
         let export_part = &source[7..]; // Skip "export "
-        
+
         if export_part.contains('=') {
             // export VAR=value
             if let Some(eq_pos) = export_part.find('=') {
                 let var_name = &export_part[..eq_pos];
                 let var_value = &export_part[eq_pos + 1..];
-                
+
                 Ok(AstBuilder::export_statement(var_name)
                     .with_value(var_value.to_string())
                     .with_text(source.to_string()))
             } else {
-                Err(astgrep_core::AnalysisError::parse_error("Invalid export assignment"))
+                Err(astgrep_core::AnalysisError::parse_error(
+                    "Invalid export assignment",
+                ))
             }
         } else {
             // export VAR
-            Ok(AstBuilder::export_statement(export_part.trim())
-                .with_text(source.to_string()))
+            Ok(AstBuilder::export_statement(export_part.trim()).with_text(source.to_string()))
         }
     }
 
@@ -190,22 +194,21 @@ impl BashAdapter {
             ""
         };
 
-        Ok(AstBuilder::source_statement(file_path.trim())
-            .with_text(source.to_string()))
+        Ok(AstBuilder::source_statement(file_path.trim()).with_text(source.to_string()))
     }
 
     /// Parse command
     fn parse_command(&self, source: &str) -> Result<UniversalNode> {
         // Parse command with arguments
         let parts: Vec<&str> = source.split_whitespace().collect();
-        
+
         if parts.is_empty() {
             return Ok(AstBuilder::command("").with_text(source.to_string()));
         }
 
         let command_name = parts[0];
         let mut command_node = AstBuilder::command(command_name);
-        
+
         // Add arguments
         for arg in &parts[1..] {
             command_node = command_node.with_argument(arg.to_string());
@@ -226,7 +229,11 @@ impl BashAdapter {
 }
 
 impl AstAdapter for BashAdapter {
-    fn adapt_node(&self, _node: &dyn std::any::Any, context: &AdapterContext) -> Result<UniversalNode> {
+    fn adapt_node(
+        &self,
+        _node: &dyn std::any::Any,
+        context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         self.parse_bash_construct(&context.source_code, context)
     }
 
@@ -284,7 +291,8 @@ impl LanguageParser for BashParser {
             matches!(ext.to_lowercase().as_str(), "sh" | "bash" | "zsh")
         } else {
             // Check for shebang in filename (common for shell scripts without extension)
-            file_path.file_name()
+            file_path
+                .file_name()
                 .and_then(|name| name.to_str())
                 .map(|name| name.starts_with("bash") || name.starts_with("sh"))
                 .unwrap_or(false)
@@ -321,7 +329,7 @@ mod tests {
     #[test]
     fn test_parse_shebang() {
         let adapter = BashAdapter::new();
-        
+
         let result = adapter.parse_shebang("#!/bin/bash");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -331,7 +339,7 @@ mod tests {
     #[test]
     fn test_parse_if_statement() {
         let adapter = BashAdapter::new();
-        
+
         let result = adapter.parse_if_statement("if [ $x -gt 0 ]; then");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -341,7 +349,7 @@ mod tests {
     #[test]
     fn test_parse_for_loop() {
         let adapter = BashAdapter::new();
-        
+
         let result = adapter.parse_for_loop("for i in 1 2 3; do");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -351,7 +359,7 @@ mod tests {
     #[test]
     fn test_parse_while_loop() {
         let adapter = BashAdapter::new();
-        
+
         let result = adapter.parse_while_loop("while [ $count -lt 10 ]; do");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -361,7 +369,7 @@ mod tests {
     #[test]
     fn test_parse_function_definition() {
         let adapter = BashAdapter::new();
-        
+
         // Function keyword style
         let result = adapter.parse_function_definition("function my_func() {");
         assert!(result.is_ok());
@@ -378,7 +386,7 @@ mod tests {
     #[test]
     fn test_parse_variable_assignment() {
         let adapter = BashAdapter::new();
-        
+
         let result = adapter.parse_variable_assignment("VAR=value");
         assert!(result.is_ok());
         let node = result.unwrap();
@@ -388,7 +396,7 @@ mod tests {
     #[test]
     fn test_parse_export_statement() {
         let adapter = BashAdapter::new();
-        
+
         // Export with assignment
         let result = adapter.parse_export_statement("export PATH=/usr/bin");
         assert!(result.is_ok());
@@ -405,7 +413,7 @@ mod tests {
     #[test]
     fn test_parse_source_statement() {
         let adapter = BashAdapter::new();
-        
+
         // source command
         let result = adapter.parse_source_statement("source ~/.bashrc");
         assert!(result.is_ok());
@@ -422,7 +430,7 @@ mod tests {
     #[test]
     fn test_parse_command() {
         let adapter = BashAdapter::new();
-        
+
         // Simple command
         let result = adapter.parse_command("ls -la");
         assert!(result.is_ok());
@@ -446,10 +454,16 @@ mod tests {
     fn test_bash_adapter_metadata() {
         let adapter = BashAdapter::new();
         let metadata = adapter.metadata();
-        
+
         assert_eq!(metadata.name, "BashAdapter");
-        assert!(metadata.supported_features.contains(&"control_flow".to_string()));
-        assert!(metadata.supported_features.contains(&"functions".to_string()));
-        assert!(metadata.supported_features.contains(&"pipes_redirections".to_string()));
+        assert!(metadata
+            .supported_features
+            .contains(&"control_flow".to_string()));
+        assert!(metadata
+            .supported_features
+            .contains(&"functions".to_string()));
+        assert!(metadata
+            .supported_features
+            .contains(&"pipes_redirections".to_string()));
     }
 }

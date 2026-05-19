@@ -2,17 +2,13 @@
 
 use egui;
 
-use crate::components::{
-    RuleEditor, CodeEditor, ResultsPanel, MenuBar, StatusBar, SettingsPanel
-};
+use crate::components::{CodeEditor, MenuBar, ResultsPanel, RuleEditor, SettingsPanel, StatusBar};
 use crate::utils::file_operations::FileOperations;
-use astgrep_core::{Language, Finding, OutputFormat};
-use astgrep_rules::{RuleEngine, RuleParser, RuleContext};
+use astgrep_core::{Finding, Language, OutputFormat};
 use astgrep_parser::LanguageParserRegistry;
-use std::sync::{mpsc, Arc};
+use astgrep_rules::{RuleContext, RuleEngine, RuleParser};
 use std::sync::atomic::{AtomicBool, Ordering};
-
-
+use std::sync::{mpsc, Arc};
 
 fn md_flush_paragraph(ui: &mut egui::Ui, para_buf: &mut String) {
     use egui::RichText;
@@ -31,7 +27,6 @@ fn render_markdown_simple(ui: &mut egui::Ui, md: &str) {
     let mut code_buf = String::new();
     let mut para_buf = String::new();
 
-
     for line in md.lines() {
         if line.starts_with("```") {
             if in_code {
@@ -40,7 +35,11 @@ fn render_markdown_simple(ui: &mut egui::Ui, md: &str) {
                 let rows = code.matches('\n').count().max(3) + 2;
                 ui.group(|ui| {
                     if !code_lang.is_empty() {
-                        ui.label(RichText::new(&code_lang).monospace().color(egui::Color32::DARK_GRAY));
+                        ui.label(
+                            RichText::new(&code_lang)
+                                .monospace()
+                                .color(egui::Color32::DARK_GRAY),
+                        );
                     }
                     ui.add(
                         egui::TextEdit::multiline(&mut code)
@@ -124,7 +123,11 @@ fn render_markdown_simple(ui: &mut egui::Ui, md: &str) {
         let rows = code.matches('\n').count().max(3) + 2;
         ui.group(|ui| {
             if !code_lang.is_empty() {
-                ui.label(RichText::new(&code_lang).monospace().color(egui::Color32::DARK_GRAY));
+                ui.label(
+                    RichText::new(&code_lang)
+                        .monospace()
+                        .color(egui::Color32::DARK_GRAY),
+                );
             }
             ui.add(
                 egui::TextEdit::multiline(&mut code)
@@ -140,7 +143,6 @@ fn render_markdown_simple(ui: &mut egui::Ui, md: &str) {
         ui.label(RichText::new(para_buf.trim().to_string()).size(14.0));
     }
 }
-
 
 /// Main application state
 pub struct CrGuiApp {
@@ -250,7 +252,6 @@ pub struct UiState {
     pub request_replace: bool,
 }
 
-
 /// Messages sent from analysis background task back to UI
 enum AnalysisMessage {
     Finished(u64, Vec<Finding>),
@@ -308,10 +309,10 @@ impl CrGuiApp {
                 font_size: 14.0,
             },
             ui_state: UiState {
-                left_panel_width: 500.0,  // 增加左侧面板宽度以适应规则编辑
+                left_panel_width: 500.0, // 增加左侧面板宽度以适应规则编辑
                 right_panel_width: 600.0,
                 bottom_panel_height: 250.0,
-                inspect_rule_expanded: true,  // 默认展开 Inspect Rule
+                inspect_rule_expanded: true, // 默认展开 Inspect Rule
                 ..Default::default()
             },
             analysis_rx: None,
@@ -496,7 +497,8 @@ select * from orders;
                 return;
             }
         }
-        self.status_bar.set_status(&format!("Loaded example for {}", lang));
+        self.status_bar
+            .set_status(&format!("Loaded example for {}", lang));
     }
 }
 
@@ -506,7 +508,8 @@ impl eframe::App for CrGuiApp {
         self.apply_theme(ctx);
 
         // Handle menu bar (collect action requests into ui_state)
-        self.menu_bar.show(ctx, &mut self.settings, &mut self.ui_state);
+        self.menu_bar
+            .show(ctx, &mut self.settings, &mut self.ui_state);
         // Process any actions requested by the menu bar
         self.process_menu_actions();
 
@@ -520,25 +523,32 @@ impl eframe::App for CrGuiApp {
                     match rx.try_recv() {
                         Ok(msg) => messages.push(msg),
                         Err(TryRecvError::Empty) => break,
-                        Err(TryRecvError::Disconnected) => { disconnected = true; break; }
+                        Err(TryRecvError::Disconnected) => {
+                            disconnected = true;
+                            break;
+                        }
                     }
                 }
             }
-            if disconnected { self.analysis_rx = None; }
+            if disconnected {
+                self.analysis_rx = None;
+            }
             for msg in messages {
                 match msg {
                     AnalysisMessage::Finished(gen, findings) => {
                         if gen == self.analysis_gen {
                             let mut findings = findings;
                             findings.sort_by(|a, b| {
-                                a.location.start_line
+                                a.location
+                                    .start_line
                                     .cmp(&b.location.start_line)
                                     .then(a.location.start_column.cmp(&b.location.start_column))
                                     .then(a.location.end_line.cmp(&b.location.end_line))
                                     .then(a.location.end_column.cmp(&b.location.end_column))
                             });
                             self.analysis_results = findings;
-                            self.status_bar.analysis_completed(self.analysis_results.len());
+                            self.status_bar
+                                .analysis_completed(self.analysis_results.len());
                             self.update_code_highlights();
                             self.is_analysis_running = false;
                         }
@@ -578,7 +588,8 @@ impl eframe::App for CrGuiApp {
 
         // Settings panel (modal)
         if self.ui_state.show_settings {
-            self.settings_panel.show(ctx, &mut self.settings, &mut self.ui_state.show_settings);
+            self.settings_panel
+                .show(ctx, &mut self.settings, &mut self.ui_state.show_settings);
         }
 
         // Find/Replace modal
@@ -608,7 +619,8 @@ impl CrGuiApp {
                 ui.separator();
 
                 // Right panel (code editor and results)
-                let remaining_width = available_rect.width() - self.ui_state.left_panel_width - 10.0;
+                let remaining_width =
+                    available_rect.width() - self.ui_state.left_panel_width - 10.0;
                 ui.allocate_ui_with_layout(
                     egui::vec2(remaining_width, available_rect.height()),
                     egui::Layout::top_down(egui::Align::LEFT),
@@ -626,17 +638,15 @@ impl CrGuiApp {
             ui.horizontal(|ui| {
                 ui.style_mut().spacing.item_spacing.x = 0.0;
 
-                let simple_btn = ui.selectable_label(
-                    self.ui_state.selected_tab_left == LeftTab::Simple,
-                    "simple"
-                );
+                let simple_btn = ui
+                    .selectable_label(self.ui_state.selected_tab_left == LeftTab::Simple, "simple");
                 if simple_btn.clicked() {
                     self.ui_state.selected_tab_left = LeftTab::Simple;
                 }
 
                 let advanced_btn = ui.selectable_label(
                     self.ui_state.selected_tab_left == LeftTab::Advanced,
-                    "advanced"
+                    "advanced",
                 );
                 if advanced_btn.clicked() {
                     self.ui_state.selected_tab_left = LeftTab::Advanced;
@@ -700,7 +710,7 @@ impl CrGuiApp {
                             .font(egui::TextStyle::Monospace)
                             .code_editor()
                             .desired_rows(20)
-                            .desired_width(f32::INFINITY)
+                            .desired_width(f32::INFINITY),
                     );
 
                     if response.changed() {
@@ -725,7 +735,11 @@ impl CrGuiApp {
 
             // 标题栏
             ui.horizontal(|ui| {
-                let icon = if self.ui_state.inspect_rule_expanded { "▼" } else { "▶" };
+                let icon = if self.ui_state.inspect_rule_expanded {
+                    "▼"
+                } else {
+                    "▶"
+                };
                 if ui.button(format!("{} Inspect Rule", icon)).clicked() {
                     self.ui_state.inspect_rule_expanded = !self.ui_state.inspect_rule_expanded;
                 }
@@ -750,7 +764,7 @@ impl CrGuiApp {
                         } else {
                             ui.colored_label(
                                 egui::Color32::GRAY,
-                                "No valid rules parsed. Edit the rule YAML above."
+                                "No valid rules parsed. Edit the rule YAML above.",
                             );
                         }
                     });
@@ -767,7 +781,7 @@ impl CrGuiApp {
                 // 左侧 tabs
                 let test_code_btn = ui.selectable_label(
                     self.ui_state.selected_tab_right == RightTab::TestCode,
-                    "test code"
+                    "test code",
                 );
                 if test_code_btn.clicked() {
                     self.ui_state.selected_tab_right = RightTab::TestCode;
@@ -775,16 +789,14 @@ impl CrGuiApp {
 
                 let metadata_btn = ui.selectable_label(
                     self.ui_state.selected_tab_right == RightTab::Metadata,
-                    "metadata"
+                    "metadata",
                 );
                 if metadata_btn.clicked() {
                     self.ui_state.selected_tab_right = RightTab::Metadata;
                 }
 
-                let docs_btn = ui.selectable_label(
-                    self.ui_state.selected_tab_right == RightTab::Docs,
-                    "docs"
-                );
+                let docs_btn =
+                    ui.selectable_label(self.ui_state.selected_tab_right == RightTab::Docs, "docs");
                 if docs_btn.clicked() {
                     self.ui_state.selected_tab_right = RightTab::Docs;
                 }
@@ -806,7 +818,10 @@ impl CrGuiApp {
                         RightTab::TestCode => {
                             if self.code_editor.show(ui, &mut self.settings) {
                                 // Analyze button was clicked
-                                println!("🔍 Analyze button clicked! Mode: {:?}", self.ui_state.analysis_mode);
+                                println!(
+                                    "🔍 Analyze button clicked! Mode: {:?}",
+                                    self.ui_state.analysis_mode
+                                );
                                 self.start_analysis_async();
                             }
                             // Load Example requested from Code Editor toolbar
@@ -855,72 +870,74 @@ impl CrGuiApp {
         if self.analysis_results.is_empty() {
             ui.colored_label(egui::Color32::GRAY, "Run analysis to see metadata");
         } else {
-            egui::ScrollArea::vertical().id_source("metadata_scroll").show(ui, |ui| {
-                ui.group(|ui| {
-                    ui.label(format!("Total Findings: {}", self.analysis_results.len()));
-                    ui.label(format!("Analysis Mode: {:?}", self.ui_state.analysis_mode));
-                    ui.label(format!("Language: {}", self.code_editor.get_language()));
+            egui::ScrollArea::vertical()
+                .id_source("metadata_scroll")
+                .show(ui, |ui| {
+                    ui.group(|ui| {
+                        ui.label(format!("Total Findings: {}", self.analysis_results.len()));
+                        ui.label(format!("Analysis Mode: {:?}", self.ui_state.analysis_mode));
+                        ui.label(format!("Language: {}", self.code_editor.get_language()));
 
-                    ui.separator();
+                        ui.separator();
 
-                    // 按严重程度统计
-                    let mut critical = 0;
-                    let mut error = 0;
-                    let mut warning = 0;
-                    let mut info = 0;
+                        // 按严重程度统计
+                        let mut critical = 0;
+                        let mut error = 0;
+                        let mut warning = 0;
+                        let mut info = 0;
 
-                    for finding in &self.analysis_results {
-                        match finding.severity {
-                            astgrep_core::Severity::Critical => critical += 1,
-                            astgrep_core::Severity::Error => error += 1,
-                            astgrep_core::Severity::Warning => warning += 1,
-                            astgrep_core::Severity::Info => info += 1,
+                        for finding in &self.analysis_results {
+                            match finding.severity {
+                                astgrep_core::Severity::Critical => critical += 1,
+                                astgrep_core::Severity::Error => error += 1,
+                                astgrep_core::Severity::Warning => warning += 1,
+                                astgrep_core::Severity::Info => info += 1,
+                            }
                         }
-                    }
 
-                    ui.label("Severity Distribution:");
-                    ui.label(format!("  Critical: {}", critical));
-                    ui.label(format!("  Error: {}", error));
-                    ui.label(format!("  Warning: {}", warning));
-                    ui.label(format!("  Info: {}", info));
+                        ui.label("Severity Distribution:");
+                        ui.label(format!("  Critical: {}", critical));
+                        ui.label(format!("  Error: {}", error));
+                        ui.label(format!("  Warning: {}", warning));
+                        ui.label(format!("  Info: {}", info));
 
-                    // 完整 JSON 展示
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.strong("Full JSON");
+                        // 完整 JSON 展示
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.strong("Full JSON");
 
-                    let metadata_value = serde_json::json!({
-                        "analysis_mode": format!("{:?}", self.ui_state.analysis_mode),
-                        "language": self.code_editor.get_language(),
-                        "total_findings": self.analysis_results.len(),
-                        "severity_counts": {
-                            "CRITICAL": critical,
-                            "ERROR": error,
-                            "WARNING": warning,
-                            "INFO": info
-                        },
-                        "findings": self.analysis_results,
-                    });
-
-                    let mut json_str = match serde_json::to_string_pretty(&metadata_value) {
-                        Ok(s) => s,
-                        Err(e) => format!("<error serializing json: {}>", e),
-                    };
-
-                    egui::ScrollArea::vertical()
-                        .id_source("metadata_json_scroll")
-                        .max_height(300.0)
-                        .show(ui, |ui| {
-                            ui.add(
-                                egui::TextEdit::multiline(&mut json_str)
-                                    .code_editor()
-                                    .desired_width(ui.available_width())
-                                    .desired_rows(12)
-                                    .interactive(false),
-                            );
+                        let metadata_value = serde_json::json!({
+                            "analysis_mode": format!("{:?}", self.ui_state.analysis_mode),
+                            "language": self.code_editor.get_language(),
+                            "total_findings": self.analysis_results.len(),
+                            "severity_counts": {
+                                "CRITICAL": critical,
+                                "ERROR": error,
+                                "WARNING": warning,
+                                "INFO": info
+                            },
+                            "findings": self.analysis_results,
                         });
+
+                        let mut json_str = match serde_json::to_string_pretty(&metadata_value) {
+                            Ok(s) => s,
+                            Err(e) => format!("<error serializing json: {}>", e),
+                        };
+
+                        egui::ScrollArea::vertical()
+                            .id_source("metadata_json_scroll")
+                            .max_height(300.0)
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut json_str)
+                                        .code_editor()
+                                        .desired_width(ui.available_width())
+                                        .desired_rows(12)
+                                        .interactive(false),
+                                );
+                            });
+                    });
                 });
-            });
         }
     }
 
@@ -1006,9 +1023,6 @@ impl CrGuiApp {
         // Get current rule from rule editor
         let rule_content = self.rule_editor.get_content().to_string();
 
-
-
-
         if source_code.trim().is_empty() {
             println!("⚠️ No source code to analyze");
             self.analysis_results.clear();
@@ -1053,7 +1067,8 @@ impl CrGuiApp {
                 println!("📊 Analysis completed with {} findings", findings.len());
                 let mut findings = findings;
                 findings.sort_by(|a, b| {
-                    a.location.start_line
+                    a.location
+                        .start_line
                         .cmp(&b.location.start_line)
                         .then(a.location.start_column.cmp(&b.location.start_column))
                         .then(a.location.end_line.cmp(&b.location.end_line))
@@ -1068,8 +1083,12 @@ impl CrGuiApp {
             }
         }
 
-        println!("📊 Analysis completed with {} findings", self.analysis_results.len());
-        self.status_bar.analysis_completed(self.analysis_results.len());
+        println!(
+            "📊 Analysis completed with {} findings",
+            self.analysis_results.len()
+        );
+        self.status_bar
+            .analysis_completed(self.analysis_results.len());
 
         // Update code editor highlights based on analysis results
         self.update_code_highlights();
@@ -1086,7 +1105,8 @@ impl CrGuiApp {
 
         // Parse rules using the real RuleParser
         let rule_parser = RuleParser::new();
-        let parsed_rules = rule_parser.parse_yaml(rule_content)
+        let parsed_rules = rule_parser
+            .parse_yaml(rule_content)
             .map_err(|e| anyhow::anyhow!("Failed to parse rules: {}", e))?;
 
         if parsed_rules.is_empty() {
@@ -1095,8 +1115,6 @@ impl CrGuiApp {
         }
 
         println!("📋 Loaded {} rules for {:?}", parsed_rules.len(), language);
-
-
 
         // Clear existing rules and add new ones
         self.rule_engine = RuleEngine::new();
@@ -1123,10 +1141,10 @@ impl CrGuiApp {
             astgrep_core::Language::Xml => "xml",
         };
         let file_path = PathBuf::from(format!("test_file.{}", file_extension));
-        let ast = self.parser_registry.parse_file(&file_path, source_code)
+        let ast = self
+            .parser_registry
+            .parse_file(&file_path, source_code)
             .map_err(|e| anyhow::anyhow!("Failed to parse source code: {}", e))?;
-
-
 
         // Create rule context
         let mut context = RuleContext::new(
@@ -1138,7 +1156,9 @@ impl CrGuiApp {
         context = context.add_data("sql_statement_boundary".to_string(), "true".to_string());
 
         // Execute rules using the real rule engine
-        let rule_results = self.rule_engine.execute_rules(&*ast, &context)
+        let rule_results = self
+            .rule_engine
+            .execute_rules(&*ast, &context)
             .map_err(|e| anyhow::anyhow!("Failed to execute rules: {}", e))?;
 
         // Convert rule results to findings
@@ -1150,8 +1170,6 @@ impl CrGuiApp {
         Ok(findings)
     }
 
-
-
     fn update_code_highlights(&mut self) {
         use crate::components::code_editor::HighlightRange;
 
@@ -1161,10 +1179,10 @@ impl CrGuiApp {
         // Add highlights for each finding
         for finding in &self.analysis_results {
             let color = match finding.severity {
-                astgrep_core::Severity::Error => egui::Color32::from_rgb(255, 100, 100),    // Red
-                astgrep_core::Severity::Warning => egui::Color32::from_rgb(255, 200, 100),  // Orange
-                astgrep_core::Severity::Info => egui::Color32::from_rgb(100, 150, 255),     // Blue
-                astgrep_core::Severity::Critical => egui::Color32::from_rgb(200, 50, 50),   // Dark Red
+                astgrep_core::Severity::Error => egui::Color32::from_rgb(255, 100, 100), // Red
+                astgrep_core::Severity::Warning => egui::Color32::from_rgb(255, 200, 100), // Orange
+                astgrep_core::Severity::Info => egui::Color32::from_rgb(100, 150, 255),  // Blue
+                astgrep_core::Severity::Critical => egui::Color32::from_rgb(200, 50, 50), // Dark Red
             };
 
             let highlight = HighlightRange {
@@ -1209,14 +1227,17 @@ impl CrGuiApp {
         let lang = match Self::map_language(&language) {
             Some(l) => l,
             None => {
-                self.status_bar.analysis_failed(&format!("Unsupported language: {}", language));
+                self.status_bar
+                    .analysis_failed(&format!("Unsupported language: {}", language));
                 return;
             }
         };
 
         // If a previous analysis is running, request cancel
         if self.is_analysis_running {
-            if let Some(c) = &self.analysis_cancel { c.store(true, Ordering::Relaxed); }
+            if let Some(c) = &self.analysis_cancel {
+                c.store(true, Ordering::Relaxed);
+            }
         }
 
         self.status_bar.analysis_started();
@@ -1234,10 +1255,21 @@ impl CrGuiApp {
                 let _ = tx.send(AnalysisMessage::Cancelled(gen));
                 return;
             }
-            match CrGuiApp::analyze_code_with_rules_stateless(&source_code, &rule_content, lang, cancel.clone()) {
-                Ok(Some(findings)) => { let _ = tx.send(AnalysisMessage::Finished(gen, findings)); }
-                Ok(None) => { let _ = tx.send(AnalysisMessage::Cancelled(gen)); }
-                Err(e) => { let _ = tx.send(AnalysisMessage::Error(gen, format!("{}", e))); }
+            match CrGuiApp::analyze_code_with_rules_stateless(
+                &source_code,
+                &rule_content,
+                lang,
+                cancel.clone(),
+            ) {
+                Ok(Some(findings)) => {
+                    let _ = tx.send(AnalysisMessage::Finished(gen, findings));
+                }
+                Ok(None) => {
+                    let _ = tx.send(AnalysisMessage::Cancelled(gen));
+                }
+                Err(e) => {
+                    let _ = tx.send(AnalysisMessage::Error(gen, format!("{}", e)));
+                }
             }
         });
     }
@@ -1268,13 +1300,18 @@ impl CrGuiApp {
     ) -> anyhow::Result<Option<Vec<astgrep_core::Finding>>> {
         use std::path::PathBuf;
 
-        if cancel.load(Ordering::Relaxed) { return Ok(None); }
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
 
         // Parse rules
         let rule_parser = RuleParser::new();
-        let parsed_rules = rule_parser.parse_yaml(rule_content)
+        let parsed_rules = rule_parser
+            .parse_yaml(rule_content)
             .map_err(|e| anyhow::anyhow!("Failed to parse rules: {}", e))?;
-        if cancel.load(Ordering::Relaxed) { return Ok(None); }
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
 
         let mut rule_engine = RuleEngine::new();
         for rule in parsed_rules {
@@ -1282,7 +1319,9 @@ impl CrGuiApp {
                 eprintln!("Failed to add rule: {}", e);
             }
         }
-        if cancel.load(Ordering::Relaxed) { return Ok(None); }
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
 
         // Parse source
         let file_extension = match language {
@@ -1301,9 +1340,12 @@ impl CrGuiApp {
         };
         let file_path = PathBuf::from(format!("test_file.{}", file_extension));
         let parser_registry = LanguageParserRegistry::new();
-        let ast = parser_registry.parse_file(&file_path, source_code)
+        let ast = parser_registry
+            .parse_file(&file_path, source_code)
             .map_err(|e| anyhow::anyhow!("Failed to parse source code: {}", e))?;
-        if cancel.load(Ordering::Relaxed) { return Ok(None); }
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
 
         let mut context = RuleContext::new(
             file_path.to_string_lossy().to_string(),
@@ -1312,12 +1354,17 @@ impl CrGuiApp {
         );
         // GUI: default to ON; YAML can override per-rule in engine
         context = context.add_data("sql_statement_boundary".to_string(), "true".to_string());
-        let rule_results = rule_engine.execute_rules(&*ast, &context)
+        let rule_results = rule_engine
+            .execute_rules(&*ast, &context)
             .map_err(|e| anyhow::anyhow!("Failed to execute rules: {}", e))?;
-        if cancel.load(Ordering::Relaxed) { return Ok(None); }
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(None);
+        }
 
         let mut findings = Vec::new();
-        for result in rule_results { findings.extend(result.findings); }
+        for result in rule_results {
+            findings.extend(result.findings);
+        }
         Ok(Some(findings))
     }
 
@@ -1348,7 +1395,8 @@ impl CrGuiApp {
                     }
                     if ui.button("Replace All").clicked() {
                         let n = self.replace_all();
-                        self.status_bar.set_status(&format!("Replaced {} occurrence(s)", n));
+                        self.status_bar
+                            .set_status(&format!("Replaced {} occurrence(s)", n));
                     }
                     if ui.button("Close").clicked() { /* handled by `open` */ }
                 });
@@ -1358,7 +1406,9 @@ impl CrGuiApp {
 
     fn find_next_and_highlight(&mut self) -> bool {
         let needle = self.find_text.as_str();
-        if needle.is_empty() { return false; }
+        if needle.is_empty() {
+            return false;
+        }
         let hay = self.code_editor.get_content().to_string();
         let start = self.last_find_pos.min(hay.len());
 
@@ -1373,7 +1423,9 @@ impl CrGuiApp {
                 for j in 0..needle_bytes.len() {
                     let a = hay_bytes[i + j];
                     let b = needle_bytes[j];
-                    if a.to_ascii_lowercase() != b.to_ascii_lowercase() { continue 'outer; }
+                    if a.to_ascii_lowercase() != b.to_ascii_lowercase() {
+                        continue 'outer;
+                    }
                 }
                 pos = Some(i);
                 break;
@@ -1381,7 +1433,9 @@ impl CrGuiApp {
             pos
         };
 
-        let Some(idx) = found else { return false; };
+        let Some(idx) = found else {
+            return false;
+        };
         let end_idx = idx + needle.len();
 
         let (s_line, s_col) = Self::index_to_line_col(&hay, idx);
@@ -1406,20 +1460,31 @@ impl CrGuiApp {
         let mut line = 0usize;
         let mut col = 0usize;
         for (i, ch) in s.char_indices() {
-            if i >= byte_idx { break; }
-            if ch == '\n' { line += 1; col = 0; } else { col += 1; }
+            if i >= byte_idx {
+                break;
+            }
+            if ch == '\n' {
+                line += 1;
+                col = 0;
+            } else {
+                col += 1;
+            }
         }
         (line, col)
     }
 
     fn replace_all(&mut self) -> usize {
         let needle = self.find_text.clone();
-        if needle.is_empty() { return 0; }
+        if needle.is_empty() {
+            return 0;
+        }
         let repl = self.replace_text.clone();
         let hay = self.code_editor.get_content().to_string();
         let bytes = hay.as_bytes();
         let nbytes = needle.as_bytes();
-        if nbytes.is_empty() || bytes.len() < nbytes.len() { return 0; }
+        if nbytes.is_empty() || bytes.len() < nbytes.len() {
+            return 0;
+        }
 
         let mut out = String::with_capacity(hay.len());
         let mut last = 0usize;
@@ -1430,8 +1495,15 @@ impl CrGuiApp {
             for j in 0..nbytes.len() {
                 let a = bytes[i + j];
                 let b = nbytes[j];
-                let eq = if self.find_case_sensitive { a == b } else { a.to_ascii_lowercase() == b.to_ascii_lowercase() };
-                if !eq { match_here = false; break; }
+                let eq = if self.find_case_sensitive {
+                    a == b
+                } else {
+                    a.to_ascii_lowercase() == b.to_ascii_lowercase()
+                };
+                if !eq {
+                    match_here = false;
+                    break;
+                }
             }
             if match_here {
                 out.push_str(&hay[last..i]);
@@ -1453,8 +1525,6 @@ impl CrGuiApp {
         count
     }
 
-
-
     // Apply light/dark theme immediately when setting changes
     fn apply_theme(&self, ctx: &egui::Context) {
         match self.settings.theme {
@@ -1465,67 +1535,161 @@ impl CrGuiApp {
 
     // Handle user actions requested via MenuBar
     fn process_menu_actions(&mut self) {
-        if self.ui_state.request_open_rule { self.ui_state.request_open_rule = false; self.menu_open_rule(); }
-        if self.ui_state.request_save_rule { self.ui_state.request_save_rule = false; self.menu_save_rule(); }
-        if self.ui_state.request_open_code { self.ui_state.request_open_code = false; self.menu_open_code(); }
-        if self.ui_state.request_save_code { self.ui_state.request_save_code = false; self.menu_save_code(); }
-        if self.ui_state.request_export_results { self.ui_state.request_export_results = false; self.menu_export_results(); }
-        if self.ui_state.request_run_analysis { self.ui_state.request_run_analysis = false; self.start_analysis_async(); }
-        if self.ui_state.request_stop_analysis { self.ui_state.request_stop_analysis = false; self.cancel_analysis(); }
-        if self.ui_state.request_validate_rule { self.ui_state.request_validate_rule = false; self.menu_validate_rule(); }
-        if self.ui_state.request_format_rule { self.ui_state.request_format_rule = false; self.menu_format_rule(); }
-        if self.ui_state.request_load_examples { self.ui_state.request_load_examples = false; self.load_default_rule(); self.analysis_results.clear(); self.results_panel.set_selected_finding(None); self.results_panel.clear_filters(); self.update_code_highlights(); }
+        if self.ui_state.request_open_rule {
+            self.ui_state.request_open_rule = false;
+            self.menu_open_rule();
+        }
+        if self.ui_state.request_save_rule {
+            self.ui_state.request_save_rule = false;
+            self.menu_save_rule();
+        }
+        if self.ui_state.request_open_code {
+            self.ui_state.request_open_code = false;
+            self.menu_open_code();
+        }
+        if self.ui_state.request_save_code {
+            self.ui_state.request_save_code = false;
+            self.menu_save_code();
+        }
+        if self.ui_state.request_export_results {
+            self.ui_state.request_export_results = false;
+            self.menu_export_results();
+        }
+        if self.ui_state.request_run_analysis {
+            self.ui_state.request_run_analysis = false;
+            self.start_analysis_async();
+        }
+        if self.ui_state.request_stop_analysis {
+            self.ui_state.request_stop_analysis = false;
+            self.cancel_analysis();
+        }
+        if self.ui_state.request_validate_rule {
+            self.ui_state.request_validate_rule = false;
+            self.menu_validate_rule();
+        }
+        if self.ui_state.request_format_rule {
+            self.ui_state.request_format_rule = false;
+            self.menu_format_rule();
+        }
+        if self.ui_state.request_load_examples {
+            self.ui_state.request_load_examples = false;
+            self.load_default_rule();
+            self.analysis_results.clear();
+            self.results_panel.set_selected_finding(None);
+            self.results_panel.clear_filters();
+            self.update_code_highlights();
+        }
         // Edit actions
-        if self.ui_state.request_undo { self.ui_state.request_undo = false; if self.code_editor.undo() { self.status_bar.set_status("Undone"); } else { self.status_bar.set_status("Nothing to undo"); } }
-        if self.ui_state.request_redo { self.ui_state.request_redo = false; if self.code_editor.redo() { self.status_bar.set_status("Redone"); } else { self.status_bar.set_status("Nothing to redo"); } }
-        if self.ui_state.request_copy { self.ui_state.request_copy = false; self.internal_clipboard = self.code_editor.get_content().to_string(); self.pending_clipboard_copy = Some(self.internal_clipboard.clone()); self.status_bar.set_status("Copied code to clipboard"); }
-        if self.ui_state.request_cut { self.ui_state.request_cut = false; self.internal_clipboard = self.code_editor.get_content().to_string(); self.pending_clipboard_copy = Some(self.internal_clipboard.clone()); self.code_editor.set_content(""); self.status_bar.set_status("Cut code to clipboard"); }
-        if self.ui_state.request_paste { self.ui_state.request_paste = false; if !self.internal_clipboard.is_empty() { self.code_editor.paste_append(&self.internal_clipboard.clone()); self.status_bar.set_status("Pasted from clipboard"); } else { self.status_bar.set_status("Clipboard empty"); } }
-        if self.ui_state.request_find { self.ui_state.request_find = false; self.show_find_replace = true; }
-        if self.ui_state.request_replace { self.ui_state.request_replace = false; self.show_find_replace = true; }
+        if self.ui_state.request_undo {
+            self.ui_state.request_undo = false;
+            if self.code_editor.undo() {
+                self.status_bar.set_status("Undone");
+            } else {
+                self.status_bar.set_status("Nothing to undo");
+            }
+        }
+        if self.ui_state.request_redo {
+            self.ui_state.request_redo = false;
+            if self.code_editor.redo() {
+                self.status_bar.set_status("Redone");
+            } else {
+                self.status_bar.set_status("Nothing to redo");
+            }
+        }
+        if self.ui_state.request_copy {
+            self.ui_state.request_copy = false;
+            self.internal_clipboard = self.code_editor.get_content().to_string();
+            self.pending_clipboard_copy = Some(self.internal_clipboard.clone());
+            self.status_bar.set_status("Copied code to clipboard");
+        }
+        if self.ui_state.request_cut {
+            self.ui_state.request_cut = false;
+            self.internal_clipboard = self.code_editor.get_content().to_string();
+            self.pending_clipboard_copy = Some(self.internal_clipboard.clone());
+            self.code_editor.set_content("");
+            self.status_bar.set_status("Cut code to clipboard");
+        }
+        if self.ui_state.request_paste {
+            self.ui_state.request_paste = false;
+            if !self.internal_clipboard.is_empty() {
+                self.code_editor
+                    .paste_append(&self.internal_clipboard.clone());
+                self.status_bar.set_status("Pasted from clipboard");
+            } else {
+                self.status_bar.set_status("Clipboard empty");
+            }
+        }
+        if self.ui_state.request_find {
+            self.ui_state.request_find = false;
+            self.show_find_replace = true;
+        }
+        if self.ui_state.request_replace {
+            self.ui_state.request_replace = false;
+            self.show_find_replace = true;
+        }
     }
 
     fn menu_open_rule(&mut self) {
-        if let Some(path) = FileOperations::open_file_dialog("Open Rule", &FileOperations::get_rule_file_filters()) {
+        if let Some(path) =
+            FileOperations::open_file_dialog("Open Rule", &FileOperations::get_rule_file_filters())
+        {
             if let Ok(content) = FileOperations::read_file(&path) {
                 self.rule_editor.set_content(&content); // triggers parse
-                self.status_bar.set_status(&format!("Loaded rule file: {}", path.display()));
+                self.status_bar
+                    .set_status(&format!("Loaded rule file: {}", path.display()));
             }
         }
     }
 
     fn menu_save_rule(&mut self) {
-        if let Some(path) = FileOperations::save_file_dialog("Save Rule", &FileOperations::get_rule_file_filters()) {
+        if let Some(path) =
+            FileOperations::save_file_dialog("Save Rule", &FileOperations::get_rule_file_filters())
+        {
             let content = self.rule_editor.get_content().to_string();
             if let Err(e) = FileOperations::write_file(&path, &content) {
-                self.status_bar.analysis_failed(&format!("Failed to save rule: {}", e));
+                self.status_bar
+                    .analysis_failed(&format!("Failed to save rule: {}", e));
             } else {
-                self.status_bar.set_status(&format!("Saved rule to {}", path.display()));
+                self.status_bar
+                    .set_status(&format!("Saved rule to {}", path.display()));
             }
         }
     }
 
     fn menu_open_code(&mut self) {
-        if let Some(path) = FileOperations::open_file_dialog("Open Code", &FileOperations::get_source_file_filters()) {
+        if let Some(path) = FileOperations::open_file_dialog(
+            "Open Code",
+            &FileOperations::get_source_file_filters(),
+        ) {
             match FileOperations::read_file(&path) {
                 Ok(content) => {
                     self.code_editor.set_content(&content);
-                    if let Some(lang) = FileOperations::detect_language(&path) { self.code_editor.set_language(&lang); }
+                    if let Some(lang) = FileOperations::detect_language(&path) {
+                        self.code_editor.set_language(&lang);
+                    }
                     self.ui_state.selected_tab_right = RightTab::TestCode;
-                    self.status_bar.set_status(&format!("Loaded source: {}", path.display()));
+                    self.status_bar
+                        .set_status(&format!("Loaded source: {}", path.display()));
                 }
-                Err(e) => self.status_bar.analysis_failed(&format!("Failed to open code: {}", e)),
+                Err(e) => self
+                    .status_bar
+                    .analysis_failed(&format!("Failed to open code: {}", e)),
             }
         }
     }
 
     fn menu_save_code(&mut self) {
-        if let Some(path) = FileOperations::save_file_dialog("Save Code", &FileOperations::get_source_file_filters()) {
+        if let Some(path) = FileOperations::save_file_dialog(
+            "Save Code",
+            &FileOperations::get_source_file_filters(),
+        ) {
             let content = self.code_editor.get_content().to_string();
             if let Err(e) = FileOperations::write_file(&path, &content) {
-                self.status_bar.analysis_failed(&format!("Failed to save code: {}", e));
+                self.status_bar
+                    .analysis_failed(&format!("Failed to save code: {}", e));
             } else {
-                self.status_bar.set_status(&format!("Saved code to {}", path.display()));
+                self.status_bar
+                    .set_status(&format!("Saved code to {}", path.display()));
             }
         }
     }
@@ -1566,24 +1730,35 @@ impl CrGuiApp {
             self.status_bar.set_status("No findings to export");
             return;
         }
-        if let Some(path) = FileOperations::save_file_dialog("Export Results", &FileOperations::get_export_file_filters()) {
+        if let Some(path) = FileOperations::save_file_dialog(
+            "Export Results",
+            &FileOperations::get_export_file_filters(),
+        ) {
             let ext = FileOperations::get_extension(&path).unwrap_or_else(|| "json".to_string());
             let format = OutputFormat::from_str(&ext).unwrap_or(OutputFormat::Json);
             let content_res = match format {
-                OutputFormat::Json => serde_json::to_string_pretty(&self.analysis_results).map_err(|e| anyhow::anyhow!(e)),
-                OutputFormat::Yaml => serde_yaml::to_string(&self.analysis_results).map_err(|e| anyhow::anyhow!(e)),
+                OutputFormat::Json => serde_json::to_string_pretty(&self.analysis_results)
+                    .map_err(|e| anyhow::anyhow!(e)),
+                OutputFormat::Yaml => {
+                    serde_yaml::to_string(&self.analysis_results).map_err(|e| anyhow::anyhow!(e))
+                }
                 OutputFormat::Sarif => self.serialize_sarif(),
-                _ => serde_json::to_string_pretty(&self.analysis_results).map_err(|e| anyhow::anyhow!(e)),
+                _ => serde_json::to_string_pretty(&self.analysis_results)
+                    .map_err(|e| anyhow::anyhow!(e)),
             };
             match content_res {
                 Ok(data) => {
                     if let Err(e) = FileOperations::write_file(&path, &data) {
-                        self.status_bar.analysis_failed(&format!("Failed to export: {}", e));
+                        self.status_bar
+                            .analysis_failed(&format!("Failed to export: {}", e));
                     } else {
-                        self.status_bar.set_status(&format!("Exported results to {}", path.display()));
+                        self.status_bar
+                            .set_status(&format!("Exported results to {}", path.display()));
                     }
                 }
-                Err(e) => self.status_bar.analysis_failed(&format!("Serialize failed: {}", e)),
+                Err(e) => self
+                    .status_bar
+                    .analysis_failed(&format!("Serialize failed: {}", e)),
             }
         }
     }
@@ -1600,7 +1775,8 @@ impl CrGuiApp {
         if self.rule_editor.format_yaml() {
             self.status_bar.set_status("Rule YAML formatted");
         } else {
-            self.status_bar.set_status("Nothing to format or invalid YAML");
+            self.status_bar
+                .set_status("Nothing to format or invalid YAML");
         }
     }
 
@@ -1618,8 +1794,9 @@ impl CrGuiApp {
             color,
             message: "Jumped to finding".to_string(),
         });
-        self.status_bar.set_status(&format!("Jumped to {}:{}", loc.start_line, loc.start_column));
+        self.status_bar.set_status(&format!(
+            "Jumped to {}:{}",
+            loc.start_line, loc.start_column
+        ));
     }
-
-
 }

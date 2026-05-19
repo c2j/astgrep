@@ -8,14 +8,10 @@
 //! - `pattern_matching`: Pattern matching traversal
 //! - `ast_ops`: AST operations and transformations
 
-pub mod integration;
-pub mod conversion;
-pub mod pattern_matching;
 pub mod ast_ops;
+pub mod conversion;
+pub mod integration;
+pub mod pattern_matching;
 
 // Re-export public types for backward compatibility
-pub use integration::{
-    TreeSitterParser,
-    PatternType,
-    MetaVariableBindings,
-};
+pub use integration::{MetaVariableBindings, PatternType, TreeSitterParser};

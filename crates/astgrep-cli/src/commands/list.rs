@@ -1,11 +1,11 @@
 //! List command for showing available rules
 
+use crate::OutputFormatCli;
 use anyhow::Result;
+use astgrep_core::{Confidence, Language, Severity};
+use astgrep_rules::Rule;
 use std::path::PathBuf;
 use tracing::{info, warn};
-use crate::OutputFormatCli;
-use astgrep_rules::Rule;
-use astgrep_core::{Severity, Confidence, Language};
 
 /// List available rules and their information
 pub async fn run(
@@ -16,20 +16,20 @@ pub async fn run(
     format: OutputFormatCli,
 ) -> Result<()> {
     let rules_path = rules_dir.unwrap_or_else(|| PathBuf::from("rules"));
-    
+
     info!("Scanning rules from: {}", rules_path.display());
-    
+
     // Load all rules from the directory
     let rules = load_rules_from_directory(&rules_path).await?;
-    
+
     if rules.is_empty() {
         warn!("No rules found in {}", rules_path.display());
         return Ok(());
     }
-    
+
     // Apply filters
     let filtered_rules = apply_filters(&rules, &language_filter, &category_filter);
-    
+
     // Generate output
     let output = match format {
         OutputFormatCli::Table => generate_table_output(&filtered_rules, detailed),
@@ -38,7 +38,7 @@ pub async fn run(
         OutputFormatCli::Text => generate_text_output(&filtered_rules, detailed),
         _ => generate_table_output(&filtered_rules, detailed),
     };
-    
+
     println!("{}", output);
     Ok(())
 }
@@ -81,7 +81,10 @@ fn load_rules_recursively(dir: &PathBuf, rules: &mut Vec<Rule>) -> Result<()> {
             // Create a demo rule for each YAML file found
             rules.push(Rule::new(
                 format!("rule-{}", rules.len() + 1),
-                format!("Rule from {}", path.file_name().unwrap_or_default().to_string_lossy()),
+                format!(
+                    "Rule from {}",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                ),
                 format!("Rule loaded from {}", path.display()),
                 Severity::Warning,
                 Confidence::Medium,
@@ -107,7 +110,8 @@ fn apply_filters<'a>(
     language_filter: &Option<String>,
     category_filter: &Option<String>,
 ) -> Vec<&'a Rule> {
-    rules.iter()
+    rules
+        .iter()
         .filter(|rule| {
             // Simplified filtering - just check if rule name contains the filter
             if let Some(ref lang) = language_filter {
@@ -117,7 +121,11 @@ fn apply_filters<'a>(
             }
 
             if let Some(ref category) = category_filter {
-                if !rule.description.to_lowercase().contains(&category.to_lowercase()) {
+                if !rule
+                    .description
+                    .to_lowercase()
+                    .contains(&category.to_lowercase())
+                {
                     return false;
                 }
             }
@@ -160,21 +168,24 @@ fn generate_table_output(rules: &[&Rule], detailed: bool) -> String {
 fn generate_json_output(rules: &[&Rule], detailed: bool) -> Result<String> {
     use serde_json::json;
 
-    let rules_json: Vec<serde_json::Value> = rules.iter().map(|rule| {
-        if detailed {
-            json!({
-                "id": rule.id,
-                "name": rule.name,
-                "description": rule.description,
-            })
-        } else {
-            json!({
-                "id": rule.id,
-                "name": rule.name,
-                "description": rule.description,
-            })
-        }
-    }).collect();
+    let rules_json: Vec<serde_json::Value> = rules
+        .iter()
+        .map(|rule| {
+            if detailed {
+                json!({
+                    "id": rule.id,
+                    "name": rule.name,
+                    "description": rule.description,
+                })
+            } else {
+                json!({
+                    "id": rule.id,
+                    "name": rule.name,
+                    "description": rule.description,
+                })
+            }
+        })
+        .collect();
 
     let output = json!({
         "total_rules": rules.len(),
@@ -186,42 +197,42 @@ fn generate_json_output(rules: &[&Rule], detailed: bool) -> Result<String> {
 
 fn generate_markdown_output(rules: &[&Rule], detailed: bool) -> String {
     let mut output = String::new();
-    
+
     output.push_str(&format!("# Available Rules ({} total)\n\n", rules.len()));
-    
+
     for rule in rules {
         output.push_str(&format!("## {}\n\n", rule.name));
         output.push_str(&format!("- **ID:** `{}`\n", rule.id));
         output.push_str(&format!("- **Description:** {}\n", rule.description));
-        
+
         if detailed {
             output.push_str("- **Type:** Static Analysis Rule\n");
             output.push_str("- **Status:** Active\n");
         }
-        
+
         output.push_str("\n");
     }
-    
+
     output
 }
 
 fn generate_text_output(rules: &[&Rule], detailed: bool) -> String {
     let mut output = String::new();
-    
+
     output.push_str(&format!("Found {} rule(s):\n\n", rules.len()));
-    
+
     for (i, rule) in rules.iter().enumerate() {
         output.push_str(&format!("{}. {} ({})\n", i + 1, rule.name, rule.id));
         output.push_str(&format!("   Description: {}\n", rule.description));
-        
+
         if detailed {
             output.push_str(&format!("   Type: Rule\n"));
             output.push_str(&format!("   Status: Active\n"));
         }
-        
+
         output.push_str("\n");
     }
-    
+
     output
 }
 
@@ -236,8 +247,8 @@ fn truncate_text(text: &str, max_len: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use astgrep_core::{Severity, Confidence, Language};
-    
+    use astgrep_core::{Confidence, Language, Severity};
+
     fn create_test_rule() -> Rule {
         Rule::new(
             "test-rule-001".to_string(),
@@ -248,34 +259,34 @@ mod tests {
             vec![Language::Java, Language::Python],
         )
     }
-    
+
     #[test]
     fn test_apply_filters_no_filter() {
         let rules = vec![create_test_rule()];
         let filtered = apply_filters(&rules, &None, &None);
         assert_eq!(filtered.len(), 1);
     }
-    
+
     #[test]
     fn test_apply_filters_language() {
         let rules = vec![create_test_rule()];
         let filtered = apply_filters(&rules, &Some("java".to_string()), &None);
         assert_eq!(filtered.len(), 1);
-        
+
         let filtered = apply_filters(&rules, &Some("javascript".to_string()), &None);
         assert_eq!(filtered.len(), 0);
     }
-    
+
     #[test]
     fn test_apply_filters_category() {
         let rules = vec![create_test_rule()];
         let filtered = apply_filters(&rules, &None, &Some("test".to_string()));
         assert_eq!(filtered.len(), 1);
-        
+
         let filtered = apply_filters(&rules, &None, &Some("security".to_string()));
         assert_eq!(filtered.len(), 0);
     }
-    
+
     #[test]
     fn test_truncate_text() {
         assert_eq!(truncate_text("short", 10), "short");

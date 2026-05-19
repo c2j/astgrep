@@ -3,35 +3,35 @@
 //! This crate provides data flow analysis and taint tracking functionality for
 //! detecting security vulnerabilities and code quality issues.
 
-pub mod graph;
-pub mod sources;
-pub mod sinks;
-pub mod sanitizers;
-pub mod taint;
+pub mod advanced_taint;
+pub mod call_graph;
+pub mod constant_analysis;
+pub mod constant_propagation;
 pub mod enhanced_taint;
 pub mod flows;
-pub mod call_graph;
+pub mod graph;
 pub mod interprocedural;
-pub mod advanced_taint;
+pub mod sanitizers;
+pub mod sinks;
+pub mod sources;
 pub mod symbol_table;
-pub mod constant_propagation;
-pub mod constant_analysis;
 pub mod symbolic_propagation;
+pub mod taint;
 
-pub use graph::*;
-pub use sources::*;
-pub use sinks::*;
-pub use sanitizers::*;
-pub use taint::*;
+pub use advanced_taint::*;
+pub use call_graph::*;
+pub use constant_analysis::*;
+pub use constant_propagation::*;
 pub use enhanced_taint::*;
 pub use flows::*;
-pub use call_graph::*;
+pub use graph::*;
 pub use interprocedural::*;
-pub use advanced_taint::*;
+pub use sanitizers::*;
+pub use sinks::*;
+pub use sources::*;
 pub use symbol_table::*;
-pub use constant_propagation::*;
-pub use constant_analysis::*;
 pub use symbolic_propagation::*;
+pub use taint::*;
 
 use astgrep_core::{AstNode, Result};
 use std::collections::HashMap;
@@ -70,7 +70,9 @@ impl DataFlowAnalyzer {
         let sanitizers = self.sanitizer_detector.detect_sanitizers(&self.graph)?;
 
         // Perform taint analysis
-        let taint_flows = self.taint_tracker.track_taint(&self.graph, &sources, &sinks, &sanitizers)?;
+        let taint_flows =
+            self.taint_tracker
+                .track_taint(&self.graph, &sources, &sinks, &sanitizers)?;
 
         // Perform constant propagation analysis
         let constant_values = self.constant_propagator.analyze_ast(ast)?;
@@ -132,7 +134,9 @@ impl DataFlowAnalyzer {
             }
             "call_expression" => {
                 // For function calls, data flows from arguments to the call
-                if child.node_type() != "identifier" || parent.child(0).map(|c| c.node_type()) != Some("identifier") {
+                if child.node_type() != "identifier"
+                    || parent.child(0).map(|c| c.node_type()) != Some("identifier")
+                {
                     self.graph.add_edge(child_id, parent_id, EdgeType::DataFlow);
                 }
             }
@@ -184,7 +188,10 @@ impl DataFlowAnalysis {
 
     /// Get all vulnerable flows
     pub fn vulnerable_flows(&self) -> Vec<&TaintFlow> {
-        self.taint_flows.iter().filter(|flow| flow.is_vulnerable()).collect()
+        self.taint_flows
+            .iter()
+            .filter(|flow| flow.is_vulnerable())
+            .collect()
     }
 
     /// Get flows by vulnerability type

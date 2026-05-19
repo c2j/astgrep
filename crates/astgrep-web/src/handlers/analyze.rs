@@ -10,17 +10,16 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::{
+    handlers::metrics::get_metrics_collector,
     models::{
-        AnalyzeRequest, AnalyzeFileRequest, AnalyzeArchiveRequest,
-        AnalysisResponse, AnalysisResults, Finding, Location,
-        AnalysisSummary, JobStatus, PerformanceMetrics,
-        MetavariableBinding, ConstraintMatch, TaintFlow, DataFlowInfo, SymbolInfo,
+        AnalysisResponse, AnalysisResults, AnalysisSummary, AnalyzeArchiveRequest,
+        AnalyzeFileRequest, AnalyzeRequest, ConstraintMatch, DataFlowInfo, Finding, JobStatus,
+        Location, MetavariableBinding, PerformanceMetrics, SymbolInfo, TaintFlow,
     },
     WebConfig, WebError, WebResult,
-    handlers::metrics::get_metrics_collector,
 };
-use astgrep_core::{Language, Severity, Confidence};
-use astgrep_rules::{RuleEngine, RuleContext};
+use astgrep_core::{Confidence, Language, Severity};
+use astgrep_rules::{RuleContext, RuleEngine};
 
 /// Analyze code snippet
 pub async fn analyze_code(
@@ -74,7 +73,10 @@ pub async fn analyze_code_sarif(
     State(config): State<Arc<WebConfig>>,
     Json(request): Json<AnalyzeRequest>,
 ) -> WebResult<Json<serde_json::Value>> {
-    info!("Analyzing code snippet (SARIF format), language: {}", request.language);
+    info!(
+        "Analyzing code snippet (SARIF format), language: {}",
+        request.language
+    );
 
     // Validate request
     if request.code.is_empty() {
@@ -125,9 +127,9 @@ pub async fn analyze_file(
         .map_err(|e| WebError::bad_request(format!("Invalid UTF-8 content: {}", e)))?;
 
     // Determine language if not specified
-    let language = request.language.unwrap_or_else(|| {
-        detect_language_from_filename(&request.filename)
-    });
+    let language = request
+        .language
+        .unwrap_or_else(|| detect_language_from_filename(&request.filename));
 
     // Create analysis request
     let analyze_request = AnalyzeRequest {
@@ -161,10 +163,10 @@ pub async fn analyze_file_flexible(
     State(config): State<Arc<WebConfig>>,
     req: axum::http::Request<axum::body::Body>,
 ) -> WebResult<Json<AnalysisResponse>> {
+    use axum::body::to_bytes;
     use axum::extract::FromRequest;
     use axum::extract::Multipart;
     use axum::http::header;
-    use axum::body::to_bytes;
 
     // Decide by Content-Type
     let is_multipart = req
@@ -190,7 +192,6 @@ pub async fn analyze_file_flexible(
         let mut options: Option<crate::models::AnalysisOptions> = None;
         let mut rules_files: Vec<String> = Vec::new();
 
-
         while let Some(field) = multipart
             .next_field()
             .await
@@ -199,8 +200,13 @@ pub async fn analyze_file_flexible(
             let name = field.name().unwrap_or("").to_string();
             match name.as_str() {
                 "file" => {
-                    let filename = field.file_name().map(|s| s.to_string()).unwrap_or_else(|| "uploaded".into());
-                    let data = field.bytes().await.map_err(|e| WebError::bad_request(format!("Failed to read file {}: {}", filename, e)))?;
+                    let filename = field
+                        .file_name()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "uploaded".into());
+                    let data = field.bytes().await.map_err(|e| {
+                        WebError::bad_request(format!("Failed to read file {}: {}", filename, e))
+                    })?;
                     // Try UTF-8; if fails, skip the file with a warning
                     match String::from_utf8(data.to_vec()) {
                         Ok(code) => files.push((filename, code)),
@@ -209,21 +215,29 @@ pub async fn analyze_file_flexible(
                 }
                 "language" => {
                     let val = field.text().await.unwrap_or_default();
-                    if !val.trim().is_empty() { global_language = Some(val.trim().to_string()); }
+                    if !val.trim().is_empty() {
+                        global_language = Some(val.trim().to_string());
+                    }
                 }
                 "rules" => {
                     // Accept rules as either uploaded file or plain text (YAML string)
                     if field.file_name().is_some() {
-                        let data = field.bytes().await.map_err(|e| WebError::bad_request(format!("Failed to read rules file: {}", e)))?;
+                        let data = field.bytes().await.map_err(|e| {
+                            WebError::bad_request(format!("Failed to read rules file: {}", e))
+                        })?;
                         match String::from_utf8(data.to_vec()) {
                             Ok(text) => {
-                                if !text.trim().is_empty() { rules_text = Some(text); }
+                                if !text.trim().is_empty() {
+                                    rules_text = Some(text);
+                                }
                             }
                             Err(_) => warn!("Skipping non-UTF8 rules file"),
                         }
                     } else {
                         let val = field.text().await.unwrap_or_default();
-                        if !val.trim().is_empty() { rules_text = Some(val); }
+                        if !val.trim().is_empty() {
+                            rules_text = Some(val);
+                        }
                     }
                 }
                 "rules_file" => {
@@ -260,7 +274,6 @@ pub async fn analyze_file_flexible(
             rules_text = Some(rules_files.join("\n"));
         }
 
-
         if files.is_empty() {
             return Err(WebError::bad_request("No file parts provided"));
         }
@@ -286,7 +299,9 @@ pub async fn analyze_file_flexible(
             let analyze_request = AnalyzeRequest {
                 code,
                 language,
-                rules: rules_text.as_ref().map(|s| serde_json::Value::String(s.clone())),
+                rules: rules_text
+                    .as_ref()
+                    .map(|s| serde_json::Value::String(s.clone())),
                 options: options.clone(),
             };
 
@@ -314,8 +329,12 @@ pub async fn analyze_file_flexible(
         let mut findings_by_severity = HashMap::new();
         let mut findings_by_confidence = HashMap::new();
         for finding in &all_findings {
-            *findings_by_severity.entry(finding.severity.clone()).or_insert(0) += 1;
-            *findings_by_confidence.entry(finding.confidence.clone()).or_insert(0) += 1;
+            *findings_by_severity
+                .entry(finding.severity.clone())
+                .or_insert(0) += 1;
+            *findings_by_confidence
+                .entry(finding.confidence.clone())
+                .or_insert(0) += 1;
         }
 
         let duration = start_time.elapsed();
@@ -329,7 +348,8 @@ pub async fn analyze_file_flexible(
         };
 
         // Metrics (simple estimate)
-        let metrics = options.as_ref()
+        let metrics = options
+            .as_ref()
             .and_then(|o| o.include_metrics)
             .unwrap_or(false)
             .then(|| PerformanceMetrics {
@@ -384,7 +404,9 @@ pub async fn analyze_file_flexible(
     let code = String::from_utf8(content)
         .map_err(|e| WebError::bad_request(format!("Invalid UTF-8 content: {}", e)))?;
 
-    let language = request.language.unwrap_or_else(|| detect_language_from_filename(&request.filename));
+    let language = request
+        .language
+        .unwrap_or_else(|| detect_language_from_filename(&request.filename));
 
     let analyze_request = AnalyzeRequest {
         code,
@@ -407,7 +429,6 @@ pub async fn analyze_file_flexible(
     info!("File analysis (JSON) completed, job_id: {}", job_id);
     Ok(Json(response))
 }
-
 
 /// Analyze uploaded archive
 pub async fn analyze_archive(
@@ -462,17 +483,21 @@ pub async fn analyze_multipart(
     let mut language = None;
 
     // Process multipart fields
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        WebError::bad_request(format!("Invalid multipart data: {}", e))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| WebError::bad_request(format!("Invalid multipart data: {}", e)))?
+    {
         let field_name = field.name().unwrap_or("").to_string();
 
         match field_name.as_str() {
             "file" => {
                 filename = field.file_name().unwrap_or("unknown").to_string();
-                content = field.bytes().await.map_err(|e| {
-                    WebError::bad_request(format!("Failed to read file: {}", e))
-                })?.to_vec();
+                content = field
+                    .bytes()
+                    .await
+                    .map_err(|e| WebError::bad_request(format!("Failed to read file: {}", e)))?
+                    .to_vec();
             }
             "language" => {
                 language = Some(field.text().await.map_err(|e| {
@@ -495,9 +520,7 @@ pub async fn analyze_multipart(
         .map_err(|e| WebError::bad_request(format!("Invalid UTF-8 content: {}", e)))?;
 
     // Determine language
-    let detected_language = language.unwrap_or_else(|| {
-        detect_language_from_filename(&filename)
-    });
+    let detected_language = language.unwrap_or_else(|| detect_language_from_filename(&filename));
 
     // Create analysis request
     let analyze_request = AnalyzeRequest {
@@ -531,8 +554,8 @@ async fn perform_code_analysis(
     request: &AnalyzeRequest,
     config: &WebConfig,
 ) -> WebResult<AnalysisResults> {
-    use std::collections::HashMap;
     use astgrep_parser::ParserFactory;
+    use std::collections::HashMap;
     use std::path::Path;
 
     let start_time = std::time::Instant::now();
@@ -546,7 +569,8 @@ async fn perform_code_analysis(
 
     // Parse the source code to AST
     let dummy_path = Path::new("input");
-    let ast = parser.parse(&request.code, dummy_path)
+    let ast = parser
+        .parse(&request.code, dummy_path)
         .map_err(|e| WebError::analysis_error(format!("Failed to parse code: {}", e)))?;
 
     // Load rules (either from request or default rules)
@@ -595,23 +619,27 @@ async fn perform_code_analysis(
     }
 
     // Execute analysis with enhanced capabilities
-    let mut findings = rule_engine.analyze(ast.as_ref(), &context)
+    let mut findings = rule_engine
+        .analyze(ast.as_ref(), &context)
         .map_err(|e| WebError::analysis_error(format!("Analysis failed: {}", e)))?;
 
     // Perform additional analysis if requested
     if let Some(ref options) = request.options {
         if options.enable_dataflow_analysis.unwrap_or(false) {
-            let dataflow_findings = perform_dataflow_analysis(ast.as_ref(), &context, language).await?;
+            let dataflow_findings =
+                perform_dataflow_analysis(ast.as_ref(), &context, language).await?;
             findings.extend(dataflow_findings);
         }
 
         if options.enable_security_analysis.unwrap_or(false) {
-            let security_findings = perform_security_analysis(ast.as_ref(), &context, language).await?;
+            let security_findings =
+                perform_security_analysis(ast.as_ref(), &context, language).await?;
             findings.extend(security_findings);
         }
 
         if options.enable_performance_analysis.unwrap_or(false) {
-            let performance_findings = perform_performance_analysis(ast.as_ref(), &context, language).await?;
+            let performance_findings =
+                perform_performance_analysis(ast.as_ref(), &context, language).await?;
             findings.extend(performance_findings);
         }
     }
@@ -623,11 +651,12 @@ async fn perform_code_analysis(
             .rules()
             .iter()
             .filter(|r| r.languages.contains(&Language::Sql))
-            .filter(|r| r
-                .metadata
-                .get("preprocess")
-                .map(|v| v.eq_ignore_ascii_case("embedded-sql"))
-                .unwrap_or(false))
+            .filter(|r| {
+                r.metadata
+                    .get("preprocess")
+                    .map(|v| v.eq_ignore_ascii_case("embedded-sql"))
+                    .unwrap_or(false)
+            })
             .filter(|r| {
                 if let Some(from) = r.metadata.get("preprocess.from") {
                     let from_l = from.to_ascii_lowercase();
@@ -644,7 +673,9 @@ async fn perform_code_analysis(
             if let Ok(sql_parser) = ParserFactory::create_parser(Language::Sql) {
                 let snippets = extract_embedded_sql_snippets(&request.code, language);
                 for sn in &snippets {
-                    if sn.sql.trim().is_empty() { continue; }
+                    if sn.sql.trim().is_empty() {
+                        continue;
+                    }
                     if let Ok(ast_sql) = sql_parser.parse(&sn.sql, dummy_path) {
                         let ctx_sql = RuleContext::new(
                             context.file_path.clone(),
@@ -652,15 +683,27 @@ async fn perform_code_analysis(
                             sn.sql.clone(),
                         );
                         for rule in &sql_rules {
-                            if let Ok(Some(result)) = rule_engine.execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql) {
+                            if let Ok(Some(result)) =
+                                rule_engine.execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql)
+                            {
                                 for mut f in result.findings {
                                     // Map snippet-relative line numbers back to the original file
                                     let line_off = sn.start_line.saturating_sub(1);
-                                    if f.location.start_line > 0 { f.location.start_line += line_off; }
-                                    if f.location.end_line > 0 { f.location.end_line += line_off; }
+                                    if f.location.start_line > 0 {
+                                        f.location.start_line += line_off;
+                                    }
+                                    if f.location.end_line > 0 {
+                                        f.location.end_line += line_off;
+                                    }
                                     // Annotate metadata to indicate preprocessing origin
-                                    f.metadata.insert("preprocess".to_string(), "embedded-sql".to_string());
-                                    if let Some(ref c) = sn.context { f.metadata.insert("embedded_context".to_string(), c.clone()); }
+                                    f.metadata.insert(
+                                        "preprocess".to_string(),
+                                        "embedded-sql".to_string(),
+                                    );
+                                    if let Some(ref c) = sn.context {
+                                        f.metadata
+                                            .insert("embedded_context".to_string(), c.clone());
+                                    }
                                     findings.push(f);
                                 }
                             }
@@ -670,7 +713,6 @@ async fn perform_code_analysis(
             }
         }
     }
-
 
     // Deduplicate findings by (rule_id + location) to avoid repeated matches
     {
@@ -691,33 +733,45 @@ async fn perform_code_analysis(
     let duration = start_time.elapsed();
 
     // Convert findings to web model format
-    let web_findings: Vec<Finding> = findings.into_iter().map(|f| Finding {
-        rule_id: f.rule_id,
-        message: f.message,
-        severity: f.severity.as_str().to_lowercase(),
-        confidence: f.confidence.as_str().to_lowercase(),
-        location: Location {
-            file: f.location.file.to_string_lossy().to_string(),
-            start_line: f.location.start_line,
-            start_column: f.location.start_column,
-            end_line: f.location.end_line,
-            end_column: f.location.end_column,
-            snippet: None, // astgrep_core::Location doesn't have snippet field
-        },
-        fix: f.fix_suggestion,
-        metadata: Some(f.metadata.into_iter().map(|(k, v)| (k, serde_json::Value::String(v))).collect()),
-        metavariable_bindings: None, // Will be populated by dataflow analysis
-        constraint_matches: None, // Will be populated by constraint analysis
-        taint_flow: None, // Will be populated by taint analysis
-    }).collect();
+    let web_findings: Vec<Finding> = findings
+        .into_iter()
+        .map(|f| Finding {
+            rule_id: f.rule_id,
+            message: f.message,
+            severity: f.severity.as_str().to_lowercase(),
+            confidence: f.confidence.as_str().to_lowercase(),
+            location: Location {
+                file: f.location.file.to_string_lossy().to_string(),
+                start_line: f.location.start_line,
+                start_column: f.location.start_column,
+                end_line: f.location.end_line,
+                end_column: f.location.end_column,
+                snippet: None, // astgrep_core::Location doesn't have snippet field
+            },
+            fix: f.fix_suggestion,
+            metadata: Some(
+                f.metadata
+                    .into_iter()
+                    .map(|(k, v)| (k, serde_json::Value::String(v)))
+                    .collect(),
+            ),
+            metavariable_bindings: None, // Will be populated by dataflow analysis
+            constraint_matches: None,    // Will be populated by constraint analysis
+            taint_flow: None,            // Will be populated by taint analysis
+        })
+        .collect();
 
     // Create summary
     let mut findings_by_severity = HashMap::new();
     let mut findings_by_confidence = HashMap::new();
 
     for finding in &web_findings {
-        *findings_by_severity.entry(finding.severity.clone()).or_insert(0) += 1;
-        *findings_by_confidence.entry(finding.confidence.clone()).or_insert(0) += 1;
+        *findings_by_severity
+            .entry(finding.severity.clone())
+            .or_insert(0) += 1;
+        *findings_by_confidence
+            .entry(finding.confidence.clone())
+            .or_insert(0) += 1;
     }
 
     let summary = AnalysisSummary {
@@ -730,7 +784,9 @@ async fn perform_code_analysis(
     };
 
     // Create performance metrics if requested
-    let metrics = request.options.as_ref()
+    let metrics = request
+        .options
+        .as_ref()
         .and_then(|opts| opts.include_metrics)
         .unwrap_or(false)
         .then(|| {
@@ -747,15 +803,15 @@ async fn perform_code_analysis(
         });
 
     // Collect dataflow information if requested
-    let dataflow_info = request.options.as_ref()
+    let dataflow_info = request
+        .options
+        .as_ref()
         .and_then(|opts| opts.enable_dataflow_analysis)
         .unwrap_or(false)
-        .then(|| {
-            DataFlowInfo {
-                taint_flows: vec![],
-                constant_values: HashMap::new(),
-                symbol_table: HashMap::new(),
-            }
+        .then(|| DataFlowInfo {
+            taint_flows: vec![],
+            constant_values: HashMap::new(),
+            symbol_table: HashMap::new(),
         });
 
     Ok(AnalysisResults {
@@ -781,7 +837,10 @@ fn parse_language(language_str: &str) -> WebResult<Language> {
         "kotlin" | "kt" => Ok(Language::Kotlin),
         "swift" => Ok(Language::Swift),
         "xml" => Ok(Language::Xml),
-        _ => Err(WebError::bad_request(&format!("Unsupported language: {}", language_str))),
+        _ => Err(WebError::bad_request(&format!(
+            "Unsupported language: {}",
+            language_str
+        ))),
     }
 }
 
@@ -809,7 +868,9 @@ async fn load_default_rules_for_language(
         Language::Xml => "xml",
     };
 
-    let rules_path = config.rules_directory.join(format!("{}.yaml", language_str));
+    let rules_path = config
+        .rules_directory
+        .join(format!("{}.yaml", language_str));
 
     // Try to load language-specific rules
     if rules_path.exists() {
@@ -856,7 +917,8 @@ fn load_builtin_rules_for_language(
     // Create a simple default rule for the language
     let builtin_rules = create_default_rule_for_language(language);
 
-    rule_engine.load_rules_from_yaml(&builtin_rules)
+    rule_engine
+        .load_rules_from_yaml(&builtin_rules)
         .map_err(|e| WebError::analysis_error(format!("Failed to load builtin rules: {}", e)))?;
 
     Ok(())
@@ -877,7 +939,8 @@ rules:
       - "System.out.println"
       - "System.out.print"
     message: "Use proper logging instead of System.out"
-"#.to_string(),
+"#
+        .to_string(),
         Language::JavaScript => r#"
 rules:
   - id: js-console-log
@@ -890,7 +953,8 @@ rules:
       - "console.log"
       - "console.warn"
     message: "Remove console statements before production"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Python => r#"
 rules:
   - id: python-print-usage
@@ -902,7 +966,8 @@ rules:
     patterns:
       - "print("
     message: "Use logging instead of print statements"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Sql => r#"
 rules:
   - id: sql-select-star
@@ -914,7 +979,8 @@ rules:
     patterns:
       - "SELECT *"
     message: "Avoid SELECT * in production queries"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Bash => r#"
 rules:
   - id: bash-unquoted-variable
@@ -926,7 +992,8 @@ rules:
     patterns:
       - "echo $"
     message: "Quote variables to prevent word splitting"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Php => r#"
 rules:
   - id: php-sql-injection
@@ -939,7 +1006,8 @@ rules:
       - "mysql_query("
       - "mysqli_query("
     message: "Use prepared statements"
-"#.to_string(),
+"#
+        .to_string(),
         Language::CSharp => r#"
 rules:
   - id: csharp-console-writeline
@@ -951,7 +1019,8 @@ rules:
     patterns:
       - "Console.WriteLine"
     message: "Use proper logging framework"
-"#.to_string(),
+"#
+        .to_string(),
         Language::C => r#"
 rules:
   - id: c-buffer-overflow
@@ -964,7 +1033,8 @@ rules:
       - "strcpy("
       - "gets("
     message: "Use safer alternatives"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Ruby => r#"
 rules:
   - id: ruby-puts-usage
@@ -976,7 +1046,8 @@ rules:
     patterns:
       - "puts "
     message: "Use proper logging instead of puts"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Kotlin => r#"
 rules:
   - id: kotlin-println-usage
@@ -988,7 +1059,8 @@ rules:
     patterns:
       - "println("
     message: "Use proper logging instead of println"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Swift => r#"
 rules:
   - id: swift-print-usage
@@ -1000,7 +1072,8 @@ rules:
     patterns:
       - "print("
     message: "Use proper logging instead of print"
-"#.to_string(),
+"#
+        .to_string(),
         Language::Xml => r#"
 rules:
   - id: xml-best-practices
@@ -1012,7 +1085,8 @@ rules:
     patterns:
       - "<!--"
     message: "Review XML structure and comments"
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 
@@ -1082,8 +1156,12 @@ async fn perform_archive_analysis(
     let mut findings_by_confidence = HashMap::new();
 
     for finding in &all_findings {
-        *findings_by_severity.entry(finding.severity.clone()).or_insert(0) += 1;
-        *findings_by_confidence.entry(finding.confidence.clone()).or_insert(0) += 1;
+        *findings_by_severity
+            .entry(finding.severity.clone())
+            .or_insert(0) += 1;
+        *findings_by_confidence
+            .entry(finding.confidence.clone())
+            .or_insert(0) += 1;
     }
 
     let summary = AnalysisSummary {
@@ -1096,7 +1174,9 @@ async fn perform_archive_analysis(
     };
 
     // Create performance metrics if requested
-    let metrics = request.options.as_ref()
+    let metrics = request
+        .options
+        .as_ref()
         .and_then(|opts| opts.include_metrics)
         .unwrap_or(false)
         .then(|| {
@@ -1129,7 +1209,10 @@ async fn extract_archive_files(
         "zip" => extract_zip_files(archive_data).await,
         "tar" => extract_tar_files(archive_data).await,
         "tar.gz" => extract_tar_gz_files(archive_data).await,
-        _ => Err(WebError::bad_request(&format!("Unsupported archive format: {}", format))),
+        _ => Err(WebError::bad_request(&format!(
+            "Unsupported archive format: {}",
+            format
+        ))),
     }
 }
 
@@ -1169,7 +1252,7 @@ async fn extract_tar_files(archive_data: &[u8]) -> WebResult<Vec<(String, String
     if archive_data.len() > 100 {
         files.push((
             "main.py".to_string(),
-            "#!/usr/bin/env python3\nprint('Hello from TAR archive')".to_string()
+            "#!/usr/bin/env python3\nprint('Hello from TAR archive')".to_string(),
         ));
     }
 
@@ -1186,7 +1269,7 @@ async fn extract_tar_gz_files(archive_data: &[u8]) -> WebResult<Vec<(String, Str
     if archive_data.len() > 100 {
         files.push((
             "script.js".to_string(),
-            "console.log('Hello from TAR.GZ archive');".to_string()
+            "console.log('Hello from TAR.GZ archive');".to_string(),
         ));
     }
 
@@ -1209,7 +1292,8 @@ async fn perform_dataflow_analysis(
             // Look for common Java taint flow patterns
             let finding = astgrep_core::Finding {
                 rule_id: "java-sql-injection-dataflow".to_string(),
-                message: "Potential SQL injection: user input may flow to database query".to_string(),
+                message: "Potential SQL injection: user input may flow to database query"
+                    .to_string(),
                 severity: astgrep_core::Severity::Error,
                 confidence: astgrep_core::Confidence::Medium,
                 location: astgrep_core::Location {
@@ -1219,11 +1303,16 @@ async fn perform_dataflow_analysis(
                     end_line: 1,
                     end_column: 1,
                 },
-                fix_suggestion: Some("Use PreparedStatement with parameterized queries".to_string()),
+                fix_suggestion: Some(
+                    "Use PreparedStatement with parameterized queries".to_string(),
+                ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
                     meta.insert("analysis_type".to_string(), "dataflow".to_string());
-                    meta.insert("vulnerability_type".to_string(), "sql_injection".to_string());
+                    meta.insert(
+                        "vulnerability_type".to_string(),
+                        "sql_injection".to_string(),
+                    );
                     meta
                 },
             };
@@ -1243,7 +1332,9 @@ async fn perform_dataflow_analysis(
                     end_line: 1,
                     end_column: 1,
                 },
-                fix_suggestion: Some("Use textContent instead of innerHTML or sanitize input".to_string()),
+                fix_suggestion: Some(
+                    "Use textContent instead of innerHTML or sanitize input".to_string(),
+                ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
                     meta.insert("analysis_type".to_string(), "dataflow".to_string());
@@ -1284,7 +1375,9 @@ async fn perform_security_analysis(
                     end_line: 1,
                     end_column: 1,
                 },
-                fix_suggestion: Some("Use environment variables or secure configuration for secrets".to_string()),
+                fix_suggestion: Some(
+                    "Use environment variables or secure configuration for secrets".to_string(),
+                ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
                     meta.insert("analysis_type".to_string(), "security".to_string());
@@ -1306,7 +1399,9 @@ async fn perform_security_analysis(
                     end_line: 1,
                     end_column: 1,
                 },
-                fix_suggestion: Some("Avoid eval() or use safer alternatives like JSON.parse()".to_string()),
+                fix_suggestion: Some(
+                    "Avoid eval() or use safer alternatives like JSON.parse()".to_string(),
+                ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
                     meta.insert("analysis_type".to_string(), "security".to_string());
@@ -1344,7 +1439,9 @@ async fn perform_performance_analysis(
                     end_line: 1,
                     end_column: 1,
                 },
-                fix_suggestion: Some("Use StringBuilder for string concatenation in loops".to_string()),
+                fix_suggestion: Some(
+                    "Use StringBuilder for string concatenation in loops".to_string(),
+                ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
                     meta.insert("analysis_type".to_string(), "performance".to_string());
@@ -1366,7 +1463,9 @@ async fn perform_performance_analysis(
                     end_line: 1,
                     end_column: 1,
                 },
-                fix_suggestion: Some("Cache DOM element references to avoid repeated queries".to_string()),
+                fix_suggestion: Some(
+                    "Cache DOM element references to avoid repeated queries".to_string(),
+                ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
                     meta.insert("analysis_type".to_string(), "performance".to_string());
@@ -1384,12 +1483,14 @@ async fn perform_performance_analysis(
 /// Convert analysis results to SARIF format
 pub fn convert_to_sarif(results: &AnalysisResults) -> crate::models::SarifOutput {
     use crate::models::{
-        SarifOutput, SarifRun, SarifTool, SarifToolDriver, SarifResult, SarifMessage,
-        SarifLocation, SarifPhysicalLocation, SarifArtifactLocation, SarifRegion,
+        SarifArtifactLocation, SarifLocation, SarifMessage, SarifOutput, SarifPhysicalLocation,
+        SarifRegion, SarifResult, SarifRun, SarifTool, SarifToolDriver,
     };
 
-    let results: Vec<SarifResult> = results.findings.iter().map(|finding| {
-        SarifResult {
+    let results: Vec<SarifResult> = results
+        .findings
+        .iter()
+        .map(|finding| SarifResult {
             rule_id: finding.rule_id.clone(),
             message: SarifMessage {
                 text: finding.message.clone(),
@@ -1398,8 +1499,6 @@ pub fn convert_to_sarif(results: &AnalysisResults) -> crate::models::SarifOutput
                 physical_location: SarifPhysicalLocation {
                     artifact_location: SarifArtifactLocation {
                         uri: finding.location.file.clone(),
-
-
                     },
                     region: Some(SarifRegion {
                         start_line: finding.location.start_line,
@@ -1410,8 +1509,8 @@ pub fn convert_to_sarif(results: &AnalysisResults) -> crate::models::SarifOutput
                 },
             }],
             level: Some(finding.severity.clone()),
-        }
-    }).collect();
+        })
+        .collect();
 
     SarifOutput {
         version: "2.1.0".to_string(),
@@ -1458,8 +1557,13 @@ fn extract_embedded_sql_from_java(src: &str) -> Vec<EmbeddedSqlSnippet> {
                 let qabs = abs + marker.len() + qpos;
                 if let Some((lit, end_idx)) = read_java_string_literal(src, qabs) {
                     let sql = normalize_sql(&unescape_java_string(&lit));
-                    out.push(EmbeddedSqlSnippet { sql, start_line, context: Some("@Select/@Query".to_string()) });
-                    idx = end_idx; continue;
+                    out.push(EmbeddedSqlSnippet {
+                        sql,
+                        start_line,
+                        context: Some("@Select/@Query".to_string()),
+                    });
+                    idx = end_idx;
+                    continue;
                 }
             }
             idx = abs + marker.len();
@@ -1474,8 +1578,13 @@ fn extract_embedded_sql_from_java(src: &str) -> Vec<EmbeddedSqlSnippet> {
                 let qabs = abs + marker.len() + qpos;
                 if let Some((lit, end_idx)) = read_java_string_literal(src, qabs) {
                     let sql = normalize_sql(&unescape_java_string(&lit));
-                    out.push(EmbeddedSqlSnippet { sql, start_line, context: Some("JDBC".to_string()) });
-                    idx = end_idx; continue;
+                    out.push(EmbeddedSqlSnippet {
+                        sql,
+                        start_line,
+                        context: Some("JDBC".to_string()),
+                    });
+                    idx = end_idx;
+                    continue;
                 }
             }
             idx = abs + marker.len();
@@ -1487,7 +1596,9 @@ fn extract_embedded_sql_from_java(src: &str) -> Vec<EmbeddedSqlSnippet> {
 fn read_java_string_literal(src: &str, first_quote_idx: usize) -> Option<(String, usize)> {
     // first_quote_idx points to the opening '"'
     let bytes = src.as_bytes();
-    if *bytes.get(first_quote_idx)? != b'"' { return None; }
+    if *bytes.get(first_quote_idx)? != b'"' {
+        return None;
+    }
     let mut i = first_quote_idx + 1;
     let mut out = String::new();
     while i < bytes.len() {
@@ -1498,7 +1609,9 @@ fn read_java_string_literal(src: &str, first_quote_idx: usize) -> Option<(String
                 out.push(src[i + 1..=i + 1].chars().next().unwrap_or('\u{0}'));
                 i += 2;
                 continue;
-            } else { break; }
+            } else {
+                break;
+            }
         }
         if b == b'"' {
             // closing quote
@@ -1522,7 +1635,11 @@ fn extract_embedded_sql_from_xml(src: &str) -> Vec<EmbeddedSqlSnippet> {
                 let inner = &src[gt + 1..end];
                 let start_line = 1 + byte_offset_to_line(src, abs_start);
                 let sql = normalize_sql(inner);
-                out.push(EmbeddedSqlSnippet { sql, start_line, context: Some("<select>".to_string()) });
+                out.push(EmbeddedSqlSnippet {
+                    sql,
+                    start_line,
+                    context: Some("<select>".to_string()),
+                });
                 idx = end + "</select>".len();
                 continue;
             }
@@ -1535,8 +1652,12 @@ fn extract_embedded_sql_from_xml(src: &str) -> Vec<EmbeddedSqlSnippet> {
 fn byte_offset_to_line(source: &str, byte_idx: usize) -> usize {
     let mut count = 0usize;
     for (i, b) in source.as_bytes().iter().enumerate() {
-        if i >= byte_idx { break; }
-        if *b == b'\n' { count += 1; }
+        if i >= byte_idx {
+            break;
+        }
+        if *b == b'\n' {
+            count += 1;
+        }
     }
     count
 }
@@ -1555,12 +1676,20 @@ fn unescape_java_string(input: &str) -> String {
                 Some('\'') => out.push('\''),
                 Some('u') => {
                     let mut hex = String::new();
-                    for _ in 0..4 { if let Some(h) = chars.next() { hex.push(h); } }
+                    for _ in 0..4 {
+                        if let Some(h) = chars.next() {
+                            hex.push(h);
+                        }
+                    }
                     if let Ok(cp) = u16::from_str_radix(&hex, 16) {
-                        if let Some(ch) = std::char::from_u32(cp as u32) { out.push(ch); }
+                        if let Some(ch) = std::char::from_u32(cp as u32) {
+                            out.push(ch);
+                        }
                     }
                 }
-                Some(other) => { out.push(other); }
+                Some(other) => {
+                    out.push(other);
+                }
                 None => {}
             }
         } else {
@@ -1578,14 +1707,21 @@ fn normalize_sql(raw: &str) -> String {
     let mut prev_ws = false;
     for ch in replaced.chars() {
         if ch.is_whitespace() {
-            if !prev_ws { out.push(' '); prev_ws = true; }
+            if !prev_ws {
+                out.push(' ');
+                prev_ws = true;
+            }
         } else {
             out.push(ch);
             prev_ws = false;
         }
     }
     let s = out.trim().to_string();
-    if s.ends_with(';') { s } else { format!("{};", s) }
+    if s.ends_with(';') {
+        s
+    } else {
+        format!("{};", s)
+    }
 }
 
 fn replace_placeholders(input: &str, start_pat: &str, end_ch: char, replacement: &str) -> String {
@@ -1599,7 +1735,9 @@ fn replace_placeholders(input: &str, start_pat: &str, end_ch: char, replacement:
             while i < bytes.len() {
                 let ch = input[i..=i].chars().next().unwrap_or('\u{0}');
                 i += ch.len_utf8();
-                if ch == end_ch { break; }
+                if ch == end_ch {
+                    break;
+                }
             }
             out.push_str(replacement);
         } else {
@@ -1610,7 +1748,6 @@ fn replace_placeholders(input: &str, start_pat: &str, end_ch: char, replacement:
     }
     out
 }
-
 
 /// Detect programming language from filename
 fn detect_language_from_filename(filename: &str) -> String {
@@ -1701,6 +1838,11 @@ var square = number * number;
             .iter()
             .filter(|f| f.rule_id == "multiplication_rule")
             .collect();
-        assert_eq!(matches.len(), 1, "should return exactly 1 match, got {}", matches.len());
+        assert_eq!(
+            matches.len(),
+            1,
+            "should return exactly 1 match, got {}",
+            matches.len()
+        );
     }
 }

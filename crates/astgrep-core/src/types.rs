@@ -57,7 +57,11 @@ impl Language {
 
     /// Detect language from file extension
     pub fn from_extension(ext: &str) -> Option<Self> {
-        let ext = if ext.starts_with('.') { ext } else { &format!(".{}", ext) };
+        let ext = if ext.starts_with('.') {
+            ext
+        } else {
+            &format!(".{}", ext)
+        };
 
         for &lang in crate::constants::languages::ALL_LANGUAGES {
             if lang.extensions().contains(&ext) {
@@ -82,7 +86,7 @@ impl Severity {
     pub fn as_str(&self) -> &'static str {
         match self {
             Severity::Info => "INFO",
-            Severity::Warning => "WARNING", 
+            Severity::Warning => "WARNING",
             Severity::Error => "ERROR",
             Severity::Critical => "CRITICAL",
         }
@@ -205,11 +209,14 @@ pub struct AnalysisConfig {
 
 impl Default for AnalysisConfig {
     fn default() -> Self {
-        use crate::constants::{paths, languages};
+        use crate::constants::{languages, paths};
 
         Self {
             target_paths: vec![PathBuf::from(".")],
-            exclude_patterns: paths::DEFAULT_EXCLUDE_PATTERNS.iter().map(|s| s.to_string()).collect(),
+            exclude_patterns: paths::DEFAULT_EXCLUDE_PATTERNS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             languages: languages::DEFAULT_LANGUAGES.to_vec(),
             rule_files: vec![],
             output_format: OutputFormat::Json,
@@ -260,7 +267,10 @@ mod tests {
     #[test]
     fn test_language_extensions() {
         assert_eq!(Language::Java.extensions(), &[".java"]);
-        assert_eq!(Language::JavaScript.extensions(), &[".js", ".jsx", ".ts", ".tsx"]);
+        assert_eq!(
+            Language::JavaScript.extensions(),
+            &[".js", ".jsx", ".ts", ".tsx"]
+        );
         assert_eq!(Language::Python.extensions(), &[".py", ".pyw"]);
         assert_eq!(Language::Sql.extensions(), &[".sql", ".ddl", ".dml"]);
         assert_eq!(Language::Bash.extensions(), &[".sh", ".bash", ".zsh"]);
@@ -348,8 +358,14 @@ mod tests {
         .with_metadata("cwe".to_string(), "CWE-89".to_string())
         .with_fix("Use prepared statements".to_string());
 
-        assert_eq!(finding.metadata.get("cwe"), Some(&serde_yaml::Value::String("CWE-89".to_string())));
-        assert_eq!(finding.fix_suggestion, Some("Use prepared statements".to_string()));
+        assert_eq!(
+            finding.metadata.get("cwe"),
+            Some(&serde_yaml::Value::String("CWE-89".to_string()))
+        );
+        assert_eq!(
+            finding.fix_suggestion,
+            Some("Use prepared statements".to_string())
+        );
     }
 
     #[test]

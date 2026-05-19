@@ -2,21 +2,21 @@
 //!
 //! This crate provides pattern matching functionality for rules.
 
-pub mod matcher;
-pub mod parser;
-pub mod metavar;
-pub mod conditions;
 pub mod advanced_matcher;
+pub mod conditions;
+pub mod matcher;
+pub mod metavar;
+pub mod parser;
 pub mod precise_matcher;
 pub mod script_classifier;
 
-pub use matcher::*;
-pub use parser::*;
 pub use advanced_matcher::*;
+pub use conditions::{ComparisonOp, ConditionEvaluator, ConditionType};
+pub use matcher::*;
+pub use metavar::{MetavarBinding, MetavarConstraint, MetavarManager};
+pub use parser::*;
 pub use precise_matcher::*;
 pub use script_classifier::*;
-pub use metavar::{MetavarBinding, MetavarConstraint, MetavarManager};
-pub use conditions::{ConditionEvaluator, ConditionType, ComparisonOp};
 
 use astgrep_core::{AstNode, Result};
 use std::collections::HashMap;
@@ -71,7 +71,12 @@ impl PatternMatcher {
     }
 
     /// Internal pattern matching logic
-    fn match_pattern(&mut self, pattern: &ParsedPattern, node: &dyn AstNode, depth: usize) -> Result<bool> {
+    fn match_pattern(
+        &mut self,
+        pattern: &ParsedPattern,
+        node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
         // Check depth limit
         if let Some(max_depth) = self.max_depth {
             if depth >= max_depth {
@@ -82,7 +87,9 @@ impl PatternMatcher {
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
-            ParsedPattern::EllipsisMetavariable(metavar) => self.match_ellipsis_metavariable(metavar, node),
+            ParsedPattern::EllipsisMetavariable(metavar) => {
+                self.match_ellipsis_metavariable(metavar, node)
+            }
             ParsedPattern::NodeType(node_type) => self.match_node_type(node_type, node),
             ParsedPattern::Sequence(patterns) => self.match_sequence(patterns, node, depth),
             ParsedPattern::Alternative(patterns) => self.match_alternative(patterns, node, depth),
@@ -111,7 +118,8 @@ impl PatternMatcher {
                 Ok(existing_binding == text)
             } else {
                 // Bind the metavariable
-                self.metavar_bindings.insert(metavar.to_string(), text.to_string());
+                self.metavar_bindings
+                    .insert(metavar.to_string(), text.to_string());
                 Ok(true)
             }
         } else {
@@ -129,12 +137,14 @@ impl PatternMatcher {
                 Ok(existing_binding == text)
             } else {
                 // Bind the metavariable
-                self.metavar_bindings.insert(metavar.to_string(), text.to_string());
+                self.metavar_bindings
+                    .insert(metavar.to_string(), text.to_string());
                 Ok(true)
             }
         } else {
             // Ellipsis can match empty content
-            self.metavar_bindings.insert(metavar.to_string(), "".to_string());
+            self.metavar_bindings
+                .insert(metavar.to_string(), "".to_string());
             Ok(true)
         }
     }
@@ -145,7 +155,12 @@ impl PatternMatcher {
     }
 
     /// Match sequence of patterns
-    fn match_sequence(&mut self, patterns: &[ParsedPattern], node: &dyn AstNode, depth: usize) -> Result<bool> {
+    fn match_sequence(
+        &mut self,
+        patterns: &[ParsedPattern],
+        node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
         if patterns.is_empty() {
             return Ok(true);
         }
@@ -186,7 +201,12 @@ impl PatternMatcher {
     }
 
     /// Match alternative patterns (OR)
-    fn match_alternative(&mut self, patterns: &[ParsedPattern], node: &dyn AstNode, depth: usize) -> Result<bool> {
+    fn match_alternative(
+        &mut self,
+        patterns: &[ParsedPattern],
+        node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
         for pattern in patterns {
             let temp_bindings = self.metavar_bindings.clone();
             if self.match_pattern(pattern, node, depth + 1)? {
@@ -281,11 +301,7 @@ mod tests {
         // Create a binary expression: a + b
         let left = AstBuilder::identifier("variable_a").with_text("variable_a".to_string());
         let right = AstBuilder::identifier("variable_b").with_text("variable_b".to_string());
-        let expr = AstBuilder::binary_expression(
-            astgrep_ast::BinaryOperator::Add,
-            left,
-            right,
-        );
+        let expr = AstBuilder::binary_expression(astgrep_ast::BinaryOperator::Add, left, right);
 
         // This should not match because the variables are different
         let result = matcher.matches("$VAR + $VAR", &expr).unwrap();

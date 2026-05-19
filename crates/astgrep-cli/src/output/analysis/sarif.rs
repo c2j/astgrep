@@ -1,7 +1,7 @@
 //! SARIF (Static Analysis Results Interchange Format) output formatter
 
-use crate::output::analysis::{AnalysisStatistics, Finding, OutputFormatter};
 use crate::output::analysis::Severity;
+use crate::output::analysis::{AnalysisStatistics, Finding, OutputFormatter};
 use anyhow::Result;
 use serde_json::json;
 use std::time::Duration;

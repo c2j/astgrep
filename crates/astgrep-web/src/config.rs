@@ -1,57 +1,57 @@
 //! Web service configuration
 
+use astgrep_core::constants::{defaults, durations};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
-use astgrep_core::constants::{defaults, durations};
 
 /// Web service configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebConfig {
     /// Server bind address
     pub bind_address: SocketAddr,
-    
+
     /// Maximum request body size in bytes
     pub max_upload_size: usize,
-    
+
     /// Request timeout duration
     pub request_timeout: Duration,
-    
+
     /// Maximum number of concurrent analysis jobs
     pub max_concurrent_jobs: usize,
-    
+
     /// Job cleanup interval
     pub job_cleanup_interval: Duration,
-    
+
     /// Job retention duration
     pub job_retention_duration: Duration,
-    
+
     /// Rules directory
     pub rules_directory: PathBuf,
-    
+
     /// Temporary files directory
     pub temp_directory: PathBuf,
-    
+
     /// Enable authentication
     pub enable_auth: bool,
-    
+
     /// JWT secret key (for authentication)
     pub jwt_secret: Option<String>,
-    
+
     /// API rate limiting
     pub rate_limit: RateLimitConfig,
-    
+
     /// CORS configuration
     pub cors: CorsConfig,
-    
+
     /// Logging configuration
     pub logging: LoggingConfig,
-    
+
     /// Database configuration (optional)
     #[cfg(feature = "database")]
     pub database: Option<DatabaseConfig>,
-    
+
     /// Metrics configuration
     #[cfg(feature = "metrics")]
     pub metrics: Option<MetricsConfig>,
@@ -62,10 +62,10 @@ pub struct WebConfig {
 pub struct RateLimitConfig {
     /// Enable rate limiting
     pub enabled: bool,
-    
+
     /// Requests per minute per IP
     pub requests_per_minute: u32,
-    
+
     /// Burst size
     pub burst_size: u32,
 }
@@ -75,13 +75,13 @@ pub struct RateLimitConfig {
 pub struct CorsConfig {
     /// Allowed origins
     pub allowed_origins: Vec<String>,
-    
+
     /// Allowed methods
     pub allowed_methods: Vec<String>,
-    
+
     /// Allowed headers
     pub allowed_headers: Vec<String>,
-    
+
     /// Max age for preflight requests
     pub max_age: Duration,
 }
@@ -91,13 +91,13 @@ pub struct CorsConfig {
 pub struct LoggingConfig {
     /// Log level
     pub level: String,
-    
+
     /// Enable request logging
     pub log_requests: bool,
-    
+
     /// Enable response logging
     pub log_responses: bool,
-    
+
     /// Log file path (optional)
     pub log_file: Option<PathBuf>,
 }
@@ -108,13 +108,13 @@ pub struct LoggingConfig {
 pub struct DatabaseConfig {
     /// Database URL
     pub url: String,
-    
+
     /// Maximum number of connections
     pub max_connections: u32,
-    
+
     /// Connection timeout
     pub connect_timeout: Duration,
-    
+
     /// Enable migrations
     pub auto_migrate: bool,
 }
@@ -125,10 +125,10 @@ pub struct DatabaseConfig {
 pub struct MetricsConfig {
     /// Enable metrics collection
     pub enabled: bool,
-    
+
     /// Metrics endpoint path
     pub endpoint: String,
-    
+
     /// Prometheus metrics port
     pub prometheus_port: Option<u16>,
 }
@@ -170,9 +170,18 @@ impl Default for RateLimitConfig {
 impl Default for CorsConfig {
     fn default() -> Self {
         Self {
-            allowed_origins: defaults::cors::ALLOWED_ORIGINS.iter().map(|s| s.to_string()).collect(),
-            allowed_methods: defaults::cors::ALLOWED_METHODS.iter().map(|s| s.to_string()).collect(),
-            allowed_headers: defaults::cors::ALLOWED_HEADERS.iter().map(|s| s.to_string()).collect(),
+            allowed_origins: defaults::cors::ALLOWED_ORIGINS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            allowed_methods: defaults::cors::ALLOWED_METHODS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            allowed_headers: defaults::cors::ALLOWED_HEADERS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             max_age: durations::cors_max_age(),
         }
     }
@@ -196,24 +205,26 @@ impl WebConfig {
         let config: Self = toml::from_str(&content)?;
         Ok(config)
     }
-    
+
     /// Save configuration to file
     pub fn to_file(&self, path: &std::path::Path) -> anyhow::Result<()> {
         let content = toml::to_string_pretty(self)?;
         std::fs::write(path, content)?;
         Ok(())
     }
-    
+
     /// Validate configuration
     pub fn validate(&self) -> anyhow::Result<()> {
         if self.max_upload_size == 0 {
             return Err(anyhow::anyhow!("max_upload_size must be greater than 0"));
         }
-        
+
         if self.max_concurrent_jobs == 0 {
-            return Err(anyhow::anyhow!("max_concurrent_jobs must be greater than 0"));
+            return Err(anyhow::anyhow!(
+                "max_concurrent_jobs must be greater than 0"
+            ));
         }
-        
+
         if !self.rules_directory.exists() {
             // Default handling: try to create the rules directory instead of erroring
             match std::fs::create_dir_all(&self.rules_directory) {
@@ -234,7 +245,9 @@ impl WebConfig {
         }
 
         if self.enable_auth && self.jwt_secret.is_none() {
-            return Err(anyhow::anyhow!("jwt_secret is required when authentication is enabled"));
+            return Err(anyhow::anyhow!(
+                "jwt_secret is required when authentication is enabled"
+            ));
         }
 
         Ok(())

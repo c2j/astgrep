@@ -1,10 +1,10 @@
 //! File collection and filtering operations
 
+use super::types::glob_match;
+use crate::EnhancedAnalysisConfig;
 use anyhow::Result;
 use std::path::PathBuf;
 use tracing::warn;
-use crate::EnhancedAnalysisConfig;
-use super::types::glob_match;
 
 /// Collect target files for analysis
 pub async fn collect_target_files(config: &EnhancedAnalysisConfig) -> Result<Vec<PathBuf>> {
@@ -49,9 +49,10 @@ fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool 
 
     // Check include patterns
     if !config.include_patterns.is_empty() {
-        let included = config.include_patterns.iter().any(|pattern| {
-            glob_match(pattern, &path_str)
-        });
+        let included = config
+            .include_patterns
+            .iter()
+            .any(|pattern| glob_match(pattern, &path_str));
         if !included {
             return false;
         }
@@ -67,14 +68,21 @@ fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool 
     // Check if file extension matches supported languages (including extra preprocess source languages)
     if let Some(extension) = path.extension() {
         let ext_str = extension.to_string_lossy().to_lowercase();
-        config.languages.iter().any(|lang| {
-            match lang {
-                astgrep_core::Language::Java => ext_str == "java",
-                astgrep_core::Language::JavaScript => ext_str == "js" || ext_str == "jsx" || ext_str == "ts" || ext_str == "tsx",
-                astgrep_core::Language::Python => ext_str == "py",
-                astgrep_core::Language::Sql => ext_str == "sql",
-                astgrep_core::Language::Bash => ext_str == "sh" || ext_str == "bash",
-                astgrep_core::Language::Xml => ext_str == "xml" || ext_str == "xsd" || ext_str == "xsl" || ext_str == "xslt" || ext_str == "svg" || ext_str == "pom",
+        config.languages.iter().any(|lang| match lang {
+            astgrep_core::Language::Java => ext_str == "java",
+            astgrep_core::Language::JavaScript => {
+                ext_str == "js" || ext_str == "jsx" || ext_str == "ts" || ext_str == "tsx"
+            }
+            astgrep_core::Language::Python => ext_str == "py",
+            astgrep_core::Language::Sql => ext_str == "sql",
+            astgrep_core::Language::Bash => ext_str == "sh" || ext_str == "bash",
+            astgrep_core::Language::Xml => {
+                ext_str == "xml"
+                    || ext_str == "xsd"
+                    || ext_str == "xsl"
+                    || ext_str == "xslt"
+                    || ext_str == "svg"
+                    || ext_str == "pom"
             }
         })
     } else {

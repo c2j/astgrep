@@ -1,9 +1,13 @@
 //! Advanced pattern matcher
-//! 
+//!
 //! This module provides the advanced pattern matching functionality with full support
 //! for metavariables, conditions, and complex patterns.
 
-use crate::{conditions::{ConditionEvaluator, ConditionType}, metavar::*, PatternParser, ParsedPattern};
+use crate::{
+    conditions::{ConditionEvaluator, ConditionType},
+    metavar::*,
+    ParsedPattern, PatternParser,
+};
 use astgrep_core::{AstNode, Result};
 use std::collections::HashMap;
 
@@ -64,18 +68,19 @@ impl AdvancedPatternMatcher {
     where
         F: Fn(&HashMap<String, String>, &dyn AstNode) -> bool + Send + Sync + 'static,
     {
-        self.condition_evaluator.add_custom_evaluator(name, evaluator);
+        self.condition_evaluator
+            .add_custom_evaluator(name, evaluator);
     }
 
     /// Match a pattern against an AST node
     pub fn matches(&mut self, pattern: &str, node: &dyn AstNode) -> Result<bool> {
         self.reset();
         let parsed_pattern = self.parser.parse(pattern)?;
-        
+
         if self.debug_mode {
             eprintln!("Parsed pattern: {}", parsed_pattern);
         }
-        
+
         self.match_pattern(&parsed_pattern, node, 0)
     }
 
@@ -87,7 +92,8 @@ impl AdvancedPatternMatcher {
         conditions: &[ConditionType],
     ) -> Result<bool> {
         if self.matches(pattern, node)? {
-            self.condition_evaluator.evaluate_all(conditions, node, &self.metavar_manager)
+            self.condition_evaluator
+                .evaluate_all(conditions, node, &self.metavar_manager)
         } else {
             Ok(false)
         }
@@ -123,7 +129,12 @@ impl AdvancedPatternMatcher {
     }
 
     /// Internal pattern matching logic
-    fn match_pattern(&mut self, pattern: &ParsedPattern, node: &dyn AstNode, depth: usize) -> Result<bool> {
+    fn match_pattern(
+        &mut self,
+        pattern: &ParsedPattern,
+        node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
         // Check depth limit
         if let Some(max_depth) = self.max_depth {
             if depth > max_depth {
@@ -132,13 +143,19 @@ impl AdvancedPatternMatcher {
         }
 
         if self.debug_mode {
-            eprintln!("Matching pattern {:?} against node type: {}", pattern, node.node_type());
+            eprintln!(
+                "Matching pattern {:?} against node type: {}",
+                pattern,
+                node.node_type()
+            );
         }
 
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
-            ParsedPattern::EllipsisMetavariable(metavar) => self.match_ellipsis_metavariable(metavar, node),
+            ParsedPattern::EllipsisMetavariable(metavar) => {
+                self.match_ellipsis_metavariable(metavar, node)
+            }
             ParsedPattern::NodeType(node_type) => self.match_node_type(node_type, node),
             ParsedPattern::Sequence(patterns) => self.match_sequence(patterns, node, depth),
             ParsedPattern::Alternative(patterns) => self.match_alternative(patterns, node, depth),
@@ -162,7 +179,8 @@ impl AdvancedPatternMatcher {
     /// Match metavariable
     fn match_metavariable(&mut self, metavar: &str, node: &dyn AstNode) -> Result<bool> {
         if let Some(text) = node.text() {
-            self.metavar_manager.bind(metavar.to_string(), text.to_string(), node)
+            self.metavar_manager
+                .bind(metavar.to_string(), text.to_string(), node)
         } else {
             Ok(false)
         }
@@ -173,10 +191,12 @@ impl AdvancedPatternMatcher {
         // For now, treat ellipsis metavariables like regular metavariables
         // In a full implementation, this would handle variable-length matching
         if let Some(text) = node.text() {
-            self.metavar_manager.bind(metavar.to_string(), text.to_string(), node)
+            self.metavar_manager
+                .bind(metavar.to_string(), text.to_string(), node)
         } else {
             // Ellipsis can match empty content
-            self.metavar_manager.bind(metavar.to_string(), "".to_string(), node)
+            self.metavar_manager
+                .bind(metavar.to_string(), "".to_string(), node)
         }
     }
 
@@ -186,7 +206,12 @@ impl AdvancedPatternMatcher {
     }
 
     /// Match sequence of patterns
-    fn match_sequence(&mut self, patterns: &[ParsedPattern], node: &dyn AstNode, depth: usize) -> Result<bool> {
+    fn match_sequence(
+        &mut self,
+        patterns: &[ParsedPattern],
+        node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
         if patterns.is_empty() {
             return Ok(true);
         }
@@ -226,7 +251,12 @@ impl AdvancedPatternMatcher {
     }
 
     /// Match alternative patterns (OR)
-    fn match_alternative(&mut self, patterns: &[ParsedPattern], node: &dyn AstNode, depth: usize) -> Result<bool> {
+    fn match_alternative(
+        &mut self,
+        patterns: &[ParsedPattern],
+        node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
         for pattern in patterns {
             let snapshot = self.metavar_manager.snapshot();
             if self.match_pattern(pattern, node, depth + 1)? {
@@ -298,7 +328,13 @@ impl AdvancedPatternMatcher {
         // Recursively check children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                self.find_matches_with_conditions_recursive(pattern, child, conditions, matches, depth + 1)?;
+                self.find_matches_with_conditions_recursive(
+                    pattern,
+                    child,
+                    conditions,
+                    matches,
+                    depth + 1,
+                )?;
             }
         }
 
@@ -428,30 +464,32 @@ mod tests {
             crate::conditions::utils::metavar_regex("VAR", r"test_.*"),
         ];
 
-        let result = matcher.matches_with_conditions("$VAR", &node, &conditions).unwrap();
+        let result = matcher
+            .matches_with_conditions("$VAR", &node, &conditions)
+            .unwrap();
         assert!(result);
 
-        let failing_conditions = vec![
-            crate::conditions::utils::node_type("literal"),
-        ];
+        let failing_conditions = vec![crate::conditions::utils::node_type("literal")];
 
-        let result = matcher.matches_with_conditions("$VAR", &node, &failing_conditions).unwrap();
+        let result = matcher
+            .matches_with_conditions("$VAR", &node, &failing_conditions)
+            .unwrap();
         assert!(!result);
     }
 
     #[test]
     fn test_advanced_matcher_find_matches() {
         let mut matcher = AdvancedPatternMatcher::new();
-        
+
         let root = AstBuilder::program(vec![
             AstBuilder::expression_statement(
-                AstBuilder::identifier("test1").with_text("test1".to_string())
+                AstBuilder::identifier("test1").with_text("test1".to_string()),
             ),
             AstBuilder::expression_statement(
-                AstBuilder::identifier("test2").with_text("test2".to_string())
+                AstBuilder::identifier("test2").with_text("test2".to_string()),
             ),
             AstBuilder::expression_statement(
-                AstBuilder::identifier("other").with_text("other".to_string())
+                AstBuilder::identifier("other").with_text("other".to_string()),
             ),
         ]);
 
@@ -471,15 +509,13 @@ mod tests {
     #[test]
     fn test_advanced_matcher_max_depth() {
         let mut matcher = AdvancedPatternMatcher::new().with_max_depth(1);
-        
-        let deep_node = AstBuilder::program(vec![
-            AstBuilder::expression_statement(
-                AstBuilder::call_expression(
-                    AstBuilder::identifier("deep").with_text("deep".to_string()),
-                    vec![],
-                )
+
+        let deep_node = AstBuilder::program(vec![AstBuilder::expression_statement(
+            AstBuilder::call_expression(
+                AstBuilder::identifier("deep").with_text("deep".to_string()),
+                vec![],
             ),
-        ]);
+        )]);
 
         let matches = matcher.find_matches("deep", &deep_node).unwrap();
         // Should not find the deep node due to depth limit
@@ -493,7 +529,7 @@ mod tests {
         bindings.insert("VAR".to_string(), "test".to_string());
 
         let result = MatchResult::new(Box::new(node), bindings);
-        
+
         assert_eq!(result.node().node_type(), "identifier");
         assert!(result.has_binding("VAR"));
         assert_eq!(result.get_binding("VAR"), Some(&"test".to_string()));

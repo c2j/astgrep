@@ -1,17 +1,17 @@
 //! Test utilities and mock implementations for astgrep
-//! 
+//!
 //! This crate contains all mock implementations and test utilities that were
 //! previously scattered throughout the production code. This separation ensures
 //! that test code doesn't pollute production code.
 
 pub mod mock_ast;
-pub mod mock_parser;
 pub mod mock_data;
+pub mod mock_parser;
 
 // Re-export commonly used mock types
 pub use mock_ast::{MockAstNode, MockUniversalNode};
+pub use mock_data::{MockFindings, MockJobs, MockMetrics, MockMetricsData, MockRules};
 pub use mock_parser::MockParser;
-pub use mock_data::{MockRules, MockJobs, MockMetrics, MockFindings, MockMetricsData};
 
 /// Test utilities version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

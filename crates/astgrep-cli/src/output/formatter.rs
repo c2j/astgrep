@@ -1,12 +1,12 @@
 //! Output formatting for migration CLI commands
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::Write;
 use chrono::{DateTime, Utc};
 use console::{style, Color};
 use prettytable::{format::TableFormat, row, Table};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::Write;
 
 use crate::services::migration_orchestrator::MigrationOperation;
 
@@ -100,11 +100,16 @@ impl OutputFormatter {
     }
 
     /// Format validation report
-    pub fn format_validation_report(&self, validation_report: &crate::validation::ValidationReport) -> Result<String> {
+    pub fn format_validation_report(
+        &self,
+        validation_report: &crate::validation::ValidationReport,
+    ) -> Result<String> {
         match self.format {
             OutputFormat::Human => self.format_human_validation_report(validation_report),
             OutputFormat::Json => self.format_json_validation_report(validation_report),
-            OutputFormat::PrettyJson => self.format_pretty_json_validation_report(validation_report),
+            OutputFormat::PrettyJson => {
+                self.format_pretty_json_validation_report(validation_report)
+            }
             OutputFormat::Table => self.format_table_validation_report(validation_report),
             OutputFormat::Csv => self.format_csv_validation_report(validation_report),
             OutputFormat::Yaml => self.format_yaml_validation_report(validation_report),
@@ -173,10 +178,7 @@ impl OutputFormatter {
             summary.directories_created
         ));
 
-        output.push_str(&format!(
-            "Symlinks: {} created\n",
-            summary.symlinks_created
-        ));
+        output.push_str(&format!("Symlinks: {} created\n", summary.symlinks_created));
 
         output.push('\n');
 
@@ -261,7 +263,10 @@ impl OutputFormatter {
         Ok(output)
     }
 
-    fn format_human_validation_report(&self, report: &crate::validation::ValidationReport) -> Result<String> {
+    fn format_human_validation_report(
+        &self,
+        report: &crate::validation::ValidationReport,
+    ) -> Result<String> {
         let mut output = String::new();
 
         output.push_str(&format!(
@@ -270,10 +275,7 @@ impl OutputFormatter {
             "=".repeat(50)
         ));
 
-        output.push_str(&format!(
-            "Migration ID: {}\n",
-            report.migration_id
-        ));
+        output.push_str(&format!("Migration ID: {}\n", report.migration_id));
 
         output.push_str(&format!(
             "Status: {}\n",
@@ -301,9 +303,7 @@ impl OutputFormatter {
             for error in &report.errors {
                 output.push_str(&format!(
                     "  • {} [{}]: {}\n",
-                    error.error_type,
-                    error.severity,
-                    error.message
+                    error.error_type, error.severity, error.message
                 ));
             }
         }
@@ -314,8 +314,7 @@ impl OutputFormatter {
     // JSON format methods
 
     fn format_json_summary(&self, summary: &MigrationSummary) -> Result<String> {
-        serde_json::to_string(summary)
-            .with_context(|| "Failed to serialize summary to JSON")
+        serde_json::to_string(summary).with_context(|| "Failed to serialize summary to JSON")
     }
 
     fn format_pretty_json_summary(&self, summary: &MigrationSummary) -> Result<String> {
@@ -324,8 +323,7 @@ impl OutputFormatter {
     }
 
     fn format_json_operations(&self, operations: &[MigrationOperation]) -> Result<String> {
-        serde_json::to_string(operations)
-            .with_context(|| "Failed to serialize operations to JSON")
+        serde_json::to_string(operations).with_context(|| "Failed to serialize operations to JSON")
     }
 
     fn format_pretty_json_operations(&self, operations: &[MigrationOperation]) -> Result<String> {
@@ -338,17 +336,26 @@ impl OutputFormatter {
             .with_context(|| "Failed to serialize backup info to JSON")
     }
 
-    fn format_pretty_json_backup_info(&self, backup_info: &HashMap<String, String>) -> Result<String> {
+    fn format_pretty_json_backup_info(
+        &self,
+        backup_info: &HashMap<String, String>,
+    ) -> Result<String> {
         serde_json::to_string_pretty(backup_info)
             .with_context(|| "Failed to serialize backup info to pretty JSON")
     }
 
-    fn format_json_validation_report(&self, report: &crate::validation::ValidationReport) -> Result<String> {
+    fn format_json_validation_report(
+        &self,
+        report: &crate::validation::ValidationReport,
+    ) -> Result<String> {
         serde_json::to_string(report)
             .with_context(|| "Failed to serialize validation report to JSON")
     }
 
-    fn format_pretty_json_validation_report(&self, report: &crate::validation::ValidationReport) -> Result<String> {
+    fn format_pretty_json_validation_report(
+        &self,
+        report: &crate::validation::ValidationReport,
+    ) -> Result<String> {
         serde_json::to_string_pretty(report)
             .with_context(|| "Failed to serialize validation report to pretty JSON")
     }
@@ -363,17 +370,26 @@ impl OutputFormatter {
         table.add_empty_row();
         table.add_row(row!["Migration ID", &summary.migration_id]);
         table.add_row(row!["Status", format!("{:?}", summary.status)]);
-        table.add_row(row!["Started", summary.started_at.format("%Y-%m-%d %H:%M:%S")]);
+        table.add_row(row![
+            "Started",
+            summary.started_at.format("%Y-%m-%d %H:%M:%S")
+        ]);
 
         if let Some(completed) = summary.completed_at {
             table.add_row(row!["Completed", completed.format("%Y-%m-%d %H:%M:%S")]);
         }
 
-        table.add_row(row!["Total Operations", summary.total_operations.to_string()]);
+        table.add_row(row![
+            "Total Operations",
+            summary.total_operations.to_string()
+        ]);
         table.add_row(row!["Completed", summary.completed_operations.to_string()]);
         table.add_row(row!["Failed", summary.failed_operations.to_string()]);
         table.add_row(row!["Files Processed", summary.files_processed.to_string()]);
-        table.add_row(row!["Bytes Transferred", self.format_bytes(summary.bytes_transferred)]);
+        table.add_row(row![
+            "Bytes Transferred",
+            self.format_bytes(summary.bytes_transferred)
+        ]);
 
         Ok(table.to_string())
     }
@@ -382,7 +398,14 @@ impl OutputFormatter {
         let mut table = Table::new();
         table.set_format(TableFormat::new());
 
-        table.add_row(row!["#", "Operation", "Source", "Target", "Status", "Bytes"]);
+        table.add_row(row![
+            "#",
+            "Operation",
+            "Source",
+            "Target",
+            "Status",
+            "Bytes"
+        ]);
         table.add_empty_row();
 
         for (i, operation) in operations.iter().enumerate() {
@@ -413,7 +436,10 @@ impl OutputFormatter {
         Ok(table.to_string())
     }
 
-    fn format_table_validation_report(&self, report: &crate::validation::ValidationReport) -> Result<String> {
+    fn format_table_validation_report(
+        &self,
+        report: &crate::validation::ValidationReport,
+    ) -> Result<String> {
         let mut table = Table::new();
         table.set_format(TableFormat::new());
 
@@ -421,10 +447,22 @@ impl OutputFormatter {
         table.add_empty_row();
         table.add_row(row!["Migration ID", &report.migration_id]);
         table.add_row(row!["Status", format!("{:?}", report.overall_status)]);
-        table.add_row(row!["Total Operations", report.total_operations.to_string()]);
-        table.add_row(row!["Valid Operations", report.valid_operations.to_string()]);
-        table.add_row(row!["Failed Operations", report.failed_operations.to_string()]);
-        table.add_row(row!["Bytes Validated", self.format_bytes(report.summary_metrics.total_bytes_validated)]);
+        table.add_row(row![
+            "Total Operations",
+            report.total_operations.to_string()
+        ]);
+        table.add_row(row![
+            "Valid Operations",
+            report.valid_operations.to_string()
+        ]);
+        table.add_row(row![
+            "Failed Operations",
+            report.failed_operations.to_string()
+        ]);
+        table.add_row(row![
+            "Bytes Validated",
+            self.format_bytes(report.summary_metrics.total_bytes_validated)
+        ]);
 
         Ok(table.to_string())
     }
@@ -438,11 +476,16 @@ impl OutputFormatter {
         output.write_all(b"migration_id,status,started_at,completed_at,duration,total_operations,completed_operations,failed_operations,skipped_operations,bytes_transferred,files_processed\n")?;
 
         // Data row
-        writeln!(&mut output, "{},{},{},{},{},{},{},{},{},{},{}",
+        writeln!(
+            &mut output,
+            "{},{},{},{},{},{},{},{},{},{},{}",
             summary.migration_id,
             format!("{:?}", summary.status),
             summary.started_at.to_rfc3339(),
-            summary.completed_at.map(|d| d.to_rfc3339()).unwrap_or_default(),
+            summary
+                .completed_at
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_default(),
             summary.duration.as_deref().unwrap_or(""),
             summary.total_operations,
             summary.completed_operations,
@@ -463,7 +506,9 @@ impl OutputFormatter {
 
         // Data rows
         for operation in operations {
-            writeln!(&mut output, "{},{},{},{},{},{},{},{}",
+            writeln!(
+                &mut output,
+                "{},{},{},{},{},{},{},{}",
                 operation.id,
                 format!("{:?}", operation.operation_type),
                 operation.source_path.display(),
@@ -492,14 +537,19 @@ impl OutputFormatter {
         Ok(String::from_utf8(output)?)
     }
 
-    fn format_csv_validation_report(&self, report: &crate::validation::ValidationReport) -> Result<String> {
+    fn format_csv_validation_report(
+        &self,
+        report: &crate::validation::ValidationReport,
+    ) -> Result<String> {
         let mut output = Vec::new();
 
         // Header
         output.write_all(b"migration_id,overall_status,total_operations,valid_operations,failed_operations,skipped_operations,total_bytes_validated,total_files_validated\n")?;
 
         // Data row
-        writeln!(&mut output, "{},{},{},{},{},{},{},{}",
+        writeln!(
+            &mut output,
+            "{},{},{},{},{},{},{},{}",
             report.migration_id,
             format!("{:?}", report.overall_status),
             report.total_operations,
@@ -516,13 +566,11 @@ impl OutputFormatter {
     // YAML format methods
 
     fn format_yaml_summary(&self, summary: &MigrationSummary) -> Result<String> {
-        serde_yaml::to_string(summary)
-            .with_context(|| "Failed to serialize summary to YAML")
+        serde_yaml::to_string(summary).with_context(|| "Failed to serialize summary to YAML")
     }
 
     fn format_yaml_operations(&self, operations: &[MigrationOperation]) -> Result<String> {
-        serde_yaml::to_string(operations)
-            .with_context(|| "Failed to serialize operations to YAML")
+        serde_yaml::to_string(operations).with_context(|| "Failed to serialize operations to YAML")
     }
 
     fn format_yaml_backup_info(&self, backup_info: &HashMap<String, String>) -> Result<String> {
@@ -530,7 +578,10 @@ impl OutputFormatter {
             .with_context(|| "Failed to serialize backup info to YAML")
     }
 
-    fn format_yaml_validation_report(&self, report: &crate::validation::ValidationReport) -> Result<String> {
+    fn format_yaml_validation_report(
+        &self,
+        report: &crate::validation::ValidationReport,
+    ) -> Result<String> {
         serde_yaml::to_string(report)
             .with_context(|| "Failed to serialize validation report to YAML")
     }

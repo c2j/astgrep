@@ -1,7 +1,7 @@
 //! Settings panel component
 
-use egui;
 use crate::app::{AppSettings, Theme};
+use egui;
 
 /// Settings panel component
 pub struct SettingsPanel;
@@ -10,7 +10,7 @@ impl SettingsPanel {
     pub fn new() -> Self {
         Self
     }
-    
+
     pub fn show(&mut self, ctx: &egui::Context, settings: &mut AppSettings, show: &mut bool) {
         let mut close_requested = false;
 
@@ -55,69 +55,93 @@ impl SettingsPanel {
             *show = false;
         }
     }
-    
+
     fn show_general_settings(&self, ui: &mut egui::Ui, settings: &mut AppSettings) {
         ui.heading("General");
-        
+
         ui.horizontal(|ui| {
             ui.label("Default Language:");
             egui::ComboBox::from_id_source("default_language")
                 .selected_text(format!("{:?}", settings.selected_language))
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::Java, "Java");
-                    ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::JavaScript, "JavaScript");
-                    ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::Python, "Python");
-                    ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::C, "C");
-                    ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::CSharp, "C#");
-                    ui.selectable_value(&mut settings.selected_language, astgrep_core::Language::Php, "PHP");
+                    ui.selectable_value(
+                        &mut settings.selected_language,
+                        astgrep_core::Language::Java,
+                        "Java",
+                    );
+                    ui.selectable_value(
+                        &mut settings.selected_language,
+                        astgrep_core::Language::JavaScript,
+                        "JavaScript",
+                    );
+                    ui.selectable_value(
+                        &mut settings.selected_language,
+                        astgrep_core::Language::Python,
+                        "Python",
+                    );
+                    ui.selectable_value(
+                        &mut settings.selected_language,
+                        astgrep_core::Language::C,
+                        "C",
+                    );
+                    ui.selectable_value(
+                        &mut settings.selected_language,
+                        astgrep_core::Language::CSharp,
+                        "C#",
+                    );
+                    ui.selectable_value(
+                        &mut settings.selected_language,
+                        astgrep_core::Language::Php,
+                        "PHP",
+                    );
                 });
         });
-        
+
         ui.checkbox(&mut settings.auto_analyze, "Auto-analyze on code changes");
     }
-    
+
     fn show_editor_settings(&self, ui: &mut egui::Ui, settings: &mut AppSettings) {
         ui.heading("Editor");
-        
+
         ui.checkbox(&mut settings.show_line_numbers, "Show line numbers");
-        
+
         ui.horizontal(|ui| {
             ui.label("Font Size:");
             ui.add(egui::Slider::new(&mut settings.font_size, 8.0..=24.0).suffix("px"));
         });
-        
+
         // Additional editor settings could go here
         ui.label("Tab Size: 4 spaces (fixed)");
         ui.label("Word Wrap: Enabled (fixed)");
     }
-    
+
     fn show_analysis_settings(&self, ui: &mut egui::Ui, _settings: &mut AppSettings) {
         ui.heading("Analysis");
-        
+
         ui.label("Analysis Engine: astgrep (built-in)");
         ui.label("Timeout: 30 seconds (fixed)");
         ui.label("Max Memory: 1GB (fixed)");
-        
+
         // Future analysis settings could include:
         // - Custom rule directories
         // - Analysis timeout
         // - Memory limits
         // - Parallel processing settings
     }
-    
+
     fn show_appearance_settings(&self, ui: &mut egui::Ui, settings: &mut AppSettings) {
         ui.heading("Appearance");
-        
+
         ui.horizontal(|ui| {
             ui.label("Theme:");
             ui.radio_value(&mut settings.theme, Theme::Dark, "Dark");
             ui.radio_value(&mut settings.theme, Theme::Light, "Light");
         });
-        
+
         // Color scheme preview
         ui.group(|ui| {
             ui.label("Color Preview:");
-            
+
             match settings.theme {
                 Theme::Dark => {
                     ui.horizontal(|ui| {

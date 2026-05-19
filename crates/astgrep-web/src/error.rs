@@ -267,10 +267,22 @@ mod tests {
 
     #[test]
     fn test_error_status_codes() {
-        assert_eq!(WebError::bad_request("test").status_code(), StatusCode::BAD_REQUEST);
-        assert_eq!(WebError::unauthorized("test").status_code(), StatusCode::UNAUTHORIZED);
-        assert_eq!(WebError::not_found("test").status_code(), StatusCode::NOT_FOUND);
-        assert_eq!(WebError::internal_server_error("test").status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            WebError::bad_request("test").status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            WebError::unauthorized("test").status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            WebError::not_found("test").status_code(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            WebError::internal_server_error("test").status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]

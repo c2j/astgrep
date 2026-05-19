@@ -93,7 +93,7 @@ impl ConstantAnalyzer {
     /// Check if a constant is sensitive
     fn is_sensitive_constant(&self, name: &str, value: &ConstantValue) -> bool {
         let name_lower = name.to_lowercase();
-        
+
         // Check name patterns
         for pattern in &self.sensitive_patterns {
             if name_lower.contains(pattern) {
@@ -131,7 +131,10 @@ impl ConstantAnalyzer {
 
     /// Check if a constant is sensitive
     pub fn is_sensitive(&self, name: &str) -> bool {
-        self.constants.get(name).map(|info| info.is_sensitive).unwrap_or(false)
+        self.constants
+            .get(name)
+            .map(|info| info.is_sensitive)
+            .unwrap_or(false)
     }
 
     /// Register a function return constant
@@ -213,15 +216,13 @@ mod tests {
 
     #[test]
     fn test_constant_info_mark_mutable() {
-        let info = ConstantInfo::new(ConstantValue::Integer(42))
-            .mark_mutable();
+        let info = ConstantInfo::new(ConstantValue::Integer(42)).mark_mutable();
         assert!(info.is_mutable);
     }
 
     #[test]
     fn test_constant_info_mark_sensitive() {
-        let info = ConstantInfo::new(ConstantValue::String("secret".to_string()))
-            .mark_sensitive();
+        let info = ConstantInfo::new(ConstantValue::String("secret".to_string())).mark_sensitive();
         assert!(info.is_sensitive);
     }
 
@@ -236,37 +237,54 @@ mod tests {
     fn test_constant_analyzer_register() {
         let mut analyzer = ConstantAnalyzer::new();
         analyzer.register_constant("x".to_string(), ConstantValue::Integer(42));
-        
+
         assert!(analyzer.is_constant("x"));
-        assert_eq!(analyzer.get_constant_value("x"), Some(&ConstantValue::Integer(42)));
+        assert_eq!(
+            analyzer.get_constant_value("x"),
+            Some(&ConstantValue::Integer(42))
+        );
     }
 
     #[test]
     fn test_constant_analyzer_sensitive() {
         let mut analyzer = ConstantAnalyzer::new();
-        analyzer.register_constant("password".to_string(), ConstantValue::String("secret123".to_string()));
-        
+        analyzer.register_constant(
+            "password".to_string(),
+            ConstantValue::String("secret123".to_string()),
+        );
+
         assert!(analyzer.is_sensitive("password"));
     }
 
     #[test]
     fn test_constant_analyzer_fold() {
         let analyzer = ConstantAnalyzer::new();
-        
-        assert_eq!(analyzer.fold_constants("42"), Some(ConstantValue::Integer(42)));
-        assert_eq!(analyzer.fold_constants("\"hello\""), Some(ConstantValue::String("hello".to_string())));
-        assert_eq!(analyzer.fold_constants("true"), Some(ConstantValue::Boolean(true)));
+
+        assert_eq!(
+            analyzer.fold_constants("42"),
+            Some(ConstantValue::Integer(42))
+        );
+        assert_eq!(
+            analyzer.fold_constants("\"hello\""),
+            Some(ConstantValue::String("hello".to_string()))
+        );
+        assert_eq!(
+            analyzer.fold_constants("true"),
+            Some(ConstantValue::Boolean(true))
+        );
         assert_eq!(analyzer.fold_constants("null"), Some(ConstantValue::Null));
     }
 
     #[test]
     fn test_constant_analyzer_function_returns() {
         let mut analyzer = ConstantAnalyzer::new();
-        analyzer.register_function_return("get_password".to_string(), ConstantValue::String("secret".to_string()));
-        
+        analyzer.register_function_return(
+            "get_password".to_string(),
+            ConstantValue::String("secret".to_string()),
+        );
+
         let returns = analyzer.get_function_returns("get_password");
         assert!(returns.is_some());
         assert_eq!(returns.unwrap().len(), 1);
     }
 }
-

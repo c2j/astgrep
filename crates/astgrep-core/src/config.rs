@@ -38,10 +38,12 @@ impl PathHandler {
 
     /// Convert a path to be relative to the base directory
     pub fn make_relative(&self, path: &PathBuf) -> Result<PathBuf> {
-        pathdiff::diff_paths(path, &self.base_dir)
-            .ok_or_else(|| crate::error::AnalysisError::parse_error(
-                format!("Cannot make path relative to base directory: {:?}", path)
+        pathdiff::diff_paths(path, &self.base_dir).ok_or_else(|| {
+            crate::error::AnalysisError::parse_error(format!(
+                "Cannot make path relative to base directory: {:?}",
+                path
             ))
+        })
     }
 
     /// Join path components using the platform separator

@@ -8,9 +8,7 @@ pub mod utils;
 
 // Re-export key functions from submodules for convenience
 pub use self::{
-    core::{
-        apply_enhanced_pattern_matching, apply_metavariable_pattern,
-    },
+    core::{apply_enhanced_pattern_matching, apply_metavariable_pattern},
     not_patterns::apply_rule_with_not_inside,
     regex::apply_regex_pattern,
     taint::apply_simple_taint_analysis,

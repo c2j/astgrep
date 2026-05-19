@@ -7,17 +7,22 @@ use tracing::{info, warn};
 
 use crate::{
     backup::BackupManager,
-    output::{OutputFormatter, OutputFormat},
-    progress::{ProgressTracker, ProgressConfig},
-    services::{migration_orchestrator::{MigrationOperation, MigrationOrchestrator, OperationType, OperationStatus}, migration_state::MigrationState},
-    validation::{MigrationValidator, ValidationConfig},
+    output::{OutputFormat, OutputFormatter},
+    progress::{ProgressConfig, ProgressTracker},
+    services::{
+        migration_orchestrator::{
+            MigrationOperation, MigrationOrchestrator, OperationStatus, OperationType,
+        },
+        migration_state::MigrationState,
+    },
     utils::path_utils::PathHandler,
+    validation::{MigrationValidator, ValidationConfig},
 };
 
-use astgrep_core::models::test_asset::{TestAsset, AssetType};
-use astgrep_parser::script_discovery::{ScriptDiscovery, DiscoveryConfig};
-use astgrep_matcher::script_classifier::ScriptClassifier;
 use astgrep_core::models::test_asset::ScriptType;
+use astgrep_core::models::test_asset::{AssetType, TestAsset};
+use astgrep_matcher::script_classifier::ScriptClassifier;
+use astgrep_parser::script_discovery::{DiscoveryConfig, ScriptDiscovery};
 
 /// Configuration for script migration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,8 +184,10 @@ impl ScriptMigrator {
     /// Execute the complete script migration process
     pub async fn migrate_scripts(&mut self) -> Result<MigrationResult> {
         let start_time = std::time::Instant::now();
-        info!("Starting script migration from {:?} to {:?}",
-              self.config.source_directories, self.config.target_directory);
+        info!(
+            "Starting script migration from {:?} to {:?}",
+            self.config.source_directories, self.config.target_directory
+        );
 
         // Initialize migration state
         self.migration_state.start_migration();
@@ -194,7 +201,10 @@ impl ScriptMigrator {
 
         // Step 1: Discover scripts
         let discovered_scripts = self.discover_scripts().await?;
-        info!("Discovered {} scripts", discovered_scripts.total_scripts_found);
+        info!(
+            "Discovered {} scripts",
+            discovered_scripts.total_scripts_found
+        );
 
         if discovered_scripts.total_scripts_found == 0 {
             return Ok(MigrationResult {
@@ -219,23 +229,32 @@ impl ScriptMigrator {
 
         // Step 3: Create backup if enabled
         let backup_id = if self.config.create_backups {
-            let _assets: Vec<TestAsset> = script_mappings.iter().map(|mapping| {
-                TestAsset::new(
-                    format!("script-{}", uuid::Uuid::new_v4()),
-                    mapping.original_path.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    AssetType::Script,
-                    mapping.original_path.clone(),
-                    mapping.target_path.clone(),
-                )
-            }).collect();
+            let _assets: Vec<TestAsset> = script_mappings
+                .iter()
+                .map(|mapping| {
+                    TestAsset::new(
+                        format!("script-{}", uuid::Uuid::new_v4()),
+                        mapping
+                            .original_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown")
+                            .to_string(),
+                        AssetType::Script,
+                        mapping.original_path.clone(),
+                        mapping.target_path.clone(),
+                    )
+                })
+                .collect();
 
-            Some(self.backup_manager.create_backup(
-                &self.migration_state.migration_id,
-                &self.create_migration_operations(&script_mappings)?,
-            ).await?)
+            Some(
+                self.backup_manager
+                    .create_backup(
+                        &self.migration_state.migration_id,
+                        &self.create_migration_operations(&script_mappings)?,
+                    )
+                    .await?,
+            )
         } else {
             None
         };
@@ -245,26 +264,33 @@ impl ScriptMigrator {
 
         // Step 5: Execute migration
         let migration_operations = self.create_migration_operations(&script_mappings)?;
-        let completed_operations = self.migration_orchestrator
+        let completed_operations = self
+            .migration_orchestrator
             .execute_migration(migration_operations)
             .await?;
 
         // Step 6: Calculate results
-        let migration_result = self.calculate_migration_result(
-            &completed_operations,
-            directories_created,
-            backup_id,
-            start_time.elapsed(),
-        ).await?;
+        let migration_result = self
+            .calculate_migration_result(
+                &completed_operations,
+                directories_created,
+                backup_id,
+                start_time.elapsed(),
+            )
+            .await?;
 
         // Step 7: Validate migration if enabled
         let validation_passed = if self.config.validate_after_migration && !self.config.dry_run {
             info!("Validating migration results...");
-            let validation_report = self.migration_validator
+            let validation_report = self
+                .migration_validator
                 .validate_migration(&self.migration_state.migration_id, &completed_operations)
                 .await?;
 
-            Some(matches!(validation_report.overall_status, crate::validation::ValidationStatus::Passed))
+            Some(matches!(
+                validation_report.overall_status,
+                crate::validation::ValidationStatus::Passed
+            ))
         } else {
             None
         };
@@ -280,10 +306,10 @@ impl ScriptMigrator {
         // Step 9: Generate output report
         self.generate_migration_report(&final_result).await?;
 
-        info!("Script migration completed: {} scripts migrated, {} failed in {:?}",
-              final_result.scripts_migrated,
-              final_result.scripts_failed,
-              final_result.migration_time);
+        info!(
+            "Script migration completed: {} scripts migrated, {} failed in {:?}",
+            final_result.scripts_migrated, final_result.scripts_failed, final_result.migration_time
+        );
 
         Ok(final_result)
     }
@@ -312,11 +338,13 @@ impl ScriptMigrator {
                 AssetType::Script,
                 script.path.clone(),
                 PathBuf::new(), // Will be set by mapping
-            ).with_language(
-                script.language
+            )
+            .with_language(
+                script
+                    .language
                     .as_ref()
                     .map(|lang| format!("{:?}", lang))
-                    .unwrap_or_else(|| "Unknown".to_string())
+                    .unwrap_or_else(|| "Unknown".to_string()),
             );
 
             script_assets.push(asset);
@@ -340,13 +368,13 @@ impl ScriptMigrator {
                     confidence: classification.confidence,
                 });
             } else {
-                warn!("No classification result for script: {:?}", asset.current_path);
+                warn!(
+                    "No classification result for script: {:?}",
+                    asset.current_path
+                );
                 // Fallback to utility category
-                let target_path = self.determine_target_path(
-                    &asset.current_path,
-                    &ScriptType::Utility,
-                    &0.1,
-                )?;
+                let target_path =
+                    self.determine_target_path(&asset.current_path, &ScriptType::Utility, &0.1)?;
 
                 mappings.push(ScriptMapping {
                     original_path: asset.current_path.clone(),
@@ -409,7 +437,10 @@ impl ScriptMigrator {
     }
 
     /// Create migration operations from script mappings
-    fn create_migration_operations(&self, mappings: &[ScriptMapping]) -> Result<Vec<MigrationOperation>> {
+    fn create_migration_operations(
+        &self,
+        mappings: &[ScriptMapping],
+    ) -> Result<Vec<MigrationOperation>> {
         let mut operations = Vec::new();
 
         for (index, mapping) in mappings.iter().enumerate() {
@@ -456,14 +487,15 @@ impl ScriptMigrator {
                 OperationStatus::Failed => {
                     scripts_failed += 1;
                     if let Some(ref error) = operation.error_message {
-                        errors.push(format!("Failed to migrate {:?}: {}",
-                                            operation.source_path, error));
+                        errors.push(format!(
+                            "Failed to migrate {:?}: {}",
+                            operation.source_path, error
+                        ));
                     }
                 }
                 OperationStatus::Skipped => {
                     scripts_skipped += 1;
-                    warnings.push(format!("Skipped migration of {:?}",
-                                         operation.source_path));
+                    warnings.push(format!("Skipped migration of {:?}", operation.source_path));
                 }
                 _ => {}
             }
@@ -487,27 +519,29 @@ impl ScriptMigrator {
 
     /// Generate migration report
     async fn generate_migration_report(&self, result: &MigrationResult) -> Result<()> {
-        let output = self.output_formatter.format_migration_summary(&crate::output::formatter::MigrationSummary {
-            migration_id: result.migration_id.clone(),
-            status: if result.validation_passed.unwrap_or(true) {
-                crate::output::formatter::MigrationStatus::Completed
-            } else {
-                crate::output::formatter::MigrationStatus::Failed
+        let output = self.output_formatter.format_migration_summary(
+            &crate::output::formatter::MigrationSummary {
+                migration_id: result.migration_id.clone(),
+                status: if result.validation_passed.unwrap_or(true) {
+                    crate::output::formatter::MigrationStatus::Completed
+                } else {
+                    crate::output::formatter::MigrationStatus::Failed
+                },
+                started_at: chrono::Utc::now(),
+                completed_at: Some(chrono::Utc::now()),
+                duration: Some(format!("{:.2}s", result.migration_time.as_secs_f64())),
+                total_operations: result.total_scripts_found,
+                completed_operations: result.scripts_migrated,
+                failed_operations: result.scripts_failed,
+                skipped_operations: result.scripts_skipped,
+                bytes_transferred: result.total_bytes_migrated,
+                files_processed: result.scripts_migrated,
+                directories_created: result.directories_created,
+                symlinks_created: 0,
+                errors: result.errors.clone(),
+                warnings: result.warnings.clone(),
             },
-            started_at: chrono::Utc::now(),
-            completed_at: Some(chrono::Utc::now()),
-            duration: Some(format!("{:.2}s", result.migration_time.as_secs_f64())),
-            total_operations: result.total_scripts_found,
-            completed_operations: result.scripts_migrated,
-            failed_operations: result.scripts_failed,
-            skipped_operations: result.scripts_skipped,
-            bytes_transferred: result.total_bytes_migrated,
-            files_processed: result.scripts_migrated,
-            directories_created: result.directories_created,
-            symlinks_created: 0,
-            errors: result.errors.clone(),
-            warnings: result.warnings.clone(),
-        })?;
+        )?;
 
         // Output to stdout for now (could be extended to write to file)
         println!("{}", output);
@@ -528,8 +562,8 @@ impl ScriptMigrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_script_migrator_creation() {
@@ -544,13 +578,14 @@ mod tests {
         let migrator = ScriptMigrator::with_config(config).unwrap();
 
         let original_path = PathBuf::from("/tests/validate.sh");
-        let target_path = migrator.determine_target_path(
-            &original_path,
-            &ScriptType::Validator,
-            &0.8,
-        ).unwrap();
+        let target_path = migrator
+            .determine_target_path(&original_path, &ScriptType::Validator, &0.8)
+            .unwrap();
 
-        assert_eq!(target_path, PathBuf::from("newtest/scripts/validation/validate.sh"));
+        assert_eq!(
+            target_path,
+            PathBuf::from("newtest/scripts/validation/validate.sh")
+        );
     }
 
     #[test]

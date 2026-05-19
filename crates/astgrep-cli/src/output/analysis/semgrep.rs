@@ -1,7 +1,7 @@
 //! Semgrep-compatible output formatter
 
-use crate::output::analysis::{get_source_line, AnalysisStatistics, Finding, OutputFormatter};
 use crate::output::analysis::Severity;
+use crate::output::analysis::{get_source_line, AnalysisStatistics, Finding, OutputFormatter};
 use anyhow::Result;
 use std::fmt::Write;
 use std::time::Duration;
@@ -32,11 +32,7 @@ impl OutputFormatter for SemgrepFormatter {
         )?;
         writeln!(&mut output)?;
         writeln!(&mut output, "  CODE RULES")?;
-        writeln!(
-            &mut output,
-            "  Scanning {} file(s).",
-            stats.files_analyzed
-        )?;
+        writeln!(&mut output, "  Scanning {} file(s).", stats.files_analyzed)?;
         writeln!(&mut output)?;
         writeln!(&mut output, "  PROGRESS")?;
         writeln!(
@@ -88,11 +84,7 @@ impl OutputFormatter for SemgrepFormatter {
                     // Get the first finding to extract rule info
                     let first_finding = &rule_findings[0];
                     writeln!(&mut output, "   ❯❯❱ {}", rule_id)?;
-                    writeln!(
-                        &mut output,
-                        "          {}",
-                        first_finding.message.trim()
-                    )?;
+                    writeln!(&mut output, "          {}", first_finding.message.trim())?;
                     writeln!(&mut output)?;
 
                     // Display all findings for this rule
@@ -101,17 +93,12 @@ impl OutputFormatter for SemgrepFormatter {
                             &mut output,
                             "           {}┆ {}",
                             finding.location.start_line,
-                            get_source_line(
-                                &finding.location.file,
-                                finding.location.start_line
-                            )
-                            .unwrap_or_else(|| "<source unavailable>".to_string())
+                            get_source_line(&finding.location.file, finding.location.start_line)
+                                .unwrap_or_else(|| "<source unavailable>".to_string())
                         )?;
 
                         // Add separator between findings (except for the last one)
-                        if rule_findings.len() > 1
-                            && i < rule_findings.len() - 1
-                        {
+                        if rule_findings.len() > 1 && i < rule_findings.len() - 1 {
                             writeln!(
                                 &mut output,
                                 "            ⋮┆----------------------------------------"
@@ -138,11 +125,7 @@ impl OutputFormatter for SemgrepFormatter {
                 .count()
         )?;
         writeln!(&mut output, " • Rules run: {}", stats.rules_executed)?;
-        writeln!(
-            &mut output,
-            " • Targets scanned: {}",
-            stats.files_analyzed
-        )?;
+        writeln!(&mut output, " • Targets scanned: {}", stats.files_analyzed)?;
         writeln!(&mut output, " • Parsed lines: ~100.0%")?;
         writeln!(&mut output, " • No ignore information available")?;
         writeln!(

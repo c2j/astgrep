@@ -4,11 +4,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 
 // Import our migration modules
-use crate::commands::migrate_scripts::{ScriptMigrator, ScriptMigrationConfig};
-use crate::dependencies::{ScriptDependencyResolver, DependencyResolutionConfig};
+use crate::commands::migrate_scripts::{ScriptMigrationConfig, ScriptMigrator};
+use crate::dependencies::{DependencyResolutionConfig, ScriptDependencyResolver};
 
 /// Migration subcommand for test directory reorganization
 #[derive(Parser)]
@@ -218,24 +218,43 @@ pub async fn run(command: MigrateCommand) -> Result<()> {
     info!("Starting migration operation");
 
     match command.action {
-        MigrationAction::Analyze { output, detailed } => {
-            handle_analyze(output, detailed).await
+        MigrationAction::Analyze { output, detailed } => handle_analyze(output, detailed).await,
+        MigrationAction::Validate {
+            asset_ids,
+            level,
+            check_dependencies,
+            check_disk_space,
+        } => handle_validate(asset_ids, level, check_dependencies, check_disk_space).await,
+        MigrationAction::Migrate {
+            asset_ids,
+            category,
+            language,
+        } => {
+            handle_migrate(
+                asset_ids,
+                category,
+                language,
+                command.dry_run,
+                command.backup,
+                command.threads,
+                command.progress,
+                command.format == "json",
+            )
+            .await
         }
-        MigrationAction::Validate { asset_ids, level, check_dependencies, check_disk_space } => {
-            handle_validate(asset_ids, level, check_dependencies, check_disk_space).await
-        }
-        MigrationAction::Migrate { asset_ids, category, language } => {
-            handle_migrate(asset_ids, category, language, command.dry_run, command.backup, command.threads, command.progress, command.format == "json").await
-        }
-        MigrationAction::Rollback { migration_id, force } => {
-            handle_rollback(migration_id, force).await
-        }
-        MigrationAction::Status { detailed, migration_id } => {
-            handle_status(detailed, migration_id).await
-        }
-        MigrationAction::Test { new_structure, all, category } => {
-            handle_test(new_structure, all, category).await
-        }
+        MigrationAction::Rollback {
+            migration_id,
+            force,
+        } => handle_rollback(migration_id, force).await,
+        MigrationAction::Status {
+            detailed,
+            migration_id,
+        } => handle_status(detailed, migration_id).await,
+        MigrationAction::Test {
+            new_structure,
+            all,
+            category,
+        } => handle_test(new_structure, all, category).await,
     }
 }
 
@@ -302,19 +321,28 @@ async fn handle_analyze(output: Option<PathBuf>, detailed: bool) -> Result<()> {
             let resolver = ScriptDependencyResolver::new(DependencyResolutionConfig::default());
             if !scripts.is_empty() {
                 let resolution_result = resolver.resolve_dependencies(&scripts).await?;
-                analysis_report.dependencies = resolution_result.circular_dependencies
+                analysis_report.dependencies = resolution_result
+                    .circular_dependencies
                     .into_iter()
                     .map(|cycle| DependencyInfo {
                         description: cycle.description,
-                        affected_scripts: cycle.scripts.iter().map(|p| p.to_string_lossy().to_string()).collect(),
+                        affected_scripts: cycle
+                            .scripts
+                            .iter()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .collect(),
                     })
                     .collect();
             }
         }
 
-        analysis_report.recommendations.push("Original test structure found and analyzed".to_string());
+        analysis_report
+            .recommendations
+            .push("Original test structure found and analyzed".to_string());
         if !newtest_exists {
-            analysis_report.recommendations.push("Consider running migration to create new structure".to_string());
+            analysis_report
+                .recommendations
+                .push("Consider running migration to create new structure".to_string());
         }
     }
 
@@ -327,13 +355,19 @@ async fn handle_analyze(output: Option<PathBuf>, detailed: bool) -> Result<()> {
         if scripts_dir.exists() {
             let new_scripts = find_scripts(&scripts_dir)?;
             info!("Found {} scripts in new structure", new_scripts.len());
-            analysis_report.recommendations.push(format!("New structure contains {} organized scripts", new_scripts.len()));
+            analysis_report.recommendations.push(format!(
+                "New structure contains {} organized scripts",
+                new_scripts.len()
+            ));
         }
 
         if testcases_dir.exists() {
             let new_test_cases = find_test_cases(&testcases_dir)?;
             info!("Found {} test cases in new structure", new_test_cases.len());
-            analysis_report.recommendations.push(format!("New structure contains {} organized test cases", new_test_cases.len()));
+            analysis_report.recommendations.push(format!(
+                "New structure contains {} organized test cases",
+                new_test_cases.len()
+            ));
         }
     }
 
@@ -354,7 +388,7 @@ async fn handle_validate(
     _asset_ids: Vec<String>,
     level: String,
     _check_dependencies: bool,
-    _check_disk_space: bool
+    _check_disk_space: bool,
 ) -> Result<()> {
     let _validation_level = match level.to_lowercase().as_str() {
         "basic" => ValidationLevel::Basic,
@@ -391,7 +425,10 @@ async fn handle_migrate(
     let target_dir = project_root.join("newtest");
 
     if !source_dir.exists() {
-        return Err(anyhow::anyhow!("Source directory not found: {}", source_dir.display()));
+        return Err(anyhow::anyhow!(
+            "Source directory not found: {}",
+            source_dir.display()
+        ));
     }
 
     // Create migration configuration
@@ -428,8 +465,14 @@ async fn handle_migrate(
 
     // Report results
     info!("Migration completed successfully!");
-    info!("Total scripts processed: {}", migration_result.total_scripts_found);
-    info!("Successfully migrated: {}", migration_result.scripts_migrated);
+    info!(
+        "Total scripts processed: {}",
+        migration_result.total_scripts_found
+    );
+    info!(
+        "Successfully migrated: {}",
+        migration_result.scripts_migrated
+    );
     info!("Failed migrations: {}", migration_result.scripts_failed);
     info!("Skipped migrations: {}", migration_result.scripts_skipped);
 
@@ -443,7 +486,10 @@ async fn handle_migrate(
     if dry_run {
         info!("Dry run completed. No actual files were modified.");
     } else {
-        info!("Files have been migrated to: {}", filtered_config.target_directory.display());
+        info!(
+            "Files have been migrated to: {}",
+            filtered_config.target_directory.display()
+        );
     }
 
     Ok(())
@@ -560,13 +606,30 @@ struct DependencyInfo {
 
 fn print_analysis_report(report: &AnalysisReport) {
     println!("=== Test Structure Analysis Report ===");
-    println!("Generated: {}", report.timestamp.format("%Y-%m-%d %H:%M:%S UTC"));
+    println!(
+        "Generated: {}",
+        report.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+    );
     println!("Project Root: {}", report.project_root.display());
     println!();
 
     println!("Directory Status:");
-    println!("  Original structure (tests/): {}", if report.original_structure_exists { "✓ Found" } else { "✗ Not found" });
-    println!("  New structure (newtest/): {}", if report.new_structure_exists { "✓ Found" } else { "✗ Not found" });
+    println!(
+        "  Original structure (tests/): {}",
+        if report.original_structure_exists {
+            "✓ Found"
+        } else {
+            "✗ Not found"
+        }
+    );
+    println!(
+        "  New structure (newtest/): {}",
+        if report.new_structure_exists {
+            "✓ Found"
+        } else {
+            "✗ Not found"
+        }
+    );
     println!();
 
     if report.original_structure_exists {
@@ -602,8 +665,13 @@ mod tests {
     #[test]
     fn test_migrate_command_parsing() {
         let cmd = MigrateCommand::try_parse_from(&[
-            "migrate", "analyze", "--detailed", "--output", "report.md"
-        ]).unwrap();
+            "migrate",
+            "analyze",
+            "--detailed",
+            "--output",
+            "report.md",
+        ])
+        .unwrap();
 
         match cmd.action {
             MigrationAction::Analyze { output, detailed } => {
@@ -617,11 +685,20 @@ mod tests {
     #[test]
     fn test_validate_command_parsing() {
         let cmd = MigrateCommand::try_parse_from(&[
-            "migrate", "validate", "--level", "comprehensive", "--check-dependencies"
-        ]).unwrap();
+            "migrate",
+            "validate",
+            "--level",
+            "comprehensive",
+            "--check-dependencies",
+        ])
+        .unwrap();
 
         match cmd.action {
-            MigrationAction::Validate { level, check_dependencies, .. } => {
+            MigrationAction::Validate {
+                level,
+                check_dependencies,
+                ..
+            } => {
                 assert_eq!(level, "comprehensive");
                 assert!(check_dependencies);
             }
@@ -632,8 +709,14 @@ mod tests {
     #[test]
     fn test_migrate_subcommand_parsing() {
         let cmd = MigrateCommand::try_parse_from(&[
-            "migrate", "migrate", "--dry-run", "--backup", "--threads", "8"
-        ]).unwrap();
+            "migrate",
+            "migrate",
+            "--dry-run",
+            "--backup",
+            "--threads",
+            "8",
+        ])
+        .unwrap();
 
         assert!(cmd.dry_run);
         assert!(cmd.backup);

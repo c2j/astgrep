@@ -34,7 +34,11 @@ impl AstAdapter for XmlAdapter {
         self.base.metadata()
     }
 
-    fn adapt_node(&self, node: &dyn std::any::Any, context: &AdapterContext) -> Result<UniversalNode> {
+    fn adapt_node(
+        &self,
+        node: &dyn std::any::Any,
+        context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         self.base.adapt_node(node, context)
     }
 
@@ -76,7 +80,7 @@ impl LanguageParser for XmlParser {
         let context = AdapterContext::new(
             _file_path.to_string_lossy().to_string(),
             source.to_string(),
-            Language::Xml
+            Language::Xml,
         );
         let ast = self.adapter.parse_to_ast(source, &context)?;
         Ok(Box::new(ast))
@@ -107,19 +111,19 @@ mod tests {
     #[test]
     fn test_xml_parser_supports_file() {
         let parser = XmlParser::new();
-        
+
         let xml_path = Path::new("test.xml");
         assert!(parser.supports_file(xml_path));
-        
+
         let xsd_path = Path::new("schema.xsd");
         assert!(parser.supports_file(xsd_path));
-        
+
         let svg_path = Path::new("image.svg");
         assert!(parser.supports_file(svg_path));
-        
+
         let pom_path = Path::new("pom.xml");
         assert!(parser.supports_file(pom_path));
-        
+
         let java_path = Path::new("test.java");
         assert!(!parser.supports_file(java_path));
     }
@@ -233,4 +237,3 @@ mod tests {
         assert!(result.is_ok());
     }
 }
-

@@ -1,7 +1,7 @@
 //! Markdown output formatter
 
-use crate::output::analysis::{AnalysisStatistics, Finding, OutputFormatter};
 use crate::output::analysis::Severity;
+use crate::output::analysis::{AnalysisStatistics, Finding, OutputFormatter};
 use anyhow::Result;
 use std::time::Duration;
 
@@ -45,18 +45,15 @@ impl OutputFormatter for MarkdownFormatter {
                     i + 1,
                     finding.message
                 ));
-                md.push_str(&format!("- **Rule:** `{}`\n", finding.rule_id)
-                );
+                md.push_str(&format!("- **Rule:** `{}`\n", finding.rule_id));
                 md.push_str(&format!(
                     "- **File:** `{}:{}:{}`\n",
                     finding.location.file.display(),
                     finding.location.start_line,
                     finding.location.start_column
                 ));
-                md.push_str(&format!("- **Severity:** {:?}\n", finding.severity)
-                );
-                md.push_str(&format!("- **Confidence:** {:?}\n", finding.confidence)
-                );
+                md.push_str(&format!("- **Severity:** {:?}\n", finding.severity));
+                md.push_str(&format!("- **Confidence:** {:?}\n", finding.confidence));
 
                 if let Some(ref fix) = finding.fix {
                     md.push_str(&format!("- **Fix:** {}\n", fix));

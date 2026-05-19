@@ -1,20 +1,21 @@
 //! astgrep Web Server Binary
-//! 
+//!
 //! This binary starts the astgrep web server with REST API endpoints
 //! for code analysis, job management, and system monitoring.
 
 use anyhow::Result;
-use clap::Parser;
 use astgrep_web::{init_web_service, WebConfig};
+use clap::Parser;
 use std::path::PathBuf;
-use tracing::{info, error};
+use tracing::{error, info};
 
 /// astgrep Web Server
 #[derive(Parser)]
 #[command(name = "astgrep-web-server")]
 #[command(about = "astgrep REST API Server for static code analysis")]
 #[command(version)]
-#[command(long_about = "astgrep Web Server provides a REST API for static code analysis.\n\n\
+#[command(
+    long_about = "astgrep Web Server provides a REST API for static code analysis.\n\n\
 USAGE:\n    \
 astgrep-web-server [OPTIONS]\n\n\
 EXAMPLES:\n    \
@@ -37,40 +38,52 @@ ENDPOINTS:\n    \
 - GET  /api/v1/jobs/{id}           - Get job status\n    \
 - GET  /api/v1/jobs/{id}/result    - Get job result\n    \
 - GET  /docs                        - API documentation\n    \
-- GET  /playground                 - Interactive playground")]
+- GET  /playground                 - Interactive playground"
+)]
 struct Args {
     /// Configuration file path (default: astgrep-web.toml)
-    #[arg(short, long, default_value = "astgrep-web.toml",
-          value_name = "FILE",
-          help = "Path to TOML configuration file")]
+    #[arg(
+        short,
+        long,
+        default_value = "astgrep-web.toml",
+        value_name = "FILE",
+        help = "Path to TOML configuration file"
+    )]
     config: PathBuf,
 
     /// Server bind address (e.g., 127.0.0.1, 0.0.0.0)
-    #[arg(short, long,
-          value_name = "ADDR",
-          help = "Server bind address (overrides config file)")]
+    #[arg(
+        short,
+        long,
+        value_name = "ADDR",
+        help = "Server bind address (overrides config file)"
+    )]
     bind: Option<String>,
 
     /// Port to bind to (1-65535)
-    #[arg(short, long,
-          value_name = "PORT",
-          help = "Server port (overrides config file)")]
+    #[arg(
+        short,
+        long,
+        value_name = "PORT",
+        help = "Server port (overrides config file)"
+    )]
     port: Option<u16>,
 
     /// Rules directory path
-    #[arg(short, long,
-          value_name = "DIR",
-          help = "Directory containing analysis rules (overrides config file)")]
+    #[arg(
+        short,
+        long,
+        value_name = "DIR",
+        help = "Directory containing analysis rules (overrides config file)"
+    )]
     rules: Option<PathBuf>,
 
     /// Enable verbose logging (debug level)
-    #[arg(short, long,
-          help = "Enable verbose logging output")]
+    #[arg(short, long, help = "Enable verbose logging output")]
     verbose: bool,
 
     /// Generate default configuration file and exit
-    #[arg(long,
-          help = "Generate default configuration file at specified path")]
+    #[arg(long, help = "Generate default configuration file at specified path")]
     generate_config: bool,
 }
 
@@ -108,10 +121,16 @@ async fn main() -> Result<()> {
 
     // Initialize and start the web service
     let server = init_web_service(config).await?;
-    
+
     info!("🌐 Web server listening on {}", server.bind_address());
-    info!("📖 API documentation: http://{}/docs", server.bind_address());
-    info!("❤️  Health check: http://{}/api/v1/health", server.bind_address());
+    info!(
+        "📖 API documentation: http://{}/docs",
+        server.bind_address()
+    );
+    info!(
+        "❤️  Health check: http://{}/api/v1/health",
+        server.bind_address()
+    );
 
     // Start the server
     if let Err(e) = server.serve().await {
@@ -160,10 +179,13 @@ async fn load_config(config_path: &PathBuf) -> Result<WebConfig> {
 fn generate_default_config(config_path: &PathBuf) -> Result<()> {
     let config = WebConfig::default();
     config.to_file(config_path)?;
-    
-    println!("✅ Generated default configuration file: {}", config_path.display());
+
+    println!(
+        "✅ Generated default configuration file: {}",
+        config_path.display()
+    );
     println!("📝 Edit the file to customize settings, then run the server again.");
-    
+
     Ok(())
 }
 
@@ -176,11 +198,15 @@ mod tests {
     fn test_args_parsing() {
         let args = Args::try_parse_from(&[
             "astgrep-web-server",
-            "--config", "test.toml",
-            "--bind", "0.0.0.0",
-            "--port", "9090",
-            "--verbose"
-        ]).unwrap();
+            "--config",
+            "test.toml",
+            "--bind",
+            "0.0.0.0",
+            "--port",
+            "9090",
+            "--verbose",
+        ])
+        .unwrap();
 
         assert_eq!(args.config, PathBuf::from("test.toml"));
         assert_eq!(args.bind, Some("0.0.0.0".to_string()));
@@ -192,7 +218,7 @@ mod tests {
     async fn test_load_config_default() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("nonexistent.toml");
-        
+
         let config = load_config(&config_path).await.unwrap();
         assert_eq!(config.bind_address.port(), 8080); // Default port
     }
@@ -201,13 +227,12 @@ mod tests {
     fn test_generate_default_config() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("test-config.toml");
-        
+
         generate_default_config(&config_path).unwrap();
         assert!(config_path.exists());
-        
+
         // Verify we can load it back
         let loaded_config = WebConfig::from_file(&config_path).unwrap();
         assert_eq!(loaded_config.bind_address.port(), 8080);
     }
 }
-

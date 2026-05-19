@@ -1,13 +1,12 @@
 //! Migration orchestrator for file system operations with rsync support
 
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::process::Command as TokioCommand;
 use tracing::{debug, error, info, warn};
-use chrono::{DateTime, Utc};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MigrationOperation {
@@ -67,7 +66,10 @@ impl MigrationOrchestrator {
         &self,
         operations: Vec<MigrationOperation>,
     ) -> Result<Vec<MigrationOperation>> {
-        info!("Starting migration execution with {} operations", operations.len());
+        info!(
+            "Starting migration execution with {} operations",
+            operations.len()
+        );
 
         if self.dry_run {
             info!("DRY RUN MODE: No actual file operations will be performed");
@@ -88,12 +90,8 @@ impl MigrationOrchestrator {
                 OperationType::Copy | OperationType::Move => {
                     self.execute_rsync_operation(&operation).await
                 }
-                OperationType::CreateDirectory => {
-                    self.create_directory(&operation).await
-                }
-                OperationType::CreateSymlink => {
-                    self.create_symlink(&operation).await
-                }
+                OperationType::CreateDirectory => self.create_directory(&operation).await,
+                OperationType::CreateSymlink => self.create_symlink(&operation).await,
             };
 
             match result {
@@ -115,7 +113,10 @@ impl MigrationOrchestrator {
         }
 
         progress_bar.finish_with_message("Migration completed");
-        info!("Migration execution completed: {} operations processed", completed_operations.len());
+        info!(
+            "Migration execution completed: {} operations processed",
+            completed_operations.len()
+        );
 
         Ok(completed_operations)
     }
@@ -135,7 +136,8 @@ impl MigrationOrchestrator {
             operation.timestamp = Utc::now();
             operation.bytes_transferred = 0; // Dry run - no actual transfer
 
-            info!("DRY RUN: Would {} from {} to {}",
+            info!(
+                "DRY RUN: Would {} from {} to {}",
                 match operation.operation_type {
                     OperationType::Copy => "copy",
                     OperationType::Move => "move",
@@ -153,30 +155,28 @@ impl MigrationOrchestrator {
     }
 
     /// Execute rsync operation with optimized parameters for large-scale file operations
-    async fn execute_rsync_operation(
-        &self,
-        operation: &MigrationOperation,
-    ) -> Result<u64> {
+    async fn execute_rsync_operation(&self, operation: &MigrationOperation) -> Result<u64> {
         let source = &operation.source_path;
         let target = &operation.target_path;
 
         // Ensure target directory exists
         if let Some(parent) = target.parent() {
-            tokio::fs::create_dir_all(parent).await
-                .with_context(|| format!("Failed to create target directory: {}", parent.display()))?;
+            tokio::fs::create_dir_all(parent).await.with_context(|| {
+                format!("Failed to create target directory: {}", parent.display())
+            })?;
         }
 
         // Build rsync command with optimized parameters
         let mut cmd = TokioCommand::new("rsync");
 
         // rsync options for optimized large-scale migration
-        cmd.arg("-a")                   // Archive mode (preserves permissions, timestamps, etc.)
-            .arg("-h")                   // Human-readable numbers
-            .arg("--progress")           // Show progress per file
-            .arg("--stats")              // Show transfer statistics
-            .arg("--no-i-r")             // Don't skip directories based on inode
-            .arg("--delete")             // Delete extraneous files from dest dirs (for moves)
-            .arg("--exclude='.*'")       // Exclude hidden files
+        cmd.arg("-a") // Archive mode (preserves permissions, timestamps, etc.)
+            .arg("-h") // Human-readable numbers
+            .arg("--progress") // Show progress per file
+            .arg("--stats") // Show transfer statistics
+            .arg("--no-i-r") // Don't skip directories based on inode
+            .arg("--delete") // Delete extraneous files from dest dirs (for moves)
+            .arg("--exclude='.*'") // Exclude hidden files
             .arg("--exclude='.DS_Store'") // Exclude macOS metadata
             .arg("--exclude='Thumbs.db'"); // Exclude Windows thumbnails
 
@@ -198,8 +198,9 @@ impl MigrationOrchestrator {
             .arg(target.to_str().unwrap_or_default());
 
         // Execute rsync and capture output
-        let output = cmd.output().await
-            .with_context(|| format!("Failed to execute rsync command: {}", format!("{:?}", cmd)))?;
+        let output = cmd.output().await.with_context(|| {
+            format!("Failed to execute rsync command: {}", format!("{:?}", cmd))
+        })?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
@@ -210,16 +211,26 @@ impl MigrationOrchestrator {
         let stats_output = String::from_utf8_lossy(&output.stderr);
         let bytes_transferred = self.parse_rsync_stats(&stats_output)?;
 
-        info!("Successfully rsynced {} bytes from {} to {}",
-              bytes_transferred, source.display(), target.display());
+        info!(
+            "Successfully rsynced {} bytes from {} to {}",
+            bytes_transferred,
+            source.display(),
+            target.display()
+        );
 
         Ok(bytes_transferred)
     }
 
     /// Create directory with proper permissions
     async fn create_directory(&self, operation: &MigrationOperation) -> Result<u64> {
-        tokio::fs::create_dir_all(&operation.target_path).await
-            .with_context(|| format!("Failed to create directory: {}", operation.target_path.display()))?;
+        tokio::fs::create_dir_all(&operation.target_path)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to create directory: {}",
+                    operation.target_path.display()
+                )
+            })?;
 
         info!("Created directory: {}", operation.target_path.display());
         Ok(0)
@@ -229,23 +240,27 @@ impl MigrationOrchestrator {
     async fn create_symlink(&self, operation: &MigrationOperation) -> Result<u64> {
         #[cfg(unix)]
         {
-            std::os::unix::fs::symlink(
-                &operation.source_path,
-                &operation.target_path,
-            ).with_context(|| {
-                format!("Failed to create symlink from {} to {}",
-                       operation.source_path.display(),
-                       operation.target_path.display())
-            })?;
+            std::os::unix::fs::symlink(&operation.source_path, &operation.target_path)
+                .with_context(|| {
+                    format!(
+                        "Failed to create symlink from {} to {}",
+                        operation.source_path.display(),
+                        operation.target_path.display()
+                    )
+                })?;
 
-            info!("Created symlink: {} -> {}",
-                  operation.target_path.display(),
-                  operation.source_path.display());
+            info!(
+                "Created symlink: {} -> {}",
+                operation.target_path.display(),
+                operation.source_path.display()
+            );
         }
 
         #[cfg(not(unix))]
         {
-            return Err(anyhow::anyhow!("Symlinks are not supported on this platform"));
+            return Err(anyhow::anyhow!(
+                "Symlinks are not supported on this platform"
+            ));
         }
 
         Ok(0)
@@ -254,15 +269,11 @@ impl MigrationOrchestrator {
     /// Validate that an operation can be performed safely
     fn validate_operation(&self, operation: &MigrationOperation) -> bool {
         match operation.operation_type {
-            OperationType::Copy | OperationType::Move => {
-                operation.source_path.exists()
-            }
+            OperationType::Copy | OperationType::Move => operation.source_path.exists(),
             OperationType::CreateDirectory => {
                 true // Can always validate directory creation
             }
-            OperationType::CreateSymlink => {
-                operation.source_path.exists()
-            }
+            OperationType::CreateSymlink => operation.source_path.exists(),
         }
     }
 
@@ -271,7 +282,8 @@ impl MigrationOrchestrator {
         // Look for pattern like: "sent 1,234,567 bytes  received 35 bytes 1,234,602 bytes/sec"
         let lines: Vec<&str> = output.lines().collect();
 
-        for line in lines.iter().rev() { // Check from bottom for final stats
+        for line in lines.iter().rev() {
+            // Check from bottom for final stats
             if line.contains("sent") && line.contains("bytes") {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 for (i, part) in parts.iter().enumerate() {
@@ -303,12 +315,13 @@ impl MigrationOrchestrator {
 
     /// Generate checksum for file integrity verification
     pub async fn calculate_checksum(&self, file_path: &Path) -> Result<String> {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         use tokio::fs::File;
         use tokio::io::AsyncReadExt;
 
-        let mut file = File::open(file_path).await
-            .with_context(|| format!("Failed to open file for checksum: {}", file_path.display()))?;
+        let mut file = File::open(file_path).await.with_context(|| {
+            format!("Failed to open file for checksum: {}", file_path.display())
+        })?;
 
         let mut hasher = Sha256::new();
         let mut buffer = [0; 8192];
@@ -325,11 +338,7 @@ impl MigrationOrchestrator {
     }
 
     /// Verify file integrity after migration
-    pub async fn verify_integrity(
-        &self,
-        source_path: &Path,
-        target_path: &Path,
-    ) -> Result<bool> {
+    pub async fn verify_integrity(&self, source_path: &Path, target_path: &Path) -> Result<bool> {
         let source_checksum = self.calculate_checksum(source_path).await?;
         let target_checksum = self.calculate_checksum(target_path).await?;
 
@@ -337,10 +346,7 @@ impl MigrationOrchestrator {
     }
 
     /// Rollback failed migration operations
-    pub async fn rollback_operations(
-        &self,
-        operations: &[MigrationOperation],
-    ) -> Result<()> {
+    pub async fn rollback_operations(&self, operations: &[MigrationOperation]) -> Result<()> {
         info!("Starting rollback of {} operations", operations.len());
 
         for operation in operations.iter().rev() {
@@ -348,22 +354,39 @@ impl MigrationOrchestrator {
                 OperationType::Move => {
                     // Move target back to source
                     if operation.target_path.exists() {
-                        self.move_file(&operation.target_path, &operation.source_path).await
-                            .with_context(|| format!("Failed to rollback move operation: {}", operation.id))?;
+                        self.move_file(&operation.target_path, &operation.source_path)
+                            .await
+                            .with_context(|| {
+                                format!("Failed to rollback move operation: {}", operation.id)
+                            })?;
                     }
                 }
                 OperationType::CreateSymlink => {
                     // Remove symlink
                     if operation.target_path.exists() {
-                        tokio::fs::remove_file(&operation.target_path).await
-                            .with_context(|| format!("Failed to remove symlink during rollback: {}", operation.id))?;
+                        tokio::fs::remove_file(&operation.target_path)
+                            .await
+                            .with_context(|| {
+                                format!(
+                                    "Failed to remove symlink during rollback: {}",
+                                    operation.id
+                                )
+                            })?;
                     }
                 }
                 OperationType::CreateDirectory => {
                     // Remove directory if empty
-                    if operation.target_path.exists() && operation.target_path.read_dir()?.next().is_none() {
-                        tokio::fs::remove_dir(&operation.target_path).await
-                            .with_context(|| format!("Failed to remove directory during rollback: {}", operation.id))?;
+                    if operation.target_path.exists()
+                        && operation.target_path.read_dir()?.next().is_none()
+                    {
+                        tokio::fs::remove_dir(&operation.target_path)
+                            .await
+                            .with_context(|| {
+                                format!(
+                                    "Failed to remove directory during rollback: {}",
+                                    operation.id
+                                )
+                            })?;
                     }
                 }
                 _ => {} // No rollback needed for copy operations
@@ -378,17 +401,22 @@ impl MigrationOrchestrator {
 
     /// Move file with error handling
     async fn move_file(&self, from: &Path, to: &Path) -> Result<()> {
-        tokio::fs::rename(from, to).await
-            .with_context(|| format!("Failed to move file from {} to {}", from.display(), to.display()))
+        tokio::fs::rename(from, to).await.with_context(|| {
+            format!(
+                "Failed to move file from {} to {}",
+                from.display(),
+                to.display()
+            )
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
     use std::io::Write;
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_checksum_calculation() {

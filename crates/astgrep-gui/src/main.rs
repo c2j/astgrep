@@ -1,10 +1,10 @@
 //! astgrep GUI Playground
-//! 
+//!
 //! A graphical user interface for the astgrep static code analysis tool,
 //! providing an interactive playground for testing rules and analyzing code.
 
-use egui;
 use anyhow::Result;
+use egui;
 
 mod app;
 mod components;
@@ -23,8 +23,7 @@ fn main() -> Result<()> {
             .with_min_inner_size([800.0, 600.0])
             .with_icon(
                 // Add an icon if available
-                eframe::icon_data::from_png_bytes(&[])
-                    .unwrap_or_default()
+                eframe::icon_data::from_png_bytes(&[]).unwrap_or_default(),
             ),
         ..Default::default()
     };
@@ -36,7 +35,7 @@ fn main() -> Result<()> {
         Box::new(|cc| {
             // Configure egui style
             configure_style(&cc.egui_ctx);
-            
+
             Box::new(CrGuiApp::new(cc))
         }),
     )
@@ -55,24 +54,28 @@ fn configure_style(ctx: &egui::Context) {
     {
         let font_paths = [
             ("/System/Library/Fonts/PingFang.ttc", "PingFang"),
-            ("/System/Library/Fonts/Hiragino Sans GB.ttc", "Hiragino Sans GB"),
+            (
+                "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                "Hiragino Sans GB",
+            ),
             ("/System/Library/Fonts/STHeiti Medium.ttc", "STHeiti"),
         ];
 
         for (path, name) in &font_paths {
             if let Ok(font_data) = std::fs::read(path) {
-                fonts.font_data.insert(
-                    name.to_string(),
-                    egui::FontData::from_owned(font_data),
-                );
+                fonts
+                    .font_data
+                    .insert(name.to_string(), egui::FontData::from_owned(font_data));
 
                 // Insert at the beginning of the proportional font list
-                fonts.families
+                fonts
+                    .families
                     .entry(egui::FontFamily::Proportional)
                     .or_default()
                     .insert(0, name.to_string());
 
-                fonts.families
+                fonts
+                    .families
                     .entry(egui::FontFamily::Monospace)
                     .or_default()
                     .insert(0, name.to_string());
@@ -92,12 +95,14 @@ fn configure_style(ctx: &egui::Context) {
                 egui::FontData::from_owned(font_data),
             );
 
-            fonts.families
+            fonts
+                .families
                 .entry(egui::FontFamily::Proportional)
                 .or_default()
                 .insert(0, "Microsoft YaHei".to_owned());
 
-            fonts.families
+            fonts
+                .families
                 .entry(egui::FontFamily::Monospace)
                 .or_default()
                 .insert(0, "Microsoft YaHei".to_owned());
@@ -120,12 +125,14 @@ fn configure_style(ctx: &egui::Context) {
                     egui::FontData::from_owned(font_data),
                 );
 
-                fonts.families
+                fonts
+                    .families
                     .entry(egui::FontFamily::Proportional)
                     .or_default()
                     .insert(0, "Noto Sans CJK".to_owned());
 
-                fonts.families
+                fonts
+                    .families
                     .entry(egui::FontFamily::Monospace)
                     .or_default()
                     .insert(0, "Noto Sans CJK".to_owned());

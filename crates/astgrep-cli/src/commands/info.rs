@@ -28,7 +28,8 @@ pub async fn run(
 fn show_general_info() {
     println!("🔍 astgrep - Static Code Analysis Tool");
     println!("Version: {}", env!("CARGO_PKG_VERSION"));
-    println!("Build: {} ({})",
+    println!(
+        "Build: {} ({})",
         option_env!("VERGEN_BUILD_DATE").unwrap_or("unknown"),
         option_env!("VERGEN_GIT_SHA").unwrap_or("unknown")
     );
@@ -43,7 +44,12 @@ fn show_general_info() {
         Language::Bash,
     ] {
         let (extensions, description) = get_language_details(lang);
-        println!("  • {:?}: {} ({})", lang, description, extensions.join(", "));
+        println!(
+            "  • {:?}: {} ({})",
+            lang,
+            description,
+            extensions.join(", ")
+        );
     }
     println!();
 
@@ -117,29 +123,17 @@ fn show_language_info(lang_str: &str) -> Result<()> {
 
 fn get_language_details(language: &Language) -> (Vec<&'static str>, &'static str) {
     match language {
-        Language::Java => (
-            vec![".java"],
-            "Object-oriented programming language"
-        ),
+        Language::Java => (vec![".java"], "Object-oriented programming language"),
         Language::JavaScript => (
             vec![".js", ".jsx", ".ts", ".tsx"],
-            "Dynamic programming language for web development"
+            "Dynamic programming language for web development",
         ),
-        Language::Python => (
-            vec![".py"],
-            "High-level programming language"
-        ),
-        Language::Sql => (
-            vec![".sql"],
-            "Structured Query Language for databases"
-        ),
-        Language::Bash => (
-            vec![".sh", ".bash"],
-            "Unix shell scripting language"
-        ),
+        Language::Python => (vec![".py"], "High-level programming language"),
+        Language::Sql => (vec![".sql"], "Structured Query Language for databases"),
+        Language::Bash => (vec![".sh", ".bash"], "Unix shell scripting language"),
         Language::Xml => (
             vec![".xml", ".xsd", ".xsl", ".xslt", ".svg", ".pom"],
-            "Extensible Markup Language for data representation"
+            "Extensible Markup Language for data representation",
         ),
     }
 }

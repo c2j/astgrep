@@ -6,7 +6,10 @@ pub mod test_case;
 // Re-export commonly used types (avoid conflicts with glob imports)
 pub use test_asset::{ScriptType, TestScript};
 // Re-export specific test_case types to avoid conflicts
-pub use test_case::{TestCase, TestType, TestComplexity, TestCaseStatus, TestCategory, TestPriority, TestCaseMetadata, LanguageMapping, LanguageConfig, MigrationDifficulty};
+pub use test_case::{
+    LanguageConfig, LanguageMapping, MigrationDifficulty, TestCase, TestCaseMetadata,
+    TestCaseStatus, TestCategory, TestComplexity, TestPriority, TestType,
+};
 
 /// Additional validation result types for script execution
 use serde::{Deserialize, Serialize};
@@ -41,11 +44,7 @@ pub struct ValidationResult {
 }
 
 impl ValidationResult {
-    pub fn new(
-        asset_path: PathBuf,
-        status: ValidationStatus,
-        message: String,
-    ) -> Self {
+    pub fn new(asset_path: PathBuf, status: ValidationStatus, message: String) -> Self {
         Self {
             asset_path,
             status,

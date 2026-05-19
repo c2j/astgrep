@@ -105,7 +105,6 @@ pub struct AnalysisOptions {
     /// SQL: constrain simple matching within single statements (semicolon delimited)
     /// YAML 'options.sql_statement_boundary' in rules overrides this per-rule.
     pub sql_statement_boundary: Option<bool>,
-
 }
 
 /// Analysis response

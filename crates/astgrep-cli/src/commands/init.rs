@@ -32,7 +32,10 @@ pub async fn run(output: PathBuf, template: String, force: bool) -> Result<()> {
 
     println!("✅ Configuration file created: {}", output.display());
     println!("📝 Edit the file to customize your analysis settings");
-    println!("🚀 Run analysis with: astgrep analyze --config {}", output.display());
+    println!(
+        "🚀 Run analysis with: astgrep analyze --config {}",
+        output.display()
+    );
 
     Ok(())
 }

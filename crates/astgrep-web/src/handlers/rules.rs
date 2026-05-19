@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::{
-    models::{RuleInfo, ValidateRulesRequest, ValidateRulesResponse, RulePerformanceMetrics},
+    models::{RuleInfo, RulePerformanceMetrics, ValidateRulesRequest, ValidateRulesResponse},
     WebConfig, WebError, WebResult,
 };
 
@@ -34,36 +34,34 @@ pub async fn list_rules(
     Query(params): Query<ListRulesQuery>,
 ) -> WebResult<Json<Vec<RuleInfo>>> {
     tracing::info!("Listing rules with filters: {:?}", params);
-    
+
     // Load rules from the rules directory
     let mut rules = load_rules_from_directory(&config.rules_directory).await?;
-    
+
     // Apply filters
     if let Some(language_filter) = &params.language {
         rules.retain(|rule| rule.languages.contains(language_filter));
     }
-    
+
     if let Some(category_filter) = &params.category {
         rules.retain(|rule| {
-            rule.category.as_ref().map_or(false, |cat| cat == category_filter)
+            rule.category
+                .as_ref()
+                .map_or(false, |cat| cat == category_filter)
         });
     }
-    
+
     if let Some(enabled_filter) = params.enabled {
         rules.retain(|rule| rule.enabled == enabled_filter);
     }
-    
+
     // Apply pagination
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(100).min(500); // Max 500 rules per request
-    
+
     let total_rules = rules.len();
-    let paginated_rules: Vec<RuleInfo> = rules
-        .into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
-    
+    let paginated_rules: Vec<RuleInfo> = rules.into_iter().skip(offset).take(limit).collect();
+
     tracing::info!(
         "Listed {} rules (offset: {}, limit: {}, total: {})",
         paginated_rules.len(),
@@ -81,9 +79,9 @@ pub async fn get_rule(
     Path(rule_id): Path<String>,
 ) -> WebResult<Json<RuleInfo>> {
     tracing::info!("Getting rule: {}", rule_id);
-    
+
     let rules = load_rules_from_directory(&config.rules_directory).await?;
-    
+
     let rule = rules
         .into_iter()
         .find(|r| r.id == rule_id)
@@ -98,12 +96,12 @@ pub async fn validate_rules(
     Json(request): Json<ValidateRulesRequest>,
 ) -> WebResult<Json<ValidateRulesResponse>> {
     tracing::info!("Validating rules");
-    
+
     let start_time = std::time::Instant::now();
-    
+
     // Parse YAML rules
     let rules_result: Result<serde_yaml::Value, _> = serde_yaml::from_str(&request.rules);
-    
+
     let (valid, errors, warnings, rules_count) = match rules_result {
         Ok(rules_yaml) => {
             // Validate the parsed rules
@@ -114,18 +112,19 @@ pub async fn validate_rules(
             (false, errors, vec![], 0)
         }
     };
-    
+
     let load_time = start_time.elapsed();
-    
+
     // Generate performance metrics if requested
-    let performance = request.check_performance.unwrap_or(false).then(|| {
-        RulePerformanceMetrics {
+    let performance = request
+        .check_performance
+        .unwrap_or(false)
+        .then(|| RulePerformanceMetrics {
             load_time_ms: load_time.as_millis() as u64,
             average_complexity: calculate_average_complexity(&request.rules),
             memory_usage_bytes: estimate_memory_usage(&request.rules),
-        }
-    });
-    
+        });
+
     let response = ValidateRulesResponse {
         valid,
         errors,
@@ -133,7 +132,7 @@ pub async fn validate_rules(
         rules_count,
         performance,
     };
-    
+
     tracing::info!(
         "Rule validation completed: valid={}, errors={}, warnings={}, rules={}",
         response.valid,
@@ -146,9 +145,7 @@ pub async fn validate_rules(
 }
 
 /// Load rules from directory (real implementation)
-async fn load_rules_from_directory(
-    rules_dir: &std::path::Path,
-) -> WebResult<Vec<RuleInfo>> {
+async fn load_rules_from_directory(rules_dir: &std::path::Path) -> WebResult<Vec<RuleInfo>> {
     use tokio::fs;
 
     let mut rules = Vec::new();
@@ -205,18 +202,29 @@ async fn load_rule_file(file_path: &std::path::Path) -> WebResult<Vec<RuleInfo>>
     use tokio::fs;
 
     let content = fs::read_to_string(file_path).await.map_err(|e| {
-        WebError::internal_server_error(format!("Failed to read rule file {}: {}", file_path.display(), e))
+        WebError::internal_server_error(format!(
+            "Failed to read rule file {}: {}",
+            file_path.display(),
+            e
+        ))
     })?;
 
     let yaml_value: serde_yaml::Value = serde_yaml::from_str(&content).map_err(|e| {
-        WebError::internal_server_error(format!("Failed to parse YAML in {}: {}", file_path.display(), e))
+        WebError::internal_server_error(format!(
+            "Failed to parse YAML in {}: {}",
+            file_path.display(),
+            e
+        ))
     })?;
 
     parse_rules_from_yaml(&yaml_value, file_path)
 }
 
 /// Parse rules from YAML value
-fn parse_rules_from_yaml(yaml_value: &serde_yaml::Value, file_path: &std::path::Path) -> WebResult<Vec<RuleInfo>> {
+fn parse_rules_from_yaml(
+    yaml_value: &serde_yaml::Value,
+    file_path: &std::path::Path,
+) -> WebResult<Vec<RuleInfo>> {
     let mut rules = Vec::new();
 
     match yaml_value {
@@ -225,7 +233,12 @@ fn parse_rules_from_yaml(yaml_value: &serde_yaml::Value, file_path: &std::path::
                 match parse_single_rule(rule_yaml, file_path, index) {
                     Ok(rule) => rules.push(rule),
                     Err(e) => {
-                        tracing::warn!("Failed to parse rule {} in {}: {}", index, file_path.display(), e);
+                        tracing::warn!(
+                            "Failed to parse rule {} in {}: {}",
+                            index,
+                            file_path.display(),
+                            e
+                        );
                         // Continue parsing other rules
                     }
                 }
@@ -252,9 +265,17 @@ fn parse_rules_from_yaml(yaml_value: &serde_yaml::Value, file_path: &std::path::
 }
 
 /// Parse a single rule from YAML
-fn parse_single_rule(rule_yaml: &serde_yaml::Value, file_path: &std::path::Path, index: usize) -> WebResult<RuleInfo> {
+fn parse_single_rule(
+    rule_yaml: &serde_yaml::Value,
+    file_path: &std::path::Path,
+    index: usize,
+) -> WebResult<RuleInfo> {
     let rule_map = rule_yaml.as_mapping().ok_or_else(|| {
-        WebError::internal_server_error(format!("Rule {} in {} is not a mapping", index, file_path.display()))
+        WebError::internal_server_error(format!(
+            "Rule {} in {} is not a mapping",
+            index,
+            file_path.display()
+        ))
     })?;
 
     // Extract required fields
@@ -266,13 +287,12 @@ fn parse_single_rule(rule_yaml: &serde_yaml::Value, file_path: &std::path::Path,
     // Extract optional fields with defaults
     let confidence = extract_string_field(rule_map, "confidence", file_path, index)
         .unwrap_or_else(|_| "medium".to_string());
-    let enabled = extract_bool_field(rule_map, "enabled", file_path, index)
-        .unwrap_or(true);
+    let enabled = extract_bool_field(rule_map, "enabled", file_path, index).unwrap_or(true);
 
     // Extract arrays
     let languages = extract_string_array(rule_map, "languages", file_path, index)?;
-    let tags = extract_string_array(rule_map, "tags", file_path, index)
-        .unwrap_or_else(|_| Vec::new());
+    let tags =
+        extract_string_array(rule_map, "tags", file_path, index).unwrap_or_else(|_| Vec::new());
 
     // Extract optional fields
     let category = extract_optional_string_field(rule_map, "category");
@@ -386,7 +406,11 @@ fn get_fallback_rules() -> Vec<RuleInfo> {
             id: "fallback-rule-001".to_string(),
             name: "Basic Security Check".to_string(),
             description: "A basic security check rule loaded as fallback".to_string(),
-            languages: vec!["javascript".to_string(), "java".to_string(), "python".to_string()],
+            languages: vec![
+                "javascript".to_string(),
+                "java".to_string(),
+                "python".to_string(),
+            ],
             severity: "warning".to_string(),
             confidence: "medium".to_string(),
             category: Some("security".to_string()),
@@ -406,7 +430,11 @@ fn get_fallback_rules() -> Vec<RuleInfo> {
             severity: "error".to_string(),
             confidence: "high".to_string(),
             category: Some("security".to_string()),
-            tags: vec!["security".to_string(), "sql-injection".to_string(), "fallback".to_string()],
+            tags: vec![
+                "security".to_string(),
+                "sql-injection".to_string(),
+                "fallback".to_string(),
+            ],
             enabled: true,
             metadata: {
                 let mut map = HashMap::new();
@@ -418,18 +446,26 @@ fn get_fallback_rules() -> Vec<RuleInfo> {
             id: "fallback-rule-003".to_string(),
             name: "XSS Prevention".to_string(),
             description: "Detects potential cross-site scripting vulnerabilities".to_string(),
-            languages: vec!["javascript".to_string(), "java".to_string(), "typescript".to_string()],
+            languages: vec![
+                "javascript".to_string(),
+                "java".to_string(),
+                "typescript".to_string(),
+            ],
             severity: "warning".to_string(),
             confidence: "medium".to_string(),
             category: Some("security".to_string()),
-            tags: vec!["security".to_string(), "xss".to_string(), "fallback".to_string()],
+            tags: vec![
+                "security".to_string(),
+                "xss".to_string(),
+                "fallback".to_string(),
+            ],
             enabled: true,
             metadata: {
                 let mut map = HashMap::new();
                 map.insert("source".to_string(), "fallback".to_string());
                 map
             },
-        }
+        },
     ]
 }
 
@@ -440,12 +476,12 @@ fn validate_rules_yaml(
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
     let mut rules_count = 0;
-    
+
     // Basic validation logic
     match rules_yaml {
         serde_yaml::Value::Sequence(rules) => {
             rules_count = rules.len();
-            
+
             for (index, rule) in rules.iter().enumerate() {
                 validate_single_rule(rule, index, &mut errors, &mut warnings);
             }
@@ -456,17 +492,18 @@ fn validate_rules_yaml(
             validate_single_rule(rules_yaml, 0, &mut errors, &mut warnings);
         }
         _ => {
-            errors.push("Rules must be either a single rule object or an array of rules".to_string());
+            errors
+                .push("Rules must be either a single rule object or an array of rules".to_string());
         }
     }
-    
+
     // Language-specific validation
     if let Some(language) = &request.language {
         if !["java", "javascript", "python", "sql", "bash"].contains(&language.as_str()) {
             warnings.push(format!("Unsupported language for validation: {}", language));
         }
     }
-    
+
     let valid = errors.is_empty();
     (valid, errors, warnings, rules_count)
 }
@@ -479,7 +516,7 @@ fn validate_single_rule(
     warnings: &mut Vec<String>,
 ) {
     let rule_prefix = format!("Rule {}", index + 1);
-    
+
     if let serde_yaml::Value::Mapping(rule_map) = rule {
         // Check required fields
         if !rule_map.contains_key(&serde_yaml::Value::String("id".to_string())) {
@@ -493,13 +530,19 @@ fn validate_single_rule(
 
         // name and description are optional (auto-generated if missing)
         if !rule_map.contains_key(&serde_yaml::Value::String("name".to_string())) {
-            warnings.push(format!("{}: Missing optional field 'name' (will use id as default)", rule_prefix));
+            warnings.push(format!(
+                "{}: Missing optional field 'name' (will use id as default)",
+                rule_prefix
+            ));
         }
 
         if !rule_map.contains_key(&serde_yaml::Value::String("description".to_string())) {
-            warnings.push(format!("{}: Missing optional field 'description' (will use message as default)", rule_prefix));
+            warnings.push(format!(
+                "{}: Missing optional field 'description' (will use message as default)",
+                rule_prefix
+            ));
         }
-        
+
         // Validate pattern field if present
         if let Some(pattern) = rule_map.get(&serde_yaml::Value::String("pattern".to_string())) {
             if let serde_yaml::Value::String(pattern_str) = pattern {
@@ -508,12 +551,15 @@ fn validate_single_rule(
                 }
             }
         }
-        
+
         // Validate severity field if present
         if let Some(severity) = rule_map.get(&serde_yaml::Value::String("severity".to_string())) {
             if let serde_yaml::Value::String(severity_str) = severity {
                 if !["info", "warning", "error", "critical"].contains(&severity_str.as_str()) {
-                    errors.push(format!("{}: Invalid severity '{}'. Must be one of: info, warning, error, critical", rule_prefix, severity_str));
+                    errors.push(format!(
+                        "{}: Invalid severity '{}'. Must be one of: info, warning, error, critical",
+                        rule_prefix, severity_str
+                    ));
                 }
             }
         }
@@ -526,10 +572,10 @@ fn validate_single_rule(
 fn calculate_average_complexity(rules_content: &str) -> f64 {
     // This is a simplified complexity calculation
     // In a real implementation, you would analyze the rule patterns
-    
+
     let line_count = rules_content.lines().count() as f64;
     let char_count = rules_content.len() as f64;
-    
+
     // Simple heuristic: complexity based on content size
     (line_count + char_count / 100.0) / 10.0
 }
@@ -539,8 +585,6 @@ fn estimate_memory_usage(rules_content: &str) -> u64 {
     // Simple estimation: content size + overhead
     (rules_content.len() as u64) * 2 + 1024 // 2x content size + 1KB overhead
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -554,7 +598,7 @@ mod tests {
             rules_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         });
-        
+
         let query = ListRulesQuery {
             language: None,
             category: None,
@@ -562,10 +606,10 @@ mod tests {
             limit: None,
             offset: None,
         };
-        
+
         let result = list_rules(State(config), Query(query)).await;
         assert!(result.is_ok());
-        
+
         let rules = result.unwrap().0;
         assert_eq!(rules.len(), 3); // Fallback rules when no files exist
     }
@@ -577,7 +621,7 @@ mod tests {
             rules_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         });
-        
+
         let query = ListRulesQuery {
             language: Some("java".to_string()),
             category: None,
@@ -585,13 +629,13 @@ mod tests {
             limit: None,
             offset: None,
         };
-        
+
         let result = list_rules(State(config), Query(query)).await;
         assert!(result.is_ok());
-        
+
         let rules = result.unwrap().0;
         assert_eq!(rules.len(), 3); // All mock rules support Java
-        
+
         for rule in rules {
             assert!(rule.languages.contains(&"java".to_string()));
         }
@@ -604,7 +648,7 @@ mod tests {
             rules_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         });
-        
+
         let result = get_rule(State(config), Path("fallback-rule-001".to_string())).await;
         assert!(result.is_ok());
 
@@ -620,7 +664,7 @@ mod tests {
             rules_directory: temp_dir.path().to_path_buf(),
             ..Default::default()
         });
-        
+
         let result = get_rule(State(config), Path("nonexistent-rule".to_string())).await;
         assert!(result.is_err());
     }
@@ -636,14 +680,15 @@ mod tests {
   message: Test rule message
   pattern: "test.*"
   severity: warning
-"#.to_string(),
+"#
+            .to_string(),
             language: Some("java".to_string()),
             check_performance: Some(true),
         };
-        
+
         let result = validate_rules(State(config), Json(request)).await;
         assert!(result.is_ok());
-        
+
         let response = result.unwrap().0;
         assert!(response.valid);
         assert_eq!(response.rules_count, 1);
@@ -657,14 +702,15 @@ mod tests {
             rules: r#"
 - name: Test Rule Missing ID
   description: A test rule without ID
-"#.to_string(),
+"#
+            .to_string(),
             language: None,
             check_performance: None,
         };
-        
+
         let result = validate_rules(State(config), Json(request)).await;
         assert!(result.is_ok());
-        
+
         let response = result.unwrap().0;
         assert!(!response.valid);
         assert!(!response.errors.is_empty());

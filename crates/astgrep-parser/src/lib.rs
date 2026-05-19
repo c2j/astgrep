@@ -2,25 +2,25 @@
 //!
 //! This crate provides language-specific parsers and adapters.
 
-pub mod registry;
 pub mod adapters;
 pub mod base_adapter;
+pub mod bash;
 pub mod java;
 pub mod javascript;
 pub mod javascript_optimizer;
 pub mod python;
+pub mod registry;
+pub mod script_discovery;
 pub mod sql;
-pub mod bash;
 pub mod tree_sitter_parser;
 pub mod xml;
-pub mod script_discovery;
 
-pub use registry::*;
 pub use adapters::*;
+pub use registry::*;
 
 // Re-export types for macro usage
-pub use astgrep_core::{Language, Result, AstNode, LanguageParser};
-pub use astgrep_ast::{UniversalNode, NodeType};
+pub use astgrep_ast::{NodeType, UniversalNode};
+pub use astgrep_core::{AstNode, Language, LanguageParser, Result};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -99,7 +99,10 @@ impl LanguageParserRegistry {
     /// Register default parsers for all supported languages
     fn register_default_parsers(&mut self) {
         self.register_parser(Language::Java, Box::new(java::JavaParser::new()));
-        self.register_parser(Language::JavaScript, Box::new(javascript::JavaScriptParser::new()));
+        self.register_parser(
+            Language::JavaScript,
+            Box::new(javascript::JavaScriptParser::new()),
+        );
         self.register_parser(Language::Python, Box::new(python::PythonParser::new()));
         self.register_parser(Language::Sql, Box::new(sql::SqlParser::new()));
         self.register_parser(Language::Bash, Box::new(bash::BashParser::new()));

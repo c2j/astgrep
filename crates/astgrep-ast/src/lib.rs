@@ -3,13 +3,13 @@
 //! This crate provides the universal AST node types and operations
 //! that are used across all supported languages.
 
+pub mod builder;
 pub mod nodes;
 pub mod visitor;
-pub mod builder;
 
+pub use builder::*;
 pub use nodes::*;
 pub use visitor::*;
-pub use builder::*;
 
 use astgrep_core::AstNode;
 use serde::{Deserialize, Serialize};
@@ -60,9 +60,7 @@ impl UniversalAst {
 
     /// Find nodes by type
     pub fn find_nodes_by_type(&self, node_type: &str) -> Vec<Box<dyn AstNode>> {
-        astgrep_core::ast_utils::find_nodes(&self.root, &|node| {
-            node.node_type() == node_type
-        })
+        astgrep_core::ast_utils::find_nodes(&self.root, &|node| node.node_type() == node_type)
     }
 
     /// Get all unique node types in the AST

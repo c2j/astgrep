@@ -1,5 +1,5 @@
 //! Data flow graph representation
-//! 
+//!
 //! This module provides the core data structures for representing data flow graphs.
 
 use astgrep_core::{AstNode, Location};
@@ -45,9 +45,15 @@ impl DataFlowGraph {
             to,
             edge_type,
         };
-        
-        self.edges.entry(from).or_insert_with(Vec::new).push(edge.clone());
-        self.reverse_edges.entry(to).or_insert_with(Vec::new).push(edge);
+
+        self.edges
+            .entry(from)
+            .or_insert_with(Vec::new)
+            .push(edge.clone());
+        self.reverse_edges
+            .entry(to)
+            .or_insert_with(Vec::new)
+            .push(edge);
     }
 
     /// Get a node by ID
@@ -73,7 +79,9 @@ impl DataFlowGraph {
     /// Check if there's a data flow edge between two nodes
     pub fn has_data_flow_edge(&self, from: NodeId, to: NodeId) -> bool {
         if let Some(edges) = self.edges.get(&from) {
-            edges.iter().any(|edge| edge.to == to && matches!(edge.edge_type, EdgeType::DataFlow))
+            edges
+                .iter()
+                .any(|edge| edge.to == to && matches!(edge.edge_type, EdgeType::DataFlow))
         } else {
             false
         }
@@ -91,7 +99,10 @@ impl DataFlowGraph {
 
     /// Get incoming edges to a node
     pub fn incoming_edges(&self, id: NodeId) -> &[DataFlowEdge] {
-        self.reverse_edges.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
+        self.reverse_edges
+            .get(&id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Get all successors of a node
@@ -127,7 +138,7 @@ impl DataFlowGraph {
         let mut paths = Vec::new();
         let mut current_path = Vec::new();
         let mut visited = HashSet::new();
-        
+
         self.find_paths_recursive(from, to, &mut current_path, &mut visited, &mut paths);
         paths
     }
@@ -226,15 +237,15 @@ impl DataFlowNode {
         Self {
             node_type: ast_node.node_type().to_string(),
             text: ast_node.text().map(|s| s.to_string()),
-            location: ast_node.location().map(|(start_line, start_col, end_line, end_col)| {
-                Location {
+            location: ast_node
+                .location()
+                .map(|(start_line, start_col, end_line, end_col)| Location {
                     file: std::path::PathBuf::new(),
                     start_line,
                     start_column: start_col,
                     end_line,
                     end_column: end_col,
-                }
-            }),
+                }),
             attributes: HashMap::new(),
         }
     }
@@ -274,7 +285,9 @@ impl DataFlowNode {
 
     /// Check if this node represents a literal
     pub fn is_literal(&self) -> bool {
-        self.node_type == "literal" || self.node_type == "string_literal" || self.node_type == "integer_literal"
+        self.node_type == "literal"
+            || self.node_type == "string_literal"
+            || self.node_type == "integer_literal"
     }
 
     /// Get the function name if this is a function call
@@ -343,13 +356,13 @@ mod tests {
     #[test]
     fn test_add_nodes() {
         let mut graph = DataFlowGraph::new();
-        
+
         let node1 = DataFlowNode::new("identifier".to_string()).with_text("x".to_string());
         let node2 = DataFlowNode::new("literal".to_string()).with_text("42".to_string());
-        
+
         let id1 = graph.add_node(node1);
         let id2 = graph.add_node(node2);
-        
+
         assert_eq!(graph.node_count(), 2);
         assert_eq!(id1, 0);
         assert_eq!(id2, 1);
@@ -358,12 +371,12 @@ mod tests {
     #[test]
     fn test_add_edges() {
         let mut graph = DataFlowGraph::new();
-        
+
         let id1 = graph.add_node(DataFlowNode::new("identifier".to_string()));
         let id2 = graph.add_node(DataFlowNode::new("literal".to_string()));
-        
+
         graph.add_edge(id1, id2, EdgeType::DataFlow);
-        
+
         assert_eq!(graph.edge_count(), 1);
         assert_eq!(graph.successors(id1), vec![id2]);
         assert_eq!(graph.predecessors(id2), vec![id1]);
@@ -372,14 +385,14 @@ mod tests {
     #[test]
     fn test_data_flow_edges() {
         let mut graph = DataFlowGraph::new();
-        
+
         let id1 = graph.add_node(DataFlowNode::new("identifier".to_string()));
         let id2 = graph.add_node(DataFlowNode::new("literal".to_string()));
         let id3 = graph.add_node(DataFlowNode::new("call".to_string()));
-        
+
         graph.add_edge(id1, id2, EdgeType::DataFlow);
         graph.add_edge(id1, id3, EdgeType::ControlFlow);
-        
+
         assert_eq!(graph.data_flow_successors(id1), vec![id2]);
         assert_eq!(graph.successors(id1).len(), 2);
     }
@@ -387,14 +400,14 @@ mod tests {
     #[test]
     fn test_find_paths() {
         let mut graph = DataFlowGraph::new();
-        
+
         let id1 = graph.add_node(DataFlowNode::new("start".to_string()));
         let id2 = graph.add_node(DataFlowNode::new("middle".to_string()));
         let id3 = graph.add_node(DataFlowNode::new("end".to_string()));
-        
+
         graph.add_edge(id1, id2, EdgeType::DataFlow);
         graph.add_edge(id2, id3, EdgeType::DataFlow);
-        
+
         let paths = graph.find_paths(id1, id3);
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0], vec![id1, id2, id3]);
@@ -402,9 +415,8 @@ mod tests {
 
     #[test]
     fn test_node_properties() {
-        let node = DataFlowNode::new("call_expression".to_string())
-            .with_text("printf".to_string());
-        
+        let node = DataFlowNode::new("call_expression".to_string()).with_text("printf".to_string());
+
         assert!(node.is_function_call());
         assert!(!node.is_variable());
         assert_eq!(node.function_name(), Some("printf"));
@@ -413,11 +425,11 @@ mod tests {
     #[test]
     fn test_nodes_by_type() {
         let mut graph = DataFlowGraph::new();
-        
+
         let id1 = graph.add_node(DataFlowNode::new("identifier".to_string()));
         let id2 = graph.add_node(DataFlowNode::new("literal".to_string()));
         let id3 = graph.add_node(DataFlowNode::new("identifier".to_string()));
-        
+
         let identifiers = graph.nodes_by_type("identifier");
         assert_eq!(identifiers.len(), 2);
         assert!(identifiers.contains(&id1));

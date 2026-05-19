@@ -1,7 +1,7 @@
 //! Mock data generators for testing web APIs and other components
 
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 use std::collections::HashMap;
 
 /// Mock rule information
@@ -130,21 +130,25 @@ impl MockRules {
     }
 
     /// Generate filtered mock rules
-    pub fn generate_filtered(language: Option<&str>, category: Option<&str>, enabled: Option<bool>) -> Vec<MockRuleInfo> {
+    pub fn generate_filtered(
+        language: Option<&str>,
+        category: Option<&str>,
+        enabled: Option<bool>,
+    ) -> Vec<MockRuleInfo> {
         let mut rules = Self::generate();
-        
+
         if let Some(lang) = language {
             rules.retain(|rule| rule.languages.contains(&lang.to_string()));
         }
-        
+
         if let Some(cat) = category {
             rules.retain(|rule| rule.category.as_ref().map_or(false, |c| c == cat));
         }
-        
+
         if let Some(en) = enabled {
             rules.retain(|rule| rule.enabled == en);
         }
-        
+
         rules
     }
 
@@ -161,7 +165,7 @@ impl MockJobs {
     /// Generate mock jobs for testing
     pub fn generate() -> Vec<MockJob> {
         let now = Utc::now();
-        
+
         vec![
             MockJob {
                 id: "job-001".to_string(),
@@ -224,24 +228,22 @@ pub struct MockFindings;
 impl MockFindings {
     /// Generate mock findings for a given language and code
     pub fn generate_for_code(language: &str, code: &str) -> Vec<MockFinding> {
-        vec![
-            MockFinding {
-                rule_id: format!("{}-demo-rule-001", language),
-                message: format!("Demo finding in {} code", language),
-                severity: "warning".to_string(),
-                confidence: "medium".to_string(),
-                location: MockLocation {
-                    file: "input".to_string(),
-                    start_line: 1,
-                    start_column: 1,
-                    end_line: 1,
-                    end_column: 10,
-                    snippet: Some(code.lines().next().unwrap_or("").to_string()),
-                },
-                fix: Some("This is a demo fix suggestion".to_string()),
-                metadata: None,
-            }
-        ]
+        vec![MockFinding {
+            rule_id: format!("{}-demo-rule-001", language),
+            message: format!("Demo finding in {} code", language),
+            severity: "warning".to_string(),
+            confidence: "medium".to_string(),
+            location: MockLocation {
+                file: "input".to_string(),
+                start_line: 1,
+                start_column: 1,
+                end_line: 1,
+                end_column: 10,
+                snippet: Some(code.lines().next().unwrap_or("").to_string()),
+            },
+            fix: Some("This is a demo fix suggestion".to_string()),
+            metadata: None,
+        }]
     }
 }
 
@@ -289,10 +291,14 @@ mod tests {
     #[test]
     fn test_mock_rules_filtering() {
         let java_rules = MockRules::generate_filtered(Some("java"), None, None);
-        assert!(java_rules.iter().all(|r| r.languages.contains(&"java".to_string())));
+        assert!(java_rules
+            .iter()
+            .all(|r| r.languages.contains(&"java".to_string())));
 
         let security_rules = MockRules::generate_filtered(None, Some("security"), None);
-        assert!(security_rules.iter().all(|r| r.category.as_ref().unwrap() == "security"));
+        assert!(security_rules
+            .iter()
+            .all(|r| r.category.as_ref().unwrap() == "security"));
     }
 
     #[test]

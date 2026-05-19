@@ -1,9 +1,9 @@
 //! Enhanced taint analysis with improved precision
 
-use crate::sources::{Source, SourceType};
-use crate::sinks::Sink;
-use crate::sanitizers::Sanitizer;
 use crate::graph::{DataFlowGraph, NodeId};
+use crate::sanitizers::Sanitizer;
+use crate::sinks::Sink;
+use crate::sources::{Source, SourceType};
 use astgrep_core::Result;
 use std::collections::{HashMap, HashSet};
 
@@ -289,7 +289,8 @@ impl EnhancedTaintTracker {
 
                     // Reduce confidence based on path length
                     let confidence_reduction = (new_taint.path.len() as f32 * 0.05).min(0.3);
-                    new_taint.confidence = ((new_taint.confidence as f32) * (1.0 - confidence_reduction)) as u8;
+                    new_taint.confidence =
+                        ((new_taint.confidence as f32) * (1.0 - confidence_reduction)) as u8;
 
                     new_taints.push(new_taint);
                 }
@@ -301,7 +302,10 @@ impl EnhancedTaintTracker {
         }
 
         // Update or create taint state for this node
-        let current_state = self.taint_states.entry(node_id).or_insert_with(EnhancedTaintState::new);
+        let current_state = self
+            .taint_states
+            .entry(node_id)
+            .or_insert_with(EnhancedTaintState::new);
         let initial_count = current_state.taints.len();
 
         for taint in new_taints {
@@ -327,7 +331,8 @@ impl EnhancedTaintTracker {
                     // Find the original source
                     if let Some(source) = sources.iter().find(|s| s.id == taint.source_id) {
                         // Check for sanitizers along the path
-                        let sanitizers_on_path = self.find_sanitizers_on_path(&taint.path, sanitizers);
+                        let sanitizers_on_path =
+                            self.find_sanitizers_on_path(&taint.path, sanitizers);
 
                         // Calculate final confidence considering sanitizers
                         let final_confidence = self.calculate_confidence_with_sanitizers(
@@ -357,7 +362,11 @@ impl EnhancedTaintTracker {
     }
 
     /// Find sanitizers along a taint path
-    fn find_sanitizers_on_path(&self, path: &[NodeId], sanitizers: &[Sanitizer]) -> Vec<AppliedSanitizer> {
+    fn find_sanitizers_on_path(
+        &self,
+        path: &[NodeId],
+        sanitizers: &[Sanitizer],
+    ) -> Vec<AppliedSanitizer> {
         let mut applied_sanitizers = Vec::new();
 
         for &node_id in path {
@@ -386,9 +395,9 @@ impl EnhancedTaintTracker {
 
         for sanitizer in sanitizers {
             // Check if sanitizer protects against any of the vulnerability types
-            let protects = vulnerability_types.iter().any(|vt| {
-                sanitizer.protected_types.contains(vt)
-            });
+            let protects = vulnerability_types
+                .iter()
+                .any(|vt| sanitizer.protected_types.contains(vt));
 
             if protects {
                 // Reduce confidence based on sanitizer effectiveness

@@ -1,7 +1,7 @@
 //! API documentation handler
 
-use axum::response::Html;
 use crate::WebResult;
+use axum::response::Html;
 
 /// API documentation endpoint
 pub async fn api_docs() -> WebResult<Html<String>> {
@@ -70,8 +70,12 @@ pub async fn api_docs() -> WebResult<Html<String>> {
 /// Render docs/astgrep-Guide.md as HTML at /docs/guide
 pub async fn rule_guide() -> WebResult<Html<String>> {
     // Embed the guide at compile-time; path relative to this crate
-    let md = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/astgrep-Guide.md"));
-    let md_json = serde_json::to_string(&md).unwrap_or_else(|_| "\"Failed to load guide.\"".to_string());
+    let md = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/astgrep-Guide.md"
+    ));
+    let md_json =
+        serde_json::to_string(&md).unwrap_or_else(|_| "\"Failed to load guide.\"".to_string());
 
     let html = format!(
         r#"<!DOCTYPE html>

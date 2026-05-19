@@ -15,9 +15,6 @@ pub fn apply_metavariable_pattern(
     file_path: &PathBuf,
     source_code: &str,
 ) -> Result<Vec<Finding>> {
-    
-    
-
     let findings = Vec::new();
 
     // Determine language

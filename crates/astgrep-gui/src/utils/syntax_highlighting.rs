@@ -11,45 +11,137 @@ pub struct SyntaxHighlighter {
 impl SyntaxHighlighter {
     pub fn new() -> Self {
         let mut keywords = std::collections::HashMap::new();
-        
+
         // Java keywords
-        keywords.insert("java".to_string(), vec![
-            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
-            "class", "const", "continue", "default", "do", "double", "else", "enum",
-            "extends", "final", "finally", "float", "for", "goto", "if", "implements",
-            "import", "instanceof", "int", "interface", "long", "native", "new", "package",
-            "private", "protected", "public", "return", "short", "static", "strictfp",
-            "super", "switch", "synchronized", "this", "throw", "throws", "transient",
-            "try", "void", "volatile", "while"
-        ].into_iter().map(|s| s.to_string()).collect());
-        
+        keywords.insert(
+            "java".to_string(),
+            vec![
+                "abstract",
+                "assert",
+                "boolean",
+                "break",
+                "byte",
+                "case",
+                "catch",
+                "char",
+                "class",
+                "const",
+                "continue",
+                "default",
+                "do",
+                "double",
+                "else",
+                "enum",
+                "extends",
+                "final",
+                "finally",
+                "float",
+                "for",
+                "goto",
+                "if",
+                "implements",
+                "import",
+                "instanceof",
+                "int",
+                "interface",
+                "long",
+                "native",
+                "new",
+                "package",
+                "private",
+                "protected",
+                "public",
+                "return",
+                "short",
+                "static",
+                "strictfp",
+                "super",
+                "switch",
+                "synchronized",
+                "this",
+                "throw",
+                "throws",
+                "transient",
+                "try",
+                "void",
+                "volatile",
+                "while",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
+        );
+
         // JavaScript keywords
-        keywords.insert("javascript".to_string(), vec![
-            "async", "await", "break", "case", "catch", "class", "const", "continue",
-            "debugger", "default", "delete", "do", "else", "export", "extends", "finally",
-            "for", "function", "if", "import", "in", "instanceof", "let", "new", "return",
-            "super", "switch", "this", "throw", "try", "typeof", "var", "void", "while",
-            "with", "yield"
-        ].into_iter().map(|s| s.to_string()).collect());
-        
+        keywords.insert(
+            "javascript".to_string(),
+            vec![
+                "async",
+                "await",
+                "break",
+                "case",
+                "catch",
+                "class",
+                "const",
+                "continue",
+                "debugger",
+                "default",
+                "delete",
+                "do",
+                "else",
+                "export",
+                "extends",
+                "finally",
+                "for",
+                "function",
+                "if",
+                "import",
+                "in",
+                "instanceof",
+                "let",
+                "new",
+                "return",
+                "super",
+                "switch",
+                "this",
+                "throw",
+                "try",
+                "typeof",
+                "var",
+                "void",
+                "while",
+                "with",
+                "yield",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
+        );
+
         // Python keywords
-        keywords.insert("python".to_string(), vec![
-            "and", "as", "assert", "break", "class", "continue", "def", "del", "elif",
-            "else", "except", "exec", "finally", "for", "from", "global", "if", "import",
-            "in", "is", "lambda", "not", "or", "pass", "print", "raise", "return", "try",
-            "while", "with", "yield", "async", "await"
-        ].into_iter().map(|s| s.to_string()).collect());
-        
+        keywords.insert(
+            "python".to_string(),
+            vec![
+                "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else",
+                "except", "exec", "finally", "for", "from", "global", "if", "import", "in", "is",
+                "lambda", "not", "or", "pass", "print", "raise", "return", "try", "while", "with",
+                "yield", "async", "await",
+            ]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect(),
+        );
+
         Self { keywords }
     }
-    
+
     /// Apply syntax highlighting to text
     pub fn highlight_text(&self, ui: &mut egui::Ui, text: &str, language: &str) {
         let keywords = self.keywords.get(language).cloned().unwrap_or_default();
-        
+
         // Simple token-based highlighting
         let tokens = self.tokenize(text);
-        
+
         ui.horizontal_wrapped(|ui| {
             for token in tokens {
                 match token.token_type {
@@ -82,7 +174,7 @@ impl SyntaxHighlighter {
             }
         });
     }
-    
+
     /// Simple tokenizer
     fn tokenize(&self, text: &str) -> Vec<Token> {
         let mut tokens = Vec::new();
@@ -90,7 +182,7 @@ impl SyntaxHighlighter {
         let mut in_string = false;
         let mut in_comment = false;
         let mut string_char = '"';
-        
+
         for ch in text.chars() {
             if in_comment {
                 current_token.push(ch);
@@ -104,7 +196,7 @@ impl SyntaxHighlighter {
                 }
                 continue;
             }
-            
+
             if in_string {
                 current_token.push(ch);
                 if ch == string_char {
@@ -117,7 +209,7 @@ impl SyntaxHighlighter {
                 }
                 continue;
             }
-            
+
             match ch {
                 '"' | '\'' => {
                     if !current_token.is_empty() {
@@ -173,17 +265,21 @@ impl SyntaxHighlighter {
                 }
             }
         }
-        
+
         if !current_token.is_empty() {
             tokens.push(Token {
                 text: current_token,
-                token_type: if in_comment { TokenType::Comment } else { TokenType::Other },
+                token_type: if in_comment {
+                    TokenType::Comment
+                } else {
+                    TokenType::Other
+                },
             });
         }
-        
+
         tokens
     }
-    
+
     fn classify_token(&self, token: &str) -> TokenType {
         if token.chars().all(|c| c.is_ascii_digit()) {
             TokenType::Number

@@ -72,7 +72,13 @@ impl CallGraph {
     }
 
     /// Add a function definition to the call graph
-    pub fn add_function(&mut self, signature: FunctionSignature, parameters: Vec<String>, return_type: Option<String>, node_id: usize) -> FunctionId {
+    pub fn add_function(
+        &mut self,
+        signature: FunctionSignature,
+        parameters: Vec<String>,
+        return_type: Option<String>,
+        node_id: usize,
+    ) -> FunctionId {
         let id = FunctionId(self.next_func_id);
         self.next_func_id += 1;
 
@@ -89,7 +95,13 @@ impl CallGraph {
     }
 
     /// Add a function call to the call graph
-    pub fn add_call(&mut self, caller_id: FunctionId, callee_signature: FunctionSignature, arguments: Vec<String>, node_id: usize) -> usize {
+    pub fn add_call(
+        &mut self,
+        caller_id: FunctionId,
+        callee_signature: FunctionSignature,
+        arguments: Vec<String>,
+        node_id: usize,
+    ) -> usize {
         let call_id = self.next_call_id;
         self.next_call_id += 1;
 
@@ -101,7 +113,10 @@ impl CallGraph {
             node_id,
         };
 
-        self.calls.entry(caller_id).or_insert_with(Vec::new).push(call);
+        self.calls
+            .entry(caller_id)
+            .or_insert_with(Vec::new)
+            .push(call);
 
         // Create parameter mapping
         if let Some(func_def) = self.functions.get(&callee_signature) {
@@ -111,10 +126,8 @@ impl CallGraph {
                     mappings.insert(i, arg.clone());
                 }
             }
-            self.param_mappings.insert(call_id, ParameterMapping {
-                call_id,
-                mappings,
-            });
+            self.param_mappings
+                .insert(call_id, ParameterMapping { call_id, mappings });
         }
 
         call_id
@@ -342,4 +355,3 @@ mod tests {
         assert!(reachable.contains(&foo_id));
     }
 }
-

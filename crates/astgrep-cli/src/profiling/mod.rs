@@ -3,6 +3,6 @@
 pub mod profiler;
 
 pub use profiler::{
-    PerformanceProfiler, ProfilingConfig, ProfileMetrics, IoStats,
-    ThreadMetrics, OperationMetric, Checkpoint
+    Checkpoint, IoStats, OperationMetric, PerformanceProfiler, ProfileMetrics, ProfilingConfig,
+    ThreadMetrics,
 };

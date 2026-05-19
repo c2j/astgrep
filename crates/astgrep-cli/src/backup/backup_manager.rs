@@ -100,12 +100,16 @@ impl BackupManager {
         }
 
         // Create backup directory if it doesn't exist
-        self.path_handler.create_directory(&self.config.backup_directory)?;
+        self.path_handler
+            .create_directory(&self.config.backup_directory)?;
 
         // Check available disk space
         self.check_disk_space().await?;
 
-        info!("Backup system initialized with directory: {:?}", self.config.backup_directory);
+        info!(
+            "Backup system initialized with directory: {:?}",
+            self.config.backup_directory
+        );
         Ok(())
     }
 
@@ -122,7 +126,10 @@ impl BackupManager {
         let backup_id = uuid::Uuid::new_v4().to_string();
         self.current_backup_id = Some(backup_id.clone());
 
-        info!("Creating backup {} for migration {}", backup_id, migration_id);
+        info!(
+            "Creating backup {} for migration {}",
+            backup_id, migration_id
+        );
 
         let backup_path = self.get_backup_path(&backup_id);
         self.path_handler.create_directory(&backup_path)?;
@@ -136,7 +143,9 @@ impl BackupManager {
                 crate::services::migration_orchestrator::OperationType::Move => {
                     // For move operations, backup the source file
                     if operation.source_path.exists() {
-                        let backup_item = self.backup_file(&operation.source_path, &backup_path).await?;
+                        let backup_item = self
+                            .backup_file(&operation.source_path, &backup_path)
+                            .await?;
                         backup_items.push(backup_item.0);
                         total_size += backup_item.1;
                     }
@@ -152,7 +161,9 @@ impl BackupManager {
                 crate::services::migration_orchestrator::OperationType::CreateSymlink => {
                     // For symlink creation, backup the target if it exists
                     if operation.source_path.exists() {
-                        let backup_item = self.backup_symlink(&operation.source_path, &backup_path).await?;
+                        let backup_item = self
+                            .backup_symlink(&operation.source_path, &backup_path)
+                            .await?;
                         backup_items.push(backup_item.0);
                         total_size += backup_item.1;
                     }
@@ -185,19 +196,26 @@ impl BackupManager {
         // Save backup manifest
         self.save_backup_manifest(&manifest).await?;
 
-        info!("Backup {} created successfully ({} bytes)", backup_id, total_size);
+        info!(
+            "Backup {} created successfully ({} bytes)",
+            backup_id, total_size
+        );
         Ok(backup_id)
     }
 
     /// Rollback migration from backup
     pub async fn rollback(&self, backup_id: &str) -> Result<()> {
         if !self.config.enabled {
-            return Err(anyhow::anyhow!("Backup system is disabled, cannot rollback"));
+            return Err(anyhow::anyhow!(
+                "Backup system is disabled, cannot rollback"
+            ));
         }
 
         info!("Starting rollback from backup: {}", backup_id);
 
-        let manifest = self.load_backup_manifest(backup_id).await
+        let manifest = self
+            .load_backup_manifest(backup_id)
+            .await
             .with_context(|| format!("Backup manifest not found for ID: {}", backup_id))?;
 
         // Verify backup integrity
@@ -207,8 +225,11 @@ impl BackupManager {
 
         // Rollback in reverse order of backup creation
         for backup_item in manifest.backup_items.iter().rev() {
-            self.restore_backup_item(backup_item).await
-                .with_context(|| format!("Failed to restore backup item: {}", backup_item.item_id))?;
+            self.restore_backup_item(backup_item)
+                .await
+                .with_context(|| {
+                    format!("Failed to restore backup item: {}", backup_item.item_id)
+                })?;
         }
 
         info!("Rollback completed successfully for backup: {}", backup_id);
@@ -298,15 +319,24 @@ impl BackupManager {
 
     // Private helper methods
 
-    async fn backup_file(&self, source_path: &Path, backup_dir: &Path) -> Result<(BackupItem, u64)> {
-        let backup_path = backup_dir.join("files").join(source_path.file_name()
-            .ok_or_else(|| anyhow::anyhow!("Invalid file name"))?);
+    async fn backup_file(
+        &self,
+        source_path: &Path,
+        backup_dir: &Path,
+    ) -> Result<(BackupItem, u64)> {
+        let backup_path = backup_dir.join("files").join(
+            source_path
+                .file_name()
+                .ok_or_else(|| anyhow::anyhow!("Invalid file name"))?,
+        );
 
         // Ensure backup subdirectory exists
-        self.path_handler.create_directory(backup_path.parent().unwrap())?;
+        self.path_handler
+            .create_directory(backup_path.parent().unwrap())?;
 
         // Copy file to backup location
-        async_fs::copy(source_path, &backup_path).await
+        async_fs::copy(source_path, &backup_path)
+            .await
             .with_context(|| format!("Failed to backup file: {:?}", source_path))?;
 
         // Calculate checksum
@@ -320,7 +350,11 @@ impl BackupManager {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                async_fs::metadata(source_path).await?.permissions().mode().into()
+                async_fs::metadata(source_path)
+                    .await?
+                    .permissions()
+                    .mode()
+                    .into()
             }
             #[cfg(not(unix))]
             {
@@ -346,15 +380,24 @@ impl BackupManager {
         Ok((backup_item, size_bytes))
     }
 
-    async fn backup_symlink(&self, source_path: &Path, backup_dir: &Path) -> Result<(BackupItem, u64)> {
-        let backup_path = backup_dir.join("symlinks").join(source_path.file_name()
-            .ok_or_else(|| anyhow::anyhow!("Invalid symlink name"))?);
+    async fn backup_symlink(
+        &self,
+        source_path: &Path,
+        backup_dir: &Path,
+    ) -> Result<(BackupItem, u64)> {
+        let backup_path = backup_dir.join("symlinks").join(
+            source_path
+                .file_name()
+                .ok_or_else(|| anyhow::anyhow!("Invalid symlink name"))?,
+        );
 
         // Ensure backup subdirectory exists
-        self.path_handler.create_directory(backup_path.parent().unwrap())?;
+        self.path_handler
+            .create_directory(backup_path.parent().unwrap())?;
 
         // Read symlink target
-        let target = async_fs::read_link(source_path).await
+        let target = async_fs::read_link(source_path)
+            .await
             .with_context(|| format!("Failed to read symlink: {:?}", source_path))?;
 
         // Create backup of the symlink
@@ -366,7 +409,9 @@ impl BackupManager {
 
         #[cfg(not(unix))]
         {
-            return Err(anyhow::anyhow!("Symlinks are not supported on this platform"));
+            return Err(anyhow::anyhow!(
+                "Symlinks are not supported on this platform"
+            ));
         }
 
         let backup_item = BackupItem {
@@ -394,15 +439,20 @@ impl BackupManager {
                 }
 
                 // Restore file from backup
-                async_fs::copy(&backup_item.backup_path, &backup_item.original_path).await
-                    .with_context(|| format!("Failed to restore file: {:?}", backup_item.original_path))?;
+                async_fs::copy(&backup_item.backup_path, &backup_item.original_path)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to restore file: {:?}", backup_item.original_path)
+                    })?;
 
                 // Restore permissions if available
                 if let Some(permissions) = backup_item.permissions {
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
-                        let mut perm = async_fs::metadata(&backup_item.original_path).await?.permissions();
+                        let mut perm = async_fs::metadata(&backup_item.original_path)
+                            .await?
+                            .permissions();
                         perm.set_mode(permissions);
                         async_fs::set_permissions(&backup_item.original_path, perm).await?;
                     }
@@ -417,7 +467,8 @@ impl BackupManager {
             BackupItemType::Directory => {
                 // Create directory if it doesn't exist
                 if !backup_item.original_path.exists() {
-                    self.path_handler.create_directory(&backup_item.original_path)?;
+                    self.path_handler
+                        .create_directory(&backup_item.original_path)?;
                 }
                 debug!("Ensured directory exists: {:?}", backup_item.original_path);
             }
@@ -427,7 +478,7 @@ impl BackupManager {
     }
 
     async fn calculate_file_checksum(&self, file_path: &Path) -> Result<String> {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         use tokio::io::AsyncReadExt;
 
         let mut file = async_fs::File::open(file_path).await?;
@@ -456,7 +507,8 @@ impl BackupManager {
         let manifest_path = self.get_backup_manifest_path(&manifest.backup_id);
         let manifest_json = serde_json::to_string_pretty(manifest)?;
 
-        async_fs::write(&manifest_path, manifest_json).await
+        async_fs::write(&manifest_path, manifest_json)
+            .await
             .with_context(|| format!("Failed to save backup manifest: {:?}", manifest_path))?;
 
         Ok(())
@@ -464,7 +516,8 @@ impl BackupManager {
 
     async fn load_backup_manifest(&self, backup_id: &str) -> Result<BackupManifest> {
         let manifest_path = self.get_backup_manifest_path(backup_id);
-        let manifest_content = async_fs::read_to_string(&manifest_path).await
+        let manifest_content = async_fs::read_to_string(&manifest_path)
+            .await
             .with_context(|| format!("Failed to load backup manifest: {:?}", manifest_path))?;
 
         let manifest: BackupManifest = serde_json::from_str(&manifest_content)
@@ -483,21 +536,28 @@ impl BackupManager {
                 if metadata.len() != backup_item.size_bytes {
                     return Err(anyhow::anyhow!(
                         "Backup file size mismatch for {}: expected {}, found {}",
-                        backup_item.item_id, backup_item.size_bytes, metadata.len()
+                        backup_item.item_id,
+                        backup_item.size_bytes,
+                        metadata.len()
                     ));
                 }
 
                 // Verify checksum
-                let current_checksum = self.calculate_file_checksum(&backup_item.backup_path).await?;
+                let current_checksum = self
+                    .calculate_file_checksum(&backup_item.backup_path)
+                    .await?;
                 if current_checksum != backup_item.checksum {
                     return Err(anyhow::anyhow!(
                         "Backup file checksum mismatch for {}: expected {}, found {}",
-                        backup_item.item_id, backup_item.checksum, current_checksum
+                        backup_item.item_id,
+                        backup_item.checksum,
+                        current_checksum
                     ));
                 }
             } else {
                 return Err(anyhow::anyhow!(
-                    "Backup file missing for item: {}", backup_item.item_id
+                    "Backup file missing for item: {}",
+                    backup_item.item_id
                 ));
             }
         }
@@ -514,7 +574,8 @@ impl BackupManager {
     }
 
     async fn remove_backup_directory(&self, backup_dir: &Path) -> Result<()> {
-        async_fs::remove_dir_all(backup_dir).await
+        async_fs::remove_dir_all(backup_dir)
+            .await
             .with_context(|| format!("Failed to remove backup directory: {:?}", backup_dir))
     }
 
@@ -530,8 +591,8 @@ impl BackupManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_backup_manager_initialization() {
@@ -587,7 +648,10 @@ mod tests {
             timestamp: Utc::now(),
         };
 
-        let backup_id = manager.create_backup("test-migration", &[operation]).await.unwrap();
+        let backup_id = manager
+            .create_backup("test-migration", &[operation])
+            .await
+            .unwrap();
         assert!(!backup_id.is_empty());
 
         // Verify backup was created

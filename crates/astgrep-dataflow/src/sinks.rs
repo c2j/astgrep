@@ -1,5 +1,5 @@
 //! Sink detection for data flow analysis
-//! 
+//!
 //! This module identifies sinks where tainted data could cause security vulnerabilities.
 
 use crate::graph::{DataFlowGraph, DataFlowNode, NodeId};
@@ -19,7 +19,12 @@ pub struct Sink {
 
 impl Sink {
     /// Create a new sink
-    pub fn new(id: NodeId, sink_type: SinkType, vulnerability_type: String, description: String) -> Self {
+    pub fn new(
+        id: NodeId,
+        sink_type: SinkType,
+        vulnerability_type: String,
+        description: String,
+    ) -> Self {
         Self {
             id,
             sink_type,
@@ -82,9 +87,15 @@ impl SinkType {
     /// Get the severity of this sink type
     pub fn severity(&self) -> SinkSeverity {
         match self {
-            SinkType::SqlExecution | SinkType::CommandExecution | SinkType::JavaScriptEvaluation => SinkSeverity::Critical,
-            SinkType::FileOperation | SinkType::XmlOperation | SinkType::LdapOperation => SinkSeverity::High,
-            SinkType::NetworkOperation | SinkType::HtmlOutput | SinkType::DatabaseOperation => SinkSeverity::Medium,
+            SinkType::SqlExecution
+            | SinkType::CommandExecution
+            | SinkType::JavaScriptEvaluation => SinkSeverity::Critical,
+            SinkType::FileOperation | SinkType::XmlOperation | SinkType::LdapOperation => {
+                SinkSeverity::High
+            }
+            SinkType::NetworkOperation | SinkType::HtmlOutput | SinkType::DatabaseOperation => {
+                SinkSeverity::Medium
+            }
             SinkType::LogOutput => SinkSeverity::Low,
         }
     }
@@ -173,7 +184,7 @@ impl SinkDetector {
                                 pattern.vulnerability_type.clone(),
                                 pattern.description.clone(),
                             )
-                            .with_confidence(pattern.confidence)
+                            .with_confidence(pattern.confidence),
                         );
                     }
                 }
@@ -185,120 +196,159 @@ impl SinkDetector {
 
     /// Get patterns for a node type
     fn get_patterns_for_type(&self, node_type: &str) -> &[SinkPattern] {
-        self.patterns.get(node_type).map(|v| v.as_slice()).unwrap_or(&[])
+        self.patterns
+            .get(node_type)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Add a custom sink pattern
     pub fn add_pattern(&mut self, node_type: String, pattern: SinkPattern) {
-        self.patterns.entry(node_type).or_insert_with(Vec::new).push(pattern);
+        self.patterns
+            .entry(node_type)
+            .or_insert_with(Vec::new)
+            .push(pattern);
     }
 
     /// Load default sink patterns
     fn load_default_patterns(&mut self) {
         // SQL execution patterns
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "executeQuery".to_string(),
-            sink_type: SinkType::SqlExecution,
-            vulnerability_type: "SQL_INJECTION".to_string(),
-            description: "SQL query execution".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "executeQuery".to_string(),
+                sink_type: SinkType::SqlExecution,
+                vulnerability_type: "SQL_INJECTION".to_string(),
+                description: "SQL query execution".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "query".to_string(),
-            sink_type: SinkType::SqlExecution,
-            vulnerability_type: "SQL_INJECTION".to_string(),
-            description: "Database query".to_string(),
-            confidence: 0.8,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "query".to_string(),
+                sink_type: SinkType::SqlExecution,
+                vulnerability_type: "SQL_INJECTION".to_string(),
+                description: "Database query".to_string(),
+                confidence: 0.8,
+                attributes: HashMap::new(),
+            },
+        );
 
         // Command execution patterns
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "exec".to_string(),
-            sink_type: SinkType::CommandExecution,
-            vulnerability_type: "COMMAND_INJECTION".to_string(),
-            description: "Command execution".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "exec".to_string(),
+                sink_type: SinkType::CommandExecution,
+                vulnerability_type: "COMMAND_INJECTION".to_string(),
+                description: "Command execution".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "system".to_string(),
-            sink_type: SinkType::CommandExecution,
-            vulnerability_type: "COMMAND_INJECTION".to_string(),
-            description: "System command execution".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "system".to_string(),
+                sink_type: SinkType::CommandExecution,
+                vulnerability_type: "COMMAND_INJECTION".to_string(),
+                description: "System command execution".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
         // File operation patterns
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "writeFile".to_string(),
-            sink_type: SinkType::FileOperation,
-            vulnerability_type: "PATH_TRAVERSAL".to_string(),
-            description: "File write operation".to_string(),
-            confidence: 0.8,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "writeFile".to_string(),
+                sink_type: SinkType::FileOperation,
+                vulnerability_type: "PATH_TRAVERSAL".to_string(),
+                description: "File write operation".to_string(),
+                confidence: 0.8,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "open".to_string(),
-            sink_type: SinkType::FileOperation,
-            vulnerability_type: "PATH_TRAVERSAL".to_string(),
-            description: "File open operation".to_string(),
-            confidence: 0.7,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "open".to_string(),
+                sink_type: SinkType::FileOperation,
+                vulnerability_type: "PATH_TRAVERSAL".to_string(),
+                description: "File open operation".to_string(),
+                confidence: 0.7,
+                attributes: HashMap::new(),
+            },
+        );
 
         // HTML output patterns
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "innerHTML".to_string(),
-            sink_type: SinkType::HtmlOutput,
-            vulnerability_type: "XSS".to_string(),
-            description: "HTML content insertion".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "innerHTML".to_string(),
+                sink_type: SinkType::HtmlOutput,
+                vulnerability_type: "XSS".to_string(),
+                description: "HTML content insertion".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "document.write".to_string(),
-            sink_type: SinkType::HtmlOutput,
-            vulnerability_type: "XSS".to_string(),
-            description: "Document write operation".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "document.write".to_string(),
+                sink_type: SinkType::HtmlOutput,
+                vulnerability_type: "XSS".to_string(),
+                description: "Document write operation".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
         // JavaScript evaluation patterns
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "eval".to_string(),
-            sink_type: SinkType::JavaScriptEvaluation,
-            vulnerability_type: "CODE_INJECTION".to_string(),
-            description: "JavaScript eval function".to_string(),
-            confidence: 0.95,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "eval".to_string(),
+                sink_type: SinkType::JavaScriptEvaluation,
+                vulnerability_type: "CODE_INJECTION".to_string(),
+                description: "JavaScript eval function".to_string(),
+                confidence: 0.95,
+                attributes: HashMap::new(),
+            },
+        );
 
         // Log output patterns
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "log".to_string(),
-            sink_type: SinkType::LogOutput,
-            vulnerability_type: "LOG_INJECTION".to_string(),
-            description: "Log output".to_string(),
-            confidence: 0.6,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "log".to_string(),
+                sink_type: SinkType::LogOutput,
+                vulnerability_type: "LOG_INJECTION".to_string(),
+                description: "Log output".to_string(),
+                confidence: 0.6,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SinkPattern {
-            name_pattern: "console.log".to_string(),
-            sink_type: SinkType::LogOutput,
-            vulnerability_type: "LOG_INJECTION".to_string(),
-            description: "Console log output".to_string(),
-            confidence: 0.5,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SinkPattern {
+                name_pattern: "console.log".to_string(),
+                sink_type: SinkType::LogOutput,
+                vulnerability_type: "LOG_INJECTION".to_string(),
+                description: "Console log output".to_string(),
+                confidence: 0.5,
+                attributes: HashMap::new(),
+            },
+        );
     }
 }
 
@@ -365,7 +415,7 @@ mod tests {
             "Test sink".to_string(),
         )
         .with_confidence(0.9);
-        
+
         assert_eq!(sink.id, 0);
         assert_eq!(sink.sink_type, SinkType::SqlExecution);
         assert_eq!(sink.vulnerability_type, "SQL_INJECTION");
@@ -384,7 +434,10 @@ mod tests {
     #[test]
     fn test_sink_type_vulnerability() {
         assert_eq!(SinkType::SqlExecution.vulnerability_type(), "SQL_INJECTION");
-        assert_eq!(SinkType::CommandExecution.vulnerability_type(), "COMMAND_INJECTION");
+        assert_eq!(
+            SinkType::CommandExecution.vulnerability_type(),
+            "COMMAND_INJECTION"
+        );
         assert_eq!(SinkType::HtmlOutput.vulnerability_type(), "XSS");
     }
 
@@ -404,8 +457,8 @@ mod tests {
             0.9,
         );
 
-        let node = DataFlowNode::new("call_expression".to_string())
-            .with_text("executeQuery".to_string());
+        let node =
+            DataFlowNode::new("call_expression".to_string()).with_text("executeQuery".to_string());
 
         assert!(pattern.matches("executeQuery", &node));
         assert!(!pattern.matches("other.method", &node));
@@ -417,8 +470,8 @@ mod tests {
         let detector = SinkDetector::new();
 
         // Add a node that should be detected as a sink
-        let node = DataFlowNode::new("call_expression".to_string())
-            .with_text("executeQuery".to_string());
+        let node =
+            DataFlowNode::new("call_expression".to_string()).with_text("executeQuery".to_string());
         let node_id = graph.add_node(node);
 
         let sinks = detector.detect_sinks(&graph).unwrap();
@@ -431,7 +484,7 @@ mod tests {
     #[test]
     fn test_custom_sink_pattern() {
         let mut detector = SinkDetector::new();
-        
+
         let custom_pattern = SinkPattern::new(
             "customSink".to_string(),
             SinkType::NetworkOperation,
@@ -439,12 +492,12 @@ mod tests {
             "Custom sink".to_string(),
             0.8,
         );
-        
+
         detector.add_pattern("call_expression".to_string(), custom_pattern);
-        
+
         let mut graph = DataFlowGraph::new();
-        let node = DataFlowNode::new("call_expression".to_string())
-            .with_text("customSink".to_string());
+        let node =
+            DataFlowNode::new("call_expression".to_string()).with_text("customSink".to_string());
         graph.add_node(node);
 
         let sinks = detector.detect_sinks(&graph).unwrap();

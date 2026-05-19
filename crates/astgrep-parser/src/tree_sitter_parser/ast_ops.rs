@@ -3,13 +3,18 @@
 //! This module provides AST-based pattern matching operations
 //! for various node types and patterns.
 
-use super::integration::{TreeSitterParser, MetaVariableBindings};
+use super::integration::{MetaVariableBindings, TreeSitterParser};
 use astgrep_core::Result;
 use tree_sitter::Node;
 
 impl TreeSitterParser {
     /// Match string literal nodes
-    pub(super) fn match_string_literal(&self, node: &Node, source: &str, content: &str) -> Result<bool> {
+    pub(super) fn match_string_literal(
+        &self,
+        node: &Node,
+        source: &str,
+        content: &str,
+    ) -> Result<bool> {
         if matches!(node.kind(), "string" | "string_literal") {
             let node_text = node.utf8_text(source.as_bytes()).unwrap_or("");
             // Remove quotes and check content
@@ -21,8 +26,16 @@ impl TreeSitterParser {
     }
 
     /// Match numeric literal nodes
-    pub(super) fn match_numeric_literal(&self, node: &Node, source: &str, value: &str) -> Result<bool> {
-        if matches!(node.kind(), "integer" | "number" | "integer_literal" | "float" | "decimal_literal") {
+    pub(super) fn match_numeric_literal(
+        &self,
+        node: &Node,
+        source: &str,
+        value: &str,
+    ) -> Result<bool> {
+        if matches!(
+            node.kind(),
+            "integer" | "number" | "integer_literal" | "float" | "decimal_literal"
+        ) {
             let node_text = node.utf8_text(source.as_bytes()).unwrap_or("");
             Ok(node_text == value)
         } else {
@@ -31,7 +44,12 @@ impl TreeSitterParser {
     }
 
     /// Match function call nodes
-    pub(super) fn match_function_call(&self, node: &Node, source: &str, func_name: &str) -> Result<bool> {
+    pub(super) fn match_function_call(
+        &self,
+        node: &Node,
+        source: &str,
+        func_name: &str,
+    ) -> Result<bool> {
         if matches!(node.kind(), "call_expression" | "call") {
             // Check if function name matches
             if let Some(function_node) = node.child_by_field_name("function") {
@@ -52,7 +70,12 @@ impl TreeSitterParser {
     }
 
     /// Match import statement nodes
-    pub(super) fn match_import_statement(&self, node: &Node, source: &str, import_spec: &str) -> Result<bool> {
+    pub(super) fn match_import_statement(
+        &self,
+        node: &Node,
+        source: &str,
+        import_spec: &str,
+    ) -> Result<bool> {
         if matches!(node.kind(), "import_statement" | "import_from_statement") {
             let node_text = node.utf8_text(source.as_bytes()).unwrap_or("");
 
@@ -74,7 +97,7 @@ impl TreeSitterParser {
         let pattern = pattern.trim();
         if pattern.starts_with("import ") {
             let module_part = &pattern[7..]; // Remove "import "
-            // Handle "import foo.bar as alias" -> "foo.bar"
+                                             // Handle "import foo.bar as alias" -> "foo.bar"
             let module_path = module_part.split_whitespace().next().unwrap_or("");
             if !module_path.is_empty() {
                 Some(module_path.to_string())
@@ -87,7 +110,13 @@ impl TreeSitterParser {
     }
 
     /// Match method call nodes (e.g., System.out.println or $obj.method)
-    pub(super) fn match_method_call(&self, node: &Node, source: &str, object: &str, method: &str) -> Result<bool> {
+    pub(super) fn match_method_call(
+        &self,
+        node: &Node,
+        source: &str,
+        object: &str,
+        method: &str,
+    ) -> Result<bool> {
         // Check if this is a method invocation node (Java)
         if node.kind() == "method_invocation" {
             // For Java method invocations, check method name
@@ -118,7 +147,10 @@ impl TreeSitterParser {
         if matches!(node.kind(), "call_expression" | "call") {
             // Check if this is a method call on specified object
             if let Some(function_node) = node.child_by_field_name("function") {
-                if matches!(function_node.kind(), "attribute" | "member_expression" | "field_expression") {
+                if matches!(
+                    function_node.kind(),
+                    "attribute" | "member_expression" | "field_expression"
+                ) {
                     let func_text = function_node.utf8_text(source.as_bytes()).unwrap_or("");
 
                     // If object is a metavariable, match any object with specified method
@@ -161,7 +193,7 @@ impl TreeSitterParser {
         node: &Node,
         source: &str,
         var_name: &str,
-        bindings: &mut MetaVariableBindings
+        bindings: &mut MetaVariableBindings,
     ) -> Result<bool> {
         let node_text = node.utf8_text(source.as_bytes()).unwrap_or("");
 
@@ -180,10 +212,12 @@ impl TreeSitterParser {
         source: &str,
         func_name: &str,
         args: &[String],
-        bindings: &mut MetaVariableBindings
+        bindings: &mut MetaVariableBindings,
     ) -> Result<bool> {
-
-        if !matches!(node.kind(), "call_expression" | "call" | "method_invocation") {
+        if !matches!(
+            node.kind(),
+            "call_expression" | "call" | "method_invocation"
+        ) {
             return Ok(false);
         }
 
@@ -217,7 +251,10 @@ impl TreeSitterParser {
         } else {
             // For other call types, use function field
             if let Some(function_node) = node.child_by_field_name("function") {
-                function_node.utf8_text(source.as_bytes()).unwrap_or("").to_string()
+                function_node
+                    .utf8_text(source.as_bytes())
+                    .unwrap_or("")
+                    .to_string()
             } else {
                 "".to_string()
             }
@@ -246,7 +283,7 @@ impl TreeSitterParser {
         node: &Node,
         source: &str,
         expected_args: &[String],
-        bindings: &mut MetaVariableBindings
+        bindings: &mut MetaVariableBindings,
     ) -> Result<bool> {
         // Get arguments node
         if let Some(args_node) = node.child_by_field_name("arguments") {
@@ -255,7 +292,8 @@ impl TreeSitterParser {
             // Collect actual arguments
             for i in 0..args_node.child_count() {
                 if let Some(arg_node) = args_node.child(i) {
-                    if arg_node.kind() != "," && arg_node.kind() != "(" && arg_node.kind() != ")" {  // Skip separators
+                    if arg_node.kind() != "," && arg_node.kind() != "(" && arg_node.kind() != ")" {
+                        // Skip separators
                         let arg_text = arg_node.utf8_text(source.as_bytes()).unwrap_or("");
                         actual_args.push(arg_text);
                     }

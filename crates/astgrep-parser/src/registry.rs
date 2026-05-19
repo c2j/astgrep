@@ -2,7 +2,7 @@
 //!
 //! This module provides the registry system for managing different language parsers.
 
-use astgrep_core::{Language, LanguageParser, Result, constants::defaults::parser};
+use astgrep_core::{constants::defaults::parser, Language, LanguageParser, Result};
 use std::collections::HashMap;
 
 /// Parser registry configuration
@@ -82,11 +82,11 @@ impl ConfigurableParserRegistry {
     /// Validate parser configuration
     pub fn validate_config(&self, language: Language) -> Result<()> {
         let config = self.get_config(language);
-        
+
         if let Some(timeout) = config.timeout_ms {
             if timeout == 0 {
                 return Err(astgrep_core::AnalysisError::parse_error(
-                    "Parser timeout cannot be zero".to_string()
+                    "Parser timeout cannot be zero".to_string(),
                 ));
             }
         }
@@ -94,7 +94,7 @@ impl ConfigurableParserRegistry {
         if let Some(max_size) = config.max_file_size {
             if max_size == 0 {
                 return Err(astgrep_core::AnalysisError::parse_error(
-                    "Max file size cannot be zero".to_string()
+                    "Max file size cannot be zero".to_string(),
                 ));
             }
         }
@@ -105,7 +105,7 @@ impl ConfigurableParserRegistry {
     /// Check if source meets size requirements
     pub fn check_source_size(&self, language: Language, source: &str) -> Result<()> {
         let config = self.get_config(language);
-        
+
         if let Some(max_size) = config.max_file_size {
             if source.len() > max_size {
                 return Err(astgrep_core::AnalysisError::parse_error(format!(
@@ -219,16 +219,16 @@ mod tests {
     #[test]
     fn test_configurable_registry() {
         let mut registry = ConfigurableParserRegistry::new();
-        
+
         let config = ParserConfig {
             timeout_ms: Some(60000),
             max_file_size: Some(50 * 1024 * 1024),
             enable_recovery: false,
             strict_mode: true,
         };
-        
+
         registry.set_language_config(Language::Java, config.clone());
-        
+
         let retrieved_config = registry.get_config(Language::Java);
         assert_eq!(retrieved_config.timeout_ms, Some(60000));
         assert_eq!(retrieved_config.max_file_size, Some(50 * 1024 * 1024));
@@ -240,7 +240,7 @@ mod tests {
     fn test_parser_factory() {
         let parser = ParserFactory::create_parser(Language::Java);
         assert!(parser.is_ok());
-        
+
         let parser = parser.unwrap();
         assert_eq!(parser.language(), Language::Java);
     }
@@ -259,12 +259,12 @@ mod tests {
     #[test]
     fn test_validate_config() {
         let mut registry = ConfigurableParserRegistry::new();
-        
+
         // Valid config
         let valid_config = ParserConfig::default();
         registry.set_language_config(Language::Java, valid_config);
         assert!(registry.validate_config(Language::Java).is_ok());
-        
+
         // Invalid config - zero timeout
         let invalid_config = ParserConfig {
             timeout_ms: Some(0),
@@ -277,33 +277,41 @@ mod tests {
     #[test]
     fn test_check_source_size() {
         let mut registry = ConfigurableParserRegistry::new();
-        
+
         let config = ParserConfig {
             max_file_size: Some(100), // 100 bytes
             ..Default::default()
         };
         registry.set_language_config(Language::Java, config);
-        
+
         // Small source should pass
         let small_source = "public class Test {}";
-        assert!(registry.check_source_size(Language::Java, small_source).is_ok());
-        
+        assert!(registry
+            .check_source_size(Language::Java, small_source)
+            .is_ok());
+
         // Large source should fail
         let large_source = "a".repeat(200);
-        assert!(registry.check_source_size(Language::Java, &large_source).is_err());
+        assert!(registry
+            .check_source_size(Language::Java, &large_source)
+            .is_err());
     }
 
     #[test]
     fn test_parser_stats() {
         let mut registry = ConfigurableParserRegistry::new();
-        
+
         // Register some parsers
         let java_parser = ParserFactory::create_parser(Language::Java).unwrap();
         let js_parser = ParserFactory::create_parser(Language::JavaScript).unwrap();
-        
+
         registry.register_parser_with_config(Language::Java, java_parser, None);
-        registry.register_parser_with_config(Language::JavaScript, js_parser, Some(ParserConfig::default()));
-        
+        registry.register_parser_with_config(
+            Language::JavaScript,
+            js_parser,
+            Some(ParserConfig::default()),
+        );
+
         let stats = registry.get_stats();
         assert_eq!(stats.total_parsers, 2);
         assert_eq!(stats.configured_parsers, 1); // Only JS has explicit config

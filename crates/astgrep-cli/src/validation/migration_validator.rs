@@ -89,7 +89,7 @@ pub struct ValidationDetails {
     pub timestamp_match: Option<bool>,
     pub size_match: Option<bool>,
     pub content_match: Option<bool>,
-    pub file_count_match: Option<bool>, // For directories
+    pub file_count_match: Option<bool>,     // For directories
     pub symlink_target_match: Option<bool>, // For symlinks
 }
 
@@ -142,7 +142,9 @@ impl std::fmt::Display for ValidationErrorType {
             ValidationErrorType::TimestampMismatch => write!(f, "TimestampMismatch"),
             ValidationErrorType::SizeMismatch => write!(f, "SizeMismatch"),
             ValidationErrorType::ContentMismatch => write!(f, "ContentMismatch"),
-            ValidationErrorType::DirectoryStructureMismatch => write!(f, "DirectoryStructureMismatch"),
+            ValidationErrorType::DirectoryStructureMismatch => {
+                write!(f, "DirectoryStructureMismatch")
+            }
             ValidationErrorType::SymlinkTargetMismatch => write!(f, "SymlinkTargetMismatch"),
             ValidationErrorType::AccessDenied => write!(f, "AccessDenied"),
             ValidationErrorType::Timeout => write!(f, "Timeout"),
@@ -193,12 +195,20 @@ impl MigrationValidator {
     }
 
     /// Register a custom validator
-    pub fn register_custom_validator(&mut self, name: String, validator: Box<dyn CustomValidator + Send + Sync>) {
+    pub fn register_custom_validator(
+        &mut self,
+        name: String,
+        validator: Box<dyn CustomValidator + Send + Sync>,
+    ) {
         self.custom_validators.insert(name, validator);
     }
 
     /// Validate migration operations
-    pub async fn validate_migration(&self, migration_id: &str, operations: &[MigrationOperation]) -> Result<ValidationReport> {
+    pub async fn validate_migration(
+        &self,
+        migration_id: &str,
+        operations: &[MigrationOperation],
+    ) -> Result<ValidationReport> {
         if !self.config.enabled {
             info!("Migration validation is disabled");
             return Ok(ValidationReport {
@@ -226,7 +236,10 @@ impl MigrationValidator {
             });
         }
 
-        info!("Starting migration validation for {} operations", operations.len());
+        info!(
+            "Starting migration validation for {} operations",
+            operations.len()
+        );
 
         let mut operation_validations = Vec::new();
         let mut errors = Vec::new();
@@ -264,8 +277,8 @@ impl MigrationValidator {
 
                     // Update counters based on operation type
                     match operation.operation_type {
-                        crate::services::migration_orchestrator::OperationType::Copy |
-                        crate::services::migration_orchestrator::OperationType::Move => {
+                        crate::services::migration_orchestrator::OperationType::Copy
+                        | crate::services::migration_orchestrator::OperationType::Move => {
                             if operation.source_path.is_file() {
                                 files_count += 1;
                                 if let Ok(metadata) = fs::metadata(&operation.source_path).await {
@@ -331,7 +344,9 @@ impl MigrationValidator {
         let overall_status = match (valid_count, failed_count, skipped_count) {
             (v, 0, s) if v + s == operation_validations.len() => ValidationStatus::Passed,
             (0, f, s) if f + s == operation_validations.len() => ValidationStatus::Failed,
-            (v, f, s) if v + f + s == operation_validations.len() && v > 0 && f > 0 => ValidationStatus::PartialSuccess,
+            (v, f, s) if v + f + s == operation_validations.len() && v > 0 && f > 0 => {
+                ValidationStatus::PartialSuccess
+            }
             (_, _, s) if s == operation_validations.len() => ValidationStatus::Skipped,
             _ => ValidationStatus::Failed,
         };
@@ -354,8 +369,16 @@ impl MigrationValidator {
             average_validation_time_ms: average_time,
             fastest_validation_ms: fastest_time as u64,
             slowest_validation_ms: slowest_time as u64,
-            checksum_calculations_performed: if self.config.verify_checksums { files_count } else { 0 },
-            content_comparisons_performed: if self.config.verify_content_integrity { files_count } else { 0 },
+            checksum_calculations_performed: if self.config.verify_checksums {
+                files_count
+            } else {
+                0
+            },
+            content_comparisons_performed: if self.config.verify_content_integrity {
+                files_count
+            } else {
+                0
+            },
         };
 
         let report = ValidationReport {
@@ -372,14 +395,19 @@ impl MigrationValidator {
             errors,
         };
 
-        info!("Migration validation completed: {} valid, {} failed, {} skipped",
-              valid_count, failed_count, skipped_count);
+        info!(
+            "Migration validation completed: {} valid, {} failed, {} skipped",
+            valid_count, failed_count, skipped_count
+        );
 
         Ok(report)
     }
 
     /// Validate a single migration operation
-    async fn validate_operation(&self, operation: &MigrationOperation) -> Result<OperationValidation> {
+    async fn validate_operation(
+        &self,
+        operation: &MigrationOperation,
+    ) -> Result<OperationValidation> {
         debug!("Validating operation: {}", operation.id);
 
         let mut validation_details = ValidationDetails {
@@ -400,16 +428,36 @@ impl MigrationValidator {
         // Perform validation based on operation type
         match operation.operation_type {
             crate::services::migration_orchestrator::OperationType::Copy => {
-                self.validate_copy_operation(operation, &mut validation_details, &mut validation_status).await?;
+                self.validate_copy_operation(
+                    operation,
+                    &mut validation_details,
+                    &mut validation_status,
+                )
+                .await?;
             }
             crate::services::migration_orchestrator::OperationType::Move => {
-                self.validate_move_operation(operation, &mut validation_details, &mut validation_status).await?;
+                self.validate_move_operation(
+                    operation,
+                    &mut validation_details,
+                    &mut validation_status,
+                )
+                .await?;
             }
             crate::services::migration_orchestrator::OperationType::CreateDirectory => {
-                self.validate_directory_operation(operation, &mut validation_details, &mut validation_status).await?;
+                self.validate_directory_operation(
+                    operation,
+                    &mut validation_details,
+                    &mut validation_status,
+                )
+                .await?;
             }
             crate::services::migration_orchestrator::OperationType::CreateSymlink => {
-                self.validate_symlink_operation(operation, &mut validation_details, &mut validation_status).await?;
+                self.validate_symlink_operation(
+                    operation,
+                    &mut validation_details,
+                    &mut validation_status,
+                )
+                .await?;
             }
         }
 
@@ -432,7 +480,12 @@ impl MigrationValidator {
         })
     }
 
-    async fn validate_copy_operation(&self, operation: &MigrationOperation, details: &mut ValidationDetails, status: &mut ValidationStatus) -> Result<()> {
+    async fn validate_copy_operation(
+        &self,
+        operation: &MigrationOperation,
+        details: &mut ValidationDetails,
+        status: &mut ValidationStatus,
+    ) -> Result<()> {
         // For copy operations, both source and target should exist
         if !details.source_exists {
             *status = ValidationStatus::Failed;
@@ -460,7 +513,10 @@ impl MigrationValidator {
         }
 
         // Validate file sizes
-        if let (Ok(source_meta), Ok(target_meta)) = (fs::metadata(&operation.source_path).await, fs::metadata(&operation.target_path).await) {
+        if let (Ok(source_meta), Ok(target_meta)) = (
+            fs::metadata(&operation.source_path).await,
+            fs::metadata(&operation.target_path).await,
+        ) {
             details.size_match = Some(source_meta.len() == target_meta.len());
 
             if !details.size_match.unwrap() {
@@ -474,7 +530,9 @@ impl MigrationValidator {
 
         // Validate content if requested
         if self.config.verify_content_integrity && operation.source_path.is_file() {
-            let content_match = self.compare_file_content(&operation.source_path, &operation.target_path).await?;
+            let content_match = self
+                .compare_file_content(&operation.source_path, &operation.target_path)
+                .await?;
             details.content_match = Some(content_match);
 
             if !content_match {
@@ -489,7 +547,12 @@ impl MigrationValidator {
         Ok(())
     }
 
-    async fn validate_move_operation(&self, operation: &MigrationOperation, details: &mut ValidationDetails, status: &mut ValidationStatus) -> Result<()> {
+    async fn validate_move_operation(
+        &self,
+        operation: &MigrationOperation,
+        details: &mut ValidationDetails,
+        status: &mut ValidationStatus,
+    ) -> Result<()> {
         // For move operations, source should not exist and target should exist
         if details.source_exists {
             *status = ValidationStatus::Failed;
@@ -514,7 +577,12 @@ impl MigrationValidator {
         Ok(())
     }
 
-    async fn validate_directory_operation(&self, operation: &MigrationOperation, details: &mut ValidationDetails, status: &mut ValidationStatus) -> Result<()> {
+    async fn validate_directory_operation(
+        &self,
+        operation: &MigrationOperation,
+        details: &mut ValidationDetails,
+        status: &mut ValidationStatus,
+    ) -> Result<()> {
         if !details.target_exists {
             *status = ValidationStatus::Failed;
             return Ok(());
@@ -529,7 +597,12 @@ impl MigrationValidator {
         Ok(())
     }
 
-    async fn validate_symlink_operation(&self, operation: &MigrationOperation, details: &mut ValidationDetails, status: &mut ValidationStatus) -> Result<()> {
+    async fn validate_symlink_operation(
+        &self,
+        operation: &MigrationOperation,
+        details: &mut ValidationDetails,
+        status: &mut ValidationStatus,
+    ) -> Result<()> {
         #[cfg(unix)]
         {
             if !details.target_exists {
@@ -560,7 +633,7 @@ impl MigrationValidator {
     }
 
     async fn calculate_checksum(&self, path: &Path) -> Result<String> {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         use tokio::io::AsyncReadExt;
 
         let mut file = fs::File::open(path).await?;
@@ -617,9 +690,9 @@ pub trait CustomValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
     use std::io::Write;
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_validation_config_default() {
@@ -629,7 +702,10 @@ mod tests {
         assert!(config.verify_permissions);
         assert!(config.verify_timestamps);
         assert!(config.verify_content_integrity);
-        assert!(matches!(config.checksum_algorithm, ChecksumAlgorithm::Sha256));
+        assert!(matches!(
+            config.checksum_algorithm,
+            ChecksumAlgorithm::Sha256
+        ));
         assert_eq!(config.validation_timeout_secs, 300);
         assert!(!config.strict_mode);
     }
@@ -657,7 +733,10 @@ mod tests {
             timestamp: chrono::Utc::now(),
         };
 
-        let report = validator.validate_migration("test-migration", &[operation]).await.unwrap();
+        let report = validator
+            .validate_migration("test-migration", &[operation])
+            .await
+            .unwrap();
         assert_eq!(report.total_operations, 1);
         assert_eq!(report.migration_id, "test-migration");
     }
@@ -690,14 +769,20 @@ mod tests {
         fs::write(&file1, content).unwrap();
         fs::write(&file2, content).unwrap();
 
-        let is_same = validator.compare_file_content(&file1, &file2).await.unwrap();
+        let is_same = validator
+            .compare_file_content(&file1, &file2)
+            .await
+            .unwrap();
         assert!(is_same);
 
         // Create different file
         let file3 = temp_dir.path().join("file3.txt");
         fs::write(&file3, "different content").unwrap();
 
-        let is_different = validator.compare_file_content(&file1, &file3).await.unwrap();
+        let is_different = validator
+            .compare_file_content(&file1, &file3)
+            .await
+            .unwrap();
         assert!(!is_different);
     }
 }

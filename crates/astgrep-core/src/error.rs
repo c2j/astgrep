@@ -100,7 +100,10 @@ impl AnalysisError {
 
     /// Create a new IO error
     pub fn io_error(message: impl Into<String>) -> Self {
-        Self::IoError(std::io::Error::new(std::io::ErrorKind::Other, message.into()))
+        Self::IoError(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            message.into(),
+        ))
     }
 
     /// Create a new timeout error
@@ -232,10 +235,16 @@ mod tests {
         assert!(matches!(parse_err, AnalysisError::ParseError { .. }));
 
         let rule_err = AnalysisError::rule_validation_error("test rule error");
-        assert!(matches!(rule_err, AnalysisError::RuleValidationError { .. }));
+        assert!(matches!(
+            rule_err,
+            AnalysisError::RuleValidationError { .. }
+        ));
 
         let pattern_err = AnalysisError::pattern_match_error("test pattern error");
-        assert!(matches!(pattern_err, AnalysisError::PatternMatchError { .. }));
+        assert!(matches!(
+            pattern_err,
+            AnalysisError::PatternMatchError { .. }
+        ));
 
         let dataflow_err = AnalysisError::data_flow_error("test dataflow error");
         assert!(matches!(dataflow_err, AnalysisError::DataFlowError { .. }));
@@ -244,7 +253,10 @@ mod tests {
         assert!(matches!(config_err, AnalysisError::ConfigError { .. }));
 
         let lang_err = AnalysisError::unsupported_language("unknown");
-        assert!(matches!(lang_err, AnalysisError::UnsupportedLanguage { .. }));
+        assert!(matches!(
+            lang_err,
+            AnalysisError::UnsupportedLanguage { .. }
+        ));
 
         let internal_err = AnalysisError::internal_error("test internal error");
         assert!(matches!(internal_err, AnalysisError::InternalError { .. }));

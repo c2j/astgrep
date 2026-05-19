@@ -1,5 +1,5 @@
 //! JavaScript language parser and adapter
-//! 
+//!
 //! This module provides JavaScript-specific parsing and AST adaptation.
 
 use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
@@ -19,54 +19,62 @@ impl JavaScriptAdapter {
     /// Parse JavaScript-specific constructs
     fn parse_js_construct(&self, source: &str, context: &AdapterContext) -> Result<UniversalNode> {
         let trimmed = source.trim();
-        
+
         if trimmed.starts_with("import ") || trimmed.starts_with("export ") {
             self.parse_module_statement(trimmed, context)
         } else if trimmed.starts_with("function ") || trimmed.contains(" function ") {
             self.parse_function_declaration(trimmed, context)
         } else if trimmed.starts_with("class ") {
             self.parse_class_declaration(trimmed, context)
-        } else if trimmed.starts_with("const ") || trimmed.starts_with("let ") || trimmed.starts_with("var ") {
+        } else if trimmed.starts_with("const ")
+            || trimmed.starts_with("let ")
+            || trimmed.starts_with("var ")
+        {
             self.parse_variable_declaration(trimmed, context)
         } else if trimmed.contains("=>") {
             self.parse_arrow_function(trimmed, context)
         } else {
             // Default to expression statement
             Ok(AstBuilder::expression_statement(
-                AstBuilder::string_literal(trimmed)
-                    .with_text(trimmed.to_string())
+                AstBuilder::string_literal(trimmed).with_text(trimmed.to_string()),
             ))
         }
     }
 
     /// Parse import/export statements
-    fn parse_module_statement(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_module_statement(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         if source.starts_with("import ") {
             self.parse_import_statement(source)
         } else if source.starts_with("export ") {
             self.parse_export_statement(source)
         } else {
-            Err(astgrep_core::AnalysisError::parse_error("Invalid module statement"))
+            Err(astgrep_core::AnalysisError::parse_error(
+                "Invalid module statement",
+            ))
         }
     }
 
     /// Parse import statement
     fn parse_import_statement(&self, source: &str) -> Result<UniversalNode> {
         let import_line = source.trim_end_matches(';');
-        
+
         if let Some(from_pos) = import_line.find(" from ") {
             let import_part = &import_line[6..from_pos].trim(); // Skip "import "
             let module_part = &import_line[from_pos + 6..].trim(); // Skip " from "
-            
+
             // Remove quotes from module path
             let module_path = module_part.trim_matches('"').trim_matches('\'');
-            
+
             // Parse import specifiers (simplified)
             let mut import_node = AstBuilder::import_declaration(module_path, false);
-            
+
             if import_part.starts_with('{') && import_part.ends_with('}') {
                 // Named imports: import { a, b } from 'module'
-                let specifiers = &import_part[1..import_part.len()-1];
+                let specifiers = &import_part[1..import_part.len() - 1];
                 for spec in specifiers.split(',') {
                     let spec = spec.trim();
                     if !spec.is_empty() {
@@ -80,30 +88,28 @@ impl JavaScriptAdapter {
                 // Default import: import name from 'module'
                 import_node = import_node.with_default(import_part.to_string());
             }
-            
+
             Ok(import_node.with_text(source.to_string()))
         } else {
             // Side-effect import: import 'module'
             let module_path = import_line[6..].trim().trim_matches('"').trim_matches('\'');
-            Ok(AstBuilder::import_declaration(module_path, false)
-                .with_text(source.to_string()))
+            Ok(AstBuilder::import_declaration(module_path, false).with_text(source.to_string()))
         }
     }
 
     /// Parse export statement
     fn parse_export_statement(&self, source: &str) -> Result<UniversalNode> {
         let export_line = source.trim_end_matches(';');
-        
+
         if export_line.starts_with("export default ") {
             // Default export
             let exported = &export_line[15..]; // Skip "export default "
-            Ok(AstBuilder::export_declaration(exported, true)
-                .with_text(source.to_string()))
+            Ok(AstBuilder::export_declaration(exported, true).with_text(source.to_string()))
         } else if export_line.starts_with("export {") {
             // Named exports
             let end_brace = export_line.find('}').unwrap_or(export_line.len());
             let specifiers = &export_line[8..end_brace]; // Skip "export {"
-            
+
             let mut export_node = AstBuilder::export_declaration("", false);
             for spec in specifiers.split(',') {
                 let spec = spec.trim();
@@ -111,22 +117,25 @@ impl JavaScriptAdapter {
                     export_node = export_node.with_specifier(spec.to_string());
                 }
             }
-            
+
             Ok(export_node.with_text(source.to_string()))
         } else {
             // Export declaration
             let exported = &export_line[7..]; // Skip "export "
-            Ok(AstBuilder::export_declaration(exported, false)
-                .with_text(source.to_string()))
+            Ok(AstBuilder::export_declaration(exported, false).with_text(source.to_string()))
         }
     }
 
     /// Parse function declaration
-    fn parse_function_declaration(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_function_declaration(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         let mut function_name = "anonymous";
         let is_async = source.contains("async ");
         let is_generator = source.contains("function*");
-        
+
         // Find function name
         if let Some(func_pos) = source.find("function") {
             let after_function = &source[func_pos + 8..]; // Skip "function"
@@ -141,13 +150,13 @@ impl JavaScriptAdapter {
                 }
             }
         }
-        
+
         if function_name.is_empty() {
             function_name = "anonymous";
         }
 
         let mut func_node = AstBuilder::simple_function_declaration(function_name);
-        
+
         if is_async {
             func_node = func_node.with_modifier("async");
         }
@@ -159,14 +168,19 @@ impl JavaScriptAdapter {
     }
 
     /// Parse class declaration
-    fn parse_class_declaration(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_class_declaration(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         let mut class_name = "UnknownClass";
         let mut extends_class = None;
-        
+
         // Find class name
         if let Some(class_pos) = source.find("class ") {
             let after_class = &source[class_pos + 6..];
-            if let Some(space_or_brace) = after_class.find(|c: char| c.is_whitespace() || c == '{') {
+            if let Some(space_or_brace) = after_class.find(|c: char| c.is_whitespace() || c == '{')
+            {
                 class_name = &after_class[..space_or_brace];
             }
         }
@@ -174,13 +188,15 @@ impl JavaScriptAdapter {
         // Check for extends
         if let Some(extends_pos) = source.find(" extends ") {
             let after_extends = &source[extends_pos + 9..];
-            if let Some(space_or_brace) = after_extends.find(|c: char| c.is_whitespace() || c == '{') {
+            if let Some(space_or_brace) =
+                after_extends.find(|c: char| c.is_whitespace() || c == '{')
+            {
                 extends_class = Some(after_extends[..space_or_brace].to_string());
             }
         }
 
         let mut class_node = AstBuilder::simple_class_declaration(class_name);
-        
+
         if let Some(parent) = extends_class {
             class_node = class_node.with_parent(parent);
         }
@@ -189,10 +205,14 @@ impl JavaScriptAdapter {
     }
 
     /// Parse variable declaration
-    fn parse_variable_declaration(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_variable_declaration(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         let mut var_type = "var";
         let mut var_name = "unknown";
-        
+
         if source.starts_with("const ") {
             var_type = "const";
             let after_const = &source[6..];
@@ -225,19 +245,23 @@ impl JavaScriptAdapter {
     }
 
     /// Parse arrow function
-    fn parse_arrow_function(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_arrow_function(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         let arrow_pos = source.find("=>").unwrap_or(0);
         let params_part = source[..arrow_pos].trim();
-        
+
         // Extract parameters (simplified)
         let params = if params_part.starts_with('(') && params_part.ends_with(')') {
-            &params_part[1..params_part.len()-1]
+            &params_part[1..params_part.len() - 1]
         } else {
             params_part
         };
 
         let mut arrow_func = AstBuilder::arrow_function();
-        
+
         if !params.is_empty() {
             for param in params.split(',') {
                 let param = param.trim();
@@ -252,7 +276,11 @@ impl JavaScriptAdapter {
 }
 
 impl AstAdapter for JavaScriptAdapter {
-    fn adapt_node(&self, _node: &dyn std::any::Any, context: &AdapterContext) -> Result<UniversalNode> {
+    fn adapt_node(
+        &self,
+        _node: &dyn std::any::Any,
+        context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         self.parse_js_construct(&context.source_code, context)
     }
 
@@ -317,7 +345,10 @@ impl LanguageParser for JavaScriptParser {
 
     fn supports_file(&self, file_path: &Path) -> bool {
         if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
-            matches!(ext.to_lowercase().as_str(), "js" | "jsx" | "ts" | "tsx" | "mjs")
+            matches!(
+                ext.to_lowercase().as_str(),
+                "js" | "jsx" | "ts" | "tsx" | "mjs"
+            )
         } else {
             false
         }
@@ -354,7 +385,7 @@ mod tests {
     #[test]
     fn test_parse_import_statement() {
         let adapter = JavaScriptAdapter::new();
-        
+
         // Named import
         let result = adapter.parse_import_statement("import { useState, useEffect } from 'react';");
         assert!(result.is_ok());
@@ -377,7 +408,7 @@ mod tests {
     #[test]
     fn test_parse_export_statement() {
         let adapter = JavaScriptAdapter::new();
-        
+
         // Default export
         let result = adapter.parse_export_statement("export default MyComponent;");
         assert!(result.is_ok());
@@ -499,10 +530,14 @@ mod tests {
     fn test_javascript_adapter_metadata() {
         let adapter = JavaScriptAdapter::new();
         let metadata = adapter.metadata();
-        
+
         assert_eq!(metadata.name, "JavaScriptAdapter");
-        assert!(metadata.supported_features.contains(&"arrow_functions".to_string()));
-        assert!(metadata.supported_features.contains(&"import_export".to_string()));
+        assert!(metadata
+            .supported_features
+            .contains(&"arrow_functions".to_string()));
+        assert!(metadata
+            .supported_features
+            .contains(&"import_export".to_string()));
         assert!(metadata.supported_features.contains(&"classes".to_string()));
     }
 }

@@ -1,5 +1,5 @@
 //! Source detection for data flow analysis
-//! 
+//!
 //! This module identifies sources of potentially tainted data in the program.
 
 use crate::graph::{DataFlowGraph, DataFlowNode, NodeId};
@@ -80,8 +80,12 @@ impl SourceType {
     /// Get the severity of this source type
     pub fn severity(&self) -> SourceSeverity {
         match self {
-            SourceType::UserInput | SourceType::UrlParameterInput | SourceType::HeaderInput => SourceSeverity::High,
-            SourceType::NetworkInput | SourceType::ExternalApiInput | SourceType::CookieInput => SourceSeverity::High,
+            SourceType::UserInput | SourceType::UrlParameterInput | SourceType::HeaderInput => {
+                SourceSeverity::High
+            }
+            SourceType::NetworkInput | SourceType::ExternalApiInput | SourceType::CookieInput => {
+                SourceSeverity::High
+            }
             SourceType::FileInput | SourceType::DatabaseInput => SourceSeverity::Medium,
             SourceType::EnvironmentInput | SourceType::CommandLineInput => SourceSeverity::Low,
         }
@@ -148,8 +152,12 @@ impl SourceDetector {
                 for pattern in self.get_patterns_for_type(&node.node_type) {
                     if pattern.matches(function_name, node) {
                         return Some(
-                            Source::new(node_id, pattern.source_type.clone(), pattern.description.clone())
-                                .with_confidence(pattern.confidence)
+                            Source::new(
+                                node_id,
+                                pattern.source_type.clone(),
+                                pattern.description.clone(),
+                            )
+                            .with_confidence(pattern.confidence),
                         );
                     }
                 }
@@ -162,8 +170,12 @@ impl SourceDetector {
                 for pattern in self.get_patterns_for_type(&node.node_type) {
                     if pattern.matches(var_name, node) {
                         return Some(
-                            Source::new(node_id, pattern.source_type.clone(), pattern.description.clone())
-                                .with_confidence(pattern.confidence)
+                            Source::new(
+                                node_id,
+                                pattern.source_type.clone(),
+                                pattern.description.clone(),
+                            )
+                            .with_confidence(pattern.confidence),
                         );
                     }
                 }
@@ -175,100 +187,136 @@ impl SourceDetector {
 
     /// Get patterns for a node type
     fn get_patterns_for_type(&self, node_type: &str) -> &[SourcePattern] {
-        self.patterns.get(node_type).map(|v| v.as_slice()).unwrap_or(&[])
+        self.patterns
+            .get(node_type)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Add a custom source pattern
     pub fn add_pattern(&mut self, node_type: String, pattern: SourcePattern) {
-        self.patterns.entry(node_type).or_insert_with(Vec::new).push(pattern);
+        self.patterns
+            .entry(node_type)
+            .or_insert_with(Vec::new)
+            .push(pattern);
     }
 
     /// Load default source patterns
     fn load_default_patterns(&mut self) {
         // HTTP request patterns
-        self.add_pattern("call_expression".to_string(), SourcePattern {
-            name_pattern: "request.getParameter".to_string(),
-            source_type: SourceType::UserInput,
-            description: "HTTP request parameter".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SourcePattern {
+                name_pattern: "request.getParameter".to_string(),
+                source_type: SourceType::UserInput,
+                description: "HTTP request parameter".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SourcePattern {
-            name_pattern: "request.getHeader".to_string(),
-            source_type: SourceType::HeaderInput,
-            description: "HTTP request header".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SourcePattern {
+                name_pattern: "request.getHeader".to_string(),
+                source_type: SourceType::HeaderInput,
+                description: "HTTP request header".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SourcePattern {
-            name_pattern: "request.getCookies".to_string(),
-            source_type: SourceType::CookieInput,
-            description: "HTTP cookies".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SourcePattern {
+                name_pattern: "request.getCookies".to_string(),
+                source_type: SourceType::CookieInput,
+                description: "HTTP cookies".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
         // File input patterns
-        self.add_pattern("call_expression".to_string(), SourcePattern {
-            name_pattern: "readFile".to_string(),
-            source_type: SourceType::FileInput,
-            description: "File read operation".to_string(),
-            confidence: 0.8,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SourcePattern {
+                name_pattern: "readFile".to_string(),
+                source_type: SourceType::FileInput,
+                description: "File read operation".to_string(),
+                confidence: 0.8,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SourcePattern {
-            name_pattern: "fs.readFileSync".to_string(),
-            source_type: SourceType::FileInput,
-            description: "Synchronous file read".to_string(),
-            confidence: 0.9,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SourcePattern {
+                name_pattern: "fs.readFileSync".to_string(),
+                source_type: SourceType::FileInput,
+                description: "Synchronous file read".to_string(),
+                confidence: 0.9,
+                attributes: HashMap::new(),
+            },
+        );
 
         // Database patterns
-        self.add_pattern("call_expression".to_string(), SourcePattern {
-            name_pattern: "executeQuery".to_string(),
-            source_type: SourceType::DatabaseInput,
-            description: "Database query result".to_string(),
-            confidence: 0.7,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SourcePattern {
+                name_pattern: "executeQuery".to_string(),
+                source_type: SourceType::DatabaseInput,
+                description: "Database query result".to_string(),
+                confidence: 0.7,
+                attributes: HashMap::new(),
+            },
+        );
 
         // Environment variables
-        self.add_pattern("call_expression".to_string(), SourcePattern {
-            name_pattern: "getenv".to_string(),
-            source_type: SourceType::EnvironmentInput,
-            description: "Environment variable".to_string(),
-            confidence: 0.6,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SourcePattern {
+                name_pattern: "getenv".to_string(),
+                source_type: SourceType::EnvironmentInput,
+                description: "Environment variable".to_string(),
+                confidence: 0.6,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("identifier".to_string(), SourcePattern {
-            name_pattern: "process.env".to_string(),
-            source_type: SourceType::EnvironmentInput,
-            description: "Node.js environment variable".to_string(),
-            confidence: 0.7,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "identifier".to_string(),
+            SourcePattern {
+                name_pattern: "process.env".to_string(),
+                source_type: SourceType::EnvironmentInput,
+                description: "Node.js environment variable".to_string(),
+                confidence: 0.7,
+                attributes: HashMap::new(),
+            },
+        );
 
         // Command line arguments
-        self.add_pattern("identifier".to_string(), SourcePattern {
-            name_pattern: "sys.argv".to_string(),
-            source_type: SourceType::CommandLineInput,
-            description: "Python command line arguments".to_string(),
-            confidence: 0.8,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "identifier".to_string(),
+            SourcePattern {
+                name_pattern: "sys.argv".to_string(),
+                source_type: SourceType::CommandLineInput,
+                description: "Python command line arguments".to_string(),
+                confidence: 0.8,
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("identifier".to_string(), SourcePattern {
-            name_pattern: "process.argv".to_string(),
-            source_type: SourceType::CommandLineInput,
-            description: "Node.js command line arguments".to_string(),
-            confidence: 0.8,
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "identifier".to_string(),
+            SourcePattern {
+                name_pattern: "process.argv".to_string(),
+                source_type: SourceType::CommandLineInput,
+                description: "Node.js command line arguments".to_string(),
+                confidence: 0.8,
+                attributes: HashMap::new(),
+            },
+        );
     }
 }
 
@@ -326,9 +374,9 @@ mod tests {
 
     #[test]
     fn test_source_creation() {
-        let source = Source::new(0, SourceType::UserInput, "Test source".to_string())
-            .with_confidence(0.8);
-        
+        let source =
+            Source::new(0, SourceType::UserInput, "Test source".to_string()).with_confidence(0.8);
+
         assert_eq!(source.id, 0);
         assert_eq!(source.source_type, SourceType::UserInput);
         assert_eq!(source.confidence, 0.8);
@@ -383,19 +431,19 @@ mod tests {
     #[test]
     fn test_custom_pattern() {
         let mut detector = SourceDetector::new();
-        
+
         let custom_pattern = SourcePattern::new(
             "customInput".to_string(),
             SourceType::ExternalApiInput,
             "Custom API input".to_string(),
             0.7,
         );
-        
+
         detector.add_pattern("call_expression".to_string(), custom_pattern);
-        
+
         let mut graph = DataFlowGraph::new();
-        let node = DataFlowNode::new("call_expression".to_string())
-            .with_text("customInput".to_string());
+        let node =
+            DataFlowNode::new("call_expression".to_string()).with_text("customInput".to_string());
         graph.add_node(node);
 
         let sources = detector.detect_sources(&graph).unwrap();

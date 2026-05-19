@@ -11,14 +11,14 @@ impl Clipboard {
         println!("Copied to clipboard: {}", text);
         Ok(())
     }
-    
+
     /// Get text from clipboard
     pub fn get_text() -> Result<String, String> {
         // For now, return empty string
         // In a real implementation, you'd use a clipboard crate like `arboard`
         Ok(String::new())
     }
-    
+
     /// Check if clipboard has text
     pub fn has_text() -> bool {
         // For now, return false

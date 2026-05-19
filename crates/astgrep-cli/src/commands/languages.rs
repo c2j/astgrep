@@ -31,11 +31,15 @@ pub async fn run() -> Result<()> {
 fn get_language_description(language: Language) -> &'static str {
     match language {
         Language::Java => "Java programming language - object-oriented, platform-independent",
-        Language::JavaScript => "JavaScript/TypeScript - dynamic scripting language for web and server",
+        Language::JavaScript => {
+            "JavaScript/TypeScript - dynamic scripting language for web and server"
+        }
         Language::Python => "Python - high-level, interpreted programming language",
         Language::Sql => "SQL - structured query language for database operations",
         Language::Bash => "Bash/Shell - command-line scripting language for Unix-like systems",
-        Language::Xml => "XML - extensible markup language for data representation and configuration",
+        Language::Xml => {
+            "XML - extensible markup language for data representation and configuration"
+        }
     }
 }
 
@@ -70,8 +74,16 @@ mod tests {
 
         for language in &languages {
             let description = get_language_description(*language);
-            assert!(!description.is_empty(), "Language {:?} has no description", language);
-            assert!(description.len() > 10, "Language {:?} description too short", language);
+            assert!(
+                !description.is_empty(),
+                "Language {:?} has no description",
+                language
+            );
+            assert!(
+                description.len() > 10,
+                "Language {:?} description too short",
+                language
+            );
         }
     }
 }

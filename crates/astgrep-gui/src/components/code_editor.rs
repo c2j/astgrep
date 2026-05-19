@@ -1,7 +1,7 @@
 //! Code editor component with syntax highlighting
 
-use egui;
 use crate::app::AppSettings;
+use egui;
 
 /// Code editor component
 pub struct CodeEditor {
@@ -82,7 +82,6 @@ impl CodeEditor {
         r
     }
 
-
     pub fn get_language(&self) -> String {
         self.language.clone()
     }
@@ -110,7 +109,11 @@ impl CodeEditor {
                     .selected_text(&self.language)
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut self.language, "java".to_string(), "Java");
-                        ui.selectable_value(&mut self.language, "javascript".to_string(), "JavaScript");
+                        ui.selectable_value(
+                            &mut self.language,
+                            "javascript".to_string(),
+                            "JavaScript",
+                        );
                         ui.selectable_value(&mut self.language, "python".to_string(), "Python");
                         ui.selectable_value(&mut self.language, "sql".to_string(), "SQL");
                         ui.selectable_value(&mut self.language, "xml".to_string(), "XML");
@@ -183,7 +186,12 @@ impl CodeEditor {
             // 构建带行号的文本用于显示
             let mut display_content = String::new();
             for (i, line) in lines.iter().enumerate() {
-                display_content.push_str(&format!("{:>width$} │ {}\n", i + 1, line, width = digits));
+                display_content.push_str(&format!(
+                    "{:>width$} │ {}\n",
+                    i + 1,
+                    line,
+                    width = digits
+                ));
             }
 
             // 如果内容为空，至少显示一行
@@ -257,7 +265,11 @@ impl CodeEditor {
                         egui::Align2::RIGHT_TOP,
                         marker.to_string(),
                         font_id.clone(),
-                        if has_highlight { egui::Color32::from_rgb(255, 0, 0) } else { ui.style().visuals.text_color().gamma_multiply(0.6) },
+                        if has_highlight {
+                            egui::Color32::from_rgb(255, 0, 0)
+                        } else {
+                            ui.style().visuals.text_color().gamma_multiply(0.6)
+                        },
                     );
                 }
 
@@ -275,7 +287,7 @@ impl CodeEditor {
                     .font(egui::FontId::monospace(settings.font_size))
                     .code_editor()
                     .desired_width(ui.available_width())
-                    .desired_rows(30)
+                    .desired_rows(30),
             );
             if resp.changed() && !snapshot_taken {
                 self.undo_stack.push(pre_content_snapshot);
@@ -290,7 +302,9 @@ impl CodeEditor {
             let curr = std::mem::replace(&mut self.content, prev);
             self.redo_stack.push(curr);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     /// Redo last undone change, returns true if changed
@@ -299,7 +313,9 @@ impl CodeEditor {
             let curr = std::mem::replace(&mut self.content, next);
             self.undo_stack.push(curr);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     /// Append given text at the end and record undo snapshot
@@ -310,7 +326,12 @@ impl CodeEditor {
     }
 
     /// 最终版本的高亮绘制方法 - 修复偏移
-    fn draw_highlights_for_display_final(&self, ui: &mut egui::Ui, display_content: &str, text_rect: egui::Rect) {
+    fn draw_highlights_for_display_final(
+        &self,
+        ui: &mut egui::Ui,
+        display_content: &str,
+        text_rect: egui::Rect,
+    ) {
         if self.highlighted_ranges.is_empty() {
             return;
         }
@@ -319,43 +340,64 @@ impl CodeEditor {
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let display_lines: Vec<&str> = display_content.lines().collect();
 
-        println!("🎨 Drawing {} highlights (CORRECTED method)", self.highlighted_ranges.len());
+        println!(
+            "🎨 Drawing {} highlights (CORRECTED method)",
+            self.highlighted_ranges.len()
+        );
 
         for highlight in &self.highlighted_ranges {
-            println!("🎯 Highlighting line {} (0-based: {})", highlight.start_line + 1, highlight.start_line);
+            println!(
+                "🎯 Highlighting line {} (0-based: {})",
+                highlight.start_line + 1,
+                highlight.start_line
+            );
 
             if highlight.start_line < display_lines.len() {
                 // 修正偏移：减去一行的高度来对齐
-                let corrected_y = text_rect.min.y + (highlight.start_line as f32 * line_height) - line_height;
+                let corrected_y =
+                    text_rect.min.y + (highlight.start_line as f32 * line_height) - line_height;
 
                 // 高亮整行
                 let highlight_rect = egui::Rect::from_min_size(
                     egui::pos2(text_rect.min.x + 4.0, corrected_y),
-                    egui::vec2(text_rect.width() - 8.0, line_height)
+                    egui::vec2(text_rect.width() - 8.0, line_height),
                 );
 
                 // 使用明显的黄色高亮
                 ui.painter().rect_filled(
                     highlight_rect,
                     egui::Rounding::same(3.0),
-                    egui::Color32::from_rgba_unmultiplied(255, 255, 0, 100) // 黄色背景
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 0, 100), // 黄色背景
                 );
 
                 // 绘制橙色边框
                 ui.painter().rect_stroke(
                     highlight_rect,
                     egui::Rounding::same(3.0),
-                    egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 165, 0)) // 橙色边框
+                    egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 165, 0)), // 橙色边框
                 );
 
-                println!("✅ Drew CORRECTED highlight at y={}, rect={:?}", corrected_y, highlight_rect);
-                println!("📍 Line content: '{}'", display_lines.get(highlight.start_line).unwrap_or(&"<out of bounds>"));
+                println!(
+                    "✅ Drew CORRECTED highlight at y={}, rect={:?}",
+                    corrected_y, highlight_rect
+                );
+                println!(
+                    "📍 Line content: '{}'",
+                    display_lines
+                        .get(highlight.start_line)
+                        .unwrap_or(&"<out of bounds>")
+                );
             }
         }
     }
 
     /// Overlay高亮绘制方法 - 在文本上方绘制
-    fn draw_highlights_for_display_overlay(&self, ui: &mut egui::Ui, display_content: &str, text_rect: egui::Rect) {
+    fn draw_highlights_for_display_overlay(
+        &self,
+        ui: &mut egui::Ui,
+        display_content: &str,
+        text_rect: egui::Rect,
+    ) {
         if self.highlighted_ranges.is_empty() {
             return;
         }
@@ -364,7 +406,10 @@ impl CodeEditor {
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let display_lines: Vec<&str> = display_content.lines().collect();
 
-        println!("🎨 Drawing {} highlights (overlay method)", self.highlighted_ranges.len());
+        println!(
+            "🎨 Drawing {} highlights (overlay method)",
+            self.highlighted_ranges.len()
+        );
         println!("📍 Text rect: {:?}", text_rect);
         println!("📏 Line height: {}", line_height);
         println!("📄 Total lines: {}", display_lines.len());
@@ -375,36 +420,49 @@ impl CodeEditor {
         }
 
         for highlight in &self.highlighted_ranges {
-            println!("🎯 Highlighting line {} (0-based: {})", highlight.start_line + 1, highlight.start_line);
+            println!(
+                "🎯 Highlighting line {} (0-based: {})",
+                highlight.start_line + 1,
+                highlight.start_line
+            );
 
             if highlight.start_line < display_lines.len() {
                 // 使用文本区域的实际位置，但需要考虑TextEdit内部的padding
                 // TextEdit通常有一些内部padding，我们需要调整
                 let text_padding = 4.0; // TextEdit的内部padding
-                let y_pos = text_rect.min.y + text_padding + (highlight.start_line as f32 * line_height);
+                let y_pos =
+                    text_rect.min.y + text_padding + (highlight.start_line as f32 * line_height);
 
                 // 高亮整行，使用文本区域的宽度
                 let highlight_rect = egui::Rect::from_min_size(
                     egui::pos2(text_rect.min.x + text_padding, y_pos),
-                    egui::vec2(text_rect.width() - 2.0 * text_padding, line_height)
+                    egui::vec2(text_rect.width() - 2.0 * text_padding, line_height),
                 );
 
                 // 绘制高亮背景，使用更明显的颜色
                 ui.painter().rect_filled(
                     highlight_rect,
                     egui::Rounding::same(2.0),
-                    egui::Color32::from_rgba_unmultiplied(255, 255, 0, 120) // 增加透明度到120
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 0, 120), // 增加透明度到120
                 );
 
                 // 绘制边框使其更明显
                 ui.painter().rect_stroke(
                     highlight_rect,
                     egui::Rounding::same(2.0),
-                    egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 150, 0)) // 增加边框宽度
+                    egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 150, 0)), // 增加边框宽度
                 );
 
-                println!("✅ Drew overlay highlight at y={} (adjusted), rect={:?}", y_pos, highlight_rect);
-                println!("📍 Expected line content: '{}'", display_lines.get(highlight.start_line).unwrap_or(&"<out of bounds>"));
+                println!(
+                    "✅ Drew overlay highlight at y={} (adjusted), rect={:?}",
+                    y_pos, highlight_rect
+                );
+                println!(
+                    "📍 Expected line content: '{}'",
+                    display_lines
+                        .get(highlight.start_line)
+                        .unwrap_or(&"<out of bounds>")
+                );
             }
         }
     }
@@ -419,10 +477,17 @@ impl CodeEditor {
         let line_height = ui.fonts(|f| f.row_height(&font_id));
         let display_lines: Vec<&str> = display_content.lines().collect();
 
-        println!("🎨 Drawing {} highlights (simple method)", self.highlighted_ranges.len());
+        println!(
+            "🎨 Drawing {} highlights (simple method)",
+            self.highlighted_ranges.len()
+        );
 
         for highlight in &self.highlighted_ranges {
-            println!("🎯 Highlighting line {} (0-based: {})", highlight.start_line + 1, highlight.start_line);
+            println!(
+                "🎯 Highlighting line {} (0-based: {})",
+                highlight.start_line + 1,
+                highlight.start_line
+            );
 
             if highlight.start_line < display_lines.len() {
                 let y_pos = ui.min_rect().min.y + (highlight.start_line as f32 * line_height);
@@ -430,14 +495,14 @@ impl CodeEditor {
                 // 简单地高亮整行
                 let highlight_rect = egui::Rect::from_min_size(
                     egui::pos2(ui.min_rect().min.x, y_pos),
-                    egui::vec2(ui.available_width(), line_height)
+                    egui::vec2(ui.available_width(), line_height),
                 );
 
                 // 绘制高亮背景
                 ui.painter().rect_filled(
                     highlight_rect,
                     egui::Rounding::same(2.0),
-                    highlight.color.gamma_multiply(0.3)
+                    highlight.color.gamma_multiply(0.3),
                 );
 
                 println!("✅ Drew simple highlight at y={}, full width", y_pos);
@@ -446,7 +511,12 @@ impl CodeEditor {
     }
 
     /// 为显示文本绘制高亮（修复版本）
-    fn draw_highlights_for_display(&self, ui: &mut egui::Ui, display_content: &str, text_rect: egui::Rect) {
+    fn draw_highlights_for_display(
+        &self,
+        ui: &mut egui::Ui,
+        display_content: &str,
+        text_rect: egui::Rect,
+    ) {
         if self.highlighted_ranges.is_empty() {
             return;
         }
@@ -456,14 +526,28 @@ impl CodeEditor {
         let char_width = ui.fonts(|f| f.glyph_width(&font_id, ' '));
         let display_lines: Vec<&str> = display_content.lines().collect();
 
-        println!("🎨 Drawing {} highlights for display", self.highlighted_ranges.len());
-        println!("📏 Line height: {}, Char width: {}", line_height, char_width);
-        println!("📄 Display has {} lines, Text rect: {:?}", display_lines.len(), text_rect);
+        println!(
+            "🎨 Drawing {} highlights for display",
+            self.highlighted_ranges.len()
+        );
+        println!(
+            "📏 Line height: {}, Char width: {}",
+            line_height, char_width
+        );
+        println!(
+            "📄 Display has {} lines, Text rect: {:?}",
+            display_lines.len(),
+            text_rect
+        );
 
         for highlight in &self.highlighted_ranges {
-            println!("🎯 Processing highlight for lines {}-{} (0-based: {}-{})",
-                highlight.start_line + 1, highlight.end_line + 1,
-                highlight.start_line, highlight.end_line);
+            println!(
+                "🎯 Processing highlight for lines {}-{} (0-based: {}-{})",
+                highlight.start_line + 1,
+                highlight.end_line + 1,
+                highlight.start_line,
+                highlight.end_line
+            );
 
             // 重要：分析结果的行号是基于原始代码的（0-based）
             // 我们需要在显示文本中找到对应的行
@@ -485,7 +569,9 @@ impl CodeEditor {
 
                         // 获取代码部分（去掉行号前缀）
                         // 需要正确处理UTF-8字符边界
-                        let code_part = if let Some(pipe_char_pos) = display_line.char_indices().find(|(_, c)| *c == '│') {
+                        let code_part = if let Some(pipe_char_pos) =
+                            display_line.char_indices().find(|(_, c)| *c == '│')
+                        {
                             // 找到 '│' 字符后，跳过它和后面的空格
                             let after_pipe = pipe_char_pos.0 + '│'.len_utf8();
                             if after_pipe + 1 < display_line.len() {
@@ -499,27 +585,37 @@ impl CodeEditor {
 
                         // 对于简化的高亮，我们高亮整行代码（去掉前导空格）
                         let trimmed_code = code_part.trim_start();
-                        let leading_spaces = code_part.chars().count() - trimmed_code.chars().count();
+                        let leading_spaces =
+                            code_part.chars().count() - trimmed_code.chars().count();
 
                         // 计算高亮的起始和结束位置（使用字符计数）
                         let start_col = leading_spaces; // 从代码开始处高亮
                         let end_col = code_part.chars().count(); // 高亮到行尾
 
                         // 计算X位置
-                        let start_x = text_rect.min.x + prefix_width + (start_col as f32 * char_width);
+                        let start_x =
+                            text_rect.min.x + prefix_width + (start_col as f32 * char_width);
                         let end_x = text_rect.min.x + prefix_width + (end_col as f32 * char_width);
 
                         // 创建高亮矩形
                         let highlight_rect = egui::Rect::from_min_size(
                             egui::pos2(start_x, y_pos),
-                            egui::vec2((end_x - start_x).max(char_width * 2.0), line_height)
+                            egui::vec2((end_x - start_x).max(char_width * 2.0), line_height),
                         );
 
-                        println!("📍 Line {}: y={:.1}, prefix_width={:.1}, start_x={:.1}, end_x={:.1}",
-                            display_line_num + 1, y_pos, prefix_width, start_x, end_x);
+                        println!(
+                            "📍 Line {}: y={:.1}, prefix_width={:.1}, start_x={:.1}, end_x={:.1}",
+                            display_line_num + 1,
+                            y_pos,
+                            prefix_width,
+                            start_x,
+                            end_x
+                        );
                         println!("📝 Display line: '{}'", display_line);
-                        println!("🔍 Code part: '{}', leading_spaces: {}, start_col: {}, end_col: {}",
-                            code_part, leading_spaces, start_col, end_col);
+                        println!(
+                            "🔍 Code part: '{}', leading_spaces: {}, start_col: {}, end_col: {}",
+                            code_part, leading_spaces, start_col, end_col
+                        );
 
                         // 确保高亮区域在文本区域内
                         if highlight_rect.intersects(text_rect) {
@@ -529,14 +625,14 @@ impl CodeEditor {
                             ui.painter().rect_filled(
                                 clipped_rect,
                                 egui::Rounding::same(2.0),
-                                highlight.color.gamma_multiply(0.4)
+                                highlight.color.gamma_multiply(0.4),
                             );
 
                             // 绘制边框
                             ui.painter().rect_stroke(
                                 clipped_rect,
                                 egui::Rounding::same(2.0),
-                                egui::Stroke::new(1.5, highlight.color)
+                                egui::Stroke::new(1.5, highlight.color),
                             );
 
                             println!("✅ Drew highlight rect: {:?}", clipped_rect);
@@ -547,7 +643,11 @@ impl CodeEditor {
                         println!("❌ No pipe separator found in line: '{}'", display_line);
                     }
                 } else {
-                    println!("❌ Display line {} out of bounds (max: {})", display_line_num, display_lines.len());
+                    println!(
+                        "❌ Display line {} out of bounds (max: {})",
+                        display_line_num,
+                        display_lines.len()
+                    );
                 }
             }
         }
@@ -561,42 +661,55 @@ impl CodeEditor {
 
         for highlight in &self.highlighted_ranges {
             // Calculate the position for each highlighted line
-            for line_num in highlight.start_line..=highlight.end_line.min(lines.len().saturating_sub(1)) {
+            for line_num in
+                highlight.start_line..=highlight.end_line.min(lines.len().saturating_sub(1))
+            {
                 let y_offset = line_num as f32 * line_height;
 
                 // Calculate the highlight rectangle for this line
                 let start_x = if line_num == highlight.start_line {
                     // For the first line, start from the start column
-                    self.calculate_text_width(&lines[line_num][..highlight.start_col.min(lines[line_num].len())], ui, &font_id)
+                    self.calculate_text_width(
+                        &lines[line_num][..highlight.start_col.min(lines[line_num].len())],
+                        ui,
+                        &font_id,
+                    )
                 } else {
                     0.0 // For continuation lines, start from the beginning
                 };
 
                 let end_x = if line_num == highlight.end_line {
                     // For the last line, end at the end column
-                    self.calculate_text_width(&lines[line_num][..highlight.end_col.min(lines[line_num].len())], ui, &font_id)
+                    self.calculate_text_width(
+                        &lines[line_num][..highlight.end_col.min(lines[line_num].len())],
+                        ui,
+                        &font_id,
+                    )
                 } else {
                     // For continuation lines, highlight the entire line
                     self.calculate_text_width(lines[line_num], ui, &font_id)
                 };
 
                 let rect = egui::Rect::from_min_size(
-                    egui::pos2(ui.min_rect().min.x + start_x, ui.min_rect().min.y + y_offset),
-                    egui::vec2(end_x - start_x, line_height)
+                    egui::pos2(
+                        ui.min_rect().min.x + start_x,
+                        ui.min_rect().min.y + y_offset,
+                    ),
+                    egui::vec2(end_x - start_x, line_height),
                 );
 
                 // Draw the highlight background
                 ui.painter().rect_filled(
                     rect,
                     egui::Rounding::same(2.0),
-                    highlight.color.gamma_multiply(0.3)
+                    highlight.color.gamma_multiply(0.3),
                 );
 
                 // Draw a border for better visibility
                 ui.painter().rect_stroke(
                     rect,
                     egui::Rounding::same(2.0),
-                    egui::Stroke::new(1.0, highlight.color)
+                    egui::Stroke::new(1.0, highlight.color),
                 );
             }
         }
@@ -608,13 +721,19 @@ impl CodeEditor {
     }
 
     /// 绘制行号（与代码完美对齐）
-    fn draw_line_numbers(&self, ui: &mut egui::Ui, font_id: &egui::FontId, scroll_offset: egui::Vec2) {
+    fn draw_line_numbers(
+        &self,
+        ui: &mut egui::Ui,
+        font_id: &egui::FontId,
+        scroll_offset: egui::Vec2,
+    ) {
         let line_height = ui.fonts(|f| f.row_height(font_id));
         let lines: Vec<&str> = self.content.lines().collect();
 
         // 计算可见行的范围
         let visible_start = (-scroll_offset.y / line_height).floor().max(0.0) as usize;
-        let visible_end = ((-scroll_offset.y + ui.available_height()) / line_height).ceil() as usize;
+        let visible_end =
+            ((-scroll_offset.y + ui.available_height()) / line_height).ceil() as usize;
         let visible_end = visible_end.min(lines.len());
 
         // 绘制可见范围内的行号
@@ -624,7 +743,7 @@ impl CodeEditor {
             if y_pos >= -line_height && y_pos <= ui.available_height() {
                 let line_rect = egui::Rect::from_min_size(
                     egui::pos2(ui.min_rect().min.x, ui.min_rect().min.y + y_pos),
-                    egui::vec2(ui.available_width(), line_height)
+                    egui::vec2(ui.available_width(), line_height),
                 );
 
                 ui.allocate_ui_at_rect(line_rect, |ui| {
@@ -632,7 +751,7 @@ impl CodeEditor {
                         ui.label(
                             egui::RichText::new(format!("{:>3}", line_num + 1))
                                 .font(font_id.clone())
-                                .color(egui::Color32::from_gray(128))
+                                .color(egui::Color32::from_gray(128)),
                         );
                     });
                 });
@@ -641,14 +760,21 @@ impl CodeEditor {
     }
 
     /// 绘制高亮（与新的布局兼容）
-    fn draw_highlights_custom(&self, ui: &mut egui::Ui, font_id: &egui::FontId, scroll_offset: egui::Vec2) {
+    fn draw_highlights_custom(
+        &self,
+        ui: &mut egui::Ui,
+        font_id: &egui::FontId,
+        scroll_offset: egui::Vec2,
+    ) {
         let line_height = ui.fonts(|f| f.row_height(font_id));
         let lines: Vec<&str> = self.content.lines().collect();
         let char_width = ui.fonts(|f| f.glyph_width(font_id, ' '));
 
         for highlight in &self.highlighted_ranges {
             // 计算高亮区域的位置
-            for line_num in highlight.start_line..=highlight.end_line.min(lines.len().saturating_sub(1)) {
+            for line_num in
+                highlight.start_line..=highlight.end_line.min(lines.len().saturating_sub(1))
+            {
                 let y_pos = line_num as f32 * line_height + scroll_offset.y;
 
                 // 只绘制可见的高亮
@@ -667,21 +793,21 @@ impl CodeEditor {
 
                     let highlight_rect = egui::Rect::from_min_size(
                         egui::pos2(ui.min_rect().min.x + start_x, ui.min_rect().min.y + y_pos),
-                        egui::vec2(end_x - start_x, line_height)
+                        egui::vec2(end_x - start_x, line_height),
                     );
 
                     // 绘制高亮背景
                     ui.painter().rect_filled(
                         highlight_rect,
                         egui::Rounding::same(2.0),
-                        highlight.color.gamma_multiply(0.3)
+                        highlight.color.gamma_multiply(0.3),
                     );
 
                     // 绘制边框
                     ui.painter().rect_stroke(
                         highlight_rect,
                         egui::Rounding::same(2.0),
-                        egui::Stroke::new(1.0, highlight.color)
+                        egui::Stroke::new(1.0, highlight.color),
                     );
                 }
             }
@@ -749,7 +875,15 @@ impl CodeEditor {
     }
 
     /// Highlight a specific range in the code
-    pub fn highlight_range(&mut self, start_line: usize, start_col: usize, end_line: usize, end_col: usize, color: egui::Color32, message: String) {
+    pub fn highlight_range(
+        &mut self,
+        start_line: usize,
+        start_col: usize,
+        end_line: usize,
+        end_col: usize,
+        color: egui::Color32,
+        message: String,
+    ) {
         self.highlighted_ranges.push(HighlightRange {
             start_line,
             start_col,

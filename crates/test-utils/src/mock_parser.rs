@@ -1,7 +1,7 @@
 //! Mock parser implementations for testing
 
-use astgrep_core::{LanguageParser, Language, AstNode, Result};
 use crate::mock_ast::MockAstNode;
+use astgrep_core::{AstNode, Language, LanguageParser, Result};
 use std::path::Path;
 
 /// Mock parser for testing purposes
@@ -36,9 +36,8 @@ impl MockParser {
 
     /// Create a parser that returns a simple program node
     pub fn simple_program_parser(language: Language) -> Self {
-        let program_node = MockAstNode::new("program")
-            .with_text("mock program content");
-        
+        let program_node = MockAstNode::new("program").with_text("mock program content");
+
         Self::new(language).with_custom_result(program_node)
     }
 
@@ -54,8 +53,7 @@ impl MockParser {
             .add_child(MockAstNode::new("identifier").with_text("TestClass"))
             .add_child(function_node);
 
-        let program_node = MockAstNode::new("program")
-            .add_child(class_node);
+        let program_node = MockAstNode::new("program").add_child(class_node);
 
         Self::new(language).with_custom_result(program_node)
     }
@@ -64,7 +62,9 @@ impl MockParser {
 impl LanguageParser for MockParser {
     fn parse(&self, source: &str, _file_path: &Path) -> Result<Box<dyn AstNode>> {
         if self.should_fail {
-            return Err(astgrep_core::AnalysisError::parse_error("Mock parser configured to fail"));
+            return Err(astgrep_core::AnalysisError::parse_error(
+                "Mock parser configured to fail",
+            ));
         }
 
         if let Some(ref custom_result) = self.custom_result {
@@ -72,8 +72,7 @@ impl LanguageParser for MockParser {
         }
 
         // Default behavior: create a simple root node with the source as text
-        let root = MockAstNode::new("root")
-            .with_text(source);
+        let root = MockAstNode::new("root").with_text(source);
 
         Ok(Box::new(root))
     }
@@ -112,7 +111,7 @@ impl MockParserRegistry {
     /// Create a registry with default parsers for all languages
     pub fn with_default_parsers() -> Self {
         let mut registry = Self::new();
-        
+
         for &language in &[
             Language::Java,
             Language::JavaScript,
@@ -125,7 +124,7 @@ impl MockParserRegistry {
         ] {
             registry.register(language, MockParser::simple_program_parser(language));
         }
-        
+
         registry
     }
 }
@@ -138,10 +137,10 @@ mod tests {
     fn test_mock_parser_basic() {
         let parser = MockParser::new(Language::Java);
         assert_eq!(parser.language(), Language::Java);
-        
+
         let result = parser.parse("test code", Path::new("test.java"));
         assert!(result.is_ok());
-        
+
         let ast = result.unwrap();
         assert_eq!(ast.node_type(), "root");
         assert_eq!(ast.text(), Some("test code"));
@@ -150,22 +149,20 @@ mod tests {
     #[test]
     fn test_mock_parser_failure() {
         let parser = MockParser::new(Language::Java).with_failure();
-        
+
         let result = parser.parse("test code", Path::new("test.java"));
         assert!(result.is_err());
     }
 
     #[test]
     fn test_mock_parser_custom_result() {
-        let custom_node = MockAstNode::new("custom")
-            .with_text("custom content");
-        
-        let parser = MockParser::new(Language::Java)
-            .with_custom_result(custom_node);
-        
+        let custom_node = MockAstNode::new("custom").with_text("custom content");
+
+        let parser = MockParser::new(Language::Java).with_custom_result(custom_node);
+
         let result = parser.parse("test code", Path::new("test.java"));
         assert!(result.is_ok());
-        
+
         let ast = result.unwrap();
         assert_eq!(ast.node_type(), "custom");
         assert_eq!(ast.text(), Some("custom content"));
@@ -174,14 +171,14 @@ mod tests {
     #[test]
     fn test_complex_ast_parser() {
         let parser = MockParser::complex_ast_parser(Language::Java);
-        
+
         let result = parser.parse("test code", Path::new("test.java"));
         assert!(result.is_ok());
-        
+
         let ast = result.unwrap();
         assert_eq!(ast.node_type(), "program");
         assert_eq!(ast.child_count(), 1);
-        
+
         let class_node = ast.child(0).unwrap();
         assert_eq!(class_node.node_type(), "class");
         assert_eq!(class_node.child_count(), 2);
@@ -191,9 +188,9 @@ mod tests {
     fn test_mock_parser_registry() {
         let mut registry = MockParserRegistry::new();
         let parser = MockParser::new(Language::Java);
-        
+
         registry.register(Language::Java, parser);
-        
+
         let retrieved = registry.get_parser(Language::Java);
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().language(), Language::Java);
@@ -202,7 +199,7 @@ mod tests {
     #[test]
     fn test_default_parsers_registry() {
         let registry = MockParserRegistry::with_default_parsers();
-        
+
         assert!(registry.get_parser(Language::Java).is_some());
         assert!(registry.get_parser(Language::JavaScript).is_some());
         assert!(registry.get_parser(Language::Python).is_some());

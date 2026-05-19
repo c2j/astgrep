@@ -1,7 +1,7 @@
 //! Interactive playground handler for testing the API
 
-use axum::response::Html;
 use crate::WebResult;
+use axum::response::Html;
 
 /// Interactive playground endpoint
 pub async fn playground() -> WebResult<Html<String>> {
@@ -1338,7 +1338,10 @@ console.log('The square of ${number} is ${square}');
 </body>
 </html>"#;
 
-    let guide_md = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/astgrep-Guide.md"));
+    let guide_md = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/astgrep-Guide.md"
+    ));
     let guide_md_json = serde_json::to_string(guide_md).unwrap_or_else(|_| "\"\"".to_string());
     let html = base.replace("__GUIDE_MD__", &guide_md_json);
     Ok(Html(html))
@@ -1358,4 +1361,3 @@ mod tests {
         assert!(html.contains("analyzeCode"));
     }
 }
-

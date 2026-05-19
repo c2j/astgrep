@@ -1,5 +1,5 @@
 //! astgrep Web API
-//! 
+//!
 //! This crate provides a RESTful web service interface for astgrep,
 //! enabling remote code analysis and integration with CI/CD pipelines.
 
@@ -50,8 +50,14 @@ pub fn create_app(config: Arc<WebConfig>) -> Router {
 
     let api_routes = Router::new()
         .route("/analyze", post(handlers::analyze::analyze_code))
-        .route("/analyze/sarif", post(handlers::analyze::analyze_code_sarif))
-        .route("/analyze/file", post(handlers::analyze::analyze_file_flexible))
+        .route(
+            "/analyze/sarif",
+            post(handlers::analyze::analyze_code_sarif),
+        )
+        .route(
+            "/analyze/file",
+            post(handlers::analyze::analyze_file_flexible),
+        )
         .route("/analyze/archive", post(handlers::analyze::analyze_archive))
         .route("/jobs/:id", get(handlers::jobs::get_job_status))
         .route("/jobs", get(handlers::jobs::list_jobs))
@@ -78,12 +84,12 @@ pub fn create_app(config: Arc<WebConfig>) -> Router {
 /// Initialize the web service
 pub async fn init_web_service(config: WebConfig) -> Result<WebServer> {
     info!("Initializing astgrep web service");
-    
+
     let config = Arc::new(config);
     let app = create_app(config.clone());
-    
+
     let server = WebServer::new(app, config).await?;
-    
+
     info!("Web service initialized successfully");
     Ok(server)
 }
@@ -98,13 +104,13 @@ mod tests {
     async fn test_create_app() {
         let config = Arc::new(WebConfig::default());
         let app = create_app(config);
-        
+
         let server = TestServer::new(app).unwrap();
-        
+
         // Test root endpoint
         let response = server.get("/").await;
         assert_eq!(response.status_code(), StatusCode::OK);
-        
+
         // Test health endpoint
         let response = server.get("/api/v1/health").await;
         assert_eq!(response.status_code(), StatusCode::OK);
@@ -114,16 +120,18 @@ mod tests {
     async fn test_cors_headers() {
         let config = Arc::new(WebConfig::default());
         let app = create_app(config);
-        
+
         let server = TestServer::new(app).unwrap();
-        
+
         let response = server
             .method(axum_test::http::Method::OPTIONS, "/api/v1/health")
             .add_header("Origin", "http://localhost:3000")
             .add_header("Access-Control-Request-Method", "GET")
             .await;
-            
+
         assert_eq!(response.status_code(), StatusCode::OK);
-        assert!(response.headers().contains_key("access-control-allow-origin"));
+        assert!(response
+            .headers()
+            .contains_key("access-control-allow-origin"));
     }
 }

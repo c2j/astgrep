@@ -3,23 +3,25 @@
 //! This module provides functionality to migrate test cases from the current directory
 //! structure to the new hierarchical organization based on language and test type.
 
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use tracing::{info, debug, error, instrument};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use tracing::{debug, error, info, instrument};
 use walkdir::WalkDir;
 
-use astgrep_core::models::{TestCase, TestType, TestComplexity, TestCaseStatus, TestCaseMetadata, LanguageMapping};
-use crate::validation::{ValidationReport};
-use crate::validation::migration_validator::{MigrationValidator, ValidationConfig};
 use crate::backup::backup_manager::BackupManager;
 use crate::services::migration_orchestrator::MigrationOrchestrator;
 use crate::utils::path_utils::PathHandler;
+use crate::validation::migration_validator::{MigrationValidator, ValidationConfig};
+use crate::validation::ValidationReport;
+use astgrep_core::models::{
+    LanguageMapping, TestCase, TestCaseMetadata, TestCaseStatus, TestComplexity, TestType,
+};
 
 /// Configuration for test case migration
 #[derive(Debug, Clone)]
@@ -236,7 +238,10 @@ impl TestCaseMigrator {
         );
         let backup_manager = BackupManager::new(crate::backup::BackupConfig {
             enabled: config.backup_directory.is_some(),
-            backup_directory: config.backup_directory.clone().unwrap_or_else(|| std::path::PathBuf::from("./backups")),
+            backup_directory: config
+                .backup_directory
+                .clone()
+                .unwrap_or_else(|| std::path::PathBuf::from("./backups")),
             compression_enabled: false,
             max_backup_size_gb: 10.0,
             retention_days: 30,
@@ -259,9 +264,11 @@ impl TestCaseMigrator {
     /// Migrate all test cases from source to target directory
     #[instrument(skip(self))]
     pub async fn migrate_test_cases(&mut self) -> Result<TestCaseMigrationResult> {
-        info!("Starting test case migration from {} to {}",
-              self.config.source_root.display(),
-              self.config.target_root.display());
+        info!(
+            "Starting test case migration from {} to {}",
+            self.config.source_root.display(),
+            self.config.target_root.display()
+        );
 
         let start_time = std::time::Instant::now();
         let mut successful_migrations = Vec::new();
@@ -274,7 +281,9 @@ impl TestCaseMigrator {
         let files_backed_up = 0usize;
 
         // Discover test cases to migrate
-        let test_cases = self.discover_test_cases().await
+        let test_cases = self
+            .discover_test_cases()
+            .await
             .context("Failed to discover test cases for migration")?;
 
         info!("Discovered {} test cases for migration", test_cases.len());
@@ -282,7 +291,10 @@ impl TestCaseMigrator {
         // Create backup if requested
         if self.config.create_backups && !self.config.dry_run {
             let migration_id = format!("migration-{}", chrono::Utc::now().timestamp());
-            let backup_id = self.backup_manager.create_backup(&migration_id, &[]).await
+            let backup_id = self
+                .backup_manager
+                .create_backup(&migration_id, &[])
+                .await
                 .context("Failed to create backup")?;
             info!("Created backup with ID: {}", backup_id);
         }
@@ -308,21 +320,28 @@ impl TestCaseMigrator {
                 Ok(migration_result) => {
                     match migration_result {
                         Ok(migrated_test_case) => {
-                            total_bytes_migrated += migrated_test_case.migration_metadata.original_file_size;
+                            total_bytes_migrated +=
+                                migrated_test_case.migration_metadata.original_file_size;
 
                             // Update distributions
                             for language in &migrated_test_case.original_test_case.languages {
                                 *language_distribution.entry(language.clone()).or_insert(0) += 1;
                             }
-                            *type_distribution.entry(format!("{:?}", migrated_test_case.original_test_case.test_type))
+                            *type_distribution
+                                .entry(format!(
+                                    "{:?}",
+                                    migrated_test_case.original_test_case.test_type
+                                ))
                                 .or_insert(0) += 1;
 
                             successful_migrations.push(migrated_test_case);
                         }
                         Err(failed_migration) => {
-                            error!("Migration failed for {}: {}",
-                                   failed_migration.original_path.display(),
-                                   failed_migration.error_message);
+                            error!(
+                                "Migration failed for {}: {}",
+                                failed_migration.original_path.display(),
+                                failed_migration.error_message
+                            );
                             failed_migrations.push(failed_migration);
                         }
                     }
@@ -341,7 +360,9 @@ impl TestCaseMigrator {
 
         // Update cross-references if requested
         if self.config.update_cross_references {
-            let cross_refs = self.update_cross_references(&successful_migrations).await
+            let cross_refs = self
+                .update_cross_references(&successful_migrations)
+                .await
                 .context("Failed to update cross-references")?;
             cross_references_updated = cross_refs;
         }
@@ -350,8 +371,12 @@ impl TestCaseMigrator {
 
         // Perform validation if requested
         let validation_results = if self.config.validate_migration && !self.config.dry_run {
-            Some(self.migration_validator.validate_migration("test-migration", &[]).await
-                .context("Migration validation failed")?)
+            Some(
+                self.migration_validator
+                    .validate_migration("test-migration", &[])
+                    .await
+                    .context("Migration validation failed")?,
+            )
         } else {
             None
         };
@@ -360,7 +385,8 @@ impl TestCaseMigrator {
         let successful_count = successful_migrations.len();
         let failed_count = failed_migrations.len();
         let skipped_count = 0; // TODO: Implement skipped logic
-        let validation_failures = validation_results.as_ref()
+        let validation_failures = validation_results
+            .as_ref()
             .map(|v| v.failed_operations)
             .unwrap_or(0);
 
@@ -376,8 +402,10 @@ impl TestCaseMigrator {
             validation_failures,
         };
 
-        info!("Migration completed: {} successful, {} failed",
-              successful_count, failed_count);
+        info!(
+            "Migration completed: {} successful, {} failed",
+            successful_count, failed_count
+        );
 
         Ok(TestCaseMigrationResult {
             successful_migrations,
@@ -433,36 +461,38 @@ impl TestCaseMigrator {
     /// Check if a file should be excluded from migration
     fn should_exclude_file(&self, file_path: &Path) -> bool {
         let path_str = file_path.to_string_lossy();
-        self.config.exclude_patterns
-            .iter()
-            .any(|pattern| {
-                let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
-                if let Ok(regex) = regex::Regex::new(&regex_pattern) {
-                    regex.is_match(&path_str)
-                } else {
-                    false
-                }
-            })
+        self.config.exclude_patterns.iter().any(|pattern| {
+            let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
+            if let Ok(regex) = regex::Regex::new(&regex_pattern) {
+                regex.is_match(&path_str)
+            } else {
+                false
+            }
+        })
     }
 
     /// Classify a file as a test case
     async fn classify_test_case(&self, file_path: &Path) -> Result<Option<TestCase>> {
         // Detect language
         let content = fs::read_to_string(file_path).ok();
-        let language = self.config.language_mapping.detect_language(&file_path.to_path_buf(), content.as_deref());
+        let language = self
+            .config
+            .language_mapping
+            .detect_language(&file_path.to_path_buf(), content.as_deref());
 
         // Check if it's a test case based on filename patterns
         if let Some(filename) = file_path.file_stem().and_then(|s| s.to_str()) {
             let filename_lower = filename.to_lowercase();
 
-            if filename_lower.contains("test") ||
-               filename_lower.contains("spec") ||
-               filename_lower.contains("validate") {
-
+            if filename_lower.contains("test")
+                || filename_lower.contains("spec")
+                || filename_lower.contains("validate")
+            {
                 // Determine test type based on filename
                 let test_type = if filename_lower.contains("security") {
                     TestType::Security
-                } else if filename_lower.contains("performance") || filename_lower.contains("perf") {
+                } else if filename_lower.contains("performance") || filename_lower.contains("perf")
+                {
                     TestType::Performance
                 } else if filename_lower.contains("integration") {
                     TestType::Integration
@@ -475,10 +505,15 @@ impl TestCaseMigrator {
                 };
 
                 // Generate target path
-                let target_path = self.generate_target_path(file_path, &language, &test_type).await?;
+                let target_path = self
+                    .generate_target_path(file_path, &language, &test_type)
+                    .await?;
 
                 // Create test case
-                let test_case_id = format!("tc-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default());
+                let test_case_id = format!(
+                    "tc-{}",
+                    chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+                );
                 let test_case_name = filename.to_string();
 
                 let test_case = TestCase {
@@ -508,9 +543,17 @@ impl TestCaseMigrator {
     }
 
     /// Generate target path for a test case
-    async fn generate_target_path(&self, source_path: &Path, language: &str, test_type: &TestType) -> Result<PathBuf> {
+    async fn generate_target_path(
+        &self,
+        source_path: &Path,
+        language: &str,
+        test_type: &TestType,
+    ) -> Result<PathBuf> {
         // Get language configuration
-        let lang_config = self.config.language_mapping.get_language_config(language)
+        let lang_config = self
+            .config
+            .language_mapping
+            .get_language_config(language)
             .ok_or_else(|| anyhow!("No language configuration found for {}", language))?;
 
         // Build path: newtest/testcases/{language}/{test-type}/
@@ -526,7 +569,9 @@ impl TestCaseMigrator {
             TestType::Custom => "custom",
         };
 
-        let mut target_path = self.config.target_root
+        let mut target_path = self
+            .config
+            .target_root
             .join(&lang_config.directory_name)
             .join(test_type_dir);
 
@@ -541,8 +586,7 @@ impl TestCaseMigrator {
 
         // Ensure file extension matches the language
         let default_ext = "txt".to_string();
-        let target_ext = lang_config.extensions.first()
-            .unwrap_or(&default_ext);
+        let target_ext = lang_config.extensions.first().unwrap_or(&default_ext);
         target_path = target_path.with_extension(target_ext);
 
         Ok(target_path)
@@ -557,21 +601,22 @@ impl TestCaseMigrator {
         let original_path = test_case.current_path.clone();
         let target_path = test_case.target_path.clone();
 
-        debug!("Migrating test case from {} to {}",
-               original_path.display(),
-               target_path.display());
+        debug!(
+            "Migrating test case from {} to {}",
+            original_path.display(),
+            target_path.display()
+        );
 
         let _migration_start = SystemTime::now();
         let mut operations_performed = Vec::new();
 
         // Get original file metadata
-        let original_metadata = fs::metadata(&original_path)
-            .map_err(|e| FailedMigration {
-                original_path: original_path.clone(),
-                error_message: format!("Failed to read file metadata: {}", e),
-                error_type: MigrationErrorType::FileAccess,
-                partial_results: None,
-            })?;
+        let original_metadata = fs::metadata(&original_path).map_err(|e| FailedMigration {
+            original_path: original_path.clone(),
+            error_message: format!("Failed to read file metadata: {}", e),
+            error_type: MigrationErrorType::FileAccess,
+            partial_results: None,
+        })?;
 
         let original_file_size = original_metadata.len();
         let original_checksum = if config.calculate_checksums {
@@ -582,29 +627,29 @@ impl TestCaseMigrator {
 
         // Perform actual migration
         if config.dry_run {
-            info!("[DRY RUN] Would migrate {} to {}",
-                  original_path.display(),
-                  target_path.display());
+            info!(
+                "[DRY RUN] Would migrate {} to {}",
+                original_path.display(),
+                target_path.display()
+            );
         } else {
             // Create target directory
             if let Some(parent) = target_path.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| FailedMigration {
-                        original_path: original_path.clone(),
-                        error_message: format!("Failed to create target directory: {}", e),
-                        error_type: MigrationErrorType::FileOperation,
-                        partial_results: None,
-                    })?;
-            }
-
-            // Copy file
-            fs::copy(&original_path, &target_path)
-                .map_err(|e| FailedMigration {
+                fs::create_dir_all(parent).map_err(|e| FailedMigration {
                     original_path: original_path.clone(),
-                    error_message: format!("Failed to copy file: {}", e),
+                    error_message: format!("Failed to create target directory: {}", e),
                     error_type: MigrationErrorType::FileOperation,
                     partial_results: None,
                 })?;
+            }
+
+            // Copy file
+            fs::copy(&original_path, &target_path).map_err(|e| FailedMigration {
+                original_path: original_path.clone(),
+                error_message: format!("Failed to copy file: {}", e),
+                error_type: MigrationErrorType::FileOperation,
+                partial_results: None,
+            })?;
 
             operations_performed.push(MigrationOperation::FileMoved {
                 from: original_path.clone(),
@@ -613,21 +658,19 @@ impl TestCaseMigrator {
 
             // Preserve timestamps if requested
             if config.preserve_timestamps {
-                let _modified = original_metadata.modified()
-                    .map_err(|e| FailedMigration {
-                        original_path: original_path.clone(),
-                        error_message: format!("Failed to get modification time: {}", e),
-                        error_type: MigrationErrorType::FileOperation,
-                        partial_results: None,
-                    })?;
+                let _modified = original_metadata.modified().map_err(|e| FailedMigration {
+                    original_path: original_path.clone(),
+                    error_message: format!("Failed to get modification time: {}", e),
+                    error_type: MigrationErrorType::FileOperation,
+                    partial_results: None,
+                })?;
 
-                let _accessed = original_metadata.accessed()
-                    .map_err(|e| FailedMigration {
-                        original_path: original_path.clone(),
-                        error_message: format!("Failed to get access time: {}", e),
-                        error_type: MigrationErrorType::FileOperation,
-                        partial_results: None,
-                    })?;
+                let _accessed = original_metadata.accessed().map_err(|e| FailedMigration {
+                    original_path: original_path.clone(),
+                    error_message: format!("Failed to get access time: {}", e),
+                    error_type: MigrationErrorType::FileOperation,
+                    partial_results: None,
+                })?;
 
                 // Skip setting file times as filetime crate is not available
                 // TODO: Add filetime dependency for proper file time preservation
@@ -660,10 +703,10 @@ impl TestCaseMigrator {
 
     /// Calculate file checksum
     async fn calculate_file_checksum(file_path: &Path) -> Result<String> {
-        let content = fs::read(file_path)
-            .context("Failed to read file for checksum calculation")?;
+        let content =
+            fs::read(file_path).context("Failed to read file for checksum calculation")?;
         {
-            use sha2::{Sha256, Digest};
+            use sha2::{Digest, Sha256};
             let mut hasher = Sha256::new();
             hasher.update(&content);
             Ok(format!("{:x}", hasher.finalize()))
@@ -671,7 +714,10 @@ impl TestCaseMigrator {
     }
 
     /// Update cross-references between migrated test cases
-    async fn update_cross_references(&mut self, _migrated_cases: &[MigratedTestCase]) -> Result<Vec<String>> {
+    async fn update_cross_references(
+        &mut self,
+        _migrated_cases: &[MigratedTestCase],
+    ) -> Result<Vec<String>> {
         let updated_refs = Vec::new();
 
         // TODO: Implement cross-reference update logic
@@ -680,7 +726,10 @@ impl TestCaseMigrator {
         // 2. Updating those references to point to the new locations
         // 3. Keeping track of what was updated
 
-        info!("Updated {} cross-references during migration", updated_refs.len());
+        info!(
+            "Updated {} cross-references during migration",
+            updated_refs.len()
+        );
         Ok(updated_refs)
     }
 
@@ -689,19 +738,49 @@ impl TestCaseMigrator {
         let mut report = String::new();
 
         report.push_str("# Test Case Migration Report\n\n");
-        report.push_str(&format!("Generated at: {}\n\n", result.migrated_at.format("%Y-%m-%d %H:%M:%S UTC")));
+        report.push_str(&format!(
+            "Generated at: {}\n\n",
+            result.migrated_at.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
 
         // Summary section
         report.push_str("## Migration Summary\n\n");
-        report.push_str(&format!("- **Total test cases processed**: {}\n", result.summary.total_test_cases));
-        report.push_str(&format!("- **Successfully migrated**: {}\n", result.summary.successful_migrations));
-        report.push_str(&format!("- **Failed migrations**: {}\n", result.summary.failed_migrations));
-        report.push_str(&format!("- **Skipped test cases**: {}\n", result.summary.skipped_test_cases));
-        report.push_str(&format!("- **Total bytes migrated**: {} MB\n", result.summary.total_bytes_migrated / 1_048_576));
-        report.push_str(&format!("- **Migration duration**: {:.2} seconds\n", result.summary.migration_duration_ms as f64 / 1000.0));
-        report.push_str(&format!("- **Files backed up**: {}\n", result.summary.files_backed_up));
-        report.push_str(&format!("- **Cross-references updated**: {}\n", result.summary.cross_references_updated));
-        report.push_str(&format!("- **Validation failures**: {}\n\n", result.summary.validation_failures));
+        report.push_str(&format!(
+            "- **Total test cases processed**: {}\n",
+            result.summary.total_test_cases
+        ));
+        report.push_str(&format!(
+            "- **Successfully migrated**: {}\n",
+            result.summary.successful_migrations
+        ));
+        report.push_str(&format!(
+            "- **Failed migrations**: {}\n",
+            result.summary.failed_migrations
+        ));
+        report.push_str(&format!(
+            "- **Skipped test cases**: {}\n",
+            result.summary.skipped_test_cases
+        ));
+        report.push_str(&format!(
+            "- **Total bytes migrated**: {} MB\n",
+            result.summary.total_bytes_migrated / 1_048_576
+        ));
+        report.push_str(&format!(
+            "- **Migration duration**: {:.2} seconds\n",
+            result.summary.migration_duration_ms as f64 / 1000.0
+        ));
+        report.push_str(&format!(
+            "- **Files backed up**: {}\n",
+            result.summary.files_backed_up
+        ));
+        report.push_str(&format!(
+            "- **Cross-references updated**: {}\n",
+            result.summary.cross_references_updated
+        ));
+        report.push_str(&format!(
+            "- **Validation failures**: {}\n\n",
+            result.summary.validation_failures
+        ));
 
         // Language distribution
         report.push_str("## Language Distribution\n\n");
@@ -743,8 +822,8 @@ impl TestCaseMigrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_test_case_migration_config_default() {
@@ -773,7 +852,9 @@ mod tests {
         let test_file = temp_dir.path().join("test.txt");
         fs::write(&test_file, "Hello, World!").unwrap();
 
-        let checksum = TestCaseMigrator::calculate_file_checksum(&test_file).await.unwrap();
+        let checksum = TestCaseMigrator::calculate_file_checksum(&test_file)
+            .await
+            .unwrap();
         assert!(!checksum.is_empty());
         assert_eq!(checksum.len(), 64); // SHA256 hex string length
     }
@@ -790,11 +871,10 @@ mod tests {
         let migrator = TestCaseMigrator::new(config).unwrap();
 
         let source_path = temp_dir.path().join("SecurityTest.java");
-        let target_path = migrator.generate_target_path(
-            &source_path,
-            "java",
-            &TestType::Security
-        ).await.unwrap();
+        let target_path = migrator
+            .generate_target_path(&source_path, "java", &TestType::Security)
+            .await
+            .unwrap();
 
         assert!(target_path.starts_with(temp_dir.path().join("newtest/testcases/java/security/")));
         assert!(target_path.ends_with(".java"));

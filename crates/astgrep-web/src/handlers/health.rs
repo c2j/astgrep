@@ -6,34 +6,32 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    models::{HealthResponse, SystemInfo, DependencyStatus},
+    models::{DependencyStatus, HealthResponse, SystemInfo},
     WebConfig, WebResult,
 };
 
 /// Health check endpoint
-pub async fn health_check(
-    State(config): State<Arc<WebConfig>>,
-) -> WebResult<Json<HealthResponse>> {
+pub async fn health_check(State(config): State<Arc<WebConfig>>) -> WebResult<Json<HealthResponse>> {
     let start_time = std::time::Instant::now();
-    
+
     // Get system information
     let system_info = get_system_info().await;
-    
+
     // Check dependencies
     let dependencies = check_dependencies(&config).await;
-    
+
     // Determine overall status
     let status = if dependencies.values().all(|dep| dep.healthy) {
         "healthy"
     } else {
         "degraded"
     };
-    
+
     let uptime = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    
+
     let response = HealthResponse {
         status: status.to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -41,10 +39,10 @@ pub async fn health_check(
         system: system_info,
         dependencies,
     };
-    
+
     let duration = start_time.elapsed();
     tracing::info!("Health check completed in {:?}", duration);
-    
+
     Ok(Json(response))
 }
 
@@ -61,32 +59,32 @@ async fn get_system_info() -> SystemInfo {
 /// Check health of dependencies
 async fn check_dependencies(config: &WebConfig) -> HashMap<String, DependencyStatus> {
     let mut dependencies = HashMap::new();
-    
+
     // Check rules directory
     let rules_status = check_rules_directory(&config.rules_directory).await;
     dependencies.insert("rules_directory".to_string(), rules_status);
-    
+
     // Check temporary directory
     let temp_status = check_temp_directory(&config.temp_directory).await;
     dependencies.insert("temp_directory".to_string(), temp_status);
-    
+
     // Check database if enabled
     #[cfg(feature = "database")]
     if let Some(ref db_config) = config.database {
         let db_status = check_database(db_config).await;
         dependencies.insert("database".to_string(), db_status);
     }
-    
+
     dependencies
 }
 
 /// Check rules directory accessibility
 async fn check_rules_directory(rules_dir: &std::path::Path) -> DependencyStatus {
     let start_time = std::time::Instant::now();
-    
+
     let result = tokio::fs::metadata(rules_dir).await;
     let duration = start_time.elapsed();
-    
+
     match result {
         Ok(metadata) if metadata.is_dir() => DependencyStatus {
             healthy: true,
@@ -109,12 +107,12 @@ async fn check_rules_directory(rules_dir: &std::path::Path) -> DependencyStatus 
 /// Check temporary directory accessibility
 async fn check_temp_directory(temp_dir: &std::path::Path) -> DependencyStatus {
     let start_time = std::time::Instant::now();
-    
+
     // Try to create the directory if it doesn't exist
     let create_result = tokio::fs::create_dir_all(temp_dir).await;
-    
+
     let duration = start_time.elapsed();
-    
+
     match create_result {
         Ok(()) => {
             // Try to write a test file
@@ -148,9 +146,9 @@ async fn check_temp_directory(temp_dir: &std::path::Path) -> DependencyStatus {
 #[cfg(feature = "database")]
 async fn check_database(db_config: &crate::config::DatabaseConfig) -> DependencyStatus {
     use sqlx::SqlitePool;
-    
+
     let start_time = std::time::Instant::now();
-    
+
     match SqlitePool::connect(&db_config.url).await {
         Ok(pool) => {
             // Try a simple query
@@ -193,7 +191,7 @@ fn get_available_memory() -> u64 {
             }
         }
     }
-    
+
     // Fallback: return a default value
     1024 * 1024 * 1024 // 1GB
 }
@@ -263,12 +261,12 @@ mod tests {
     async fn test_check_temp_directory() {
         let temp_dir = tempdir().unwrap();
         let temp_path = temp_dir.path().join("test_temp");
-        
+
         let status = check_temp_directory(&temp_path).await;
         assert!(status.healthy);
         assert!(status.response_time_ms.is_some());
         assert!(status.error.is_none());
-        
+
         // Verify directory was created
         assert!(temp_path.exists());
     }
@@ -277,7 +275,7 @@ mod tests {
     fn test_get_system_info() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let system_info = rt.block_on(get_system_info());
-        
+
         assert!(system_info.available_memory_bytes > 0);
         assert!(system_info.cpu_usage_percent >= 0.0);
         assert!(system_info.disk_usage_percent >= 0.0);

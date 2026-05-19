@@ -1,15 +1,16 @@
 //! Metrics handler
 
-use axum::response::Response;
 use axum::http::{header, StatusCode};
-use std::sync::{Arc, RwLock};
+use axum::response::Response;
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::WebResult;
 
 /// Global metrics collector
-pub static METRICS_COLLECTOR: std::sync::OnceLock<Arc<MetricsCollector>> = std::sync::OnceLock::new();
+pub static METRICS_COLLECTOR: std::sync::OnceLock<Arc<MetricsCollector>> =
+    std::sync::OnceLock::new();
 
 /// Initialize the global metrics collector
 pub fn init_metrics_collector() {
@@ -198,13 +199,16 @@ impl MetricsCollector {
 /// Get metrics in Prometheus format
 pub async fn get_metrics() -> WebResult<Response> {
     let metrics = generate_prometheus_metrics().await;
-    
+
     let response = Response::builder()
         .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")
+        .header(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )
         .body(metrics.into())
         .unwrap();
-    
+
     Ok(response)
 }
 
@@ -226,14 +230,26 @@ async fn generate_prometheus_metrics() -> String {
     // Uptime
     metrics.push_str("# HELP astgrep_uptime_seconds Total uptime of the service in seconds\n");
     metrics.push_str("# TYPE astgrep_uptime_seconds counter\n");
-    metrics.push_str(&format!("astgrep_uptime_seconds {}\n", get_uptime_seconds()));
+    metrics.push_str(&format!(
+        "astgrep_uptime_seconds {}\n",
+        get_uptime_seconds()
+    ));
 
     // Request metrics
     metrics.push_str("# HELP astgrep_requests_total Total number of HTTP requests\n");
     metrics.push_str("# TYPE astgrep_requests_total counter\n");
-    metrics.push_str(&format!("astgrep_requests_total{{method=\"GET\",endpoint=\"/api/v1/health\"}} {}\n", get_request_count("GET", "/api/v1/health")));
-    metrics.push_str(&format!("astgrep_requests_total{{method=\"POST\",endpoint=\"/api/v1/analyze\"}} {}\n", get_request_count("POST", "/api/v1/analyze")));
-    metrics.push_str(&format!("astgrep_requests_total{{method=\"GET\",endpoint=\"/api/v1/metrics\"}} {}\n", get_request_count("GET", "/api/v1/metrics")));
+    metrics.push_str(&format!(
+        "astgrep_requests_total{{method=\"GET\",endpoint=\"/api/v1/health\"}} {}\n",
+        get_request_count("GET", "/api/v1/health")
+    ));
+    metrics.push_str(&format!(
+        "astgrep_requests_total{{method=\"POST\",endpoint=\"/api/v1/analyze\"}} {}\n",
+        get_request_count("POST", "/api/v1/analyze")
+    ));
+    metrics.push_str(&format!(
+        "astgrep_requests_total{{method=\"GET\",endpoint=\"/api/v1/metrics\"}} {}\n",
+        get_request_count("GET", "/api/v1/metrics")
+    ));
 
     // Analysis metrics
     metrics.push_str("# HELP astgrep_analyses_total Total number of code analyses performed\n");
@@ -243,7 +259,10 @@ async fn generate_prometheus_metrics() -> String {
     let collector = get_metrics_collector();
     let analysis_counts = collector.analysis_counts.read().unwrap();
     for (language, count) in analysis_counts.iter() {
-        metrics.push_str(&format!("astgrep_analyses_total{{language=\"{}\"}} {}\n", language, count));
+        metrics.push_str(&format!(
+            "astgrep_analyses_total{{language=\"{}\"}} {}\n",
+            language, count
+        ));
     }
 
     // Analysis duration (real histogram would require more sophisticated tracking)
@@ -258,21 +277,54 @@ async fn generate_prometheus_metrics() -> String {
     let bucket_10 = (total_analyses as f64 * 0.8) as u64;
     let bucket_50 = (total_analyses as f64 * 0.95) as u64;
 
-    metrics.push_str(&format!("astgrep_analysis_duration_seconds_bucket{{le=\"0.1\"}} {}\n", bucket_01));
-    metrics.push_str(&format!("astgrep_analysis_duration_seconds_bucket{{le=\"0.5\"}} {}\n", bucket_05));
-    metrics.push_str(&format!("astgrep_analysis_duration_seconds_bucket{{le=\"1.0\"}} {}\n", bucket_10));
-    metrics.push_str(&format!("astgrep_analysis_duration_seconds_bucket{{le=\"5.0\"}} {}\n", bucket_50));
-    metrics.push_str(&format!("astgrep_analysis_duration_seconds_bucket{{le=\"+Inf\"}} {}\n", total_analyses));
-    metrics.push_str(&format!("astgrep_analysis_duration_seconds_sum {:.1}\n", total_analyses as f64 * 0.5));
-    metrics.push_str(&format!("astgrep_analysis_duration_seconds_count {}\n", total_analyses));
+    metrics.push_str(&format!(
+        "astgrep_analysis_duration_seconds_bucket{{le=\"0.1\"}} {}\n",
+        bucket_01
+    ));
+    metrics.push_str(&format!(
+        "astgrep_analysis_duration_seconds_bucket{{le=\"0.5\"}} {}\n",
+        bucket_05
+    ));
+    metrics.push_str(&format!(
+        "astgrep_analysis_duration_seconds_bucket{{le=\"1.0\"}} {}\n",
+        bucket_10
+    ));
+    metrics.push_str(&format!(
+        "astgrep_analysis_duration_seconds_bucket{{le=\"5.0\"}} {}\n",
+        bucket_50
+    ));
+    metrics.push_str(&format!(
+        "astgrep_analysis_duration_seconds_bucket{{le=\"+Inf\"}} {}\n",
+        total_analyses
+    ));
+    metrics.push_str(&format!(
+        "astgrep_analysis_duration_seconds_sum {:.1}\n",
+        total_analyses as f64 * 0.5
+    ));
+    metrics.push_str(&format!(
+        "astgrep_analysis_duration_seconds_count {}\n",
+        total_analyses
+    ));
 
     // Findings metrics
     metrics.push_str("# HELP astgrep_findings_total Total number of findings detected\n");
     metrics.push_str("# TYPE astgrep_findings_total counter\n");
-    metrics.push_str(&format!("astgrep_findings_total{{severity=\"info\"}} {}\n", get_findings_count("info")));
-    metrics.push_str(&format!("astgrep_findings_total{{severity=\"warning\"}} {}\n", get_findings_count("warning")));
-    metrics.push_str(&format!("astgrep_findings_total{{severity=\"error\"}} {}\n", get_findings_count("error")));
-    metrics.push_str(&format!("astgrep_findings_total{{severity=\"critical\"}} {}\n", get_findings_count("critical")));
+    metrics.push_str(&format!(
+        "astgrep_findings_total{{severity=\"info\"}} {}\n",
+        get_findings_count("info")
+    ));
+    metrics.push_str(&format!(
+        "astgrep_findings_total{{severity=\"warning\"}} {}\n",
+        get_findings_count("warning")
+    ));
+    metrics.push_str(&format!(
+        "astgrep_findings_total{{severity=\"error\"}} {}\n",
+        get_findings_count("error")
+    ));
+    metrics.push_str(&format!(
+        "astgrep_findings_total{{severity=\"critical\"}} {}\n",
+        get_findings_count("critical")
+    ));
 
     // Job metrics
     metrics.push_str("# HELP astgrep_jobs_active Number of currently active jobs\n");
@@ -281,32 +333,53 @@ async fn generate_prometheus_metrics() -> String {
 
     metrics.push_str("# HELP astgrep_jobs_total Total number of jobs processed\n");
     metrics.push_str("# TYPE astgrep_jobs_total counter\n");
-    metrics.push_str(&format!("astgrep_jobs_total{{status=\"completed\"}} {}\n", get_job_count("completed")));
-    metrics.push_str(&format!("astgrep_jobs_total{{status=\"failed\"}} {}\n", get_job_count("failed")));
+    metrics.push_str(&format!(
+        "astgrep_jobs_total{{status=\"completed\"}} {}\n",
+        get_job_count("completed")
+    ));
+    metrics.push_str(&format!(
+        "astgrep_jobs_total{{status=\"failed\"}} {}\n",
+        get_job_count("failed")
+    ));
 
     // Success rate
     metrics.push_str("# HELP astgrep_job_success_rate Job success rate percentage\n");
     metrics.push_str("# TYPE astgrep_job_success_rate gauge\n");
-    metrics.push_str(&format!("astgrep_job_success_rate {:.2}\n", stats.success_rate()));
+    metrics.push_str(&format!(
+        "astgrep_job_success_rate {:.2}\n",
+        stats.success_rate()
+    ));
 
     // System metrics (real-time)
     metrics.push_str("# HELP astgrep_memory_usage_bytes Current memory usage in bytes\n");
     metrics.push_str("# TYPE astgrep_memory_usage_bytes gauge\n");
-    metrics.push_str(&format!("astgrep_memory_usage_bytes {}\n", get_memory_usage()));
+    metrics.push_str(&format!(
+        "astgrep_memory_usage_bytes {}\n",
+        get_memory_usage()
+    ));
 
     metrics.push_str("# HELP astgrep_cpu_usage_percent Current CPU usage percentage\n");
     metrics.push_str("# TYPE astgrep_cpu_usage_percent gauge\n");
-    metrics.push_str(&format!("astgrep_cpu_usage_percent {:.2}\n", get_cpu_usage()));
+    metrics.push_str(&format!(
+        "astgrep_cpu_usage_percent {:.2}\n",
+        get_cpu_usage()
+    ));
 
     // Rules metrics
     metrics.push_str("# HELP astgrep_rules_loaded Number of rules currently loaded\n");
     metrics.push_str("# TYPE astgrep_rules_loaded gauge\n");
-    metrics.push_str(&format!("astgrep_rules_loaded {}\n", get_loaded_rules_count()));
+    metrics.push_str(&format!(
+        "astgrep_rules_loaded {}\n",
+        get_loaded_rules_count()
+    ));
 
     // Performance metrics
     metrics.push_str("# HELP astgrep_avg_findings_per_analysis Average findings per analysis\n");
     metrics.push_str("# TYPE astgrep_avg_findings_per_analysis gauge\n");
-    metrics.push_str(&format!("astgrep_avg_findings_per_analysis {:.2}\n", stats.avg_findings_per_analysis()));
+    metrics.push_str(&format!(
+        "astgrep_avg_findings_per_analysis {:.2}\n",
+        stats.avg_findings_per_analysis()
+    ));
 
     metrics
 }
@@ -449,9 +522,7 @@ fn get_cpu_usage_percent() -> Result<f64, Box<dyn std::error::Error>> {
         use std::process::Command;
 
         // Use top command to get CPU usage
-        let output = Command::new("top")
-            .args(&["-l", "1", "-n", "0"])
-            .output()?;
+        let output = Command::new("top").args(&["-l", "1", "-n", "0"]).output()?;
 
         let output_str = String::from_utf8(output.stdout)?;
 
@@ -550,10 +621,10 @@ mod tests {
     async fn test_get_metrics() {
         let result = get_metrics().await;
         assert!(result.is_ok());
-        
+
         let response = result.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         // Check content type
         let content_type = response.headers().get(header::CONTENT_TYPE).unwrap();
         assert!(content_type.to_str().unwrap().starts_with("text/plain"));
@@ -585,7 +656,10 @@ mod tests {
 
         // Check specific metric values
         assert!(metrics.contains("astgrep_jobs_active 2"));
-        assert!(metrics.contains(&format!("astgrep_info{{version=\"{}\"}} 1", env!("CARGO_PKG_VERSION"))));
+        assert!(metrics.contains(&format!(
+            "astgrep_info{{version=\"{}\"}} 1",
+            env!("CARGO_PKG_VERSION")
+        )));
     }
 
     #[test]

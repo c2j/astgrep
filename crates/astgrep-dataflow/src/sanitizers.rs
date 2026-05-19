@@ -1,5 +1,5 @@
 //! Sanitizer detection for data flow analysis
-//! 
+//!
 //! This module identifies sanitizers that clean or validate tainted data.
 
 use crate::graph::{DataFlowGraph, DataFlowNode, NodeId};
@@ -50,8 +50,13 @@ impl Sanitizer {
 
     /// Check if this sanitizer protects against a specific vulnerability type
     pub fn protects_against(&self, vulnerability_type: &str) -> bool {
-        self.vulnerability_types.iter().any(|vt| vt == vulnerability_type) ||
-        self.sanitizer_type.default_protections().contains(&vulnerability_type.to_string())
+        self.vulnerability_types
+            .iter()
+            .any(|vt| vt == vulnerability_type)
+            || self
+                .sanitizer_type
+                .default_protections()
+                .contains(&vulnerability_type.to_string())
     }
 
     /// Check if this sanitizer is highly effective
@@ -60,7 +65,11 @@ impl Sanitizer {
     }
 
     /// Get effectiveness against a specific source type and vulnerability
-    pub fn effectiveness_against(&self, source_type: &crate::sources::SourceType, vulnerability_type: &str) -> f32 {
+    pub fn effectiveness_against(
+        &self,
+        source_type: &crate::sources::SourceType,
+        vulnerability_type: &str,
+    ) -> f32 {
         if self.protects_against(vulnerability_type) {
             // Adjust effectiveness based on source type
             match source_type {
@@ -115,10 +124,18 @@ impl SanitizerType {
     /// Get the strength of this sanitizer type
     pub fn strength(&self) -> SanitizerStrength {
         match self {
-            SanitizerType::SqlParameterBinding | SanitizerType::OutputEncoding => SanitizerStrength::Strong,
-            SanitizerType::InputValidation | SanitizerType::HtmlEncoding | SanitizerType::WhitelistFiltering => SanitizerStrength::Strong,
-            SanitizerType::UrlEncoding | SanitizerType::JavaScriptEncoding | SanitizerType::PathNormalization => SanitizerStrength::Medium,
-            SanitizerType::RegexValidation | SanitizerType::LengthValidation | SanitizerType::TypeValidation => SanitizerStrength::Medium,
+            SanitizerType::SqlParameterBinding | SanitizerType::OutputEncoding => {
+                SanitizerStrength::Strong
+            }
+            SanitizerType::InputValidation
+            | SanitizerType::HtmlEncoding
+            | SanitizerType::WhitelistFiltering => SanitizerStrength::Strong,
+            SanitizerType::UrlEncoding
+            | SanitizerType::JavaScriptEncoding
+            | SanitizerType::PathNormalization => SanitizerStrength::Medium,
+            SanitizerType::RegexValidation
+            | SanitizerType::LengthValidation
+            | SanitizerType::TypeValidation => SanitizerStrength::Medium,
             SanitizerType::BlacklistFiltering => SanitizerStrength::Weak,
         }
     }
@@ -128,13 +145,23 @@ impl SanitizerType {
         match self {
             SanitizerType::SqlParameterBinding => vec!["SQL_INJECTION".to_string()],
             SanitizerType::HtmlEncoding | SanitizerType::OutputEncoding => vec!["XSS".to_string()],
-            SanitizerType::UrlEncoding => vec!["XSS".to_string(), "HTTP_RESPONSE_SPLITTING".to_string()],
-            SanitizerType::JavaScriptEncoding => vec!["XSS".to_string(), "CODE_INJECTION".to_string()],
+            SanitizerType::UrlEncoding => {
+                vec!["XSS".to_string(), "HTTP_RESPONSE_SPLITTING".to_string()]
+            }
+            SanitizerType::JavaScriptEncoding => {
+                vec!["XSS".to_string(), "CODE_INJECTION".to_string()]
+            }
             SanitizerType::PathNormalization => vec!["PATH_TRAVERSAL".to_string()],
             SanitizerType::InputValidation | SanitizerType::WhitelistFiltering => {
-                vec!["XSS".to_string(), "SQL_INJECTION".to_string(), "COMMAND_INJECTION".to_string()]
+                vec![
+                    "XSS".to_string(),
+                    "SQL_INJECTION".to_string(),
+                    "COMMAND_INJECTION".to_string(),
+                ]
             }
-            SanitizerType::RegexValidation | SanitizerType::LengthValidation | SanitizerType::TypeValidation => {
+            SanitizerType::RegexValidation
+            | SanitizerType::LengthValidation
+            | SanitizerType::TypeValidation => {
                 vec!["INPUT_VALIDATION".to_string()]
             }
             SanitizerType::BlacklistFiltering => vec!["BASIC_FILTERING".to_string()],
@@ -204,9 +231,13 @@ impl SanitizerDetector {
                 for pattern in self.get_patterns_for_type(&node.node_type) {
                     if pattern.matches(function_name, node) {
                         return Some(
-                            Sanitizer::new(node_id, pattern.sanitizer_type.clone(), pattern.description.clone())
-                                .with_effectiveness(pattern.effectiveness)
-                                .with_vulnerability_types(pattern.vulnerability_types.clone())
+                            Sanitizer::new(
+                                node_id,
+                                pattern.sanitizer_type.clone(),
+                                pattern.description.clone(),
+                            )
+                            .with_effectiveness(pattern.effectiveness)
+                            .with_vulnerability_types(pattern.vulnerability_types.clone()),
                         );
                     }
                 }
@@ -218,103 +249,136 @@ impl SanitizerDetector {
 
     /// Get patterns for a node type
     fn get_patterns_for_type(&self, node_type: &str) -> &[SanitizerPattern] {
-        self.patterns.get(node_type).map(|v| v.as_slice()).unwrap_or(&[])
+        self.patterns
+            .get(node_type)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Add a custom sanitizer pattern
     pub fn add_pattern(&mut self, node_type: String, pattern: SanitizerPattern) {
-        self.patterns.entry(node_type).or_insert_with(Vec::new).push(pattern);
+        self.patterns
+            .entry(node_type)
+            .or_insert_with(Vec::new)
+            .push(pattern);
     }
 
     /// Load default sanitizer patterns
     fn load_default_patterns(&mut self) {
         // SQL parameter binding
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "prepareStatement".to_string(),
-            sanitizer_type: SanitizerType::SqlParameterBinding,
-            description: "SQL prepared statement".to_string(),
-            effectiveness: 0.95,
-            vulnerability_types: vec!["SQL_INJECTION".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "prepareStatement".to_string(),
+                sanitizer_type: SanitizerType::SqlParameterBinding,
+                description: "SQL prepared statement".to_string(),
+                effectiveness: 0.95,
+                vulnerability_types: vec!["SQL_INJECTION".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
         // HTML encoding
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "htmlEncode".to_string(),
-            sanitizer_type: SanitizerType::HtmlEncoding,
-            description: "HTML encoding function".to_string(),
-            effectiveness: 0.9,
-            vulnerability_types: vec!["XSS".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "htmlEncode".to_string(),
+                sanitizer_type: SanitizerType::HtmlEncoding,
+                description: "HTML encoding function".to_string(),
+                effectiveness: 0.9,
+                vulnerability_types: vec!["XSS".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "escapeHtml".to_string(),
-            sanitizer_type: SanitizerType::HtmlEncoding,
-            description: "HTML escape function".to_string(),
-            effectiveness: 0.9,
-            vulnerability_types: vec!["XSS".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "escapeHtml".to_string(),
+                sanitizer_type: SanitizerType::HtmlEncoding,
+                description: "HTML escape function".to_string(),
+                effectiveness: 0.9,
+                vulnerability_types: vec!["XSS".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
         // URL encoding
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "encodeURIComponent".to_string(),
-            sanitizer_type: SanitizerType::UrlEncoding,
-            description: "URL component encoding".to_string(),
-            effectiveness: 0.8,
-            vulnerability_types: vec!["XSS".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "encodeURIComponent".to_string(),
+                sanitizer_type: SanitizerType::UrlEncoding,
+                description: "URL component encoding".to_string(),
+                effectiveness: 0.8,
+                vulnerability_types: vec!["XSS".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
         // Input validation
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "validate".to_string(),
-            sanitizer_type: SanitizerType::InputValidation,
-            description: "Input validation function".to_string(),
-            effectiveness: 0.8,
-            vulnerability_types: vec!["INPUT_VALIDATION".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "validate".to_string(),
+                sanitizer_type: SanitizerType::InputValidation,
+                description: "Input validation function".to_string(),
+                effectiveness: 0.8,
+                vulnerability_types: vec!["INPUT_VALIDATION".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "sanitize".to_string(),
-            sanitizer_type: SanitizerType::InputValidation,
-            description: "Input sanitization function".to_string(),
-            effectiveness: 0.7,
-            vulnerability_types: vec!["XSS".to_string(), "SQL_INJECTION".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "sanitize".to_string(),
+                sanitizer_type: SanitizerType::InputValidation,
+                description: "Input sanitization function".to_string(),
+                effectiveness: 0.7,
+                vulnerability_types: vec!["XSS".to_string(), "SQL_INJECTION".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
         // Path normalization
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "path.normalize".to_string(),
-            sanitizer_type: SanitizerType::PathNormalization,
-            description: "Path normalization".to_string(),
-            effectiveness: 0.8,
-            vulnerability_types: vec!["PATH_TRAVERSAL".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "path.normalize".to_string(),
+                sanitizer_type: SanitizerType::PathNormalization,
+                description: "Path normalization".to_string(),
+                effectiveness: 0.8,
+                vulnerability_types: vec!["PATH_TRAVERSAL".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
         // Regular expression validation
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "match".to_string(),
-            sanitizer_type: SanitizerType::RegexValidation,
-            description: "Regular expression matching".to_string(),
-            effectiveness: 0.6,
-            vulnerability_types: vec!["INPUT_VALIDATION".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "match".to_string(),
+                sanitizer_type: SanitizerType::RegexValidation,
+                description: "Regular expression matching".to_string(),
+                effectiveness: 0.6,
+                vulnerability_types: vec!["INPUT_VALIDATION".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
 
         // Length validation
-        self.add_pattern("call_expression".to_string(), SanitizerPattern {
-            name_pattern: "length".to_string(),
-            sanitizer_type: SanitizerType::LengthValidation,
-            description: "Length validation".to_string(),
-            effectiveness: 0.5,
-            vulnerability_types: vec!["BUFFER_OVERFLOW".to_string()],
-            attributes: HashMap::new(),
-        });
+        self.add_pattern(
+            "call_expression".to_string(),
+            SanitizerPattern {
+                name_pattern: "length".to_string(),
+                sanitizer_type: SanitizerType::LengthValidation,
+                description: "Length validation".to_string(),
+                effectiveness: 0.5,
+                vulnerability_types: vec!["BUFFER_OVERFLOW".to_string()],
+                attributes: HashMap::new(),
+            },
+        );
     }
 }
 
@@ -374,14 +438,11 @@ mod tests {
 
     #[test]
     fn test_sanitizer_creation() {
-        let sanitizer = Sanitizer::new(
-            0,
-            SanitizerType::HtmlEncoding,
-            "Test sanitizer".to_string(),
-        )
-        .with_effectiveness(0.9)
-        .with_vulnerability_types(vec!["XSS".to_string()]);
-        
+        let sanitizer =
+            Sanitizer::new(0, SanitizerType::HtmlEncoding, "Test sanitizer".to_string())
+                .with_effectiveness(0.9)
+                .with_vulnerability_types(vec!["XSS".to_string()]);
+
         assert_eq!(sanitizer.id, 0);
         assert_eq!(sanitizer.sanitizer_type, SanitizerType::HtmlEncoding);
         assert_eq!(sanitizer.effectiveness, 0.9);
@@ -391,16 +452,25 @@ mod tests {
 
     #[test]
     fn test_sanitizer_type_strength() {
-        assert_eq!(SanitizerType::SqlParameterBinding.strength(), SanitizerStrength::Strong);
-        assert_eq!(SanitizerType::UrlEncoding.strength(), SanitizerStrength::Medium);
-        assert_eq!(SanitizerType::BlacklistFiltering.strength(), SanitizerStrength::Weak);
+        assert_eq!(
+            SanitizerType::SqlParameterBinding.strength(),
+            SanitizerStrength::Strong
+        );
+        assert_eq!(
+            SanitizerType::UrlEncoding.strength(),
+            SanitizerStrength::Medium
+        );
+        assert_eq!(
+            SanitizerType::BlacklistFiltering.strength(),
+            SanitizerStrength::Weak
+        );
     }
 
     #[test]
     fn test_sanitizer_type_protections() {
         let protections = SanitizerType::HtmlEncoding.default_protections();
         assert!(protections.contains(&"XSS".to_string()));
-        
+
         let sql_protections = SanitizerType::SqlParameterBinding.default_protections();
         assert!(sql_protections.contains(&"SQL_INJECTION".to_string()));
     }
@@ -421,8 +491,8 @@ mod tests {
             vec!["XSS".to_string()],
         );
 
-        let node = DataFlowNode::new("call_expression".to_string())
-            .with_text("htmlEncode".to_string());
+        let node =
+            DataFlowNode::new("call_expression".to_string()).with_text("htmlEncode".to_string());
 
         assert!(pattern.matches("htmlEncode", &node));
         assert!(!pattern.matches("other.method", &node));
@@ -434,8 +504,8 @@ mod tests {
         let detector = SanitizerDetector::new();
 
         // Add a node that should be detected as a sanitizer
-        let node = DataFlowNode::new("call_expression".to_string())
-            .with_text("htmlEncode".to_string());
+        let node =
+            DataFlowNode::new("call_expression".to_string()).with_text("htmlEncode".to_string());
         let node_id = graph.add_node(node);
 
         let sanitizers = detector.detect_sanitizers(&graph).unwrap();
@@ -448,7 +518,7 @@ mod tests {
     #[test]
     fn test_custom_sanitizer_pattern() {
         let mut detector = SanitizerDetector::new();
-        
+
         let custom_pattern = SanitizerPattern::new(
             "customSanitize".to_string(),
             SanitizerType::InputValidation,
@@ -456,9 +526,9 @@ mod tests {
             0.8,
             vec!["CUSTOM_VULN".to_string()],
         );
-        
+
         detector.add_pattern("call_expression".to_string(), custom_pattern);
-        
+
         let mut graph = DataFlowGraph::new();
         let node = DataFlowNode::new("call_expression".to_string())
             .with_text("customSanitize".to_string());

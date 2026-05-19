@@ -388,4 +388,3 @@ mod tests {
         assert_eq!(ext.diagnostic_count(), 0);
     }
 }
-

@@ -3,12 +3,12 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs::{self};
-use std::time::SystemTime;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use tracing::{debug, info, warn, error};
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+use tracing::{debug, error, info, warn};
 use walkdir::{DirEntry, WalkDir};
 
 use astgrep_core::{models::test_asset::ScriptType, Language};
@@ -145,7 +145,10 @@ impl ScriptDiscovery {
 
     /// Discover all scripts according to the configuration
     pub async fn discover_scripts(&self) -> Result<DiscoveryResults> {
-        info!("Starting script discovery with {} search paths", self.config.search_paths.len());
+        info!(
+            "Starting script discovery with {} search paths",
+            self.config.search_paths.len()
+        );
 
         let mut results = DiscoveryResults {
             total_scripts_found: 0,
@@ -171,7 +174,8 @@ impl ScriptDiscovery {
 
                     for script in path_scripts {
                         // Categorize by script type
-                        results.scripts_by_type
+                        results
+                            .scripts_by_type
                             .entry(script.script_type.clone())
                             .or_insert_with(Vec::new)
                             .push(script.clone());
@@ -179,7 +183,8 @@ impl ScriptDiscovery {
                         // Categorize by language
                         if let Some(lang) = &script.language {
                             let lang_str = format!("{:?}", lang);
-                            results.scripts_by_language
+                            results
+                                .scripts_by_language
                                 .entry(lang_str)
                                 .or_insert_with(Vec::new)
                                 .push(script.clone());
@@ -187,7 +192,8 @@ impl ScriptDiscovery {
 
                         // Categorize by platform
                         for platform in &script.platforms {
-                            results.scripts_by_platform
+                            results
+                                .scripts_by_platform
                                 .entry(platform.clone())
                                 .or_insert_with(Vec::new)
                                 .push(script.clone());
@@ -195,14 +201,18 @@ impl ScriptDiscovery {
                     }
                 }
                 Err(e) => {
-                    let error_msg = format!("Failed to discover scripts in {:?}: {}", search_path, e);
+                    let error_msg =
+                        format!("Failed to discover scripts in {:?}: {}", search_path, e);
                     error!("{}", error_msg);
                     results.discovery_errors.push(error_msg);
                 }
             }
         }
 
-        info!("Script discovery completed: {} scripts found", results.total_scripts_found);
+        info!(
+            "Script discovery completed: {} scripts found",
+            results.total_scripts_found
+        );
         Ok(results)
     }
 
@@ -234,7 +244,11 @@ impl ScriptDiscovery {
     }
 
     /// Process a single file entry to determine if it's a script
-    async fn process_file_entry(&self, entry: &DirEntry, scripts: &mut Vec<DiscoveredScript>) -> Result<()> {
+    async fn process_file_entry(
+        &self,
+        entry: &DirEntry,
+        scripts: &mut Vec<DiscoveredScript>,
+    ) -> Result<()> {
         let path = entry.path();
 
         // Check if file should be included based on patterns
@@ -310,8 +324,8 @@ impl ScriptDiscovery {
     fn is_executable(&self, metadata: &std::fs::Metadata) -> bool {
         #[cfg(unix)]
         {
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+            #[cfg(unix)]
+            use std::os::unix::fs::PermissionsExt;
             metadata.permissions().mode() & 0o111 != 0
         }
         #[cfg(not(unix))]
@@ -326,27 +340,41 @@ use std::os::unix::fs::PermissionsExt;
         use tokio::fs::File;
         use tokio::io::AsyncReadExt;
 
-        let mut file = File::open(path).await
+        let mut file = File::open(path)
+            .await
             .with_context(|| format!("Failed to open file: {:?}", path))?;
 
         let mut buffer = [0; 256];
-        let bytes_read = file.read(&mut buffer).await
+        let bytes_read = file
+            .read(&mut buffer)
+            .await
             .with_context(|| format!("Failed to read file: {:?}", path))?;
 
         if bytes_read >= 2 && buffer[0] == b'#' && buffer[1] == b'!' {
-            let shebang_len = buffer.iter()
+            let shebang_len = buffer
+                .iter()
                 .position(|&b| b == b'\n')
                 .unwrap_or(bytes_read);
 
-            Ok(Some(String::from_utf8_lossy(&buffer[2..shebang_len]).trim().to_string()))
+            Ok(Some(
+                String::from_utf8_lossy(&buffer[2..shebang_len])
+                    .trim()
+                    .to_string(),
+            ))
         } else {
             Ok(None)
         }
     }
 
     /// Analyze a script file to extract detailed information
-    async fn analyze_script(&self, path: &Path, is_executable: bool, shebang: Option<String>) -> Result<DiscoveredScript> {
-        let file_name = path.file_name()
+    async fn analyze_script(
+        &self,
+        path: &Path,
+        is_executable: bool,
+        shebang: Option<String>,
+    ) -> Result<DiscoveredScript> {
+        let file_name = path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown")
             .to_string();
@@ -355,12 +383,13 @@ use std::os::unix::fs::PermissionsExt;
         let script_type = self.determine_script_type(&file_name, &shebang);
 
         // Detect language from shebang or file extension
-        let language = self.detect_language_from_shebang(&shebang)
+        let language = self
+            .detect_language_from_shebang(&shebang)
             .or_else(|| self.detect_language_from_extension(path));
 
         // Get file metadata
-        let metadata = fs::metadata(path)
-            .with_context(|| format!("Failed to get metadata for {:?}", path))?;
+        let metadata =
+            fs::metadata(path).with_context(|| format!("Failed to get metadata for {:?}", path))?;
 
         let file_size = metadata.len();
         let created_at = metadata.created().ok();
@@ -411,12 +440,18 @@ use std::os::unix::fs::PermissionsExt;
         }
 
         // Check for runner scripts
-        if filename_lower.contains("run") || filename_lower.contains("execute") || filename_lower.contains("test") {
+        if filename_lower.contains("run")
+            || filename_lower.contains("execute")
+            || filename_lower.contains("test")
+        {
             return ScriptType::Runner;
         }
 
         // Check for CI integration scripts
-        if filename_lower.contains("ci") || filename_lower.contains("build") || filename_lower.contains("deploy") {
+        if filename_lower.contains("ci")
+            || filename_lower.contains("build")
+            || filename_lower.contains("deploy")
+        {
             return ScriptType::CiIntegration;
         }
 
@@ -456,20 +491,25 @@ use std::os::unix::fs::PermissionsExt;
     }
 
     /// Determine supported platforms based on shebang and language
-    fn determine_platforms(&self, shebang: &Option<String>, language: &Option<Language>) -> Vec<String> {
+    fn determine_platforms(
+        &self,
+        shebang: &Option<String>,
+        language: &Option<Language>,
+    ) -> Vec<String> {
         let mut platforms = Vec::new();
 
         // Default platforms based on language
         match language {
-            Some(Language::Bash) | Some(Language::Python) |
-            Some(Language::Java) | Some(Language::JavaScript) => {
+            Some(Language::Bash)
+            | Some(Language::Python)
+            | Some(Language::Java)
+            | Some(Language::JavaScript) => {
                 platforms.push("Linux".to_string());
                 platforms.push("macOS".to_string());
 
                 // Windows support for certain languages
                 match language {
-                    Some(Language::Python) |
-                    Some(Language::Java) | Some(Language::JavaScript) => {
+                    Some(Language::Python) | Some(Language::Java) | Some(Language::JavaScript) => {
                         platforms.push("Windows".to_string());
                     }
                     _ => {}
@@ -480,7 +520,10 @@ use std::os::unix::fs::PermissionsExt;
 
         // Check shebang for Windows-specific interpreters
         if let Some(shebang) = shebang {
-            if shebang.contains("cmd.exe") || shebang.contains("powershell") || shebang.contains("pwsh") {
+            if shebang.contains("cmd.exe")
+                || shebang.contains("powershell")
+                || shebang.contains("pwsh")
+            {
                 platforms.retain(|p| p != "Linux" && p != "macOS");
                 platforms.push("Windows".to_string());
             }
@@ -500,7 +543,7 @@ use std::os::unix::fs::PermissionsExt;
 
     /// Calculate file hash for integrity checking
     async fn calculate_file_hash(&self, path: &Path) -> Result<String> {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         use tokio::fs::File;
         use tokio::io::AsyncReadExt;
 
@@ -568,14 +611,21 @@ use std::os::unix::fs::PermissionsExt;
             let trimmed = line.trim();
 
             // Look for common comment patterns that might contain descriptions
-            if trimmed.starts_with("# ") || trimmed.starts_with("// ") || trimmed.starts_with("/* ") {
-                let comment = trimmed.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
+            if trimmed.starts_with("# ") || trimmed.starts_with("// ") || trimmed.starts_with("/* ")
+            {
+                let comment = trimmed
+                    .split_whitespace()
+                    .skip(1)
+                    .collect::<Vec<_>>()
+                    .join(" ");
 
                 // Heuristic: if it looks like a description (contains keywords), return it
-                if comment.len() > 10 && (comment.to_lowercase().contains("script") ||
-                    comment.to_lowercase().contains("test") ||
-                    comment.to_lowercase().contains("validate") ||
-                    comment.to_lowercase().contains("run")) {
+                if comment.len() > 10
+                    && (comment.to_lowercase().contains("script")
+                        || comment.to_lowercase().contains("test")
+                        || comment.to_lowercase().contains("validate")
+                        || comment.to_lowercase().contains("run"))
+                {
                     return Ok(Some(comment));
                 }
             }
@@ -689,10 +739,7 @@ mod tests {
             discovery.detect_language_from_shebang(&Some("/usr/bin/node".to_string())),
             Some(Language::JavaScript)
         );
-        assert_eq!(
-            discovery.detect_language_from_shebang(&None),
-            None
-        );
+        assert_eq!(discovery.detect_language_from_shebang(&None), None);
     }
 
     #[tokio::test]
@@ -701,15 +748,23 @@ mod tests {
         let script_path = temp_dir.path().join("test_script.sh");
 
         // Create a test script
-        fs::write(&script_path, "#!/bin/bash\n# Test script for validation\necho 'Hello World'\n")?;
+        fs::write(
+            &script_path,
+            "#!/bin/bash\n# Test script for validation\necho 'Hello World'\n",
+        )?;
 
         let discovery = ScriptDiscovery::new();
-        let discovered = discovery.analyze_script(&script_path, true, Some("/bin/bash".to_string())).await?;
+        let discovered = discovery
+            .analyze_script(&script_path, true, Some("/bin/bash".to_string()))
+            .await?;
 
         assert_eq!(discovered.name, "test_script.sh");
         assert!(discovered.executable);
         assert_eq!(discovered.shebang, Some("/bin/bash".to_string()));
-        assert!(matches!(discovered.script_type, ScriptType::Validator | ScriptType::Utility));
+        assert!(matches!(
+            discovered.script_type,
+            ScriptType::Validator | ScriptType::Utility
+        ));
 
         Ok(())
     }

@@ -15,7 +15,8 @@ pub trait LanguageParser: Send + Sync {
     fn supports_file(&self, file_path: &Path) -> bool {
         // Default implementation based on file extension
         if let Some(extension) = file_path.extension().and_then(|e| e.to_str()) {
-            self.extensions().contains(&extension.to_lowercase().as_str())
+            self.extensions()
+                .contains(&extension.to_lowercase().as_str())
         } else {
             false
         }
@@ -107,11 +108,7 @@ pub mod ast_utils {
 /// Trait for rule engines
 pub trait RuleEngine: Send + Sync {
     /// Execute rules against an AST and return findings
-    fn execute_rules(
-        &self,
-        ast: &dyn AstNode,
-        rules: &[Box<dyn Rule>],
-    ) -> Result<Vec<Finding>>;
+    fn execute_rules(&self, ast: &dyn AstNode, rules: &[Box<dyn Rule>]) -> Result<Vec<Finding>>;
 
     /// Validate a rule
     fn validate_rule(&self, rule: &dyn Rule) -> Result<()>;

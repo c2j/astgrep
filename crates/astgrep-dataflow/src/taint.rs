@@ -1,12 +1,12 @@
 //! Taint tracking for data flow analysis
-//! 
+//!
 //! This module implements taint analysis to track the flow of potentially dangerous data.
 
 use crate::graph::{DataFlowGraph, NodeId};
-use crate::sources::{Source, SourceType};
-use crate::sinks::Sink;
 use crate::sanitizers::{Sanitizer, SanitizerType};
-use astgrep_core::{Location, Result, constants::defaults::analysis};
+use crate::sinks::Sink;
+use crate::sources::{Source, SourceType};
+use astgrep_core::{constants::defaults::analysis, Location, Result};
 use std::collections::HashMap;
 
 /// Taint tracker for analyzing data flow
@@ -32,25 +32,30 @@ impl TaintTracker {
     ) -> Result<Vec<TaintFlow>> {
         // Initialize taint states
         self.initialize_taint_states(graph, sources, sanitizers);
-        
+
         // Propagate taint through the graph
         self.propagate_taint(graph)?;
-        
+
         // Find flows from sources to sinks
         let flows = self.find_taint_flows(graph, sources, sinks, sanitizers)?;
-        
+
         Ok(flows)
     }
 
     /// Initialize taint states for sources and sanitizers
-    fn initialize_taint_states(&mut self, graph: &DataFlowGraph, sources: &[Source], sanitizers: &[Sanitizer]) {
+    fn initialize_taint_states(
+        &mut self,
+        graph: &DataFlowGraph,
+        sources: &[Source],
+        sanitizers: &[Sanitizer],
+    ) {
         self.taint_states.clear();
-        
+
         // Initialize all nodes as untainted
         for node_id in graph.node_ids() {
             self.taint_states.insert(node_id, TaintState::new());
         }
-        
+
         // Mark sources as tainted
         for source in sources {
             if let Some(state) = self.taint_states.get_mut(&source.id) {
@@ -61,7 +66,7 @@ impl TaintTracker {
                 ));
             }
         }
-        
+
         // Mark sanitizers
         for sanitizer in sanitizers {
             if let Some(state) = self.taint_states.get_mut(&sanitizer.id) {
@@ -75,17 +80,17 @@ impl TaintTracker {
         let mut changed = true;
         let mut iteration = 0;
         const MAX_ITERATIONS: usize = 1000; // Prevent infinite loops
-        
+
         while changed && iteration < MAX_ITERATIONS {
             changed = false;
             iteration += 1;
-            
+
             for node_id in graph.node_ids() {
                 let predecessors = graph.data_flow_predecessors(node_id);
-                
+
                 if !predecessors.is_empty() {
                     let mut new_taints = Vec::new();
-                    
+
                     // Collect taint from all predecessors
                     for pred_id in predecessors {
                         if let Some(pred_state) = self.taint_states.get(&pred_id) {
@@ -96,14 +101,15 @@ impl TaintTracker {
                             }
                         }
                     }
-                    
+
                     // Apply sanitization if this node is a sanitizer
                     if let Some(current_state) = self.taint_states.get(&node_id) {
                         if let Some((sanitizer_type, effectiveness)) = &current_state.sanitizer {
-                            new_taints = self.apply_sanitization(new_taints, sanitizer_type, *effectiveness);
+                            new_taints =
+                                self.apply_sanitization(new_taints, sanitizer_type, *effectiveness);
                         }
                     }
-                    
+
                     // Update taint state
                     if let Some(current_state) = self.taint_states.get_mut(&node_id) {
                         let old_count = current_state.taints.len();
@@ -117,11 +123,11 @@ impl TaintTracker {
                 }
             }
         }
-        
+
         if iteration >= MAX_ITERATIONS {
             eprintln!("Warning: Taint propagation reached maximum iterations");
         }
-        
+
         Ok(())
     }
 
@@ -133,7 +139,7 @@ impl TaintTracker {
         effectiveness: f32,
     ) -> Vec<TaintInfo> {
         let protected_types = sanitizer_type.default_protections();
-        
+
         taints
             .into_iter()
             .filter_map(|mut taint| {
@@ -144,11 +150,11 @@ impl TaintTracker {
                     SourceType::FileInput => "PATH_TRAVERSAL",
                     _ => "UNKNOWN",
                 };
-                
+
                 if protected_types.contains(&source_vuln_type.to_string()) {
                     // Reduce confidence based on sanitizer effectiveness
                     taint.confidence *= 1.0 - effectiveness;
-                    
+
                     // If confidence is very low, consider it sanitized
                     if taint.confidence < analysis::LOW_CONFIDENCE_THRESHOLD as f32 {
                         None
@@ -189,11 +195,10 @@ impl TaintTracker {
                         }
 
                         // Find sanitizers along the path
-                        let path_sanitizers: Vec<&Sanitizer> = taint.path
+                        let path_sanitizers: Vec<&Sanitizer> = taint
+                            .path
                             .iter()
-                            .filter_map(|&node_id| {
-                                sanitizers.iter().find(|s| s.id == node_id)
-                            })
+                            .filter_map(|&node_id| sanitizers.iter().find(|s| s.id == node_id))
                             .collect();
 
                         // Calculate effective confidence considering sanitizers
@@ -227,7 +232,11 @@ impl TaintTracker {
         }
 
         // Sort flows by confidence (highest first)
-        flows.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        flows.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(flows)
     }
@@ -302,7 +311,11 @@ impl TaintTracker {
 
         // Merge and deduplicate flows
         flows.extend(inter_flows);
-        flows.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        flows.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         flows.dedup_by(|a, b| a.source.id == b.source.id && a.sink.id == b.sink.id);
 
         Ok(flows)
@@ -363,12 +376,20 @@ impl TaintTracker {
 
         for source in sources {
             let context = contexts.get(&source.id).cloned().unwrap_or_default();
-            context_groups.entry(context).or_default().0.push(source.clone());
+            context_groups
+                .entry(context)
+                .or_default()
+                .0
+                .push(source.clone());
         }
 
         for sink in sinks {
             let context = contexts.get(&sink.id).cloned().unwrap_or_default();
-            context_groups.entry(context).or_default().1.push(sink.clone());
+            context_groups
+                .entry(context)
+                .or_default()
+                .1
+                .push(sink.clone());
         }
 
         let mut all_flows = Vec::new();
@@ -381,10 +402,13 @@ impl TaintTracker {
                 let flows = self.track_taint(graph, &ctx_sources, &ctx_sinks, sanitizers)?;
 
                 // Add context information to flows
-                let mut context_flows: Vec<TaintFlow> = flows.into_iter().map(|mut flow| {
-                    flow.context = Some(context.clone());
-                    flow
-                }).collect();
+                let mut context_flows: Vec<TaintFlow> = flows
+                    .into_iter()
+                    .map(|mut flow| {
+                        flow.context = Some(context.clone());
+                        flow
+                    })
+                    .collect();
 
                 all_flows.append(&mut context_flows);
             }
@@ -650,9 +674,9 @@ impl TaintFlow {
 
     /// Check if this flow is effectively sanitized
     pub fn is_effectively_sanitized(&self) -> bool {
-        self.sanitizers.iter().any(|s| {
-            s.protects_against(&self.vulnerability_type) && s.is_highly_effective()
-        })
+        self.sanitizers
+            .iter()
+            .any(|s| s.protects_against(&self.vulnerability_type) && s.is_highly_effective())
     }
 
     /// Get the vulnerability type
@@ -667,10 +691,18 @@ impl TaintFlow {
         }
 
         match (self.source.severity(), self.sink.severity()) {
-            (crate::sources::SourceSeverity::High, crate::sinks::SinkSeverity::Critical) => FlowSeverity::Critical,
-            (crate::sources::SourceSeverity::High, crate::sinks::SinkSeverity::High) => FlowSeverity::High,
-            (crate::sources::SourceSeverity::Medium, crate::sinks::SinkSeverity::Critical) => FlowSeverity::High,
-            (crate::sources::SourceSeverity::Medium, crate::sinks::SinkSeverity::High) => FlowSeverity::Medium,
+            (crate::sources::SourceSeverity::High, crate::sinks::SinkSeverity::Critical) => {
+                FlowSeverity::Critical
+            }
+            (crate::sources::SourceSeverity::High, crate::sinks::SinkSeverity::High) => {
+                FlowSeverity::High
+            }
+            (crate::sources::SourceSeverity::Medium, crate::sinks::SinkSeverity::Critical) => {
+                FlowSeverity::High
+            }
+            (crate::sources::SourceSeverity::Medium, crate::sinks::SinkSeverity::High) => {
+                FlowSeverity::Medium
+            }
             _ => FlowSeverity::Low,
         }
     }
@@ -717,15 +749,14 @@ mod tests {
     #[test]
     fn test_taint_flow_vulnerability() {
         let source = Source::new(0, SourceType::UserInput, "Test source".to_string());
-        let sink = Sink::new(1, SinkType::HtmlOutput, "XSS".to_string(), "Test sink".to_string());
-        
-        let flow = TaintFlow::new(
-            source,
-            sink,
-            vec![0, 1],
-            0.8,
+        let sink = Sink::new(
+            1,
+            SinkType::HtmlOutput,
             "XSS".to_string(),
+            "Test sink".to_string(),
         );
+
+        let flow = TaintFlow::new(source, sink, vec![0, 1], 0.8, "XSS".to_string());
 
         assert!(flow.is_vulnerable());
         assert!(!flow.is_effectively_sanitized());
@@ -735,18 +766,17 @@ mod tests {
     #[test]
     fn test_taint_flow_with_sanitizer() {
         let source = Source::new(0, SourceType::UserInput, "Test source".to_string());
-        let sink = Sink::new(2, SinkType::HtmlOutput, "XSS".to_string(), "Test sink".to_string());
+        let sink = Sink::new(
+            2,
+            SinkType::HtmlOutput,
+            "XSS".to_string(),
+            "Test sink".to_string(),
+        );
         let sanitizer = Sanitizer::new(1, SanitizerType::HtmlEncoding, "HTML encoder".to_string())
             .with_effectiveness(0.9)
             .with_vulnerability_types(vec!["XSS".to_string()]);
-        
-        let mut flow = TaintFlow::new(
-            source,
-            sink,
-            vec![0, 1, 2],
-            0.8,
-            "XSS".to_string(),
-        );
+
+        let mut flow = TaintFlow::new(source, sink, vec![0, 1, 2], 0.8, "XSS".to_string());
         flow.add_sanitizer(sanitizer);
 
         assert!(flow.is_effectively_sanitized());
@@ -756,15 +786,14 @@ mod tests {
     #[test]
     fn test_flow_severity() {
         let source = Source::new(0, SourceType::UserInput, "Test source".to_string());
-        let sink = Sink::new(1, SinkType::SqlExecution, "SQL_INJECTION".to_string(), "Test sink".to_string());
-        
-        let flow = TaintFlow::new(
-            source,
-            sink,
-            vec![0, 1],
-            0.8,
+        let sink = Sink::new(
+            1,
+            SinkType::SqlExecution,
             "SQL_INJECTION".to_string(),
+            "Test sink".to_string(),
         );
+
+        let flow = TaintFlow::new(source, sink, vec![0, 1], 0.8, "SQL_INJECTION".to_string());
 
         assert_eq!(flow.severity(), FlowSeverity::Critical);
     }
@@ -773,18 +802,33 @@ mod tests {
     fn test_simple_taint_tracking() {
         let mut tracker = TaintTracker::new();
         let mut graph = DataFlowGraph::new();
-        
+
         // Create a simple flow: source -> sink
-        let source_id = graph.add_node(crate::graph::DataFlowNode::new("call_expression".to_string()));
-        let sink_id = graph.add_node(crate::graph::DataFlowNode::new("call_expression".to_string()));
+        let source_id = graph.add_node(crate::graph::DataFlowNode::new(
+            "call_expression".to_string(),
+        ));
+        let sink_id = graph.add_node(crate::graph::DataFlowNode::new(
+            "call_expression".to_string(),
+        ));
         graph.add_edge(source_id, sink_id, crate::graph::EdgeType::DataFlow);
-        
-        let sources = vec![Source::new(source_id, SourceType::UserInput, "Test source".to_string())];
-        let sinks = vec![Sink::new(sink_id, SinkType::HtmlOutput, "XSS".to_string(), "Test sink".to_string())];
+
+        let sources = vec![Source::new(
+            source_id,
+            SourceType::UserInput,
+            "Test source".to_string(),
+        )];
+        let sinks = vec![Sink::new(
+            sink_id,
+            SinkType::HtmlOutput,
+            "XSS".to_string(),
+            "Test sink".to_string(),
+        )];
         let sanitizers = Vec::new();
-        
-        let flows = tracker.track_taint(&graph, &sources, &sinks, &sanitizers).unwrap();
-        
+
+        let flows = tracker
+            .track_taint(&graph, &sources, &sinks, &sanitizers)
+            .unwrap();
+
         assert_eq!(flows.len(), 1);
         assert_eq!(flows[0].source.id, source_id);
         assert_eq!(flows[0].sink.id, sink_id);

@@ -1,10 +1,10 @@
 //! Enhanced validate command with detailed analysis
 
+use crate::OutputFormatCli;
 use anyhow::Result;
 use std::path::PathBuf;
 use std::time::Instant;
 use tracing::info;
-use crate::OutputFormatCli;
 
 // Simplified types for demonstration
 #[derive(Debug, Clone)]
@@ -22,9 +22,9 @@ pub async fn run_enhanced(
     performance: bool,
 ) -> Result<()> {
     let start_time = Instant::now();
-    
+
     info!("Starting enhanced rule validation");
-    
+
     if rule_files.is_empty() {
         return Err(anyhow::anyhow!("No rule files specified"));
     }
@@ -58,7 +58,7 @@ pub async fn run_enhanced(
     }
 
     let total_time = start_time.elapsed();
-    
+
     // Generate output
     let output = generate_validation_output(
         &validation_results,
@@ -96,13 +96,17 @@ async fn validate_rule_file(
 
     // Check if file exists
     if !rule_file.exists() {
-        result.errors.push(format!("File does not exist: {}", rule_file.display()));
+        result
+            .errors
+            .push(format!("File does not exist: {}", rule_file.display()));
         return Ok(result);
     }
 
     // Check file extension
     if !is_rule_file(rule_file) {
-        result.warnings.push("File does not have a .yaml or .yml extension".to_string());
+        result
+            .warnings
+            .push("File does not have a .yaml or .yml extension".to_string());
     }
 
     // Simplified validation - just check if file can be read
@@ -191,10 +195,34 @@ fn generate_validation_output(
     format: OutputFormatCli,
 ) -> Result<String> {
     match format {
-        OutputFormatCli::Json => generate_json_validation_output(results, total_rules, valid_rules, invalid_rules, total_time),
-        OutputFormatCli::Text => generate_text_validation_output(results, total_rules, valid_rules, invalid_rules, total_time),
-        OutputFormatCli::Markdown => generate_markdown_validation_output(results, total_rules, valid_rules, invalid_rules, total_time),
-        _ => generate_text_validation_output(results, total_rules, valid_rules, invalid_rules, total_time),
+        OutputFormatCli::Json => generate_json_validation_output(
+            results,
+            total_rules,
+            valid_rules,
+            invalid_rules,
+            total_time,
+        ),
+        OutputFormatCli::Text => generate_text_validation_output(
+            results,
+            total_rules,
+            valid_rules,
+            invalid_rules,
+            total_time,
+        ),
+        OutputFormatCli::Markdown => generate_markdown_validation_output(
+            results,
+            total_rules,
+            valid_rules,
+            invalid_rules,
+            total_time,
+        ),
+        _ => generate_text_validation_output(
+            results,
+            total_rules,
+            valid_rules,
+            invalid_rules,
+            total_time,
+        ),
     }
 }
 
@@ -247,7 +275,10 @@ fn generate_text_validation_output(
     if invalid_rules == 0 {
         output.push_str("✅ All rules are valid!\n\n");
     } else {
-        output.push_str(&format!("❌ Validation failed with {} invalid rules\n\n", invalid_rules));
+        output.push_str(&format!(
+            "❌ Validation failed with {} invalid rules\n\n",
+            invalid_rules
+        ));
     }
 
     output.push_str(&format!("📊 Summary:\n"));
@@ -260,8 +291,10 @@ fn generate_text_validation_output(
     // File details
     for result in results {
         output.push_str(&format!("📄 File: {}\n", result.file_path.display()));
-        output.push_str(&format!("  Rules: {} total, {} valid, {} invalid\n", 
-            result.total_rules, result.valid_rules, result.invalid_rules));
+        output.push_str(&format!(
+            "  Rules: {} total, {} valid, {} invalid\n",
+            result.total_rules, result.valid_rules, result.invalid_rules
+        ));
 
         if !result.warnings.is_empty() {
             output.push_str("  ⚠️  Warnings:\n");
@@ -280,8 +313,14 @@ fn generate_text_validation_output(
         if let Some(ref perf) = result.performance_metrics {
             output.push_str(&format!("  ⚡ Performance:\n"));
             output.push_str(&format!("    - Load time: {}ms\n", perf.load_time_ms));
-            output.push_str(&format!("    - Avg complexity: {:.2}\n", perf.average_rule_complexity));
-            output.push_str(&format!("    - Memory estimate: {} bytes\n", perf.memory_usage_estimate));
+            output.push_str(&format!(
+                "    - Avg complexity: {:.2}\n",
+                perf.average_rule_complexity
+            ));
+            output.push_str(&format!(
+                "    - Memory estimate: {} bytes\n",
+                perf.memory_usage_estimate
+            ));
         }
 
         output.push_str("\n");
@@ -303,9 +342,14 @@ fn generate_markdown_validation_output(
 
     // Summary
     let status_emoji = if invalid_rules == 0 { "✅" } else { "❌" };
-    output.push_str(&format!("{} **Validation Status:** {}\n\n", 
-        status_emoji, 
-        if invalid_rules == 0 { "PASSED" } else { "FAILED" }
+    output.push_str(&format!(
+        "{} **Validation Status:** {}\n\n",
+        status_emoji,
+        if invalid_rules == 0 {
+            "PASSED"
+        } else {
+            "FAILED"
+        }
     ));
 
     output.push_str("## Summary\n\n");
@@ -317,13 +361,23 @@ fn generate_markdown_validation_output(
 
     // File details
     output.push_str("## File Details\n\n");
-    
+
     for result in results {
-        let file_status = if result.invalid_rules == 0 { "✅" } else { "❌" };
-        output.push_str(&format!("### {} {}\n\n", file_status, result.file_path.display()));
-        
-        output.push_str(&format!("- **Rules:** {} total, {} valid, {} invalid\n", 
-            result.total_rules, result.valid_rules, result.invalid_rules));
+        let file_status = if result.invalid_rules == 0 {
+            "✅"
+        } else {
+            "❌"
+        };
+        output.push_str(&format!(
+            "### {} {}\n\n",
+            file_status,
+            result.file_path.display()
+        ));
+
+        output.push_str(&format!(
+            "- **Rules:** {} total, {} valid, {} invalid\n",
+            result.total_rules, result.valid_rules, result.invalid_rules
+        ));
 
         if !result.warnings.is_empty() {
             output.push_str("- **Warnings:**\n");

@@ -86,8 +86,10 @@ impl Scope {
     }
 
     pub fn update_location(&mut self, location: SourceLocation) {
-        if location.line > self.end_location.line ||
-           (location.line == self.end_location.line && location.column > self.end_location.column) {
+        if location.line > self.end_location.line
+            || (location.line == self.end_location.line
+                && location.column > self.end_location.column)
+        {
             self.end_location = location;
         }
     }
@@ -147,7 +149,12 @@ impl ConstantPropagator {
     }
 
     /// Define a local variable in the current scope
-    pub fn define_local_variable(&mut self, name: String, value: ConstantValue, location: SourceLocation) {
+    pub fn define_local_variable(
+        &mut self,
+        name: String,
+        value: ConstantValue,
+        location: SourceLocation,
+    ) {
         // Record the definition
         let def = VariableDefinition {
             name: name.clone(),
@@ -158,7 +165,8 @@ impl ConstantPropagator {
         self.variable_definitions.push(def);
 
         // Store location-based constant for efficient lookup
-        self.location_based_constants.insert((name.clone(), location), value.clone());
+        self.location_based_constants
+            .insert((name.clone(), location), value.clone());
 
         // Also define in current scope if we have one
         if let Some(scope) = self.scope_stack.last_mut() {
@@ -210,7 +218,9 @@ impl ConstantPropagator {
     }
 
     /// Get all location-based constants
-    pub fn get_location_based_constants(&self) -> &HashMap<(String, SourceLocation), ConstantValue> {
+    pub fn get_location_based_constants(
+        &self,
+    ) -> &HashMap<(String, SourceLocation), ConstantValue> {
         &self.location_based_constants
     }
 
@@ -259,4 +269,3 @@ impl Default for ConstantPropagator {
         Self::new()
     }
 }
-

@@ -4,14 +4,13 @@
 //! name extraction, and value parsing.
 
 use crate::constant_propagation::state::{ConstantValue, SourceLocation};
-use std::collections::HashMap;
 use astgrep_core::AstNode;
+use std::collections::HashMap;
 
 /// Get the source location of a node
 pub fn get_node_location(node: &dyn AstNode) -> Option<SourceLocation> {
-    node.location().map(|(start_line, start_col, _, _)| {
-        SourceLocation::new(start_line, start_col)
-    })
+    node.location()
+        .map(|(start_line, start_col, _, _)| SourceLocation::new(start_line, start_col))
 }
 
 /// Check if this is a static block context
@@ -37,7 +36,8 @@ pub fn is_static_block_context(node: &dyn AstNode) -> bool {
             let child_type = child.node_type();
 
             // Look for static keyword
-            if child_type == "static" || child.text().map(|t| t.trim() == "static").unwrap_or(false) {
+            if child_type == "static" || child.text().map(|t| t.trim() == "static").unwrap_or(false)
+            {
                 has_static = true;
             }
 
@@ -56,7 +56,8 @@ pub fn is_static_block_context(node: &dyn AstNode) -> bool {
     // Also check if parent node is a static block
     if node.node_type() == "static_initializer"
         || node.node_type() == "static_block"
-        || node.node_type() == "static_initialization" {
+        || node.node_type() == "static_initialization"
+    {
         return true;
     }
 
@@ -164,7 +165,10 @@ pub fn extract_variable_name_from_assignment_target(node: &dyn AstNode) -> Optio
 }
 
 /// Extract constant value from expression node
-pub fn extract_constant_from_expression(node: &dyn AstNode, constants: &HashMap<String, ConstantValue>) -> Option<ConstantValue> {
+pub fn extract_constant_from_expression(
+    node: &dyn AstNode,
+    constants: &HashMap<String, ConstantValue>,
+) -> Option<ConstantValue> {
     match node.node_type() {
         "literal" | "decimal_integer_literal" | "integer_literal" => {
             // Integer literal
@@ -180,13 +184,9 @@ pub fn extract_constant_from_expression(node: &dyn AstNode, constants: &HashMap<
         }
         "true" | "false" => {
             // Boolean literal
-            node.text()
-                .map(|t| t == "true")
-                .map(ConstantValue::Boolean)
+            node.text().map(|t| t == "true").map(ConstantValue::Boolean)
         }
-        "null_literal" | "null" => {
-            Some(ConstantValue::Null)
-        }
+        "null_literal" | "null" => Some(ConstantValue::Null),
         "identifier" => {
             // If identifier refers to a known constant, propagate it
             if let Some(var_name) = node.text() {
@@ -208,4 +208,3 @@ pub fn extract_constant_from_expression(node: &dyn AstNode, constants: &HashMap<
         }
     }
 }
-

@@ -16,7 +16,7 @@ pub async fn run() -> Result<()> {
     println!();
     println!("Supported Languages: Java, JavaScript, Python, SQL, Bash");
     println!("Output Formats: JSON, YAML, SARIF, Text, XML");
-    
+
     Ok(())
 }
 

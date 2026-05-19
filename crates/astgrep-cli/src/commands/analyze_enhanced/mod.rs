@@ -1,5 +1,5 @@
 //! Enhanced analyze command with advanced features
-//! 
+//!
 //! This module provides enhanced analysis capabilities with features like:
 //! - Rule-based analysis with YAML rule files
 //! - Pattern matching with tree-sitter integration
@@ -8,30 +8,33 @@
 //! - Multiple output formats (JSON, SARIF, Text)
 
 use anyhow::Result;
+use astgrep_core::Language;
 use std::path::PathBuf;
 use std::time::Instant;
 use tracing::{info, warn};
-use astgrep_core::Language;
 
+use crate::output::analysis::{AnalysisStatistics, Finding};
 use crate::EnhancedAnalysisConfig;
-use crate::output::analysis::{Finding, AnalysisStatistics};
 
 // Import submodules
 mod file_ops;
-mod rule_loader;
-mod pattern_matcher;
 mod output;
+mod pattern_matcher;
+mod rule_loader;
 mod types;
 
 // Re-export types that might be needed by other modules
-pub use types::{ParsedRule, EmbeddedSqlSnippet, BasicPattern, determine_language, glob_match};
 pub use file_ops::collect_target_files;
-pub use rule_loader::load_rules_for_language;
+pub use output::{apply_filters, generate_enhanced_output};
 pub use pattern_matcher::{apply_rule_to_source, get_basic_security_patterns};
-pub use output::{generate_enhanced_output, apply_filters};
+pub use rule_loader::load_rules_for_language;
+pub use types::{determine_language, glob_match, BasicPattern, EmbeddedSqlSnippet, ParsedRule};
 
 /// Run enhanced analysis with advanced features
-pub async fn run_enhanced(config: EnhancedAnalysisConfig, output_file: Option<PathBuf>) -> Result<()> {
+pub async fn run_enhanced(
+    config: EnhancedAnalysisConfig,
+    output_file: Option<PathBuf>,
+) -> Result<()> {
     let start_time = Instant::now();
 
     info!("Starting enhanced analysis");
@@ -84,7 +87,10 @@ pub async fn run_enhanced(config: EnhancedAnalysisConfig, output_file: Option<Pa
 
     // Exit with appropriate code
     if config.fail_on_findings && !limited_findings.is_empty() {
-        info!("Found {} issues, exiting with error code", limited_findings.len());
+        info!(
+            "Found {} issues, exiting with error code",
+            limited_findings.len()
+        );
         std::process::exit(1);
     }
 
@@ -120,7 +126,8 @@ fn analyze_file_simple(
     // Load rules if any are specified
     if !config.rule_files.is_empty() {
         // Use shared astgrep RuleEngine to ensure consistent behavior across CLI/GUI/Web
-        let (file_findings, rules_count) = analyze_with_rule_engine(file_path, &source_code, language, config)?;
+        let (file_findings, rules_count) =
+            analyze_with_rule_engine(file_path, &source_code, language, config)?;
         findings.extend(file_findings);
         // Record executed rules count once
         if stats.rules_executed == 0 {
@@ -170,7 +177,10 @@ fn analyze_with_rule_engine(
     language: Language,
     config: &EnhancedAnalysisConfig,
 ) -> Result<(Vec<Finding>, usize)> {
-    eprintln!("[DEBUG] entered analyze_with_rule_engine for {}", file_path.display());
+    eprintln!(
+        "[DEBUG] entered analyze_with_rule_engine for {}",
+        file_path.display()
+    );
     use astgrep_parser::LanguageParserRegistry;
     use astgrep_rules::{RuleContext, RuleEngine};
     use std::path::Path;
@@ -208,9 +218,9 @@ fn analyze_with_rule_engine(
         let _constant_values = if config.enable_constant_propagation {
             use astgrep_dataflow::ConstantPropagator;
             use astgrep_parser::tree_sitter_parser::TreeSitterParser;
-            
+
             let mut propagator = ConstantPropagator::new();
-            
+
             // Try to use tree-sitter for better AST
             let constants_result = if let Ok(mut ts_parser) = TreeSitterParser::new() {
                 if let Ok(Some(tree)) = ts_parser.parse(source_code, language) {
@@ -225,13 +235,15 @@ fn analyze_with_rule_engine(
             } else {
                 propagator.analyze_ast(ast.as_ref())
             };
-            
+
             match constants_result {
                 Ok(constants) => {
                     if !constants.is_empty() {
                         tracing::info!("Constant propagation found {} constants", constants.len());
                         // Set constants in the engine's executor
-                        engine.configure_executor().set_constant_values(constants.clone());
+                        engine
+                            .configure_executor()
+                            .set_constant_values(constants.clone());
                         constants
                     } else {
                         std::collections::HashMap::new()
@@ -264,7 +276,10 @@ fn analyze_with_rule_engine(
             Language::Sql => "Sql",
             _ => "Other",
         };
-        eprintln!("[DEBUG-PREPROC] language for preprocessing check = {}", lang_name);
+        eprintln!(
+            "[DEBUG-PREPROC] language for preprocessing check = {}",
+            lang_name
+        );
         tracing::info!("enhanced: language for preprocessing check = {}", lang_name);
     }
     if matches!(language, Language::Java | Language::Xml) {
@@ -272,43 +287,66 @@ fn analyze_with_rule_engine(
         let registry2 = LanguageParserRegistry::new();
         if let Some(sql_parser) = registry2.get_parser(Language::Sql) {
             // Collect eligible SQL rules with preprocessing metadata
-            tracing::info!("embedded-sql: total loaded rules = {}", engine.rules().len());
+            tracing::info!(
+                "embedded-sql: total loaded rules = {}",
+                engine.rules().len()
+            );
             let sql_rules: Vec<_> = engine
                 .rules()
                 .iter()
                 .inspect(|r| {
-                    tracing::debug!("rule id='{}', langs={:?}, metadata={:?}", r.id, r.languages, r.metadata);
+                    tracing::debug!(
+                        "rule id='{}', langs={:?}, metadata={:?}",
+                        r.id,
+                        r.languages,
+                        r.metadata
+                    );
                 })
                 .filter(|r| r.languages.contains(&Language::Sql))
                 .filter(|r| {
                     if let Some(pp) = r.get_metadata_string("preprocess") {
                         pp == "embedded-sql"
-                    } else { false }
+                    } else {
+                        false
+                    }
                 })
                 .filter(|r| {
                     if let Some(from) = r.get_metadata_string("preprocess.from") {
                         let from_l = from.to_ascii_lowercase();
-                        (language == Language::Java && from_l.contains("java")) ||
-                        (language == Language::Xml && from_l.contains("xml"))
-                    } else { false }
+                        (language == Language::Java && from_l.contains("java"))
+                            || (language == Language::Xml && from_l.contains("xml"))
+                    } else {
+                        false
+                    }
                 })
                 .cloned()
                 .collect();
-            tracing::info!("embedded-sql: eligible SQL rules after filter = {}", sql_rules.len());
+            tracing::info!(
+                "embedded-sql: eligible SQL rules after filter = {}",
+                sql_rules.len()
+            );
 
             if !sql_rules.is_empty() {
                 // Extract embedded SQL snippets
                 let snippets = extract_embedded_sql_snippets(&source_code, language);
-                tracing::info!("embedded-sql: {} eligible SQL rules; {} snippets extracted", sql_rules.len(), snippets.len());
+                tracing::info!(
+                    "embedded-sql: {} eligible SQL rules; {} snippets extracted",
+                    sql_rules.len(),
+                    snippets.len()
+                );
                 for (idx, sn) in snippets.iter().enumerate() {
-                    if sn.sql.trim().is_empty() { continue; }
-                    tracing::debug!("embedded-sql snippet #{}, start_line={}, context={:?}, sql_preview=\"{}\"",
+                    if sn.sql.trim().is_empty() {
+                        continue;
+                    }
+                    tracing::debug!(
+                        "embedded-sql snippet #{}, start_line={}, context={:?}, sql_preview=\"{}\"",
                         idx + 1,
                         sn.start_line,
                         sn.context,
                         &sn.sql.chars().take(120).collect::<String>()
                     );
-                    if let Ok(ast_sql) = sql_parser.parse(&sn.sql, std::path::Path::new(file_path)) {
+                    if let Ok(ast_sql) = sql_parser.parse(&sn.sql, std::path::Path::new(file_path))
+                    {
                         // Build SQL context using original file path but snippet content
                         let mut ctx_sql = RuleContext::new(
                             file_path.to_string_lossy().to_string(),
@@ -316,11 +354,14 @@ fn analyze_with_rule_engine(
                             sn.sql.clone(),
                         );
                         if let Some(flag) = config.sql_statement_boundary {
-                            ctx_sql = ctx_sql.add_data("sql_statement_boundary".to_string(), flag.to_string());
+                            ctx_sql = ctx_sql
+                                .add_data("sql_statement_boundary".to_string(), flag.to_string());
                         }
 
                         for rule in &sql_rules {
-                            if let Ok(Some(result)) = engine.execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql) {
+                            if let Ok(Some(result)) =
+                                engine.execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql)
+                            {
                                 if result.is_success() {
                                     tracing::debug!("embedded-sql: rule '{}' produced {} findings on snippet #{}", rule.id, result.findings.len(), idx + 1);
                                     for f in result.findings {
@@ -337,11 +378,19 @@ fn analyze_with_rule_engine(
                                             confidence: f.confidence,
                                             location: astgrep_core::Location::new(
                                                 std::path::PathBuf::from(&file_path),
-                                                loc.start_line, loc.start_column, loc.end_line, loc.end_column
+                                                loc.start_line,
+                                                loc.start_column,
+                                                loc.end_line,
+                                                loc.end_column,
                                             ),
                                             metadata: {
                                                 let mut m = f.metadata;
-                                                if let Some(ctx) = sn.context.as_ref() { m.insert("embedded_context".to_string(), serde_yaml::Value::String(ctx.clone())); }
+                                                if let Some(ctx) = sn.context.as_ref() {
+                                                    m.insert(
+                                                        "embedded_context".to_string(),
+                                                        serde_yaml::Value::String(ctx.clone()),
+                                                    );
+                                                }
                                                 m
                                             },
                                             fix_suggestion: f.fix_suggestion,
@@ -388,10 +437,14 @@ fn load_rules_into_engine_from_paths(
     use std::fs;
 
     fn is_yaml(path: &std::path::Path) -> bool {
-        path.extension().map_or(false, |ext| ext == "yaml" || ext == "yml")
+        path.extension()
+            .map_or(false, |ext| ext == "yaml" || ext == "yml")
     }
 
-    fn load_from_dir(dir: &std::path::Path, engine: &mut astgrep_rules::RuleEngine) -> anyhow::Result<usize> {
+    fn load_from_dir(
+        dir: &std::path::Path,
+        engine: &mut astgrep_rules::RuleEngine,
+    ) -> anyhow::Result<usize> {
         let mut loaded = 0usize;
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -401,7 +454,9 @@ fn load_rules_into_engine_from_paths(
             } else if is_yaml(&path) {
                 if let Ok(content) = fs::read_to_string(&path) {
                     match engine.load_rules_from_yaml(&content) {
-                        Ok(n) => { loaded += n; },
+                        Ok(n) => {
+                            loaded += n;
+                        }
                         Err(e) => {
                             tracing::warn!("Failed to load rules from {:?}: {}", path, e);
                         }
@@ -418,8 +473,12 @@ fn load_rules_into_engine_from_paths(
             if is_yaml(rule_path) {
                 if let Ok(content) = std::fs::read_to_string(rule_path) {
                     match engine.load_rules_from_yaml(&content) {
-                        Ok(n) => { total += n; },
-                        Err(e) => tracing::warn!("Failed to load rules from {:?}: {}", rule_path, e),
+                        Ok(n) => {
+                            total += n;
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to load rules from {:?}: {}", rule_path, e)
+                        }
                     }
                 }
             }
@@ -438,26 +497,38 @@ fn extract_embedded_sql_snippets(source_code: &str, language: Language) -> Vec<E
         Language::Java => {
             use regex::Regex;
             // @Select("...") or @Query("...")
-            if let Ok(re) = Regex::new(r#"(?s)@(?:[A-Za-z0-9_]+\.)*(Select|Query)\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)"#) {
+            if let Ok(re) = Regex::new(
+                r#"(?s)@(?:[A-Za-z0-9_]+\.)*(Select|Query)\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)"#,
+            ) {
                 for cap in re.captures_iter(source_code) {
                     if let (Some(m), Some(inner)) = (cap.get(0), cap.get(2)) {
                         let start_byte = m.start();
                         let start_line = 1 + byte_offset_to_line(source_code, start_byte);
                         let raw = inner.as_str();
                         let sql = normalize_sql(&unescape_java_string(raw));
-                        out.push(EmbeddedSqlSnippet { sql, start_line, context: Some("@Select/@Query".to_string()) });
+                        out.push(EmbeddedSqlSnippet {
+                            sql,
+                            start_line,
+                            context: Some("@Select/@Query".to_string()),
+                        });
                     }
                 }
             }
             // Common JDBC/native query methods with a single string literal argument
-            if let Ok(re) = Regex::new(r#"(?s)\b(prepareStatement|executeQuery|createNativeQuery)\s*\(\s*"((?:\\.|[^"\\])*)""#) {
+            if let Ok(re) = Regex::new(
+                r#"(?s)\b(prepareStatement|executeQuery|createNativeQuery)\s*\(\s*"((?:\\.|[^"\\])*)""#,
+            ) {
                 for cap in re.captures_iter(source_code) {
                     if let (Some(m), Some(inner)) = (cap.get(0), cap.get(2)) {
                         let start_byte = m.start();
                         let start_line = 1 + byte_offset_to_line(source_code, start_byte);
                         let raw = inner.as_str();
                         let sql = normalize_sql(&unescape_java_string(raw));
-                        out.push(EmbeddedSqlSnippet { sql, start_line, context: Some("JDBC".to_string()) });
+                        out.push(EmbeddedSqlSnippet {
+                            sql,
+                            start_line,
+                            context: Some("JDBC".to_string()),
+                        });
                     }
                 }
             }
@@ -472,7 +543,11 @@ fn extract_embedded_sql_snippets(source_code: &str, language: Language) -> Vec<E
                         let start_line = 1 + byte_offset_to_line(source_code, start_byte);
                         let raw = inner.as_str();
                         let sql = normalize_sql(raw);
-                        out.push(EmbeddedSqlSnippet { sql, start_line, context: Some("<select>".to_string()) });
+                        out.push(EmbeddedSqlSnippet {
+                            sql,
+                            start_line,
+                            context: Some("<select>".to_string()),
+                        });
                     }
                 }
             }
@@ -486,8 +561,12 @@ fn byte_offset_to_line(source: &str, byte_idx: usize) -> usize {
     // Returns 0-based line number corresponding to the byte offset
     let mut count = 0usize;
     for (i, b) in source.as_bytes().iter().enumerate() {
-        if i >= byte_idx { break; }
-        if *b == b'\n' { count += 1; }
+        if i >= byte_idx {
+            break;
+        }
+        if *b == b'\n' {
+            count += 1;
+        }
     }
     count
 }
@@ -507,12 +586,20 @@ fn unescape_java_string(input: &str) -> String {
                 Some('u') => {
                     // rudimentary \uXXXX handling
                     let mut hex = String::new();
-                    for _ in 0..4 { if let Some(h) = chars.next() { hex.push(h); } }
+                    for _ in 0..4 {
+                        if let Some(h) = chars.next() {
+                            hex.push(h);
+                        }
+                    }
                     if let Ok(cp) = u16::from_str_radix(&hex, 16) {
-                        if let Some(ch) = std::char::from_u32(cp as u32) { out.push(ch); }
+                        if let Some(ch) = std::char::from_u32(cp as u32) {
+                            out.push(ch);
+                        }
                     }
                 }
-                Some(other) => { out.push(other); }
+                Some(other) => {
+                    out.push(other);
+                }
                 None => {}
             }
         } else {
@@ -526,12 +613,22 @@ fn normalize_sql(raw: &str) -> String {
     use regex::Regex;
     let mut s = raw.to_string();
     // MyBatis placeholders
-    if let Ok(re_hash) = Regex::new(r"(?is)#\{[^}]+\}") { s = re_hash.replace_all(&s, "1").into_owned(); }
-    if let Ok(re_dollar) = Regex::new(r"(?is)\$\{[^}]+\}") { s = re_dollar.replace_all(&s, "T0").into_owned(); }
+    if let Ok(re_hash) = Regex::new(r"(?is)#\{[^}]+\}") {
+        s = re_hash.replace_all(&s, "1").into_owned();
+    }
+    if let Ok(re_dollar) = Regex::new(r"(?is)\$\{[^}]+\}") {
+        s = re_dollar.replace_all(&s, "T0").into_owned();
+    }
     // Collapse whitespace
-    if let Ok(re_ws) = Regex::new(r"(?s)\s+") { s = re_ws.replace_all(&s, " ").into_owned(); }
+    if let Ok(re_ws) = Regex::new(r"(?s)\s+") {
+        s = re_ws.replace_all(&s, " ").into_owned();
+    }
     let s = s.trim().to_string();
-    if s.ends_with(';') { s } else { format!("{};", s) }
+    if s.ends_with(';') {
+        s
+    } else {
+        format!("{};", s)
+    }
 }
 
 fn try_tree_sitter_ast(

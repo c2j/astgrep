@@ -6,8 +6,8 @@
 //! - Taint merging and splitting
 //! - Context-aware analysis
 
-use crate::taint::TaintState;
 use crate::graph::{DataFlowGraph, NodeId};
+use crate::taint::TaintState;
 use astgrep_core::Result;
 use std::collections::{HashMap, HashSet};
 
@@ -142,7 +142,8 @@ impl AdvancedTaintAnalyzer {
             TaintTransformation::MethodCall("toLowerCase".to_string()),
             TaintTransformation::MethodCall("trim".to_string()),
         ];
-        self.transformation_rules.insert("string_methods".to_string(), string_methods);
+        self.transformation_rules
+            .insert("string_methods".to_string(), string_methods);
 
         // Sanitization methods
         let sanitization_methods = vec![
@@ -150,7 +151,8 @@ impl AdvancedTaintAnalyzer {
             TaintTransformation::MethodCall("sqlEscape".to_string()),
             TaintTransformation::MethodCall("urlEncode".to_string()),
         ];
-        self.transformation_rules.insert("sanitization_methods".to_string(), sanitization_methods);
+        self.transformation_rules
+            .insert("sanitization_methods".to_string(), sanitization_methods);
     }
 
     /// Track a taint through the graph with transformations
@@ -211,7 +213,11 @@ impl AdvancedTaintAnalyzer {
     }
 
     /// Split taint for conditional branches
-    pub fn split_taint(&self, taint: &AdvancedTaintState, condition: &str) -> (AdvancedTaintState, AdvancedTaintState) {
+    pub fn split_taint(
+        &self,
+        taint: &AdvancedTaintState,
+        condition: &str,
+    ) -> (AdvancedTaintState, AdvancedTaintState) {
         let mut true_branch = taint.clone();
         let mut false_branch = taint.clone();
 
@@ -279,7 +285,9 @@ impl AdvancedTaintAnalyzer {
                 }
                 let mut combined = taints[0].clone();
                 for taint in &taints[1..] {
-                    combined.transformations.retain(|t| taint.transformations.contains(t));
+                    combined
+                        .transformations
+                        .retain(|t| taint.transformations.contains(t));
                 }
                 combined
             }
@@ -292,8 +300,11 @@ impl AdvancedTaintAnalyzer {
                         .iter()
                         .map(|t| t.effectiveness())
                         .sum();
-                    let new_effectiveness: f32 =
-                        taint.transformations.iter().map(|t| t.effectiveness()).sum();
+                    let new_effectiveness: f32 = taint
+                        .transformations
+                        .iter()
+                        .map(|t| t.effectiveness())
+                        .sum();
 
                     if new_effectiveness > current_effectiveness {
                         most_restrictive = taint.clone();
@@ -413,4 +424,3 @@ mod tests {
         assert_eq!(false_branch.get_context("branch"), Some("false"));
     }
 }
-

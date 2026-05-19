@@ -1,8 +1,8 @@
 //! Base adapters for converting language-specific ASTs to universal AST
-//! 
+//!
 //! This module provides the base functionality for adapting different language ASTs.
 
-use astgrep_ast::{AstBuilder, UniversalNode, NodeType};
+use astgrep_ast::{AstBuilder, NodeType, UniversalNode};
 use astgrep_core::{AstNode, Language, LanguageParser, Location, Result};
 use std::collections::HashMap;
 use std::path::Path;
@@ -10,7 +10,11 @@ use std::path::Path;
 /// Base adapter trait for converting language-specific ASTs
 pub trait AstAdapter: Send + Sync {
     /// Convert a language-specific AST node to universal AST
-    fn adapt_node(&self, node: &dyn std::any::Any, context: &AdapterContext) -> Result<UniversalNode>;
+    fn adapt_node(
+        &self,
+        node: &dyn std::any::Any,
+        context: &AdapterContext,
+    ) -> Result<UniversalNode>;
 
     /// Parse source code directly to universal AST
     fn parse_to_ast(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
@@ -58,7 +62,7 @@ impl AdapterContext {
     pub fn get_location(&self, start_offset: usize, end_offset: usize) -> Location {
         let (start_line, start_col) = self.offset_to_line_col(start_offset);
         let (end_line, end_col) = self.offset_to_line_col(end_offset);
-        
+
         Location::new(
             Path::new(&self.file_path).to_path_buf(),
             start_line,
@@ -76,7 +80,7 @@ impl AdapterContext {
                 return (line_num + 1, col + 1); // 1-based indexing
             }
         }
-        
+
         // If we reach here, offset is at or beyond the end
         let last_line = self.line_map.len();
         let last_line_start = self.line_map.last().copied().unwrap_or(0);
@@ -87,13 +91,13 @@ impl AdapterContext {
     /// Build line map from source code
     fn build_line_map(source: &str) -> Vec<usize> {
         let mut line_map = vec![0]; // First line starts at offset 0
-        
+
         for (i, ch) in source.char_indices() {
             if ch == '\n' {
                 line_map.push(i + 1);
             }
         }
-        
+
         line_map
     }
 }
@@ -149,24 +153,26 @@ impl BaseParser {
         // 1. Use a language-specific parser (tree-sitter, etc.)
         // 2. Get the language-specific AST
         // 3. Use the adapter to convert to universal AST
-        
+
         // For now, create a simple placeholder AST
         let universal_node = self.create_placeholder_ast(source, &context)?;
         Ok(Box::new(universal_node))
     }
 
     /// Create a placeholder AST for demonstration
-    fn create_placeholder_ast(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn create_placeholder_ast(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         // This is a simplified implementation
         // Real parsers would use tree-sitter or similar
-        
-        let root = AstBuilder::program(vec![
-            AstBuilder::expression_statement(
-                AstBuilder::string_literal(source)
-                    .with_text(source.to_string())
-                    .with_location(1, 1, 1, source.len())
-            )
-        ])
+
+        let root = AstBuilder::program(vec![AstBuilder::expression_statement(
+            AstBuilder::string_literal(source)
+                .with_text(source.to_string())
+                .with_location(1, 1, 1, source.len()),
+        )])
         .with_text(source.to_string())
         .with_location(1, 1, 1, source.len());
 
@@ -231,7 +237,10 @@ pub mod utils {
     }
 
     /// Create a simple identifier node
-    pub fn create_identifier(name: &str, location: Option<(usize, usize, usize, usize)>) -> UniversalNode {
+    pub fn create_identifier(
+        name: &str,
+        location: Option<(usize, usize, usize, usize)>,
+    ) -> UniversalNode {
         let mut node = AstBuilder::identifier(name).with_text(name.to_string());
         if let Some((start_line, start_col, end_line, end_col)) = location {
             node = node.with_location(start_line, start_col, end_line, end_col);
@@ -240,7 +249,10 @@ pub mod utils {
     }
 
     /// Create a simple literal node
-    pub fn create_literal(value: &str, location: Option<(usize, usize, usize, usize)>) -> UniversalNode {
+    pub fn create_literal(
+        value: &str,
+        location: Option<(usize, usize, usize, usize)>,
+    ) -> UniversalNode {
         let mut node = AstBuilder::string_literal(value).with_text(value.to_string());
         if let Some((start_line, start_col, end_line, end_col)) = location {
             node = node.with_location(start_line, start_col, end_line, end_col);
@@ -250,40 +262,152 @@ pub mod utils {
 
     // Language keywords
     const JAVA_KEYWORDS: &[&str] = &[
-        "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class",
-        "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
-        "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
-        "interface", "long", "native", "new", "package", "private", "protected", "public",
-        "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this",
-        "throw", "throws", "transient", "try", "void", "volatile", "while",
+        "abstract",
+        "assert",
+        "boolean",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "class",
+        "const",
+        "continue",
+        "default",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "extends",
+        "final",
+        "finally",
+        "float",
+        "for",
+        "goto",
+        "if",
+        "implements",
+        "import",
+        "instanceof",
+        "int",
+        "interface",
+        "long",
+        "native",
+        "new",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "return",
+        "short",
+        "static",
+        "strictfp",
+        "super",
+        "switch",
+        "synchronized",
+        "this",
+        "throw",
+        "throws",
+        "transient",
+        "try",
+        "void",
+        "volatile",
+        "while",
     ];
 
     const JAVASCRIPT_KEYWORDS: &[&str] = &[
-        "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
-        "do", "else", "export", "extends", "finally", "for", "function", "if", "import", "in",
-        "instanceof", "let", "new", "return", "super", "switch", "this", "throw", "try", "typeof",
-        "var", "void", "while", "with", "yield",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "export",
+        "extends",
+        "finally",
+        "for",
+        "function",
+        "if",
+        "import",
+        "in",
+        "instanceof",
+        "let",
+        "new",
+        "return",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "try",
+        "typeof",
+        "var",
+        "void",
+        "while",
+        "with",
+        "yield",
     ];
 
     const PYTHON_KEYWORDS: &[&str] = &[
-        "False", "None", "True", "and", "as", "assert", "break", "class", "continue", "def",
-        "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import",
-        "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
-        "while", "with", "yield",
+        "False", "None", "True", "and", "as", "assert", "break", "class", "continue", "def", "del",
+        "elif", "else", "except", "finally", "for", "from", "global", "if", "import", "in", "is",
+        "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with",
+        "yield",
     ];
 
     const SQL_KEYWORDS: &[&str] = &[
-        "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER",
-        "TABLE", "INDEX", "VIEW", "DATABASE", "SCHEMA", "GRANT", "REVOKE", "COMMIT", "ROLLBACK",
-        "TRANSACTION", "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "ON", "GROUP", "BY",
-        "ORDER", "HAVING", "UNION", "ALL", "DISTINCT", "AS", "AND", "OR", "NOT", "NULL",
-        "IS", "IN", "BETWEEN", "LIKE", "EXISTS",
+        "SELECT",
+        "FROM",
+        "WHERE",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "CREATE",
+        "DROP",
+        "ALTER",
+        "TABLE",
+        "INDEX",
+        "VIEW",
+        "DATABASE",
+        "SCHEMA",
+        "GRANT",
+        "REVOKE",
+        "COMMIT",
+        "ROLLBACK",
+        "TRANSACTION",
+        "JOIN",
+        "INNER",
+        "LEFT",
+        "RIGHT",
+        "FULL",
+        "OUTER",
+        "ON",
+        "GROUP",
+        "BY",
+        "ORDER",
+        "HAVING",
+        "UNION",
+        "ALL",
+        "DISTINCT",
+        "AS",
+        "AND",
+        "OR",
+        "NOT",
+        "NULL",
+        "IS",
+        "IN",
+        "BETWEEN",
+        "LIKE",
+        "EXISTS",
     ];
 
     const BASH_KEYWORDS: &[&str] = &[
-        "if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until", "do",
-        "done", "function", "select", "time", "in", "break", "continue", "return", "exit",
-        "export", "readonly", "local", "declare", "typeset", "unset",
+        "if", "then", "else", "elif", "fi", "case", "esac", "for", "while", "until", "do", "done",
+        "function", "select", "time", "in", "break", "continue", "return", "exit", "export",
+        "readonly", "local", "declare", "typeset", "unset",
     ];
 }
 
@@ -294,11 +418,8 @@ mod tests {
     #[test]
     fn test_adapter_context_creation() {
         let source = "line 1\nline 2\nline 3";
-        let context = AdapterContext::new(
-            "test.java".to_string(),
-            source.to_string(),
-            Language::Java,
-        );
+        let context =
+            AdapterContext::new("test.java".to_string(), source.to_string(), Language::Java);
 
         assert_eq!(context.file_path, "test.java");
         assert_eq!(context.language, Language::Java);
@@ -308,11 +429,8 @@ mod tests {
     #[test]
     fn test_offset_to_line_col() {
         let source = "hello\nworld\ntest";
-        let context = AdapterContext::new(
-            "test.txt".to_string(),
-            source.to_string(),
-            Language::Java,
-        );
+        let context =
+            AdapterContext::new("test.txt".to_string(), source.to_string(), Language::Java);
 
         // Test various positions
         assert_eq!(context.offset_to_line_col(0), (1, 1)); // 'h'
@@ -324,11 +442,8 @@ mod tests {
     #[test]
     fn test_get_location() {
         let source = "hello\nworld";
-        let context = AdapterContext::new(
-            "test.txt".to_string(),
-            source.to_string(),
-            Language::Java,
-        );
+        let context =
+            AdapterContext::new("test.txt".to_string(), source.to_string(), Language::Java);
 
         let location = context.get_location(0, 5);
         assert_eq!(location.start_line, 1);
@@ -362,7 +477,10 @@ mod tests {
 
     #[test]
     fn test_utils_normalize_whitespace() {
-        assert_eq!(utils::normalize_whitespace("  hello   world  "), "hello world");
+        assert_eq!(
+            utils::normalize_whitespace("  hello   world  "),
+            "hello world"
+        );
         assert_eq!(utils::normalize_whitespace("a\n\tb\r\nc"), "a b c");
     }
 
@@ -373,7 +491,7 @@ mod tests {
         assert!(utils::is_keyword("def", Language::Python));
         assert!(utils::is_keyword("SELECT", Language::Sql));
         assert!(utils::is_keyword("if", Language::Bash));
-        
+
         assert!(!utils::is_keyword("myVariable", Language::Java));
     }
 
@@ -416,16 +534,28 @@ macro_rules! impl_basic_adapter {
                     name: $name.to_string(),
                     version: "1.0.0".to_string(),
                     description: $description.to_string(),
-                    supported_features: vec!["basic_parsing".to_string(), "taint_analysis".to_string()],
+                    supported_features: vec![
+                        "basic_parsing".to_string(),
+                        "taint_analysis".to_string(),
+                    ],
                 }
             }
 
-            fn adapt_node(&self, _node: &dyn std::any::Any, _context: &$crate::adapters::AdapterContext) -> $crate::Result<$crate::UniversalNode> {
+            fn adapt_node(
+                &self,
+                _node: &dyn std::any::Any,
+                _context: &$crate::adapters::AdapterContext,
+            ) -> $crate::Result<$crate::UniversalNode> {
                 Ok($crate::UniversalNode::new($crate::NodeType::Program))
             }
 
-            fn parse_to_ast(&self, source: &str, _context: &$crate::adapters::AdapterContext) -> $crate::Result<$crate::UniversalNode> {
-                Ok($crate::UniversalNode::new($crate::NodeType::Program).with_text(source.to_string()))
+            fn parse_to_ast(
+                &self,
+                source: &str,
+                _context: &$crate::adapters::AdapterContext,
+            ) -> $crate::Result<$crate::UniversalNode> {
+                Ok($crate::UniversalNode::new($crate::NodeType::Program)
+                    .with_text(source.to_string()))
             }
         }
 
@@ -437,14 +567,16 @@ macro_rules! impl_basic_adapter {
         impl $parser {
             /// Create a new parser
             pub fn new() -> Self {
-                Self {
-                    adapter: $adapter,
-                }
+                Self { adapter: $adapter }
             }
         }
 
         impl $crate::LanguageParser for $parser {
-            fn parse(&self, source: &str, file_path: &std::path::Path) -> $crate::Result<Box<dyn $crate::AstNode>> {
+            fn parse(
+                &self,
+                source: &str,
+                file_path: &std::path::Path,
+            ) -> $crate::Result<Box<dyn $crate::AstNode>> {
                 let context = $crate::adapters::AdapterContext::new(
                     file_path.to_string_lossy().to_string(),
                     source.to_string(),

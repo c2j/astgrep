@@ -1,9 +1,6 @@
 //! API utilities and helpers
 
-use axum::{
-    extract::State,
-    response::Json,
-};
+use axum::{extract::State, response::Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -86,11 +83,7 @@ impl<T> ApiResponse<T> {
 
 impl<T> PaginatedResponse<T> {
     /// Create a new paginated response
-    pub fn new(
-        data: Vec<T>,
-        pagination: PaginationMeta,
-        request_id: Option<String>,
-    ) -> Self {
+    pub fn new(data: Vec<T>, pagination: PaginationMeta, request_id: Option<String>) -> Self {
         Self {
             data,
             pagination,
@@ -110,11 +103,11 @@ impl PaginationQuery {
         if let (Some(offset), Some(limit)) = (self.offset, self.limit) {
             return (offset, limit.min(100)); // Max 100 items per request
         }
-        
+
         // Use page/per_page if provided
         let page = self.page.unwrap_or(1).max(1);
         let per_page = self.per_page.unwrap_or(20).min(100); // Default 20, max 100
-        
+
         let offset = (page - 1) * per_page;
         (offset, per_page)
     }
@@ -123,8 +116,12 @@ impl PaginationQuery {
 impl PaginationMeta {
     /// Create pagination metadata
     pub fn new(page: u32, per_page: u32, total: u32) -> Self {
-        let total_pages = if total == 0 { 1 } else { (total + per_page - 1) / per_page };
-        
+        let total_pages = if total == 0 {
+            1
+        } else {
+            (total + per_page - 1) / per_page
+        };
+
         Self {
             page,
             per_page,
@@ -134,7 +131,7 @@ impl PaginationMeta {
             has_prev: page > 1,
         }
     }
-    
+
     /// Create from offset/limit
     pub fn from_offset_limit(offset: u32, limit: u32, total: u32) -> Self {
         let page = (offset / limit) + 1;
@@ -163,7 +160,7 @@ pub async fn api_status(
         uptime_seconds: get_uptime_seconds(),
         endpoints: get_available_endpoints(),
     };
-    
+
     let response = ApiResponse::new(status_data, None);
     Ok(Json(response))
 }
@@ -196,11 +193,12 @@ pub struct EndpointInfo {
 fn get_uptime_seconds() -> u64 {
     // This is a simplified implementation
     use std::time::{SystemTime, UNIX_EPOCH};
-    
+
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs() % 86400 // Mock: uptime within last 24 hours
+        .as_secs()
+        % 86400 // Mock: uptime within last 24 hours
 }
 
 /// Get available endpoints
@@ -280,9 +278,19 @@ pub fn validate_request_size(content_length: Option<usize>, max_size: usize) -> 
 /// Extract and validate language parameter
 pub fn validate_language(language: &str) -> WebResult<()> {
     const SUPPORTED_LANGUAGES: &[&str] = &[
-        "java", "javascript", "typescript", "python", "sql", "bash", "c", "cpp", "csharp", "php", "ruby"
+        "java",
+        "javascript",
+        "typescript",
+        "python",
+        "sql",
+        "bash",
+        "c",
+        "cpp",
+        "csharp",
+        "php",
+        "ruby",
     ];
-    
+
     if !SUPPORTED_LANGUAGES.contains(&language.to_lowercase().as_str()) {
         return Err(WebError::bad_request(format!(
             "Unsupported language: {}. Supported languages: {}",
@@ -290,14 +298,14 @@ pub fn validate_language(language: &str) -> WebResult<()> {
             SUPPORTED_LANGUAGES.join(", ")
         )));
     }
-    
+
     Ok(())
 }
 
 /// Extract and validate severity parameter
 pub fn validate_severity(severity: &str) -> WebResult<()> {
     const VALID_SEVERITIES: &[&str] = &["info", "warning", "error", "critical"];
-    
+
     if !VALID_SEVERITIES.contains(&severity.to_lowercase().as_str()) {
         return Err(WebError::bad_request(format!(
             "Invalid severity: {}. Valid severities: {}",
@@ -305,14 +313,14 @@ pub fn validate_severity(severity: &str) -> WebResult<()> {
             VALID_SEVERITIES.join(", ")
         )));
     }
-    
+
     Ok(())
 }
 
 /// Extract and validate confidence parameter
 pub fn validate_confidence(confidence: &str) -> WebResult<()> {
     const VALID_CONFIDENCES: &[&str] = &["low", "medium", "high"];
-    
+
     if !VALID_CONFIDENCES.contains(&confidence.to_lowercase().as_str()) {
         return Err(WebError::bad_request(format!(
             "Invalid confidence: {}. Valid confidences: {}",
@@ -320,7 +328,7 @@ pub fn validate_confidence(confidence: &str) -> WebResult<()> {
             VALID_CONFIDENCES.join(", ")
         )));
     }
-    
+
     Ok(())
 }
 
@@ -338,7 +346,7 @@ mod tests {
             limit: None,
         };
         assert_eq!(query.to_offset_limit(), (10, 10));
-        
+
         // Test with offset/limit
         let query = PaginationQuery {
             page: None,
@@ -347,7 +355,7 @@ mod tests {
             limit: Some(15),
         };
         assert_eq!(query.to_offset_limit(), (20, 15));
-        
+
         // Test defaults
         let query = PaginationQuery {
             page: None,
@@ -367,7 +375,7 @@ mod tests {
         assert_eq!(meta.total_pages, 3);
         assert!(meta.has_next);
         assert!(meta.has_prev);
-        
+
         let meta = PaginationMeta::from_offset_limit(20, 10, 25);
         assert_eq!(meta.page, 3);
         assert!(!meta.has_next);
@@ -407,7 +415,7 @@ mod tests {
         let config = Arc::new(WebConfig::default());
         let result = api_status(State(config)).await;
         assert!(result.is_ok());
-        
+
         let response = result.unwrap().0;
         assert_eq!(response.data.status, "operational");
         assert!(!response.data.endpoints.is_empty());

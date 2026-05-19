@@ -16,26 +16,75 @@ use std::collections::{HashMap, HashSet};
 
 fn is_operator_node(node_type: &str, node_text: Option<&str>) -> bool {
     // Check by known operator types
-    if matches!(node_type,
-        "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "++" | "--" |
-        "+" | "-" | "*" | "/" | "%" |
-        "==" | "!=" | "<" | ">" | "<=" | ">=" |
-        "&&" | "||" | "!" | "&" | "|" | "^" | "~" |
-        "<<" | ">>" | ">>>" |
-        "assignment_operator" | "operator"
+    if matches!(
+        node_type,
+        "=" | "+="
+            | "-="
+            | "*="
+            | "/="
+            | "%="
+            | "++"
+            | "--"
+            | "+"
+            | "-"
+            | "*"
+            | "/"
+            | "%"
+            | "=="
+            | "!="
+            | "<"
+            | ">"
+            | "<="
+            | ">="
+            | "&&"
+            | "||"
+            | "!"
+            | "&"
+            | "|"
+            | "^"
+            | "~"
+            | "<<"
+            | ">>"
+            | ">>>"
+            | "assignment_operator"
+            | "operator"
     ) {
         return true;
     }
 
     // Check by node text (handles cases where node_type is unknown)
     if let Some(text) = node_text {
-        if text.len() <= 3 && matches!(text,
-            "=" | "+=" | "-=" | "*=" | "/=" | "%=" |
-            "+" | "-" | "*" | "/" | "%" |
-            "==" | "!=" | "<" | ">" | "<=" | ">=" |
-            "&&" | "||" | "!" | "&" | "|" | "^" | "~" |
-            "<<" | ">>" | ">>>"
-        ) {
+        if text.len() <= 3
+            && matches!(
+                text,
+                "=" | "+="
+                    | "-="
+                    | "*="
+                    | "/="
+                    | "%="
+                    | "+"
+                    | "-"
+                    | "*"
+                    | "/"
+                    | "%"
+                    | "=="
+                    | "!="
+                    | "<"
+                    | ">"
+                    | "<="
+                    | ">="
+                    | "&&"
+                    | "||"
+                    | "!"
+                    | "&"
+                    | "|"
+                    | "^"
+                    | "~"
+                    | "<<"
+                    | ">>"
+                    | ">>>"
+            )
+        {
             return true;
         }
     }
@@ -49,9 +98,15 @@ pub enum SymbolicValue {
     /// A variable with a specific name
     Variable(String),
     /// A field access (e.g., obj.field)
-    FieldAccess { base: Box<SymbolicValue>, field: String },
+    FieldAccess {
+        base: Box<SymbolicValue>,
+        field: String,
+    },
     /// A method call result
-    MethodCall { base: Box<SymbolicValue>, method: String },
+    MethodCall {
+        base: Box<SymbolicValue>,
+        method: String,
+    },
     /// A constructor invocation (e.g., new B())
     ConstructorCall { class: String },
     /// A constant value
@@ -99,9 +154,7 @@ impl SymbolicValue {
                     false
                 }
             }
-            SymbolicValue::FieldAccess { base, .. } => {
-                base.is_derived_from(other)
-            }
+            SymbolicValue::FieldAccess { base, .. } => base.is_derived_from(other),
             SymbolicValue::MethodCall { base, .. } => {
                 base.is_derived_from(other) || base.as_ref() == other
             }
@@ -179,7 +232,7 @@ impl SymbolicState {
         if var1 == var2 {
             return true;
         }
-        
+
         if let Some(aliases) = self.aliases.get(var1) {
             if aliases.contains(var2) {
                 return true;
@@ -211,7 +264,7 @@ impl SymbolicState {
                 continue;
             }
             visited.insert(current.clone());
-            
+
             if current != var {
                 result.insert(current.clone());
             }
@@ -347,7 +400,10 @@ impl SymbolicPropagator {
         // For example, "String userName = req.xyz;" might have a child "userName = req.xyz"
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                if child.node_type() == "variable_declaration" || child.node_type() == "variable_declarator" || child.node_type() == "declarator" {
+                if child.node_type() == "variable_declaration"
+                    || child.node_type() == "variable_declarator"
+                    || child.node_type() == "declarator"
+                {
                     // This is a nested declarator - real declaration is inside
                     // Don't analyze this node as a whole, let's recursion handle the child
                     return Ok(());
@@ -486,22 +542,16 @@ impl SymbolicPropagator {
     }
 
     /// Convert an AST node to a symbolic value
-    fn node_to_symbolic_value(
-        &self, node: &dyn AstNode
-    ) -> SymbolicValue {
+    fn node_to_symbolic_value(&self, node: &dyn AstNode) -> SymbolicValue {
         let node_type = node.node_type();
         let node_text = node.text();
 
         match node_type {
             "constructor_invocation" | "object_creation_expression" | "class_creator" => {
                 self.extract_constructor_call_dyn(node)
-            },
-            "method_invocation" | "call_expression" => {
-                self.extract_method_call_dyn(node)
-            },
-            "field_access" | "member_expression" => {
-                self.extract_field_access_dyn(node)
-            },
+            }
+            "method_invocation" | "call_expression" => self.extract_method_call_dyn(node),
+            "field_access" | "member_expression" => self.extract_field_access_dyn(node),
             _ => {
                 // Check for 'new' keyword to detect constructor calls
                 if let Some(text) = node_text {
@@ -521,17 +571,13 @@ impl SymbolicPropagator {
     }
 
     /// Helper to extract method call from any AstNode reference
-    fn extract_method_call_from_ref<T: AstNode>(
-        &self, node: &T
-    ) -> SymbolicValue {
+    fn extract_method_call_from_ref<T: AstNode>(&self, node: &T) -> SymbolicValue {
         // Convert to dyn AstNode and delegate
         self.extract_method_call_dyn(node)
     }
 
     /// Extract a field access symbolic value
-    fn extract_field_access<T: AstNode>(
-        &self, node: &T
-    ) -> SymbolicValue {
+    fn extract_field_access<T: AstNode>(&self, node: &T) -> SymbolicValue {
         self.extract_field_access_dyn(node)
     }
 
@@ -541,7 +587,7 @@ impl SymbolicPropagator {
         let mut field = None;
 
         for i in 0..node.child_count() {
-                if let Some(child) = node.child(i) {
+            if let Some(child) = node.child(i) {
                 match child.node_type() {
                     "identifier" => {
                         if base.is_none() {
@@ -572,9 +618,7 @@ impl SymbolicPropagator {
     }
 
     /// Extract a method call symbolic value
-    fn extract_method_call<T: AstNode>(
-        &self, node: &T
-    ) -> SymbolicValue {
+    fn extract_method_call<T: AstNode>(&self, node: &T) -> SymbolicValue {
         self.extract_method_call_dyn(node)
     }
 
@@ -696,7 +740,7 @@ impl SymbolicPropagator {
     /// Check if a value contains any alias of a variable
     pub fn contains_alias(&self, value: &str, var: &str) -> bool {
         let aliases = self.state.get_all_aliases(var);
-        
+
         // Check if the value text contains any alias
         for alias in &aliases {
             if value.contains(alias) {
@@ -734,7 +778,9 @@ mod tests {
         assert!(matches!(field, SymbolicValue::FieldAccess { field: f, .. } if f == "field"));
 
         let constructor = SymbolicValue::constructor_call("MyClass");
-        assert!(matches!(constructor, SymbolicValue::ConstructorCall { class } if class == "MyClass"));
+        assert!(
+            matches!(constructor, SymbolicValue::ConstructorCall { class } if class == "MyClass")
+        );
     }
 
     #[test]
@@ -761,10 +807,10 @@ mod tests {
     fn test_symbolic_state_binding() {
         let mut state = SymbolicState::new();
         state.bind("a".to_string(), SymbolicValue::variable("b"));
-        
+
         assert!(state.is_alias("a", "b"));
         assert!(state.is_alias("b", "a"));
-        
+
         let aliases = state.get_all_aliases("a");
         assert!(aliases.contains("b"));
     }
@@ -774,10 +820,10 @@ mod tests {
         let mut state = SymbolicState::new();
         state.bind("a".to_string(), SymbolicValue::variable("b"));
         state.bind("c".to_string(), SymbolicValue::variable("b"));
-        
+
         // a and c should be transitively aliased through b
         assert!(state.is_alias("a", "c"));
-        
+
         let aliases_a = state.get_all_aliases("a");
         assert!(aliases_a.contains("b"));
         assert!(aliases_a.contains("c"));

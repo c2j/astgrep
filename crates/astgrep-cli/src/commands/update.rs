@@ -2,17 +2,11 @@
 
 use anyhow::Result;
 use std::path::PathBuf;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Update rules from remote repositories
-pub async fn run(
-    repository: Option<String>,
-    directory: PathBuf,
-    force: bool,
-) -> Result<()> {
-    let repo_url = repository.unwrap_or_else(|| {
-        "https://github.com/astgrep/rules.git".to_string()
-    });
+pub async fn run(repository: Option<String>, directory: PathBuf, force: bool) -> Result<()> {
+    let repo_url = repository.unwrap_or_else(|| "https://github.com/astgrep/rules.git".to_string());
 
     info!("Updating rules from repository: {}", repo_url);
     info!("Target directory: {}", directory.display());
@@ -24,7 +18,7 @@ pub async fn run(
                 directory.display()
             ));
         }
-        
+
         info!("Updating existing repository");
         update_existing_repository(&directory).await?;
     } else {
@@ -32,7 +26,7 @@ pub async fn run(
             warn!("Removing existing directory: {}", directory.display());
             std::fs::remove_dir_all(&directory)?;
         }
-        
+
         info!("Cloning repository");
         clone_repository(&repo_url, &directory).await?;
     }
@@ -40,7 +34,7 @@ pub async fn run(
     // Validate downloaded rules
     info!("Validating downloaded rules");
     let validation_result = validate_rules_directory(&directory).await?;
-    
+
     println!("✅ Rules updated successfully!");
     println!("📊 Validation Results:");
     println!("  • Total rule files: {}", validation_result.total_files);
@@ -84,7 +78,7 @@ async fn update_existing_repository(directory: &PathBuf) -> Result<()> {
 
     if !status_output.stdout.is_empty() {
         warn!("Local changes detected in repository");
-        
+
         // Stash local changes
         let stash_output = Command::new("git")
             .args(&["stash", "push", "-m", "astgrep auto-stash before update"])
@@ -107,7 +101,7 @@ async fn update_existing_repository(directory: &PathBuf) -> Result<()> {
 
     if !pull_output.status.success() {
         let stderr = String::from_utf8_lossy(&pull_output.stderr);
-        
+
         // Try with master branch if main fails
         let pull_master_output = Command::new("git")
             .args(&["pull", "origin", "master"])
@@ -118,7 +112,8 @@ async fn update_existing_repository(directory: &PathBuf) -> Result<()> {
             let master_stderr = String::from_utf8_lossy(&pull_master_output.stderr);
             return Err(anyhow::anyhow!(
                 "Failed to pull from repository. Main branch error: {}. Master branch error: {}",
-                stderr, master_stderr
+                stderr,
+                master_stderr
             ));
         }
     }
@@ -133,13 +128,12 @@ fn is_git_repository(directory: &PathBuf) -> Result<bool> {
 }
 
 async fn validate_rules_directory(directory: &PathBuf) -> Result<ValidationResult> {
-    
     let mut result = ValidationResult::new();
-    
+
     // Find all rule files
     let rule_files = find_rule_files(directory).await?;
     result.total_files = rule_files.len();
-    
+
     for rule_file in rule_files {
         match validate_rule_file(&rule_file).await {
             Ok(rule_count) => {
@@ -152,7 +146,7 @@ async fn validate_rules_directory(directory: &PathBuf) -> Result<ValidationResul
             }
         }
     }
-    
+
     Ok(result)
 }
 
@@ -164,11 +158,11 @@ async fn find_rule_files(directory: &PathBuf) -> Result<Vec<PathBuf>> {
 
 fn find_rule_files_recursive(directory: &PathBuf, rule_files: &mut Vec<PathBuf>) -> Result<()> {
     use std::fs;
-    
+
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
-        
+
         if path.is_dir() {
             // Skip .git and other hidden directories
             if let Some(dir_name) = path.file_name() {
@@ -180,7 +174,7 @@ fn find_rule_files_recursive(directory: &PathBuf, rule_files: &mut Vec<PathBuf>)
             rule_files.push(path);
         }
     }
-    
+
     Ok(())
 }
 
@@ -195,7 +189,7 @@ fn is_rule_file(path: &PathBuf) -> bool {
 
 async fn validate_rule_file(rule_file: &PathBuf) -> Result<usize> {
     use astgrep_rules::RuleEngine;
-    
+
     let mut engine = RuleEngine::new();
     engine.load_rules_from_file(rule_file)?;
     Ok(engine.rule_count())
@@ -223,11 +217,9 @@ impl ValidationResult {
 /// Check if git is available on the system
 pub fn check_git_availability() -> Result<()> {
     use std::process::Command;
-    
-    let output = Command::new("git")
-        .args(&["--version"])
-        .output();
-    
+
+    let output = Command::new("git").args(&["--version"]).output();
+
     match output {
         Ok(output) if output.status.success() => {
             let version = String::from_utf8_lossy(&output.stdout);
@@ -235,62 +227,70 @@ pub fn check_git_availability() -> Result<()> {
             Ok(())
         }
         Ok(_) => Err(anyhow::anyhow!("Git command failed")),
-        Err(_) => Err(anyhow::anyhow!("Git is not installed or not available in PATH")),
+        Err(_) => Err(anyhow::anyhow!(
+            "Git is not installed or not available in PATH"
+        )),
     }
 }
 
 /// Get information about the current repository
 pub async fn get_repository_info(directory: &PathBuf) -> Result<RepositoryInfo> {
     use std::process::Command;
-    
+
     if !is_git_repository(directory)? {
         return Err(anyhow::anyhow!("Not a git repository"));
     }
-    
+
     // Get remote URL
     let remote_output = Command::new("git")
         .args(&["remote", "get-url", "origin"])
         .current_dir(directory)
         .output()?;
-    
+
     let remote_url = if remote_output.status.success() {
-        String::from_utf8_lossy(&remote_output.stdout).trim().to_string()
+        String::from_utf8_lossy(&remote_output.stdout)
+            .trim()
+            .to_string()
     } else {
         "unknown".to_string()
     };
-    
+
     // Get current branch
     let branch_output = Command::new("git")
         .args(&["branch", "--show-current"])
         .current_dir(directory)
         .output()?;
-    
+
     let current_branch = if branch_output.status.success() {
-        String::from_utf8_lossy(&branch_output.stdout).trim().to_string()
+        String::from_utf8_lossy(&branch_output.stdout)
+            .trim()
+            .to_string()
     } else {
         "unknown".to_string()
     };
-    
+
     // Get last commit
     let commit_output = Command::new("git")
         .args(&["log", "-1", "--format=%H %s"])
         .current_dir(directory)
         .output()?;
-    
+
     let last_commit = if commit_output.status.success() {
-        String::from_utf8_lossy(&commit_output.stdout).trim().to_string()
+        String::from_utf8_lossy(&commit_output.stdout)
+            .trim()
+            .to_string()
     } else {
         "unknown".to_string()
     };
-    
+
     // Check for local changes
     let status_output = Command::new("git")
         .args(&["status", "--porcelain"])
         .current_dir(directory)
         .output()?;
-    
+
     let has_local_changes = !status_output.stdout.is_empty();
-    
+
     Ok(RepositoryInfo {
         remote_url,
         current_branch,
@@ -310,8 +310,8 @@ pub struct RepositoryInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn test_is_rule_file() {
@@ -326,12 +326,12 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let rules_dir = temp_dir.path().join("rules");
         fs::create_dir_all(&rules_dir).unwrap();
-        
+
         // Create test rule files
         fs::write(rules_dir.join("rule1.yaml"), "test content").unwrap();
         fs::write(rules_dir.join("rule2.yml"), "test content").unwrap();
         fs::write(rules_dir.join("not_a_rule.txt"), "test content").unwrap();
-        
+
         let rule_files = find_rule_files(&rules_dir).await.unwrap();
         assert_eq!(rule_files.len(), 2);
     }
@@ -342,11 +342,11 @@ mod tests {
         assert_eq!(result.total_files, 0);
         assert_eq!(result.valid_rules, 0);
         assert_eq!(result.invalid_rules, 0);
-        
+
         result.total_files = 5;
         result.valid_rules = 3;
         result.invalid_rules = 2;
-        
+
         assert_eq!(result.total_files, 5);
         assert_eq!(result.valid_rules, 3);
         assert_eq!(result.invalid_rules, 2);

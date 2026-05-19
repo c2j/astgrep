@@ -98,10 +98,11 @@ impl AdvancedRuleExecutor {
                     };
 
                     if let ComparisonOperator::PythonExpression(expr) = &metavar_comp.operator {
-                        let str_bindings: std::collections::HashMap<String, String> =
-                            match_result.bindings.iter()
-                                .map(|(k, v)| (k.clone(), v.value.clone()))
-                                .collect();
+                        let str_bindings: std::collections::HashMap<String, String> = match_result
+                            .bindings
+                            .iter()
+                            .map(|(k, v)| (k.clone(), v.value.clone()))
+                            .collect();
                         return self.evaluate_python_expression(
                             &resolved_value,
                             expr,
@@ -210,8 +211,9 @@ impl AdvancedRuleExecutor {
                                 return Ok(false);
                             }
                             combined_bindings.extend(
-                                new_bindings.into_iter()
-                                    .map(|(k, v)| (k, MatchBinding::new(v)))
+                                new_bindings
+                                    .into_iter()
+                                    .map(|(k, v)| (k, MatchBinding::new(v))),
                             );
                         }
                     }

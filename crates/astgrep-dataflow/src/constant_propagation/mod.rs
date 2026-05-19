@@ -16,18 +16,20 @@
 //!   - Context detection (is_static_block_context, etc.)
 //!   - Name/value extraction utilities
 
+pub mod analysis;
 pub mod state;
 pub mod utils;
-pub mod analysis;
 
 // Re-export public items from state module for backward compatibility
-pub use state::{ConstantPropagator, ConstantValue, SourceLocation, Scope, VariableDefinition, VisitContext};
+pub use state::{
+    ConstantPropagator, ConstantValue, Scope, SourceLocation, VariableDefinition, VisitContext,
+};
 
 // Tests remain in this file for simplicity
 #[cfg(test)]
 mod tests {
-    use crate::constant_propagation::state::*;
     use super::*;
+    use crate::constant_propagation::state::*;
 
     #[test]
     fn test_constant_value_string() {
@@ -67,7 +69,9 @@ mod tests {
     #[test]
     fn test_constant_propagator_mark_reassigned() {
         let mut propagator = ConstantPropagator::new();
-        propagator.constants.insert("x".to_string(), ConstantValue::Integer(42));
+        propagator
+            .constants
+            .insert("x".to_string(), ConstantValue::Integer(42));
 
         assert!(propagator.is_constant("x"));
 
@@ -80,7 +84,10 @@ mod tests {
     #[test]
     fn test_constant_propagator_get_constant() {
         let mut propagator = ConstantPropagator::new();
-        propagator.constants.insert("password".to_string(), ConstantValue::String("secret".to_string()));
+        propagator.constants.insert(
+            "password".to_string(),
+            ConstantValue::String("secret".to_string()),
+        );
 
         assert_eq!(
             propagator.get_constant("password"),

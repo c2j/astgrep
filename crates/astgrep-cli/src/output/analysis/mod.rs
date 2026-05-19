@@ -7,19 +7,19 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::time::Duration;
 
-mod json;
-mod sarif;
-mod text;
 mod html;
+mod json;
 mod markdown;
+mod sarif;
 mod semgrep;
+mod text;
 
-pub use json::JsonFormatter;
-pub use sarif::SarifFormatter;
-pub use text::TextFormatter;
 pub use html::HtmlFormatter;
+pub use json::JsonFormatter;
 pub use markdown::MarkdownFormatter;
+pub use sarif::SarifFormatter;
 pub use semgrep::SemgrepFormatter;
+pub use text::TextFormatter;
 
 /// Analysis finding representation
 #[derive(Debug, Clone, serde::Serialize)]
@@ -51,7 +51,7 @@ where
 }
 
 // Re-export Severity and Confidence from astgrep_core to ensure consistency
-pub use astgrep_core::{Severity, Confidence};
+pub use astgrep_core::{Confidence, Severity};
 
 /// Analysis statistics
 #[derive(Debug, Clone, serde::Serialize)]

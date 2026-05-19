@@ -4,7 +4,7 @@
 //! and node type mapping functionality.
 
 use super::integration::TreeSitterParser;
-use astgrep_ast::{UniversalNode, NodeType};
+use astgrep_ast::{NodeType, UniversalNode};
 use astgrep_core::Result;
 use tree_sitter::Node;
 
@@ -48,7 +48,10 @@ impl TreeSitterParser {
         universal_node = universal_node
             .with_metadata("ts_kind".to_string(), node.kind().to_string())
             .with_metadata("ts_id".to_string(), node.id().to_string())
-            .with_metadata("byte_range".to_string(), format!("{}-{}", node.start_byte(), node.end_byte()));
+            .with_metadata(
+                "byte_range".to_string(),
+                format!("{}-{}", node.start_byte(), node.end_byte()),
+            );
 
         // Add syntax highlighting information if available
         if let Some(syntax_info) = self.extract_syntax_info(node, &text) {
@@ -162,33 +165,57 @@ impl TreeSitterParser {
             "module" | "program" | "source_file" | "compilation_unit" => NodeType::Program,
 
             // Function definitions
-            "function_definition" | "function_declaration" | "method_definition" |
-            "constructor_definition" | "arrow_function" | "function_expression" => NodeType::FunctionDeclaration,
+            "function_definition"
+            | "function_declaration"
+            | "method_definition"
+            | "constructor_definition"
+            | "arrow_function"
+            | "function_expression" => NodeType::FunctionDeclaration,
 
             // Function calls
-            "call_expression" | "call" | "method_invocation" | "constructor_invocation" |
-            "new_expression" => NodeType::CallExpression,
+            "call_expression"
+            | "call"
+            | "method_invocation"
+            | "constructor_invocation"
+            | "new_expression" => NodeType::CallExpression,
 
             // Assignments
-            "assignment" | "assignment_expression" | "augmented_assignment" => NodeType::AssignmentExpression,
+            "assignment" | "assignment_expression" | "augmented_assignment" => {
+                NodeType::AssignmentExpression
+            }
             "variable_declaration" | "variable_declarator" => NodeType::VariableDeclaration,
 
             // Identifiers and names
-            "identifier" | "field_identifier" | "type_identifier" | "property_identifier" |
-            "variable_name" | "function_name" | "class_name" => NodeType::Identifier,
+            "identifier"
+            | "field_identifier"
+            | "type_identifier"
+            | "property_identifier"
+            | "variable_name"
+            | "function_name"
+            | "class_name" => NodeType::Identifier,
 
             // Literals
-            "string" | "string_literal" | "template_string" | "raw_string" |
-            "character_literal" | "escape_sequence" => NodeType::Literal,
-            "integer" | "number" | "integer_literal" | "float_literal" |
-            "decimal_integer_literal" | "hex_integer_literal" | "binary_integer_literal" |
-            "octal_integer_literal" => NodeType::Literal,
+            "string" | "string_literal" | "template_string" | "raw_string"
+            | "character_literal" | "escape_sequence" => NodeType::Literal,
+            "integer"
+            | "number"
+            | "integer_literal"
+            | "float_literal"
+            | "decimal_integer_literal"
+            | "hex_integer_literal"
+            | "binary_integer_literal"
+            | "octal_integer_literal" => NodeType::Literal,
             "boolean" | "true" | "false" | "null" | "undefined" | "none" => NodeType::Literal,
 
             // Control flow
-            "if_statement" | "conditional_expression" | "ternary_expression" => NodeType::IfStatement,
+            "if_statement" | "conditional_expression" | "ternary_expression" => {
+                NodeType::IfStatement
+            }
             "while_statement" | "do_statement" => NodeType::WhileStatement,
-            "for_statement" | "for_in_statement" | "for_of_statement" | "enhanced_for_statement" => NodeType::ForStatement,
+            "for_statement"
+            | "for_in_statement"
+            | "for_of_statement"
+            | "enhanced_for_statement" => NodeType::ForStatement,
             "return_statement" => NodeType::ReturnStatement,
             "break_statement" => NodeType::BreakStatement,
             "continue_statement" => NodeType::ContinueStatement,
@@ -197,21 +224,31 @@ impl TreeSitterParser {
 
             // Expressions
             "expression_statement" => NodeType::ExpressionStatement,
-            "binary_expression" | "logical_expression" | "comparison_expression" => NodeType::BinaryExpression,
+            "binary_expression" | "logical_expression" | "comparison_expression" => {
+                NodeType::BinaryExpression
+            }
             "unary_expression" | "update_expression" => NodeType::UnaryExpression,
-            "member_expression" | "subscript_expression" | "attribute" | "field_access" => NodeType::MemberExpression,
+            "member_expression" | "subscript_expression" | "attribute" | "field_access" => {
+                NodeType::MemberExpression
+            }
             "array" | "array_literal" | "list" | "tuple" => NodeType::ArrayExpression,
             "object" | "object_literal" | "dictionary" | "hash" => NodeType::ObjectExpression,
 
             // Blocks and statements
-            "block" | "block_statement" | "compound_statement" | "suite" => NodeType::BlockStatement,
+            "block" | "block_statement" | "compound_statement" | "suite" => {
+                NodeType::BlockStatement
+            }
             "class_declaration" | "class_definition" => NodeType::ClassDeclaration,
             "interface_declaration" => NodeType::InterfaceDeclaration,
-            "import_statement" | "import_declaration" | "from_import" | "include" => NodeType::ImportDeclaration,
+            "import_statement" | "import_declaration" | "from_import" | "include" => {
+                NodeType::ImportDeclaration
+            }
             "export_statement" | "export_declaration" => NodeType::ExportDeclaration,
 
             // Comments and documentation
-            "comment" | "line_comment" | "block_comment" | "documentation_comment" => NodeType::Comment,
+            "comment" | "line_comment" | "block_comment" | "documentation_comment" => {
+                NodeType::Comment
+            }
 
             // Language-specific constructs
             "lambda" | "lambda_expression" => NodeType::LambdaExpression,
@@ -221,12 +258,16 @@ impl TreeSitterParser {
             "case_statement" | "case_clause" => NodeType::CaseStatement,
 
             // Bash-specific constructs
-            "command" | "simple_command" | "pipeline" | "command_substitution" => NodeType::CallExpression,
+            "command" | "simple_command" | "pipeline" | "command_substitution" => {
+                NodeType::CallExpression
+            }
             "variable_assignment" => NodeType::AssignmentExpression,
             "word" | "command_name" => NodeType::Identifier,
             "ansi_c_quoting" | "quoted_string" => NodeType::Literal,
             "expansion" | "process_substitution" => NodeType::CallExpression,
-            "if_statement" | "while_statement" | "for_statement" | "case_statement" => NodeType::ControlFlowStatement,
+            "if_statement" | "while_statement" | "for_statement" | "case_statement" => {
+                NodeType::ControlFlowStatement
+            }
             "function_definition" => NodeType::FunctionDeclaration,
             "subshell" => NodeType::BlockStatement,
             "test_command" | "test_operator" => NodeType::BinaryExpression,
@@ -242,14 +283,29 @@ impl TreeSitterParser {
             "drop_statement" => NodeType::DropStatement,
             "alter_statement" => NodeType::AlterStatement,
             // SQL clauses map to a generic SqlExpression container
-            "from_clause" | "where_clause" | "having_clause" | "order_by_clause" |
-            "group_by_clause" | "limit_clause" | "join_clause" | "inner_join" |
-            "left_join" | "right_join" | "full_join" | "subquery" | "parenthesized_expression" => NodeType::SqlExpression,
+            "from_clause"
+            | "where_clause"
+            | "having_clause"
+            | "order_by_clause"
+            | "group_by_clause"
+            | "limit_clause"
+            | "join_clause"
+            | "inner_join"
+            | "left_join"
+            | "right_join"
+            | "full_join"
+            | "subquery"
+            | "parenthesized_expression" => NodeType::SqlExpression,
             // Common SQL tokens
             "column_reference" | "table_reference" | "field" => NodeType::Identifier,
             "function_call" | "aggregate_function" => NodeType::CallExpression,
-            "comparison_predicate" | "in_predicate" |
-            "like_predicate" | "between_predicate" | "union" | "intersect" | "except" => NodeType::BinaryExpression,
+            "comparison_predicate"
+            | "in_predicate"
+            | "like_predicate"
+            | "between_predicate"
+            | "union"
+            | "intersect"
+            | "except" => NodeType::BinaryExpression,
             "literal" | "number_literal" | "boolean_literal" => NodeType::Literal,
 
             // Error handling
@@ -276,7 +332,10 @@ impl TreeSitterParser {
                 NodeType::BinaryExpression
             } else if ts_kind.contains("unary") {
                 NodeType::UnaryExpression
-            } else if ts_kind.contains("member") || ts_kind.contains("attribute") || ts_kind.contains("field_access") {
+            } else if ts_kind.contains("member")
+                || ts_kind.contains("attribute")
+                || ts_kind.contains("field_access")
+            {
                 NodeType::MemberExpression
             } else if ts_kind.contains("call") {
                 NodeType::CallExpression

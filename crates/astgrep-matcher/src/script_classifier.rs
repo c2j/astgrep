@@ -1,14 +1,14 @@
 //! Script categorization logic for functional classification
 
 use anyhow::Result;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::fs;
-use regex::Regex;
+use std::path::Path;
 use tracing::{debug, info};
 
-use astgrep_core::models::test_asset::{TestAsset, ScriptType, AssetType};
+use astgrep_core::models::test_asset::{AssetType, ScriptType, TestAsset};
 
 /// Configuration for script categorization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,12 +81,28 @@ pub struct ClassificationRule {
 /// Classification condition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClassificationCondition {
-    FilenameContains { pattern: String, case_sensitive: bool },
-    ContentContains { pattern: String, case_sensitive: bool },
-    ShebangMatches { pattern: String },
-    FileExtension { extension: String },
-    FileSize { min_bytes: Option<u64>, max_bytes: Option<u64> },
-    CustomCondition { name: String, parameters: HashMap<String, String> },
+    FilenameContains {
+        pattern: String,
+        case_sensitive: bool,
+    },
+    ContentContains {
+        pattern: String,
+        case_sensitive: bool,
+    },
+    ShebangMatches {
+        pattern: String,
+    },
+    FileExtension {
+        extension: String,
+    },
+    FileSize {
+        min_bytes: Option<u64>,
+        max_bytes: Option<u64>,
+    },
+    CustomCondition {
+        name: String,
+        parameters: HashMap<String, String>,
+    },
 }
 
 /// Script classification engine
@@ -128,7 +144,11 @@ impl ScriptClassifier {
     pub fn classify_script(&self, asset: &TestAsset) -> Result<ClassificationResult> {
         let start_time = std::time::Instant::now();
 
-        debug!("Classifying script: {} ({})", asset.name, asset.current_path.display());
+        debug!(
+            "Classifying script: {} ({})",
+            asset.name,
+            asset.current_path.display()
+        );
 
         let mut results = Vec::new();
 
@@ -170,8 +190,10 @@ impl ScriptClassifier {
         // Combine results and determine best classification
         let final_result = self.combine_classification_results(results, &start_time)?;
 
-        info!("Script classified as {:?} with confidence {:.2}",
-              final_result.script_type, final_result.confidence);
+        info!(
+            "Script classified as {:?} with confidence {:.2}",
+            final_result.script_type, final_result.confidence
+        );
 
         Ok(final_result)
     }
@@ -193,7 +215,8 @@ impl ScriptClassifier {
 
     /// Classify by filename patterns
     fn classify_by_filename(&self, asset: &TestAsset) -> Result<ClassificationResult> {
-        let filename = asset.current_path
+        let filename = asset
+            .current_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("");
@@ -205,7 +228,11 @@ impl ScriptClassifier {
                 if pattern.is_match(filename) {
                     let confidence = 0.8; // High confidence for filename matches
                     if confidence > best_match.1 {
-                        best_match = (script_type.clone(), confidence, vec![format!("Filename pattern: {}", pattern)]);
+                        best_match = (
+                            script_type.clone(),
+                            confidence,
+                            vec![format!("Filename pattern: {}", pattern)],
+                        );
                     }
                 }
             }
@@ -316,7 +343,8 @@ impl ScriptClassifier {
         }
 
         // Find the best match
-        let (best_type, best_score) = scores.iter()
+        let (best_type, best_score) = scores
+            .iter()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap();
 
@@ -375,7 +403,8 @@ impl ScriptClassifier {
             (ScriptType::Utility, utility_score),
         ];
 
-        let (best_type, best_score) = scores.iter()
+        let (best_type, best_score) = scores
+            .iter()
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap();
 
@@ -399,7 +428,11 @@ impl ScriptClassifier {
     }
 
     /// Classify by custom rule
-    fn classify_by_custom_rule(&self, asset: &TestAsset, rule: &ClassificationRule) -> Result<ClassificationResult> {
+    fn classify_by_custom_rule(
+        &self,
+        asset: &TestAsset,
+        rule: &ClassificationRule,
+    ) -> Result<ClassificationResult> {
         let mut matched_conditions = Vec::new();
         let mut conditions_met = 0;
 
@@ -434,10 +467,18 @@ impl ScriptClassifier {
     }
 
     /// Evaluate a classification condition
-    fn evaluate_condition(&self, asset: &TestAsset, condition: &ClassificationCondition) -> Result<bool> {
+    fn evaluate_condition(
+        &self,
+        asset: &TestAsset,
+        condition: &ClassificationCondition,
+    ) -> Result<bool> {
         match condition {
-            ClassificationCondition::FilenameContains { pattern, case_sensitive } => {
-                let filename = asset.current_path
+            ClassificationCondition::FilenameContains {
+                pattern,
+                case_sensitive,
+            } => {
+                let filename = asset
+                    .current_path
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("");
@@ -448,7 +489,10 @@ impl ScriptClassifier {
                     Ok(filename.to_lowercase().contains(&pattern.to_lowercase()))
                 }
             }
-            ClassificationCondition::ContentContains { pattern, case_sensitive } => {
+            ClassificationCondition::ContentContains {
+                pattern,
+                case_sensitive,
+            } => {
                 let content = fs::read_to_string(&asset.current_path)?;
                 if *case_sensitive {
                     Ok(content.contains(pattern))
@@ -461,13 +505,17 @@ impl ScriptClassifier {
                 Ok(shebang.map_or(false, |s| s.contains(pattern)))
             }
             ClassificationCondition::FileExtension { extension } => {
-                let file_extension = asset.current_path
+                let file_extension = asset
+                    .current_path
                     .extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or("");
                 Ok(file_extension == extension)
             }
-            ClassificationCondition::FileSize { min_bytes, max_bytes } => {
+            ClassificationCondition::FileSize {
+                min_bytes,
+                max_bytes,
+            } => {
                 let file_size = asset.get_file_size().unwrap_or(0);
                 let min_ok = min_bytes.map_or(true, |min| file_size >= min);
                 let max_ok = max_bytes.map_or(true, |max| file_size <= max);
@@ -507,17 +555,25 @@ impl ScriptClassifier {
 
         // Sort by confidence
         let mut sorted_results = results;
-        sorted_results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        sorted_results.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let best_result = sorted_results.into_iter().next().unwrap();
 
         // Check if confidence meets threshold
-        if best_result.confidence < self.config.confidence_threshold && self.config.enable_fallback {
+        if best_result.confidence < self.config.confidence_threshold && self.config.enable_fallback
+        {
             return Ok(ClassificationResult {
                 script_type: ScriptType::Utility,
                 confidence: best_result.confidence.max(0.1),
                 classification_method: "fallback".to_string(),
-                supporting_evidence: vec![format!("Low confidence ({}), using fallback", best_result.confidence)],
+                supporting_evidence: vec![format!(
+                    "Low confidence ({}), using fallback",
+                    best_result.confidence
+                )],
                 alternative_types: vec![(best_result.script_type.clone(), best_result.confidence)],
                 metadata: ClassificationMetadata {
                     keywords_found: Vec::new(),
@@ -552,45 +608,89 @@ impl ScriptClassifier {
     /// Check if content contains validation patterns
     fn contains_validation_patterns(&self, content: &str) -> bool {
         let validation_keywords = [
-            "validate", "check", "verify", "assert", "test", "spec", "expect",
-            "assertEqual", "assertNotNull", "assertTrue", "assertFalse",
+            "validate",
+            "check",
+            "verify",
+            "assert",
+            "test",
+            "spec",
+            "expect",
+            "assertEqual",
+            "assertNotNull",
+            "assertTrue",
+            "assertFalse",
         ];
 
         let content_lower = content.to_lowercase();
-        validation_keywords.iter().any(|&keyword| content_lower.contains(keyword))
+        validation_keywords
+            .iter()
+            .any(|&keyword| content_lower.contains(keyword))
     }
 
     /// Check if content contains runner patterns
     fn contains_runner_patterns(&self, content: &str) -> bool {
         let runner_keywords = [
-            "run", "execute", "start", "launch", "invoke", "call", "perform",
-            "main", "test_all", "run_all", "execute_all",
+            "run",
+            "execute",
+            "start",
+            "launch",
+            "invoke",
+            "call",
+            "perform",
+            "main",
+            "test_all",
+            "run_all",
+            "execute_all",
         ];
 
         let content_lower = content.to_lowercase();
-        runner_keywords.iter().any(|&keyword| content_lower.contains(keyword))
+        runner_keywords
+            .iter()
+            .any(|&keyword| content_lower.contains(keyword))
     }
 
     /// Check if content contains CI patterns
     fn contains_ci_patterns(&self, content: &str) -> bool {
         let ci_keywords = [
-            "ci", "build", "deploy", "pipeline", "continuous", "integration",
-            "github", "jenkins", "travis", "circleci", "actions",
+            "ci",
+            "build",
+            "deploy",
+            "pipeline",
+            "continuous",
+            "integration",
+            "github",
+            "jenkins",
+            "travis",
+            "circleci",
+            "actions",
         ];
 
         let content_lower = content.to_lowercase();
-        ci_keywords.iter().any(|&keyword| content_lower.contains(keyword))
+        ci_keywords
+            .iter()
+            .any(|&keyword| content_lower.contains(keyword))
     }
 
     /// Check if content contains utility patterns
     fn contains_utility_patterns(&self, content: &str) -> bool {
         let utility_keywords = [
-            "helper", "util", "tool", "function", "method", "procedure",
-            "library", "module", "package", "import", "require",
+            "helper",
+            "util",
+            "tool",
+            "function",
+            "method",
+            "procedure",
+            "library",
+            "module",
+            "package",
+            "import",
+            "require",
         ];
 
         let content_lower = content.to_lowercase();
-        utility_keywords.iter().any(|&keyword| content_lower.contains(keyword))
+        utility_keywords
+            .iter()
+            .any(|&keyword| content_lower.contains(keyword))
     }
 
     /// Build keyword patterns for different script types
@@ -703,9 +803,9 @@ impl Default for ScriptClassifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use astgrep_core::models::test_asset::AssetType;
     use std::fs;
     use tempfile::tempdir;
-    use astgrep_core::models::test_asset::{AssetType};
 
     #[test]
     fn test_classification_config_default() {
@@ -770,7 +870,10 @@ mod tests {
         let classifier = ScriptClassifier::new();
         let result = classifier.classify_by_shebang(&asset)?;
 
-        assert_eq!(result.shebang_detected, Some("/usr/bin/python3".to_string()));
+        assert_eq!(
+            result.shebang_detected,
+            Some("/usr/bin/python3".to_string())
+        );
 
         Ok(())
     }
@@ -781,7 +884,10 @@ mod tests {
         let script_path = temp_dir.path().join("test_script.sh");
 
         // Create a script with validation keywords
-        fs::write(&script_path, "#!/bin/bash\nvalidate_function() {\n  check_output\n  verify_result\n}\n")?;
+        fs::write(
+            &script_path,
+            "#!/bin/bash\nvalidate_function() {\n  check_output\n  verify_result\n}\n",
+        )?;
 
         let asset = TestAsset::new(
             "test-003".to_string(),

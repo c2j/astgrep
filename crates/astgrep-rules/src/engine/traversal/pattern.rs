@@ -421,8 +421,6 @@ impl RuleExecutionEngine {
         rule: &Rule,
         context: &RuleContext,
     ) -> Result<Vec<Finding>> {
-        
-
         let mut findings = Vec::new();
         let matches =
             self.find_pattern_matches(pattern, ast, context.language, &context.source_code)?;
@@ -465,8 +463,6 @@ impl RuleExecutionEngine {
     fn select_non_overlapping(
         mm: Vec<((usize, usize), usize, usize, usize, usize, Box<dyn AstNode>)>,
     ) -> Vec<Box<dyn AstNode>> {
-        
-
         let mut sorted = mm;
         sorted.sort_by(|a, b| {
             a.0.cmp(&b.0)

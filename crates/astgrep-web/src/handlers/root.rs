@@ -1,7 +1,7 @@
 //! Root endpoint handler
 
-use axum::response::Html;
 use crate::WebResult;
+use axum::response::Html;
 
 /// Root endpoint - returns API information
 pub async fn root() -> WebResult<Html<&'static str>> {
@@ -100,7 +100,7 @@ mod tests {
     async fn test_root_endpoint() {
         let result = root().await;
         assert!(result.is_ok());
-        
+
         let html = result.unwrap().0;
         assert!(html.contains("astgrep API"));
         assert!(html.contains("/api/v1/health"));

@@ -1,7 +1,7 @@
 //! Version information handler
 
-use axum::response::Json;
 use crate::{models::VersionInfo, WebResult};
+use axum::response::Json;
 
 /// Get version information
 pub async fn get_version() -> WebResult<Json<VersionInfo>> {
@@ -10,9 +10,7 @@ pub async fn get_version() -> WebResult<Json<VersionInfo>> {
         build_timestamp: option_env!("BUILD_TIMESTAMP")
             .unwrap_or("unknown")
             .to_string(),
-        git_commit: option_env!("GIT_COMMIT")
-            .unwrap_or("unknown")
-            .to_string(),
+        git_commit: option_env!("GIT_COMMIT").unwrap_or("unknown").to_string(),
         rust_version: option_env!("RUST_VERSION")
             .unwrap_or(env!("CARGO_PKG_RUST_VERSION"))
             .to_string(),
@@ -74,7 +72,9 @@ mod tests {
         let version_info = result.unwrap().0;
         assert!(!version_info.version.is_empty());
         assert!(!version_info.features.is_empty());
-        assert!(version_info.features.contains(&"static-analysis".to_string()));
+        assert!(version_info
+            .features
+            .contains(&"static-analysis".to_string()));
     }
 
     #[test]
@@ -84,7 +84,7 @@ mod tests {
         assert!(features.contains(&"static-analysis".to_string()));
         assert!(features.contains(&"multi-language".to_string()));
         assert!(features.contains(&"java".to_string()));
-        
+
         // Features should be sorted
         let mut sorted_features = features.clone();
         sorted_features.sort();

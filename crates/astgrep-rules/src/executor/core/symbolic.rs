@@ -14,8 +14,6 @@ impl AdvancedRuleExecutor {
         ast: &dyn AstNode,
         type_constraints: &[(String, String)],
     ) -> Result<Vec<astgrep_core::SemgrepMatchResult>> {
-        
-
         eprintln!(
             "DEBUG: Searching for symbolic propagation matches with {} type constraints",
             type_constraints.len()
@@ -131,7 +129,6 @@ impl AdvancedRuleExecutor {
         matches: &mut Vec<astgrep_core::SemgrepMatchResult>,
     ) -> Result<()> {
         use astgrep_core::SemgrepMatchResult;
-        
 
         eprintln!(
             "DEBUG: Searching for matches: {}(). ... .{}()",
@@ -590,8 +587,6 @@ impl AdvancedRuleExecutor {
         propagator: &astgrep_dataflow::SymbolicPropagator,
         full_source: &str,
     ) -> bool {
-        
-
         eprintln!(
             "DEBUG check_var_type_sym: Checking if '{}' traces to type '{}'",
             var_value, expected_type
@@ -737,8 +732,6 @@ impl AdvancedRuleExecutor {
         propagator: &astgrep_dataflow::SymbolicPropagator,
         full_source: &str,
     ) -> bool {
-        
-
         let state = propagator.state();
         if let Some(symbolic_value) = state.get(var_value) {
             if let Some(root_var) = symbolic_value.root_variable() {

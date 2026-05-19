@@ -1,7 +1,7 @@
 //! Mock AST node implementations for testing
 
+use astgrep_ast::{NodeType, UniversalNode};
 use astgrep_core::AstNode;
-use astgrep_ast::{UniversalNode, NodeType};
 
 /// Mock AST node for testing purposes
 #[derive(Clone, Debug)]
@@ -24,7 +24,13 @@ impl MockAstNode {
     }
 
     /// Set location information
-    pub fn with_location(mut self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> Self {
+    pub fn with_location(
+        mut self,
+        start_line: usize,
+        start_col: usize,
+        end_line: usize,
+        end_col: usize,
+    ) -> Self {
         self.location = Some((start_line, start_col, end_line, end_col));
         self
     }
@@ -152,7 +158,7 @@ mod tests {
     fn test_mock_ast_node_with_children() {
         let child1 = MockAstNode::new("child1");
         let child2 = MockAstNode::new("child2");
-        
+
         let parent = MockAstNode::new("parent")
             .add_child(child1)
             .add_child(child2);
@@ -166,7 +172,7 @@ mod tests {
     #[test]
     fn test_mock_universal_node() {
         let node = MockUniversalNode::with_text(NodeType::Program, "test program");
-        
+
         assert_eq!(node.node_type(), "program");
         assert_eq!(node.text(), Some("test program"));
     }

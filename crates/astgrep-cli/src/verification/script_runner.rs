@@ -3,17 +3,17 @@
 //! This module provides runtime verification and execution capabilities
 //! for test scripts, ensuring they run correctly in the new organized structure.
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
-    time::{Duration, Instant},
     process::Stdio,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 use tokio::process::Command as TokioCommand;
-use tracing::{info, debug, instrument};
-use anyhow::Result;
+use tracing::{debug, info, instrument};
 
 /// Configuration for script execution verification
 #[derive(Debug, Clone)]
@@ -221,8 +221,10 @@ impl ScriptRunner {
             verified_at: chrono::Utc::now(),
         };
 
-        info!("Verification completed: {}/{} scripts passed verification",
-              summary.successful_verifications, summary.total_scripts);
+        info!(
+            "Verification completed: {}/{} scripts passed verification",
+            summary.successful_verifications, summary.total_scripts
+        );
 
         Ok(summary)
     }
@@ -232,12 +234,15 @@ impl ScriptRunner {
         &self,
         scripts: &[PathBuf],
     ) -> Result<Vec<ScriptExecutionResult>> {
-        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(self.config.max_concurrent_executions));
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(
+            self.config.max_concurrent_executions,
+        ));
         let execution_count = self.execution_count.clone();
         let success_count = self.success_count.clone();
         let failure_count = self.failure_count.clone();
 
-        let tasks: Vec<_> = scripts.iter()
+        let tasks: Vec<_> = scripts
+            .iter()
             .map(|script| {
                 let semaphore = std::sync::Arc::clone(&semaphore);
                 let config = self.config.clone();
@@ -274,10 +279,7 @@ impl ScriptRunner {
 
     /// Verify execution of a single script
     #[instrument(skip(self, script_path))]
-    async fn verify_single_script(
-        &self,
-        script_path: &PathBuf,
-    ) -> Result<ScriptExecutionResult> {
+    async fn verify_single_script(&self, script_path: &PathBuf) -> Result<ScriptExecutionResult> {
         debug!("Verifying script: {}", script_path.display());
 
         let start_time = Instant::now();
@@ -349,7 +351,10 @@ impl ScriptRunner {
             }
         }
 
-        debug!("Script verification completed: {:?} ({}ms)", result.success, result.execution_time_ms);
+        debug!(
+            "Script verification completed: {:?} ({}ms)",
+            result.success, result.execution_time_ms
+        );
         Ok(result)
     }
 
@@ -384,7 +389,10 @@ impl ScriptRunner {
                 check_type: VerificationCheckType::FilePermissions,
                 description: "Script has appropriate permissions".to_string(),
                 passed: is_executable,
-                details: Some(format!("Permissions: {:o}, Executable: {}", mode, is_executable)),
+                details: Some(format!(
+                    "Permissions: {:o}, Executable: {}",
+                    mode, is_executable
+                )),
                 check_time_ms: start_time.elapsed().as_millis() as u64,
             })
         }
@@ -404,12 +412,18 @@ impl ScriptRunner {
     /// Validate script syntax without executing
     async fn validate_script_syntax(&self, script_path: &PathBuf) -> Result<VerificationCheck> {
         let start_time = Instant::now();
-        let extension = script_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let extension = script_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
 
         let (passed, details) = match extension {
             "sh" | "bash" => self.validate_bash_syntax(script_path).await?,
             "py" => self.validate_python_syntax(script_path).await?,
-            _ => (true, Some("Syntax validation not supported for this file type".to_string())),
+            _ => (
+                true,
+                Some("Syntax validation not supported for this file type".to_string()),
+            ),
         };
 
         Ok(VerificationCheck {
@@ -443,7 +457,10 @@ impl ScriptRunner {
     }
 
     /// Validate Python script syntax
-    async fn validate_python_syntax(&self, script_path: &PathBuf) -> Result<(bool, Option<String>)> {
+    async fn validate_python_syntax(
+        &self,
+        script_path: &PathBuf,
+    ) -> Result<(bool, Option<String>)> {
         let result = tokio::process::Command::new("python3")
             .arg("-m")
             .arg("py_compile")
@@ -460,7 +477,10 @@ impl ScriptRunner {
                     Ok((false, Some(format!("Python syntax error: {}", error_msg))))
                 }
             }
-            Err(e) => Ok((true, Some(format!("Could not validate Python syntax: {}", e)))),
+            Err(e) => Ok((
+                true,
+                Some(format!("Could not validate Python syntax: {}", e)),
+            )),
         }
     }
 
@@ -476,7 +496,10 @@ impl ScriptRunner {
         let dependency_checks = vec![
             ("bash", which::which("bash")),
             ("sh", which::which("sh")),
-            ("python", which::which("python3").or_else(|_| which::which("python"))),
+            (
+                "python",
+                which::which("python3").or_else(|_| which::which("python")),
+            ),
             ("python3", which::which("python3")),
             ("node", which::which("node")),
         ];
@@ -519,19 +542,22 @@ impl ScriptRunner {
         #[cfg(not(unix))]
         let permissions = None;
 
-        let modified_at = metadata.modified()
+        let modified_at = metadata
+            .modified()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .and_then(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, d.subsec_nanos()));
 
-        let shebang = content.lines().next()
+        let shebang = content
+            .lines()
+            .next()
             .filter(|line| line.starts_with("#!"))
             .map(|line| line.to_string());
 
         let script_type = self.detect_script_type(script_path, &content);
         let dependencies = self.extract_dependencies(&content);
         let checksum = {
-            use sha2::{Sha256, Digest};
+            use sha2::{Digest, Sha256};
             let mut hasher = Sha256::new();
             hasher.update(content.as_bytes());
             Some(format!("{:x}", hasher.finalize()))
@@ -606,30 +632,33 @@ impl ScriptRunner {
     }
 
     /// Execute script and capture results
-    async fn execute_script(&self, script_path: &PathBuf, _metadata: &ScriptMetadata) -> Result<ExecutionResult> {
+    async fn execute_script(
+        &self,
+        script_path: &PathBuf,
+        _metadata: &ScriptMetadata,
+    ) -> Result<ExecutionResult> {
         let result = tokio::time::timeout(
             self.config.execution_timeout,
-            self.execute_script_with_timeout(script_path)
-        ).await;
+            self.execute_script_with_timeout(script_path),
+        )
+        .await;
 
         match result {
-            Ok(Ok(output)) => {
-                Ok(ExecutionResult {
-                    success: output.status.success(),
-                    exit_code: output.status.code(),
-                    stdout: if self.config.capture_output {
-                        Some(String::from_utf8_lossy(&output.stdout).to_string())
-                    } else {
-                        None
-                    },
-                    stderr: if self.config.capture_output {
-                        Some(String::from_utf8_lossy(&output.stderr).to_string())
-                    } else {
-                        None
-                    },
-                    error_message: None,
-                })
-            }
+            Ok(Ok(output)) => Ok(ExecutionResult {
+                success: output.status.success(),
+                exit_code: output.status.code(),
+                stdout: if self.config.capture_output {
+                    Some(String::from_utf8_lossy(&output.stdout).to_string())
+                } else {
+                    None
+                },
+                stderr: if self.config.capture_output {
+                    Some(String::from_utf8_lossy(&output.stderr).to_string())
+                } else {
+                    None
+                },
+                error_message: None,
+            }),
             Ok(Err(e)) => Ok(ExecutionResult {
                 success: false,
                 exit_code: None,
@@ -648,7 +677,10 @@ impl ScriptRunner {
     }
 
     /// Execute script with proper environment and working directory
-    async fn execute_script_with_timeout(&self, script_path: &PathBuf) -> Result<std::process::Output> {
+    async fn execute_script_with_timeout(
+        &self,
+        script_path: &PathBuf,
+    ) -> Result<std::process::Output> {
         let mut cmd = TokioCommand::new(script_path);
 
         // Set working directory
@@ -675,7 +707,8 @@ impl ScriptRunner {
     /// Calculate verification statistics
     fn calculate_statistics(&self, results: &[ScriptExecutionResult]) -> VerificationStatistics {
         let execution_times: Vec<u64> = results.iter().map(|r| r.execution_time_ms).collect();
-        let successful_results: Vec<&ScriptExecutionResult> = results.iter().filter(|r| r.success).collect();
+        let successful_results: Vec<&ScriptExecutionResult> =
+            results.iter().filter(|r| r.success).collect();
 
         let average_execution_time = if !execution_times.is_empty() {
             execution_times.iter().sum::<u64>() as f64 / execution_times.len() as f64
@@ -687,7 +720,8 @@ impl ScriptRunner {
         let slowest_time = execution_times.iter().max().copied().unwrap_or(0);
 
         // Find most common failure reason
-        let failure_reasons: HashMap<String, usize> = results.iter()
+        let failure_reasons: HashMap<String, usize> = results
+            .iter()
             .filter(|r| !r.success && r.error_message.is_some())
             .map(|r| r.error_message.as_ref().unwrap().clone())
             .fold(HashMap::new(), |mut map, reason| {
@@ -706,12 +740,14 @@ impl ScriptRunner {
             0.0
         };
 
-        let scripts_with_dependencies = results.iter()
+        let scripts_with_dependencies = results
+            .iter()
             .filter(|r| !r.metadata.dependencies.is_empty())
             .count();
 
         // Find most common script type
-        let script_types: HashMap<String, usize> = results.iter()
+        let script_types: HashMap<String, usize> = results
+            .iter()
             .map(|r| r.metadata.script_type.clone())
             .fold(HashMap::new(), |mut map, script_type| {
                 *map.entry(script_type).or_insert(0) += 1;
@@ -739,38 +775,74 @@ impl ScriptRunner {
         let mut report = String::new();
 
         report.push_str("# Script Execution Verification Report\n\n");
-        report.push_str(&format!("**Verification Date**: {}\n", summary.verified_at.format("%Y-%m-%d %H:%M:%S UTC")));
+        report.push_str(&format!(
+            "**Verification Date**: {}\n",
+            summary.verified_at.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
         report.push_str(&format!("**Total Scripts**: {}\n", summary.total_scripts));
-        report.push_str(&format!("**Successful**: {} ({:.1}%)\n",
-            summary.successful_verifications, summary.statistics.success_rate));
+        report.push_str(&format!(
+            "**Successful**: {} ({:.1}%)\n",
+            summary.successful_verifications, summary.statistics.success_rate
+        ));
         report.push_str(&format!("**Failed**: {}\n", summary.failed_verifications));
-        report.push_str(&format!("**Total Time**: {:.2}s\n\n", summary.total_verification_time.as_secs_f64()));
+        report.push_str(&format!(
+            "**Total Time**: {:.2}s\n\n",
+            summary.total_verification_time.as_secs_f64()
+        ));
 
         report.push_str("## Execution Statistics\n\n");
-        report.push_str(&format!("- **Average Execution Time**: {:.2}ms\n", summary.statistics.average_execution_time_ms));
-        report.push_str(&format!("- **Fastest Execution**: {}ms\n", summary.statistics.fastest_execution_time_ms));
-        report.push_str(&format!("- **Slowest Execution**: {}ms\n", summary.statistics.slowest_execution_time_ms));
-        report.push_str(&format!("- **Scripts with Dependencies**: {}\n", summary.statistics.scripts_with_dependencies));
+        report.push_str(&format!(
+            "- **Average Execution Time**: {:.2}ms\n",
+            summary.statistics.average_execution_time_ms
+        ));
+        report.push_str(&format!(
+            "- **Fastest Execution**: {}ms\n",
+            summary.statistics.fastest_execution_time_ms
+        ));
+        report.push_str(&format!(
+            "- **Slowest Execution**: {}ms\n",
+            summary.statistics.slowest_execution_time_ms
+        ));
+        report.push_str(&format!(
+            "- **Scripts with Dependencies**: {}\n",
+            summary.statistics.scripts_with_dependencies
+        ));
 
         if let Some(script_type) = &summary.statistics.most_common_script_type {
             report.push_str(&format!("- **Most Common Script Type**: {}\n", script_type));
         }
 
         if let Some(failure_reason) = &summary.statistics.common_failure_reason {
-            report.push_str(&format!("- **Common Failure Reason**: {}\n", failure_reason));
+            report.push_str(&format!(
+                "- **Common Failure Reason**: {}\n",
+                failure_reason
+            ));
         }
 
         if !summary.execution_results.is_empty() {
             report.push_str("\n## Individual Script Results\n\n");
 
             for result in &summary.execution_results {
-                let status = if result.success { "✅ PASS" } else { "❌ FAIL" };
-                report.push_str(&format!("### {} - {}\n\n",
-                    result.script_path.file_name().unwrap_or_default().to_string_lossy(),
-                    status));
+                let status = if result.success {
+                    "✅ PASS"
+                } else {
+                    "❌ FAIL"
+                };
+                report.push_str(&format!(
+                    "### {} - {}\n\n",
+                    result
+                        .script_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
+                    status
+                ));
 
                 report.push_str(&format!("- **Type**: {}\n", result.metadata.script_type));
-                report.push_str(&format!("- **Execution Time**: {}ms\n", result.execution_time_ms));
+                report.push_str(&format!(
+                    "- **Execution Time**: {}ms\n",
+                    result.execution_time_ms
+                ));
                 report.push_str(&format!("- **Exit Code**: {:?}\n", result.exit_code));
 
                 if let Some(shebang) = &result.metadata.shebang {
@@ -778,14 +850,19 @@ impl ScriptRunner {
                 }
 
                 if !result.metadata.dependencies.is_empty() {
-                    report.push_str(&format!("- **Dependencies**: {:?}\n", result.metadata.dependencies));
+                    report.push_str(&format!(
+                        "- **Dependencies**: {:?}\n",
+                        result.metadata.dependencies
+                    ));
                 }
 
                 report.push_str("- **Verification Checks**:\n");
                 for check in &result.verification_checks {
                     let check_status = if check.passed { "✅" } else { "❌" };
-                    report.push_str(&format!("  - {} {}: {}ms\n",
-                        check_status, check.description, check.check_time_ms));
+                    report.push_str(&format!(
+                        "  - {} {}: {}ms\n",
+                        check_status, check.description, check.check_time_ms
+                    ));
                 }
 
                 if let Some(error) = &result.error_message {
@@ -819,8 +896,8 @@ struct ExecutionResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_script_runner_config_default() {
@@ -840,15 +917,27 @@ mod tests {
 
         // Test bash script detection
         let bash_content = "#!/bin/bash\necho 'test'";
-        assert_eq!(runner.detect_script_type(&PathBuf::from("test.sh"), bash_content), "bash");
+        assert_eq!(
+            runner.detect_script_type(&PathBuf::from("test.sh"), bash_content),
+            "bash"
+        );
 
         // Test python script detection
         let python_content = "#!/usr/bin/env python3\nprint('test')";
-        assert_eq!(runner.detect_script_type(&PathBuf::from("test.py"), python_content), "python");
+        assert_eq!(
+            runner.detect_script_type(&PathBuf::from("test.py"), python_content),
+            "python"
+        );
 
         // Test extension-based detection
-        assert_eq!(runner.detect_script_type(&PathBuf::from("test.js"), ""), "javascript");
-        assert_eq!(runner.detect_script_type(&PathBuf::from("test.py"), ""), "python");
+        assert_eq!(
+            runner.detect_script_type(&PathBuf::from("test.js"), ""),
+            "javascript"
+        );
+        assert_eq!(
+            runner.detect_script_type(&PathBuf::from("test.py"), ""),
+            "python"
+        );
     }
 
     #[test]
@@ -894,7 +983,10 @@ print("test")
         assert!(check.passed);
 
         // Test non-existent file
-        let check = runner.check_file_existence(&non_existent_file).await.unwrap();
+        let check = runner
+            .check_file_existence(&non_existent_file)
+            .await
+            .unwrap();
         assert!(!check.passed);
     }
 

@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    time::{Duration, Instant},
     process::Stdio,
+    time::{Duration, Instant},
 };
 use tokio::process::Command;
-use tracing::{warn, debug, instrument};
+use tracing::{debug, instrument, warn};
 
 /// Configuration for script validation
 #[derive(Debug, Clone)]
@@ -139,7 +139,8 @@ impl ScriptValidator {
 
         let asset = TestAsset {
             path: script_path.to_path_buf(),
-            relative_path: script_path.strip_prefix(std::env::current_dir()?)
+            relative_path: script_path
+                .strip_prefix(std::env::current_dir()?)
                 .unwrap_or(script_path)
                 .to_path_buf(),
             content,
@@ -180,7 +181,10 @@ impl ScriptValidator {
                 stdout: None,
                 stderr: None,
                 exit_code: None,
-                error_message: Some(format!("Skipping execution due to missing dependencies: {:?}", missing_deps)),
+                error_message: Some(format!(
+                    "Skipping execution due to missing dependencies: {:?}",
+                    missing_deps
+                )),
                 validated_dependencies: validated_deps,
                 missing_dependencies: missing_deps,
                 validated_at: chrono::Utc::now(),
@@ -211,7 +215,10 @@ impl ScriptValidator {
             validated_at: chrono::Utc::now(),
         };
 
-        debug!("Script validation completed: {:?} ({}ms)", result.status, result.execution_time_ms);
+        debug!(
+            "Script validation completed: {:?} ({}ms)",
+            result.status, result.execution_time_ms
+        );
         Ok(result)
     }
 
@@ -220,20 +227,33 @@ impl ScriptValidator {
         let mut report = String::new();
 
         report.push_str("# Script Validation Report\n\n");
-        report.push_str(&format!("**Validation Date**: {}\n", summary.validation_timestamp.format("%Y-%m-%d %H:%M:%S UTC")));
+        report.push_str(&format!(
+            "**Validation Date**: {}\n",
+            summary.validation_timestamp.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
         report.push_str(&format!("**Total Scripts**: {}\n", summary.total_scripts));
-        report.push_str(&format!("**Successful**: {}\n", summary.successful_validations));
+        report.push_str(&format!(
+            "**Successful**: {}\n",
+            summary.successful_validations
+        ));
         report.push_str(&format!("**Failed**: {}\n", summary.failed_validations));
         report.push_str(&format!("**Skipped**: {}\n", summary.skipped_scripts));
-        report.push_str(&format!("**Total Time**: {:.2}s\n\n", summary.total_validation_time.as_secs_f64()));
+        report.push_str(&format!(
+            "**Total Time**: {:.2}s\n\n",
+            summary.total_validation_time.as_secs_f64()
+        ));
 
         if summary.failed_validations > 0 {
             report.push_str("## Failed Validations\n\n");
             for result in &summary.script_results {
                 if result.status == ValidationStatus::Invalid {
-                    report.push_str(&format!("- **{}**: {}\n",
+                    report.push_str(&format!(
+                        "- **{}**: {}\n",
                         result.asset.relative_path.display(),
-                        result.error_message.as_ref().unwrap_or(&"Unknown error".to_string())
+                        result
+                            .error_message
+                            .as_ref()
+                            .unwrap_or(&"Unknown error".to_string())
                     ));
                     if let Some(exit_code) = result.exit_code {
                         report.push_str(&format!("  - Exit Code: {}\n", exit_code));
@@ -252,12 +272,19 @@ impl ScriptValidator {
             report.push_str("## Skipped Scripts\n\n");
             for result in &summary.script_results {
                 if result.status == ValidationStatus::Skipped {
-                    report.push_str(&format!("- **{}**: {}\n",
+                    report.push_str(&format!(
+                        "- **{}**: {}\n",
                         result.asset.relative_path.display(),
-                        result.error_message.as_ref().unwrap_or(&"Unknown reason".to_string())
+                        result
+                            .error_message
+                            .as_ref()
+                            .unwrap_or(&"Unknown reason".to_string())
                     ));
                     if !result.missing_dependencies.is_empty() {
-                        report.push_str(&format!("  - Missing Dependencies: {:?}\n", result.missing_dependencies));
+                        report.push_str(&format!(
+                            "  - Missing Dependencies: {:?}\n",
+                            result.missing_dependencies
+                        ));
                     }
                 }
             }
@@ -320,13 +347,21 @@ async fn validate_script_dependencies(
     let dependency_checks = vec![
         ("bash", which::which("bash")),
         ("sh", which::which("sh")),
-        ("python", which::which("python3").or_else(|_| which::which("python"))),
+        (
+            "python",
+            which::which("python3").or_else(|_| which::which("python")),
+        ),
         ("python3", which::which("python3")),
         ("node", which::which("node")),
     ];
 
     for (dep_name, which_result) in dependency_checks {
-        if asset.content.contains(dep_name) || asset.shebang.as_ref().map_or(false, |s| s.contains(dep_name)) {
+        if asset.content.contains(dep_name)
+            || asset
+                .shebang
+                .as_ref()
+                .map_or(false, |s| s.contains(dep_name))
+        {
             match which_result {
                 Ok(path) => {
                     debug!("Found dependency: {} at {}", dep_name, path.display());
@@ -409,8 +444,8 @@ async fn execute_script_and_validate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_script_validation_config_default() {
@@ -425,10 +460,16 @@ mod tests {
     #[test]
     fn test_extract_shebang() {
         let bash_script = "#!/bin/bash\necho 'test'";
-        assert_eq!(extract_shebang(bash_script), Some("#!/bin/bash".to_string()));
+        assert_eq!(
+            extract_shebang(bash_script),
+            Some("#!/bin/bash".to_string())
+        );
 
         let python_script = "#!/usr/bin/env python3\nprint('test')";
-        assert_eq!(extract_shebang(python_script), Some("#!/usr/bin/env python3".to_string()));
+        assert_eq!(
+            extract_shebang(python_script),
+            Some("#!/usr/bin/env python3".to_string())
+        );
 
         let no_shebang = "echo 'test'";
         assert_eq!(extract_shebang(no_shebang), None);

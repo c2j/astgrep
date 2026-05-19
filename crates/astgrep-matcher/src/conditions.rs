@@ -1,5 +1,5 @@
 //! Condition evaluation for pattern matching
-//! 
+//!
 //! This module provides functionality for evaluating conditions in pattern matching.
 
 use crate::metavar::MetavarManager;
@@ -13,13 +13,20 @@ pub enum ConditionType {
     /// Metavariable regex match
     MetavarRegex { metavar: String, pattern: String },
     /// Metavariable comparison
-    MetavarComparison { metavar: String, operator: ComparisonOp, value: String },
+    MetavarComparison {
+        metavar: String,
+        operator: ComparisonOp,
+        value: String,
+    },
     /// Node type check
     NodeType { expected: String },
     /// Node attribute check
     NodeAttribute { attribute: String, value: String },
     /// Custom condition
-    Custom { name: String, params: HashMap<String, String> },
+    Custom {
+        name: String,
+        params: HashMap<String, String>,
+    },
 }
 
 /// Comparison operators
@@ -74,7 +81,8 @@ impl ComparisonOp {
 
 /// Condition evaluator
 pub struct ConditionEvaluator {
-    custom_evaluators: HashMap<String, Box<dyn Fn(&HashMap<String, String>, &dyn AstNode) -> bool + Send + Sync>>,
+    custom_evaluators:
+        HashMap<String, Box<dyn Fn(&HashMap<String, String>, &dyn AstNode) -> bool + Send + Sync>>,
 }
 
 impl ConditionEvaluator {
@@ -104,12 +112,12 @@ impl ConditionEvaluator {
             ConditionType::MetavarRegex { metavar, pattern } => {
                 self.evaluate_metavar_regex(metavar, pattern, metavar_manager)
             }
-            ConditionType::MetavarComparison { metavar, operator, value } => {
-                self.evaluate_metavar_comparison(metavar, operator, value, metavar_manager)
-            }
-            ConditionType::NodeType { expected } => {
-                Ok(node.node_type() == expected)
-            }
+            ConditionType::MetavarComparison {
+                metavar,
+                operator,
+                value,
+            } => self.evaluate_metavar_comparison(metavar, operator, value, metavar_manager),
+            ConditionType::NodeType { expected } => Ok(node.node_type() == expected),
             ConditionType::NodeAttribute { attribute, value } => {
                 self.evaluate_node_attribute(attribute, value, node)
             }
@@ -157,8 +165,9 @@ impl ConditionEvaluator {
         metavar_manager: &MetavarManager,
     ) -> Result<bool> {
         if let Some(binding) = metavar_manager.get_binding(metavar) {
-            let regex = Regex::new(pattern)
-                .map_err(|e| astgrep_core::AnalysisError::pattern_match_error(format!("Invalid regex: {}", e)))?;
+            let regex = Regex::new(pattern).map_err(|e| {
+                astgrep_core::AnalysisError::pattern_match_error(format!("Invalid regex: {}", e))
+            })?;
             Ok(regex.is_match(&binding.value))
         } else {
             Ok(false)
@@ -227,7 +236,12 @@ impl ConditionEvaluator {
     }
 
     /// Evaluate node attribute condition
-    fn evaluate_node_attribute(&self, attribute: &str, expected_value: &str, node: &dyn AstNode) -> Result<bool> {
+    fn evaluate_node_attribute(
+        &self,
+        attribute: &str,
+        expected_value: &str,
+        node: &dyn AstNode,
+    ) -> Result<bool> {
         match attribute {
             "type" => Ok(node.node_type() == expected_value),
             "text" => {
@@ -331,7 +345,10 @@ mod tests {
     fn test_comparison_op_from_str() {
         assert_eq!(ComparisonOp::from_str("=="), Some(ComparisonOp::Equals));
         assert_eq!(ComparisonOp::from_str("!="), Some(ComparisonOp::NotEquals));
-        assert_eq!(ComparisonOp::from_str("contains"), Some(ComparisonOp::Contains));
+        assert_eq!(
+            ComparisonOp::from_str("contains"),
+            Some(ComparisonOp::Contains)
+        );
         assert_eq!(ComparisonOp::from_str("unknown"), None);
     }
 
@@ -349,11 +366,15 @@ mod tests {
         let node = AstBuilder::identifier("test");
 
         let condition = utils::node_type("identifier");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let condition = utils::node_type("literal");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(!result);
     }
 
@@ -364,15 +385,21 @@ mod tests {
         let node = AstBuilder::identifier("test_var").with_text("test_var".to_string());
 
         let condition = utils::node_attribute("text", "test_var");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let condition = utils::node_attribute("text", "other_var");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(!result);
 
         let condition = utils::node_attribute("child_count", "0");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
     }
 
@@ -383,14 +410,20 @@ mod tests {
         let node = AstBuilder::identifier("test_var");
 
         // Bind metavariable
-        metavar_manager.bind("VAR".to_string(), "test_123".to_string(), &node).unwrap();
+        metavar_manager
+            .bind("VAR".to_string(), "test_123".to_string(), &node)
+            .unwrap();
 
         let condition = utils::metavar_regex("VAR", r"test_\d+");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let condition = utils::metavar_regex("VAR", r"fail_\d+");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(!result);
     }
 
@@ -401,18 +434,26 @@ mod tests {
         let node = AstBuilder::identifier("test_var");
 
         // Bind metavariable
-        metavar_manager.bind("VAR".to_string(), "hello_world".to_string(), &node).unwrap();
+        metavar_manager
+            .bind("VAR".to_string(), "hello_world".to_string(), &node)
+            .unwrap();
 
         let condition = utils::metavar_comparison("VAR", ComparisonOp::Contains, "world");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let condition = utils::metavar_comparison("VAR", ComparisonOp::StartsWith, "hello");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let condition = utils::metavar_comparison("VAR", ComparisonOp::Equals, "goodbye");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(!result);
     }
 
@@ -423,18 +464,26 @@ mod tests {
         let node = AstBuilder::integer_literal(42);
 
         // Bind metavariable
-        metavar_manager.bind("NUM".to_string(), "42".to_string(), &node).unwrap();
+        metavar_manager
+            .bind("NUM".to_string(), "42".to_string(), &node)
+            .unwrap();
 
         let condition = utils::metavar_comparison("NUM", ComparisonOp::GreaterThan, "30");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let condition = utils::metavar_comparison("NUM", ComparisonOp::LessThan, "50");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let condition = utils::metavar_comparison("NUM", ComparisonOp::Equals, "42");
-        let result = evaluator.evaluate(&condition, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
     }
 
@@ -444,7 +493,9 @@ mod tests {
         let mut metavar_manager = MetavarManager::new();
         let node = AstBuilder::identifier("test_var").with_text("test_var".to_string());
 
-        metavar_manager.bind("VAR".to_string(), "test_var".to_string(), &node).unwrap();
+        metavar_manager
+            .bind("VAR".to_string(), "test_var".to_string(), &node)
+            .unwrap();
 
         let conditions = vec![
             utils::node_type("identifier"),
@@ -452,7 +503,9 @@ mod tests {
             utils::node_attribute("child_count", "0"),
         ];
 
-        let result = evaluator.evaluate_all(&conditions, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate_all(&conditions, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         // Add a failing condition
@@ -461,7 +514,9 @@ mod tests {
             utils::metavar_comparison("VAR", ComparisonOp::StartsWith, "fail"),
         ];
 
-        let result = evaluator.evaluate_all(&conditions_with_failure, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate_all(&conditions_with_failure, &node, &metavar_manager)
+            .unwrap();
         assert!(!result);
     }
 
@@ -472,12 +527,14 @@ mod tests {
         let node = AstBuilder::identifier("test_var");
 
         let conditions = vec![
-            utils::node_type("literal"), // false
-            utils::node_type("identifier"), // true
+            utils::node_type("literal"),            // false
+            utils::node_type("identifier"),         // true
             utils::node_attribute("text", "wrong"), // false
         ];
 
-        let result = evaluator.evaluate_any(&conditions, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate_any(&conditions, &node, &metavar_manager)
+            .unwrap();
         assert!(result);
 
         let all_false_conditions = vec![
@@ -485,34 +542,38 @@ mod tests {
             utils::node_attribute("text", "wrong"),
         ];
 
-        let result = evaluator.evaluate_any(&all_false_conditions, &node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate_any(&all_false_conditions, &node, &metavar_manager)
+            .unwrap();
         assert!(!result);
     }
 
     #[test]
     fn test_custom_condition_evaluator() {
         let mut evaluator = ConditionEvaluator::new();
-        evaluator.add_custom_evaluator(
-            "is_long_identifier".to_string(),
-            |_params, node| {
-                if let Some(text) = node.text() {
-                    text.len() > 10
-                } else {
-                    false
-                }
-            },
-        );
+        evaluator.add_custom_evaluator("is_long_identifier".to_string(), |_params, node| {
+            if let Some(text) = node.text() {
+                text.len() > 10
+            } else {
+                false
+            }
+        });
 
         let metavar_manager = MetavarManager::new();
         let short_node = AstBuilder::identifier("short").with_text("short".to_string());
-        let long_node = AstBuilder::identifier("very_long_identifier").with_text("very_long_identifier".to_string());
+        let long_node = AstBuilder::identifier("very_long_identifier")
+            .with_text("very_long_identifier".to_string());
 
         let condition = utils::custom("is_long_identifier", HashMap::new());
 
-        let result = evaluator.evaluate(&condition, &short_node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &short_node, &metavar_manager)
+            .unwrap();
         assert!(!result);
 
-        let result = evaluator.evaluate(&condition, &long_node, &metavar_manager).unwrap();
+        let result = evaluator
+            .evaluate(&condition, &long_node, &metavar_manager)
+            .unwrap();
         assert!(result);
     }
 }

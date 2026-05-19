@@ -1,5 +1,5 @@
 //! AST visitor pattern implementation
-//! 
+//!
 //! This module provides visitor patterns for traversing and transforming AST nodes.
 
 use crate::nodes::NodeType;
@@ -147,7 +147,7 @@ impl AstVisitor for NodeCollector {
         if node.node_type() == self.target_type {
             self.collected_nodes.push(node.clone_node());
         }
-        
+
         // Continue visiting children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
@@ -189,7 +189,7 @@ impl AstVisitor for NodeCounter {
     fn visit_node(&mut self, node: &dyn AstNode) -> Result<()> {
         let node_type = node.node_type().to_string();
         *self.counts.entry(node_type).or_insert(0) += 1;
-        
+
         // Continue visiting children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
@@ -222,19 +222,19 @@ impl LocationFinder {
 
     fn contains_position(&self, location: (usize, usize, usize, usize)) -> bool {
         let (start_line, start_col, end_line, end_col) = location;
-        
+
         if self.target_line < start_line || self.target_line > end_line {
             return false;
         }
-        
+
         if self.target_line == start_line && self.target_column < start_col {
             return false;
         }
-        
+
         if self.target_line == end_line && self.target_column > end_col {
             return false;
         }
-        
+
         true
     }
 }
@@ -246,7 +246,7 @@ impl AstVisitor for LocationFinder {
                 self.found_nodes.push(node.clone_node());
             }
         }
-        
+
         // Continue visiting children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
@@ -265,27 +265,23 @@ mod tests {
 
     fn create_test_ast() -> UniversalNode {
         // Create a simple AST: function add(a, b) { return a + b; }
-        let param_a = UniversalNode::new(NodeType::Identifier)
-            .with_identifier("a".to_string());
-        let param_b = UniversalNode::new(NodeType::Identifier)
-            .with_identifier("b".to_string());
-        
-        let left_operand = UniversalNode::new(NodeType::Identifier)
-            .with_identifier("a".to_string());
-        let right_operand = UniversalNode::new(NodeType::Identifier)
-            .with_identifier("b".to_string());
-        
+        let param_a = UniversalNode::new(NodeType::Identifier).with_identifier("a".to_string());
+        let param_b = UniversalNode::new(NodeType::Identifier).with_identifier("b".to_string());
+
+        let left_operand =
+            UniversalNode::new(NodeType::Identifier).with_identifier("a".to_string());
+        let right_operand =
+            UniversalNode::new(NodeType::Identifier).with_identifier("b".to_string());
+
         let binary_expr = UniversalNode::new(NodeType::BinaryExpression)
             .with_binary_operator(BinaryOperator::Add)
             .add_child(left_operand)
             .add_child(right_operand);
-        
-        let return_stmt = UniversalNode::new(NodeType::ReturnStatement)
-            .add_child(binary_expr);
-        
-        let block = UniversalNode::new(NodeType::BlockStatement)
-            .add_child(return_stmt);
-        
+
+        let return_stmt = UniversalNode::new(NodeType::ReturnStatement).add_child(binary_expr);
+
+        let block = UniversalNode::new(NodeType::BlockStatement).add_child(return_stmt);
+
         UniversalNode::new(NodeType::FunctionDeclaration)
             .with_identifier("add".to_string())
             .add_child(param_a)
@@ -298,7 +294,7 @@ mod tests {
         let ast = create_test_ast();
         let mut collector = NodeCollector::new("identifier".to_string());
         collector.visit(&ast).unwrap();
-        
+
         let collected = collector.collected_nodes();
         assert_eq!(collected.len(), 4); // "add", "a", "b", "a", "b" but some might be duplicates
     }
@@ -308,7 +304,7 @@ mod tests {
         let ast = create_test_ast();
         let mut counter = NodeCounter::new();
         counter.visit(&ast).unwrap();
-        
+
         let counts = counter.counts();
         assert!(counts.get("identifier").unwrap_or(&0) > &0);
         assert!(counts.get("function_declaration").unwrap_or(&0) > &0);
@@ -321,10 +317,10 @@ mod tests {
         let ast = UniversalNode::new(NodeType::Identifier)
             .with_identifier("test".to_string())
             .with_location(1, 5, 1, 9);
-        
+
         let mut finder = LocationFinder::new(1, 7);
         finder.visit(&ast).unwrap();
-        
+
         let found = finder.found_nodes();
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].node_type(), "identifier");
@@ -335,10 +331,10 @@ mod tests {
         let ast = UniversalNode::new(NodeType::Identifier)
             .with_identifier("test".to_string())
             .with_location(1, 5, 1, 9);
-        
+
         let mut finder = LocationFinder::new(1, 15); // Outside range
         finder.visit(&ast).unwrap();
-        
+
         let found = finder.found_nodes();
         assert_eq!(found.len(), 0);
     }

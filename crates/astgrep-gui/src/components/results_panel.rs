@@ -1,7 +1,7 @@
 //! Results panel component for displaying analysis results
 
-use egui;
 use astgrep_core::{Finding, Location};
+use egui;
 
 #[derive(Clone, Copy, PartialEq)]
 enum SortKey {
@@ -65,7 +65,11 @@ impl ResultsPanel {
                     ui.add_space(8.0);
 
                     // Sort key combo
-                    let current_key_text = match self.sort_key { SortKey::Line => "行号", SortKey::Severity => "严重等级", SortKey::RuleId => "规则ID" };
+                    let current_key_text = match self.sort_key {
+                        SortKey::Line => "行号",
+                        SortKey::Severity => "严重等级",
+                        SortKey::RuleId => "规则ID",
+                    };
                     egui::ComboBox::from_id_source("results_sort_key")
                         .selected_text(current_key_text)
                         .show_ui(ui, |ui| {
@@ -95,7 +99,9 @@ impl ResultsPanel {
                 let a = &findings[i];
                 let b = &findings[j];
                 let ord = match self.sort_key {
-                    SortKey::Line => a.location.start_line
+                    SortKey::Line => a
+                        .location
+                        .start_line
                         .cmp(&b.location.start_line)
                         .then(a.location.start_column.cmp(&b.location.start_column))
                         .then(a.location.end_line.cmp(&b.location.end_line))
@@ -104,12 +110,17 @@ impl ResultsPanel {
                         .cmp(&Self::severity_rank(&b.severity))
                         .then(a.location.start_line.cmp(&b.location.start_line))
                         .then(a.location.start_column.cmp(&b.location.start_column)),
-                    SortKey::RuleId => a.rule_id
+                    SortKey::RuleId => a
+                        .rule_id
                         .cmp(&b.rule_id)
                         .then(a.location.start_line.cmp(&b.location.start_line))
                         .then(a.location.start_column.cmp(&b.location.start_column)),
                 };
-                if self.sort_desc { ord.reverse() } else { ord }
+                if self.sort_desc {
+                    ord.reverse()
+                } else {
+                    ord
+                }
             });
 
             // Results list - playground 风格
@@ -127,7 +138,11 @@ impl ResultsPanel {
 
             // 底部统计信息 - playground 风格
             ui.horizontal(|ui| {
-                ui.label(format!("✓ {} match{}", findings.len(), if findings.len() == 1 { "" } else { "es" }));
+                ui.label(format!(
+                    "✓ {} match{}",
+                    findings.len(),
+                    if findings.len() == 1 { "" } else { "es" }
+                ));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label("astgrep v1.0.0");
@@ -146,24 +161,23 @@ impl ResultsPanel {
         }
     }
 
-
     fn show_finding_playground_style(&mut self, ui: &mut egui::Ui, finding: &Finding) {
         // 根据严重程度选择背景色 - 与 playground 一致
         let (bg_color, border_color, text_color) = match finding.severity {
             astgrep_core::Severity::Critical | astgrep_core::Severity::Error => (
-                egui::Color32::from_rgb(255, 245, 245),  // 浅红色背景
-                egui::Color32::from_rgb(254, 178, 178),  // 红色边框
-                egui::Color32::from_rgb(204, 0, 0),      // 深红色文字
+                egui::Color32::from_rgb(255, 245, 245), // 浅红色背景
+                egui::Color32::from_rgb(254, 178, 178), // 红色边框
+                egui::Color32::from_rgb(204, 0, 0),     // 深红色文字
             ),
             astgrep_core::Severity::Warning => (
-                egui::Color32::from_rgb(255, 251, 240),  // 浅黄色背景
-                egui::Color32::from_rgb(251, 211, 141),  // 黄色边框
-                egui::Color32::from_rgb(153, 102, 0),    // 深黄色文字
+                egui::Color32::from_rgb(255, 251, 240), // 浅黄色背景
+                egui::Color32::from_rgb(251, 211, 141), // 黄色边框
+                egui::Color32::from_rgb(153, 102, 0),   // 深黄色文字
             ),
             astgrep_core::Severity::Info => (
-                egui::Color32::from_rgb(240, 247, 255),  // 浅蓝色背景
-                egui::Color32::from_rgb(179, 217, 255),  // 蓝色边框
-                egui::Color32::from_rgb(0, 102, 204),    // 深蓝色文字
+                egui::Color32::from_rgb(240, 247, 255), // 浅蓝色背景
+                egui::Color32::from_rgb(179, 217, 255), // 蓝色边框
+                egui::Color32::from_rgb(0, 102, 204),   // 深蓝色文字
             ),
         };
 
@@ -223,7 +237,10 @@ impl ResultsPanel {
                     ui.horizontal(|ui| {
                         ui.strong(&finding.rule_id);
                         ui.separator();
-                        ui.label(format!("{}:{}", finding.location.start_line, finding.location.start_column));
+                        ui.label(format!(
+                            "{}:{}",
+                            finding.location.start_line, finding.location.start_column
+                        ));
                         ui.separator();
                         ui.label(finding.location.file.to_string_lossy().as_ref());
                     });

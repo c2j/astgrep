@@ -1,8 +1,8 @@
 //! Test asset models for migration operations
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 
 /// Represents any test-related file or directory in the system
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,16 +255,13 @@ impl TestAsset {
     }
 
     pub fn is_platform_supported(&self, platform: &str) -> bool {
-        self.metadata.platforms.contains(&platform.to_string()) || self.metadata.platforms.is_empty()
+        self.metadata.platforms.contains(&platform.to_string())
+            || self.metadata.platforms.is_empty()
     }
 }
 
 impl TestScript {
-    pub fn new(
-        asset_id: String,
-        script_type: ScriptType,
-        platforms: Vec<String>,
-    ) -> Self {
+    pub fn new(asset_id: String, script_type: ScriptType, platforms: Vec<String>) -> Self {
         Self {
             asset_id,
             script_type,
@@ -296,10 +293,7 @@ impl TestScript {
 }
 
 impl ScriptArgument {
-    pub fn new(
-        name: &str,
-        description: &str,
-    ) -> Self {
+    pub fn new(name: &str, description: &str) -> Self {
         Self {
             name: name.to_string(),
             short_name: None,
@@ -338,11 +332,7 @@ impl ScriptArgument {
 }
 
 impl TestCase {
-    pub fn new(
-        asset_id: String,
-        test_type: TestType,
-        languages: Vec<String>,
-    ) -> Self {
+    pub fn new(asset_id: String, test_type: TestType, languages: Vec<String>) -> Self {
         Self {
             asset_id,
             test_type,

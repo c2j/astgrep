@@ -5,10 +5,10 @@
 
 use crate::call_graph::{CallGraph, FunctionId, FunctionSignature, ParameterMapping};
 use crate::graph::{DataFlowGraph, NodeId};
-use crate::taint::{TaintFlow, TaintState};
-use crate::sources::Source;
-use crate::sinks::Sink;
 use crate::sanitizers::Sanitizer;
+use crate::sinks::Sink;
+use crate::sources::Source;
+use crate::taint::{TaintFlow, TaintState};
 use astgrep_core::Result;
 use std::collections::{HashMap, HashSet};
 
@@ -47,14 +47,7 @@ impl InterproceduralTaintTracker {
         let mut flows = Vec::new();
 
         // Trace from entry function
-        self.trace_function_taint(
-            entry_func,
-            graph,
-            sources,
-            sinks,
-            sanitizers,
-            &mut flows,
-        )?;
+        self.trace_function_taint(entry_func, graph, sources, sinks, sanitizers, &mut flows)?;
 
         Ok(flows)
     }
@@ -76,7 +69,9 @@ impl InterproceduralTaintTracker {
         self.visited_functions.insert(func_id);
 
         // Get all calls from this function
-        let calls_to_process: Vec<_> = self.call_graph.calls_from(func_id)
+        let calls_to_process: Vec<_> = self
+            .call_graph
+            .calls_from(func_id)
             .map(|calls| calls.clone())
             .unwrap_or_default();
 
@@ -223,11 +218,7 @@ impl SymbolPropagator {
     }
 
     /// Trace a symbol through the data flow graph
-    pub fn trace_symbol(
-        &self,
-        name: &str,
-        graph: &DataFlowGraph,
-    ) -> Option<Vec<NodeId>> {
+    pub fn trace_symbol(&self, name: &str, graph: &DataFlowGraph) -> Option<Vec<NodeId>> {
         let def_node = self.get_definition(name)?;
         let use_nodes = self.get_uses(name)?;
 
@@ -296,4 +287,3 @@ mod tests {
         assert_eq!(uses.len(), 3);
     }
 }
-

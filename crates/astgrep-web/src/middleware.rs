@@ -75,11 +75,13 @@ pub async fn auth(
 
     // Validate JWT token
     if !auth_header.starts_with("Bearer ") {
-        return Err(WebError::unauthorized("Invalid authorization header format"));
+        return Err(WebError::unauthorized(
+            "Invalid authorization header format",
+        ));
     }
 
     let token = &auth_header[7..]; // Remove "Bearer " prefix
-    
+
     // Validate the token (simplified implementation)
     validate_jwt_token(token, &config)?;
 
@@ -99,8 +101,7 @@ pub async fn rate_limit(
     }
 
     // Extract client IP
-    let client_ip = extract_client_ip(&headers)
-        .unwrap_or_else(|| "unknown".to_string());
+    let client_ip = extract_client_ip(&headers).unwrap_or_else(|| "unknown".to_string());
 
     // Check rate limit (simplified implementation)
     if is_rate_limited(&client_ip, &config).await {
@@ -123,9 +124,9 @@ pub async fn request_logging(
     let method = request.method().clone();
     let uri = request.uri().clone();
     let headers = request.headers().clone();
-    
+
     let start_time = std::time::Instant::now();
-    
+
     info!(
         method = %method,
         uri = %uri,
@@ -134,10 +135,10 @@ pub async fn request_logging(
     );
 
     let response = next.run(request).await;
-    
+
     let duration = start_time.elapsed();
     let status = response.status();
-    
+
     info!(
         method = %method,
         uri = %uri,
@@ -162,7 +163,7 @@ pub async fn cors_custom(
         .unwrap_or("*");
 
     // Check if origin is allowed
-    let allowed = config.cors.allowed_origins.contains(&"*".to_string()) 
+    let allowed = config.cors.allowed_origins.contains(&"*".to_string())
         || config.cors.allowed_origins.contains(&origin.to_string());
 
     if !allowed {
@@ -183,10 +184,7 @@ pub async fn cors_custom(
 }
 
 /// Security headers middleware
-pub async fn security_headers(
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn security_headers(request: Request, next: Next) -> Response {
     let mut response = next.run(request).await;
 
     let headers = response.headers_mut();
@@ -196,17 +194,14 @@ pub async fn security_headers(
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
     );
-    
-    headers.insert(
-        header::X_FRAME_OPTIONS,
-        HeaderValue::from_static("DENY"),
-    );
-    
+
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+
     headers.insert(
         "X-XSS-Protection",
         HeaderValue::from_static("1; mode=block"),
     );
-    
+
     headers.insert(
         header::STRICT_TRANSPORT_SECURITY,
         HeaderValue::from_static("max-age=31536000; includeSubDomains"),
@@ -217,7 +212,7 @@ pub async fn security_headers(
 
 /// Validate JWT token (simplified implementation)
 fn validate_jwt_token(token: &str, config: &WebConfig) -> WebResult<()> {
-    use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+    use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Serialize, Deserialize)]
@@ -226,7 +221,9 @@ fn validate_jwt_token(token: &str, config: &WebConfig) -> WebResult<()> {
         exp: usize,
     }
 
-    let jwt_secret = config.jwt_secret.as_ref()
+    let jwt_secret = config
+        .jwt_secret
+        .as_ref()
         .ok_or_else(|| WebError::internal_server_error("JWT secret not configured"))?;
 
     let key = DecodingKey::from_secret(jwt_secret.as_bytes());
@@ -268,7 +265,7 @@ async fn is_rate_limited(client_ip: &str, config: &WebConfig) -> bool {
     // This is a simplified implementation
     // In a real application, you would use a proper rate limiting library
     // like tower-governor or implement your own with Redis/in-memory store
-    
+
     use std::collections::HashMap;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -307,16 +304,19 @@ mod tests {
     #[test]
     fn test_extract_client_ip() {
         let mut headers = HeaderMap::new();
-        
+
         // Test x-forwarded-for header
-        headers.insert("x-forwarded-for", HeaderValue::from_static("192.168.1.1, 10.0.0.1"));
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("192.168.1.1, 10.0.0.1"),
+        );
         assert_eq!(extract_client_ip(&headers), Some("192.168.1.1".to_string()));
-        
+
         // Test x-real-ip header
         headers.clear();
         headers.insert("x-real-ip", HeaderValue::from_static("192.168.1.2"));
         assert_eq!(extract_client_ip(&headers), Some("192.168.1.2".to_string()));
-        
+
         // Test no headers
         headers.clear();
         assert_eq!(extract_client_ip(&headers), None);
@@ -335,10 +335,10 @@ mod tests {
 
         // First request should pass
         assert!(!is_rate_limited("test-ip", &config).await);
-        
+
         // Second request should pass
         assert!(!is_rate_limited("test-ip", &config).await);
-        
+
         // Third request should be rate limited
         assert!(is_rate_limited("test-ip", &config).await);
     }

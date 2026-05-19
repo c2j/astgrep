@@ -14,7 +14,7 @@ pub enum NodeType {
     Identifier,
     Literal,
     Comment,
-    
+
     // Expression nodes
     BinaryExpression,
     UnaryExpression,
@@ -25,7 +25,7 @@ pub enum NodeType {
     ArrayExpression,
     ObjectExpression,
     LambdaExpression,
-    
+
     // Statement nodes
     ExpressionStatement,
     DeclarationStatement,
@@ -36,7 +36,7 @@ pub enum NodeType {
     ContinueStatement,
     ThrowStatement,
     TryStatement,
-    
+
     // Declaration nodes
     FunctionDeclaration,
     VariableDeclaration,
@@ -44,14 +44,14 @@ pub enum NodeType {
     ImportDeclaration,
     ExportDeclaration,
     InterfaceDeclaration,
-    
+
     // Control flow nodes
     IfStatement,
     WhileStatement,
     ForStatement,
     SwitchStatement,
     CaseStatement,
-    
+
     // Special language-specific nodes
     SqlQuery,
     SqlProcedure,
@@ -252,50 +252,53 @@ impl NodeType {
 
     /// Check if this node type is an expression
     pub fn is_expression(&self) -> bool {
-        matches!(self,
-            NodeType::BinaryExpression |
-            NodeType::UnaryExpression |
-            NodeType::CallExpression |
-            NodeType::MemberExpression |
-            NodeType::AssignmentExpression |
-            NodeType::ConditionalExpression |
-            NodeType::ArrayExpression |
-            NodeType::ObjectExpression |
-            NodeType::LambdaExpression |
-            NodeType::Identifier |
-            NodeType::Literal
+        matches!(
+            self,
+            NodeType::BinaryExpression
+                | NodeType::UnaryExpression
+                | NodeType::CallExpression
+                | NodeType::MemberExpression
+                | NodeType::AssignmentExpression
+                | NodeType::ConditionalExpression
+                | NodeType::ArrayExpression
+                | NodeType::ObjectExpression
+                | NodeType::LambdaExpression
+                | NodeType::Identifier
+                | NodeType::Literal
         )
     }
 
     /// Check if this node type is a statement
     pub fn is_statement(&self) -> bool {
-        matches!(self,
-            NodeType::ExpressionStatement |
-            NodeType::DeclarationStatement |
-            NodeType::ControlFlowStatement |
-            NodeType::ReturnStatement |
-            NodeType::BlockStatement |
-            NodeType::BreakStatement |
-            NodeType::ContinueStatement |
-            NodeType::ThrowStatement |
-            NodeType::TryStatement |
-            NodeType::IfStatement |
-            NodeType::WhileStatement |
-            NodeType::ForStatement |
-            NodeType::SwitchStatement |
-            NodeType::CaseStatement
+        matches!(
+            self,
+            NodeType::ExpressionStatement
+                | NodeType::DeclarationStatement
+                | NodeType::ControlFlowStatement
+                | NodeType::ReturnStatement
+                | NodeType::BlockStatement
+                | NodeType::BreakStatement
+                | NodeType::ContinueStatement
+                | NodeType::ThrowStatement
+                | NodeType::TryStatement
+                | NodeType::IfStatement
+                | NodeType::WhileStatement
+                | NodeType::ForStatement
+                | NodeType::SwitchStatement
+                | NodeType::CaseStatement
         )
     }
 
     /// Check if this node type is a declaration
     pub fn is_declaration(&self) -> bool {
-        matches!(self,
-            NodeType::FunctionDeclaration |
-            NodeType::VariableDeclaration |
-            NodeType::ClassDeclaration |
-            NodeType::ImportDeclaration |
-            NodeType::ExportDeclaration |
-            NodeType::InterfaceDeclaration
+        matches!(
+            self,
+            NodeType::FunctionDeclaration
+                | NodeType::VariableDeclaration
+                | NodeType::ClassDeclaration
+                | NodeType::ImportDeclaration
+                | NodeType::ExportDeclaration
+                | NodeType::InterfaceDeclaration
         )
     }
 }
@@ -334,24 +337,54 @@ impl fmt::Display for LiteralValue {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BinaryOperator {
     // Arithmetic
-    Add, Subtract, Multiply, Divide, Modulo, Power,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
+    Power,
     // Comparison
-    Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
     // Logical
-    And, Or,
+    And,
+    Or,
     // Bitwise
-    BitwiseAnd, BitwiseOr, BitwiseXor, LeftShift, RightShift,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+    LeftShift,
+    RightShift,
     // Assignment
-    Assign, AddAssign, SubtractAssign, MultiplyAssign, DivideAssign,
+    Assign,
+    AddAssign,
+    SubtractAssign,
+    MultiplyAssign,
+    DivideAssign,
     // Other
-    In, InstanceOf, Typeof,
+    In,
+    InstanceOf,
+    Typeof,
 }
 
 /// Unary operators
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnaryOperator {
-    Plus, Minus, Not, BitwiseNot, Typeof, Void, Delete,
-    PreIncrement, PostIncrement, PreDecrement, PostDecrement,
+    Plus,
+    Minus,
+    Not,
+    BitwiseNot,
+    Typeof,
+    Void,
+    Delete,
+    PreIncrement,
+    PostIncrement,
+    PreDecrement,
+    PostDecrement,
 }
 
 /// Universal AST node implementation
@@ -385,7 +418,13 @@ impl UniversalNode {
         }
     }
 
-    pub fn with_location(mut self, start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> Self {
+    pub fn with_location(
+        mut self,
+        start_line: usize,
+        start_col: usize,
+        end_line: usize,
+        end_col: usize,
+    ) -> Self {
         self.location = Some((start_line, start_col, end_line, end_col));
         self
     }
@@ -462,26 +501,36 @@ impl UniversalNode {
     /// Add an interface (for Java implements)
     pub fn with_interface(self, interface: String) -> Self {
         let mut node = self;
-        let current_interfaces = node.attributes.get("interfaces").cloned().unwrap_or_default();
+        let current_interfaces = node
+            .attributes
+            .get("interfaces")
+            .cloned()
+            .unwrap_or_default();
         let new_interfaces = if current_interfaces.is_empty() {
             interface
         } else {
             format!("{},{}", current_interfaces, interface)
         };
-        node.attributes.insert("interfaces".to_string(), new_interfaces);
+        node.attributes
+            .insert("interfaces".to_string(), new_interfaces);
         node
     }
 
     /// Add a specifier (for import/export)
     pub fn with_specifier(self, specifier: String) -> Self {
         let mut node = self;
-        let current_specifiers = node.attributes.get("specifiers").cloned().unwrap_or_default();
+        let current_specifiers = node
+            .attributes
+            .get("specifiers")
+            .cloned()
+            .unwrap_or_default();
         let new_specifiers = if current_specifiers.is_empty() {
             specifier
         } else {
             format!("{},{}", current_specifiers, specifier)
         };
-        node.attributes.insert("specifiers".to_string(), new_specifiers);
+        node.attributes
+            .insert("specifiers".to_string(), new_specifiers);
         node
     }
 
@@ -519,7 +568,11 @@ impl UniversalNode {
     /// Add a parameter (for functions)
     pub fn with_parameter(self, parameter: String) -> Self {
         let mut node = self;
-        let current_params = node.attributes.get("parameters").cloned().unwrap_or_default();
+        let current_params = node
+            .attributes
+            .get("parameters")
+            .cloned()
+            .unwrap_or_default();
         let new_params = if current_params.is_empty() {
             parameter
         } else {
@@ -557,26 +610,36 @@ impl UniversalNode {
     /// Add an assignment (for UPDATE SET)
     pub fn with_assignment(self, assignment: String) -> Self {
         let mut node = self;
-        let current_assignments = node.attributes.get("assignments").cloned().unwrap_or_default();
+        let current_assignments = node
+            .attributes
+            .get("assignments")
+            .cloned()
+            .unwrap_or_default();
         let new_assignments = if current_assignments.is_empty() {
             assignment
         } else {
             format!("{},{}", current_assignments, assignment)
         };
-        node.attributes.insert("assignments".to_string(), new_assignments);
+        node.attributes
+            .insert("assignments".to_string(), new_assignments);
         node
     }
 
     /// Add a column definition (for CREATE TABLE)
     pub fn with_column_definition(self, definition: String) -> Self {
         let mut node = self;
-        let current_defs = node.attributes.get("column_definitions").cloned().unwrap_or_default();
+        let current_defs = node
+            .attributes
+            .get("column_definitions")
+            .cloned()
+            .unwrap_or_default();
         let new_defs = if current_defs.is_empty() {
             definition
         } else {
             format!("{},{}", current_defs, definition)
         };
-        node.attributes.insert("column_definitions".to_string(), new_defs);
+        node.attributes
+            .insert("column_definitions".to_string(), new_defs);
         node
     }
 
@@ -590,7 +653,11 @@ impl UniversalNode {
     /// Add an argument (for commands)
     pub fn with_argument(self, argument: String) -> Self {
         let mut node = self;
-        let current_args = node.attributes.get("arguments").cloned().unwrap_or_default();
+        let current_args = node
+            .attributes
+            .get("arguments")
+            .cloned()
+            .unwrap_or_default();
         let new_args = if current_args.is_empty() {
             argument
         } else {
@@ -675,10 +742,16 @@ mod tests {
     fn test_node_type_string_conversion() {
         assert_eq!(NodeType::Identifier.as_str(), "identifier");
         assert_eq!(NodeType::BinaryExpression.as_str(), "binary_expression");
-        assert_eq!(NodeType::FunctionDeclaration.as_str(), "function_declaration");
+        assert_eq!(
+            NodeType::FunctionDeclaration.as_str(),
+            "function_declaration"
+        );
 
         assert_eq!(NodeType::from_str("identifier"), Some(NodeType::Identifier));
-        assert_eq!(NodeType::from_str("binary_expression"), Some(NodeType::BinaryExpression));
+        assert_eq!(
+            NodeType::from_str("binary_expression"),
+            Some(NodeType::BinaryExpression)
+        );
         assert_eq!(NodeType::from_str("unknown"), None);
     }
 
@@ -699,7 +772,10 @@ mod tests {
 
     #[test]
     fn test_literal_value_display() {
-        assert_eq!(LiteralValue::String("hello".to_string()).to_string(), "\"hello\"");
+        assert_eq!(
+            LiteralValue::String("hello".to_string()).to_string(),
+            "\"hello\""
+        );
         assert_eq!(LiteralValue::Number(42.5).to_string(), "42.5");
         assert_eq!(LiteralValue::Integer(42).to_string(), "42");
         assert_eq!(LiteralValue::Boolean(true).to_string(), "true");
@@ -726,10 +802,8 @@ mod tests {
 
     #[test]
     fn test_universal_node_with_children() {
-        let child1 = UniversalNode::new(NodeType::Identifier)
-            .with_identifier("left".to_string());
-        let child2 = UniversalNode::new(NodeType::Identifier)
-            .with_identifier("right".to_string());
+        let child1 = UniversalNode::new(NodeType::Identifier).with_identifier("left".to_string());
+        let child2 = UniversalNode::new(NodeType::Identifier).with_identifier("right".to_string());
 
         let parent = UniversalNode::new(NodeType::BinaryExpression)
             .with_binary_operator(BinaryOperator::Add)
@@ -752,6 +826,9 @@ mod tests {
             .with_literal(LiteralValue::String("hello world".to_string()));
 
         assert_eq!(node.node_type(), "literal");
-        assert_eq!(node.literal(), Some(&LiteralValue::String("hello world".to_string())));
+        assert_eq!(
+            node.literal(),
+            Some(&LiteralValue::String("hello world".to_string()))
+        );
     }
 }

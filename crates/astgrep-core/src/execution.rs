@@ -2,11 +2,7 @@
 
 use crate::Result;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    process::Stdio,
-};
+use std::{collections::HashMap, path::PathBuf, process::Stdio};
 use tokio::process::Command;
 
 /// Configuration for script execution

@@ -1,8 +1,8 @@
-use astgrep_web::{create_app, WebConfig};
 use astgrep_web::handlers::metrics::init_metrics_collector;
+use astgrep_web::{create_app, WebConfig};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{info, error};
+use tracing::{error, info};
 use tracing_subscriber;
 
 #[tokio::main]
@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load configuration
     let config = Arc::new(WebConfig::default());
-    
+
     info!("Starting CR Web Service");
     info!("Configuration: {:?}", config);
 
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Bind to address
     let addr = config.bind_address.clone();
     let listener = TcpListener::bind(&addr).await?;
-    
+
     info!("Server listening on {}", addr);
     info!("API documentation available at http://{}/docs", addr);
     info!("Health check available at http://{}/health", addr);

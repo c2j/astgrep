@@ -1,11 +1,8 @@
 //! Test case models for migration operations
 
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, path::PathBuf};
 
 /// Represents a collection of test files for specific functionality
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -475,11 +472,19 @@ impl TestCase {
 
     /// Get estimated migration difficulty
     pub fn migration_difficulty(&self) -> MigrationDifficulty {
-        match (self.complexity.clone(), self.dependencies.len(), self.rule_files.len()) {
+        match (
+            self.complexity.clone(),
+            self.dependencies.len(),
+            self.rule_files.len(),
+        ) {
             (TestComplexity::Simple, 0, 0) => MigrationDifficulty::Easy,
             (TestComplexity::Simple, 0, _) => MigrationDifficulty::Medium,
-            (TestComplexity::Simple, _, _) | (TestComplexity::Medium, _, _) => MigrationDifficulty::Medium,
-            (TestComplexity::Complex, _, _) | (TestComplexity::Expert, _, _) => MigrationDifficulty::Hard,
+            (TestComplexity::Simple, _, _) | (TestComplexity::Medium, _, _) => {
+                MigrationDifficulty::Medium
+            }
+            (TestComplexity::Complex, _, _) | (TestComplexity::Expert, _, _) => {
+                MigrationDifficulty::Hard
+            }
         }
     }
 }
@@ -552,75 +557,84 @@ impl LanguageMapping {
         ]);
 
         let language_configs = HashMap::from([
-            ("java".to_string(), LanguageConfig {
-                language: "java".to_string(),
-                directory_name: "java".to_string(),
-                extensions: vec!["java".to_string(), "class".to_string()],
-                common_test_types: vec![
-                    TestType::PatternMatching,
-                    TestType::RuleValidation,
-                    TestType::Integration,
-                ],
-                frameworks: vec!["JUnit".to_string()],
-                default_category: TestCategory::LanguageSpecific,
-                test_file_patterns: vec![
-                    "*Test*.java".to_string(),
-                    "*TestCase*.java".to_string(),
-                    "Test*".to_string(),
-                ],
-            }),
-            ("python".to_string(), LanguageConfig {
-                language: "python".to_string(),
-                directory_name: "python".to_string(),
-                extensions: vec!["py".to_string(), "pyw".to_string()],
-                common_test_types: vec![
-                    TestType::PatternMatching,
-                    TestType::RuleValidation,
-                    TestType::Integration,
-                ],
-                frameworks: vec!["pytest".to_string(), "unittest".to_string()],
-                default_category: TestCategory::LanguageSpecific,
-                test_file_patterns: vec![
-                    "test_*.py".to_string(),
-                    "*_test.py".to_string(),
-                    "tests.py".to_string(),
-                    "test_*.py".to_string(),
-                ],
-            }),
-            ("javascript".to_string(), LanguageConfig {
-                language: "javascript".to_string(),
-                directory_name: "javascript".to_string(),
-                extensions: vec!["js".to_string(), "jsx".to_string()],
-                common_test_types: vec![
-                    TestType::PatternMatching,
-                    TestType::RuleValidation,
-                    TestType::Integration,
-                ],
-                frameworks: vec!["Jest".to_string(), "Mocha".to_string()],
-                default_category: TestCategory::LanguageSpecific,
-                test_file_patterns: vec![
-                    "*.test.js".to_string(),
-                    "*.spec.js".to_string(),
-                    "test_*.js".to_string(),
-                    "*_test.js".to_string(),
-                ],
-            }),
-            ("sql".to_string(), LanguageConfig {
-                language: "sql".to_string(),
-                directory_name: "sql".to_string(),
-                extensions: vec!["sql".to_string(), "ddl".to_string(), "dml".to_string()],
-                common_test_types: vec![
-                    TestType::PatternMatching,
-                    TestType::RuleValidation,
-                ],
-                frameworks: vec!["sqlcheck".to_string()],
-                default_category: TestCategory::LanguageSpecific,
-                test_file_patterns: vec![
-                    "*_test.sql".to_string(),
-                    "test_*.sql".to_string(),
-                    "*_validate.sql".to_string(),
-                ],
-            }),
+            (
+                "java".to_string(),
+                LanguageConfig {
+                    language: "java".to_string(),
+                    directory_name: "java".to_string(),
+                    extensions: vec!["java".to_string(), "class".to_string()],
+                    common_test_types: vec![
+                        TestType::PatternMatching,
+                        TestType::RuleValidation,
+                        TestType::Integration,
+                    ],
+                    frameworks: vec!["JUnit".to_string()],
+                    default_category: TestCategory::LanguageSpecific,
+                    test_file_patterns: vec![
+                        "*Test*.java".to_string(),
+                        "*TestCase*.java".to_string(),
+                        "Test*".to_string(),
+                    ],
+                },
+            ),
+            (
+                "python".to_string(),
+                LanguageConfig {
+                    language: "python".to_string(),
+                    directory_name: "python".to_string(),
+                    extensions: vec!["py".to_string(), "pyw".to_string()],
+                    common_test_types: vec![
+                        TestType::PatternMatching,
+                        TestType::RuleValidation,
+                        TestType::Integration,
+                    ],
+                    frameworks: vec!["pytest".to_string(), "unittest".to_string()],
+                    default_category: TestCategory::LanguageSpecific,
+                    test_file_patterns: vec![
+                        "test_*.py".to_string(),
+                        "*_test.py".to_string(),
+                        "tests.py".to_string(),
+                        "test_*.py".to_string(),
+                    ],
+                },
+            ),
+            (
+                "javascript".to_string(),
+                LanguageConfig {
+                    language: "javascript".to_string(),
+                    directory_name: "javascript".to_string(),
+                    extensions: vec!["js".to_string(), "jsx".to_string()],
+                    common_test_types: vec![
+                        TestType::PatternMatching,
+                        TestType::RuleValidation,
+                        TestType::Integration,
+                    ],
+                    frameworks: vec!["Jest".to_string(), "Mocha".to_string()],
+                    default_category: TestCategory::LanguageSpecific,
+                    test_file_patterns: vec![
+                        "*.test.js".to_string(),
+                        "*.spec.js".to_string(),
+                        "test_*.js".to_string(),
+                        "*_test.js".to_string(),
+                    ],
+                },
+            ),
+            (
+                "sql".to_string(),
+                LanguageConfig {
+                    language: "sql".to_string(),
+                    directory_name: "sql".to_string(),
+                    extensions: vec!["sql".to_string(), "ddl".to_string(), "dml".to_string()],
+                    common_test_types: vec![TestType::PatternMatching, TestType::RuleValidation],
+                    frameworks: vec!["sqlcheck".to_string()],
+                    default_category: TestCategory::LanguageSpecific,
+                    test_file_patterns: vec![
+                        "*_test.sql".to_string(),
+                        "test_*.sql".to_string(),
+                        "*_validate.sql".to_string(),
+                    ],
+                },
+            ),
         ]);
 
         Self {
@@ -696,14 +710,23 @@ impl TestCaseCollection {
     fn update_distributions(&mut self, test_case: &TestCase) {
         // Update language distribution
         for language in &test_case.languages {
-            *self.language_distribution.entry(language.clone()).or_insert(0) += 1;
+            *self
+                .language_distribution
+                .entry(language.clone())
+                .or_insert(0) += 1;
         }
 
         // Update type distribution
-        *self.type_distribution.entry(test_case.test_type.clone()).or_insert(0) += 1;
+        *self
+            .type_distribution
+            .entry(test_case.test_type.clone())
+            .or_insert(0) += 1;
 
         // Update complexity distribution
-        *self.complexity_distribution.entry(test_case.complexity.clone()).or_insert(0) += 1;
+        *self
+            .complexity_distribution
+            .entry(test_case.complexity.clone())
+            .or_insert(0) += 1;
 
         // Update category distribution
         if let Some(category) = &test_case.category {
@@ -773,8 +796,8 @@ impl Default for CollectionMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_test_case_creation() {
@@ -801,7 +824,8 @@ mod tests {
             TestType::Integration,
             PathBuf::from("/tests/MultiTest.java"),
             PathBuf::from("/newtest/testcases/java/integration/MultiTest.java"),
-        ).with_languages(vec!["java".to_string(), "python".to_string()]);
+        )
+        .with_languages(vec!["java".to_string(), "python".to_string()]);
 
         assert_eq!(test_case.languages.len(), 2);
         assert!(test_case.supports_language("java"));
@@ -839,7 +863,8 @@ mod tests {
             TestType::RuleValidation,
             PathBuf::from("/tests/ValidTest.java"),
             PathBuf::from("/newtest/testcases/java/validation/ValidTest.java"),
-        ).with_languages(vec!["java".to_string()]);
+        )
+        .with_languages(vec!["java".to_string()]);
 
         let issues = valid_test_case.validate();
         assert!(issues.is_empty());
@@ -865,7 +890,8 @@ mod tests {
             TestType::PatternMatching,
             PathBuf::from("/tests/EasyTest.java"),
             PathBuf::from("/newtest/testcases/java/basic/EasyTest.java"),
-        ).with_complexity(TestComplexity::Simple);
+        )
+        .with_complexity(TestComplexity::Simple);
 
         assert_eq!(easy_test.migration_difficulty(), MigrationDifficulty::Easy);
 
@@ -875,8 +901,9 @@ mod tests {
             TestType::Security,
             PathBuf::from("/tests/HardTest.java"),
             PathBuf::from("/newtest/testcases/java/security/HardTest.java"),
-        ).with_complexity(TestComplexity::Complex)
-            .with_dependencies(vec!["complex_dep".to_string()]);
+        )
+        .with_complexity(TestComplexity::Complex)
+        .with_dependencies(vec!["complex_dep".to_string()]);
 
         assert_eq!(hard_test.migration_difficulty(), MigrationDifficulty::Hard);
     }
@@ -885,19 +912,32 @@ mod tests {
     fn test_language_mapping_creation() {
         let mapping = LanguageMapping::new();
 
-        assert_eq!(mapping.detect_language(&PathBuf::from("test.java"), None), "java");
-        assert_eq!(mapping.detect_language(&PathBuf::from("test.py"), None), "python");
-        assert_eq!(mapping.detect_language(&PathBuf::from("test.js"), None), "javascript");
-        assert_eq!(mapping.detect_language(&PathBuf::from("test.sql"), None), "sql");
-        assert_eq!(mapping.detect_language(&PathBuf::from("test.unknown"), None), "unknown");
+        assert_eq!(
+            mapping.detect_language(&PathBuf::from("test.java"), None),
+            "java"
+        );
+        assert_eq!(
+            mapping.detect_language(&PathBuf::from("test.py"), None),
+            "python"
+        );
+        assert_eq!(
+            mapping.detect_language(&PathBuf::from("test.js"), None),
+            "javascript"
+        );
+        assert_eq!(
+            mapping.detect_language(&PathBuf::from("test.sql"), None),
+            "sql"
+        );
+        assert_eq!(
+            mapping.detect_language(&PathBuf::from("test.unknown"), None),
+            "unknown"
+        );
     }
 
     #[test]
     fn test_test_case_collection_creation() {
-        let mut collection = TestCaseCollection::new(
-            "collection-001".to_string(),
-            "Security Tests".to_string(),
-        );
+        let mut collection =
+            TestCaseCollection::new("collection-001".to_string(), "Security Tests".to_string());
 
         assert_eq!(collection.collection_id, "collection-001");
         assert_eq!(collection.name, "Security Tests");
@@ -917,13 +957,17 @@ mod tests {
             TestType::Integration,
             PathBuf::from("/tests/IntegrationTest.java"),
             PathBuf::from("/newtest/testcases/java/integration/IntegrationTest.java"),
-        ).with_languages(vec!["java".to_string()]);
+        )
+        .with_languages(vec!["java".to_string()]);
 
         collection.add_test_case(test_case);
 
         assert_eq!(collection.test_cases.len(), 1);
         assert_eq!(collection.language_distribution.get("java"), Some(&1));
-        assert_eq!(collection.type_distribution.get(&TestType::Integration), Some(&1));
+        assert_eq!(
+            collection.type_distribution.get(&TestType::Integration),
+            Some(&1)
+        );
     }
 
     #[test]

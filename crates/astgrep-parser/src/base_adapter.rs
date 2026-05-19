@@ -1,10 +1,10 @@
 //! Base adapter implementation to reduce code duplication
-//! 
+//!
 //! This module provides a generic base adapter that can be used by language-specific
 //! adapters to reduce boilerplate code.
 
-use crate::adapters::{AstAdapter, AdapterContext, AdapterMetadata};
-use astgrep_ast::{UniversalNode, NodeType};
+use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
+use astgrep_ast::{NodeType, UniversalNode};
 use astgrep_core::{Language, Result};
 
 /// Generic base adapter that provides common functionality
@@ -49,7 +49,14 @@ impl BaseAdapter {
             Language::Xml => (
                 "XML Adapter",
                 "Adapter for parsing XML documents",
-                vec!["xml".to_string(), "xsd".to_string(), "xsl".to_string(), "xslt".to_string(), "svg".to_string(), "pom".to_string()],
+                vec![
+                    "xml".to_string(),
+                    "xsd".to_string(),
+                    "xsl".to_string(),
+                    "xslt".to_string(),
+                    "svg".to_string(),
+                    "pom".to_string(),
+                ],
             ),
         };
 
@@ -58,10 +65,7 @@ impl BaseAdapter {
             name: name.to_string(),
             version: "1.0.0".to_string(),
             description: description.to_string(),
-            features: vec![
-                "basic_parsing".to_string(),
-                "ast_conversion".to_string(),
-            ],
+            features: vec!["basic_parsing".to_string(), "ast_conversion".to_string()],
             extensions,
         }
     }
@@ -87,7 +91,11 @@ impl BaseAdapter {
 
     /// Parse source code into a basic AST structure
     /// This provides a default implementation that can be overridden
-    pub fn parse_basic_ast(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
+    pub fn parse_basic_ast(
+        &self,
+        source: &str,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         // Create a basic AST structure based on the language
         let mut root = UniversalNode::new(NodeType::Program)
             .with_text(source.to_string())
@@ -264,7 +272,7 @@ impl BaseAdapter {
             Some(
                 UniversalNode::new(NodeType::CallExpression)
                     .with_text(line.to_string())
-                    .with_location(line_num, 1, line_num, line.len())
+                    .with_location(line_num, 1, line_num, line.len()),
             )
         } else {
             None
@@ -277,7 +285,7 @@ impl BaseAdapter {
             Some(
                 UniversalNode::new(NodeType::CallExpression)
                     .with_text(line.to_string())
-                    .with_location(line_num, 1, line_num, line.len())
+                    .with_location(line_num, 1, line_num, line.len()),
             )
         } else {
             None
@@ -296,7 +304,7 @@ impl BaseAdapter {
                 return Some(
                     UniversalNode::new(NodeType::VariableDeclaration)
                         .with_text(line.to_string())
-                        .with_location(line_num, 1, line_num, line.len())
+                        .with_location(line_num, 1, line_num, line.len()),
                 );
             }
         }
@@ -309,7 +317,7 @@ impl BaseAdapter {
             Some(
                 UniversalNode::new(NodeType::AssignmentExpression)
                     .with_text(line.to_string())
-                    .with_location(line_num, 1, line_num, line.len())
+                    .with_location(line_num, 1, line_num, line.len()),
             )
         } else {
             None
@@ -318,15 +326,17 @@ impl BaseAdapter {
 
     /// Parse SQL statements
     fn parse_sql_statement(&self, line: &str, line_num: usize) -> Option<UniversalNode> {
-        let sql_keywords = ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER"];
+        let sql_keywords = [
+            "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER",
+        ];
         let upper_line = line.to_uppercase();
-        
+
         for keyword in sql_keywords {
             if upper_line.starts_with(keyword) {
                 return Some(
                     UniversalNode::new(NodeType::ExpressionStatement)
                         .with_text(line.to_string())
-                        .with_location(line_num, 1, line_num, line.len())
+                        .with_location(line_num, 1, line_num, line.len()),
                 );
             }
         }
@@ -339,7 +349,7 @@ impl BaseAdapter {
             Some(
                 UniversalNode::new(NodeType::CallExpression)
                     .with_text(line.to_string())
-                    .with_location(line_num, 1, line_num, line.len())
+                    .with_location(line_num, 1, line_num, line.len()),
             )
         } else {
             None
@@ -361,7 +371,11 @@ impl AstAdapter for BaseAdapter {
         }
     }
 
-    fn adapt_node(&self, _node: &dyn std::any::Any, _context: &AdapterContext) -> Result<UniversalNode> {
+    fn adapt_node(
+        &self,
+        _node: &dyn std::any::Any,
+        _context: &AdapterContext,
+    ) -> Result<UniversalNode> {
         // Simple implementation for now
         Ok(UniversalNode::new(NodeType::Program))
     }
@@ -402,7 +416,11 @@ macro_rules! create_language_adapter {
                 self.base.metadata()
             }
 
-            fn parse_to_ast(&self, source: &str, context: &AdapterContext) -> Result<UniversalNode> {
+            fn parse_to_ast(
+                &self,
+                source: &str,
+                context: &AdapterContext,
+            ) -> Result<UniversalNode> {
                 self.base.parse_to_ast(source, context)
             }
         }
@@ -428,7 +446,7 @@ mod tests {
             "System.out.println(\"Hello\");".to_string(),
             Language::Java,
         );
-        
+
         let result = adapter.parse_to_ast("System.out.println(\"Hello\");", &context);
         assert!(result.is_ok());
     }
@@ -436,7 +454,7 @@ mod tests {
     #[test]
     fn test_macro_generated_adapter() {
         create_language_adapter!(TestJavaAdapter, Language::Java);
-        
+
         let adapter = TestJavaAdapter::new();
         assert_eq!(adapter.language(), Language::Java);
     }

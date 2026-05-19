@@ -32,8 +32,14 @@ impl PerformanceMetrics {
 
     /// Record an operation
     pub fn record_operation(&mut self, operation: &str, duration: Duration) {
-        *self.operation_counts.entry(operation.to_string()).or_insert(0) += 1;
-        *self.operation_times.entry(operation.to_string()).or_insert(Duration::ZERO) += duration;
+        *self
+            .operation_counts
+            .entry(operation.to_string())
+            .or_insert(0) += 1;
+        *self
+            .operation_times
+            .entry(operation.to_string())
+            .or_insert(Duration::ZERO) += duration;
     }
 
     /// Record memory usage
@@ -145,9 +151,10 @@ impl PerformanceProfiler {
 
     /// Get current metrics
     pub fn get_metrics(&self) -> PerformanceMetrics {
-        self.metrics.lock().unwrap_or_else(|poisoned| {
-            poisoned.into_inner()
-        }).clone()
+        self.metrics
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
     /// Reset metrics
@@ -169,10 +176,7 @@ pub struct AstTraversalOptimizer;
 
 impl AstTraversalOptimizer {
     /// Optimized AST traversal with early termination
-    pub fn find_first_matching_node<F>(
-        root: &dyn AstNode,
-        predicate: F,
-    ) -> Option<&dyn AstNode>
+    pub fn find_first_matching_node<F>(root: &dyn AstNode, predicate: F) -> Option<&dyn AstNode>
     where
         F: Fn(&dyn AstNode) -> bool,
     {
@@ -215,10 +219,7 @@ impl AstTraversalOptimizer {
     }
 
     /// Collect nodes by type efficiently
-    pub fn collect_nodes_by_type(
-        root: &dyn AstNode,
-        node_type: &str,
-    ) -> Vec<String> {
+    pub fn collect_nodes_by_type(root: &dyn AstNode, node_type: &str) -> Vec<String> {
         let mut results = Vec::new();
         Self::collect_nodes_by_type_recursive(root, node_type, &mut results);
         results
@@ -335,14 +336,14 @@ where
         } else {
             self.misses += 1;
             let value = compute();
-            
+
             // Simple eviction: remove oldest if at capacity
             if self.cache.len() >= self.max_size {
                 if let Some(first_key) = self.cache.keys().next().cloned() {
                     self.cache.remove(&first_key);
                 }
             }
-            
+
             self.cache.insert(key, value.clone());
             value
         }
@@ -374,10 +375,10 @@ mod tests {
     #[test]
     fn test_performance_metrics() {
         let mut metrics = PerformanceMetrics::new();
-        
+
         metrics.record_operation("test_op", Duration::from_millis(100));
         metrics.record_operation("test_op", Duration::from_millis(200));
-        
+
         assert_eq!(metrics.operation_counts.get("test_op"), Some(&2));
         assert_eq!(
             metrics.average_operation_time("test_op"),
@@ -388,14 +389,14 @@ mod tests {
     #[test]
     fn test_performance_profiler() {
         let profiler = PerformanceProfiler::new();
-        
+
         let result = profiler.time_operation("test", || {
             std::thread::sleep(Duration::from_millis(10));
             42
         });
-        
+
         assert_eq!(result, 42);
-        
+
         let metrics = profiler.get_metrics();
         assert_eq!(metrics.operation_counts.get("test"), Some(&1));
     }
@@ -403,13 +404,13 @@ mod tests {
     #[test]
     fn test_memory_tracker() {
         let mut tracker = MemoryTracker::new();
-        
+
         tracker.track_allocation("component1", 1000);
         tracker.track_allocation("component2", 2000);
-        
+
         assert_eq!(tracker.get_allocation("component1"), 1000);
         assert_eq!(tracker.total_allocation(), 3000);
-        
+
         tracker.track_deallocation("component1", 500);
         assert_eq!(tracker.get_allocation("component1"), 500);
         assert_eq!(tracker.total_allocation(), 2500);
@@ -418,13 +419,13 @@ mod tests {
     #[test]
     fn test_operation_cache() {
         let mut cache = OperationCache::new(2);
-        
+
         let value1 = cache.get_or_compute("key1", || "value1".to_string());
         assert_eq!(value1, "value1");
-        
+
         let value1_cached = cache.get_or_compute("key1", || "different".to_string());
         assert_eq!(value1_cached, "value1"); // Should return cached value
-        
+
         let (hits, misses, hit_rate) = cache.statistics();
         assert_eq!(hits, 1);
         assert_eq!(misses, 1);
