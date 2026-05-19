@@ -68,7 +68,6 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 ///     metavariable_pattern: None,
 ///     focus: None,
 ///     conditions: Vec::new(),
-///     as_binding: None,
 /// };
 ///
 /// // Create an AST node to match against
@@ -157,7 +156,6 @@ mod tests {
             metavariable_pattern: None,
             focus: None,
             conditions: Vec::new(),
-            as_binding: None,
         };
 
         let ast = UniversalNode::new(NodeType::CallExpression).with_text("eval(code)".to_string());

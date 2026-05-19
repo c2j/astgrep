@@ -6,11 +6,11 @@ use crate::executor::dependency::VariableDependencyGraph;
 use crate::executor::types::{is_operator_node, TaintMatch};
 use crate::types::*;
 use astgrep_core::{
-    AstNode, ComparisonOperator, Finding, Language, Location, MetavariableAnalysis, Result,
-    SemgrepMatchResult, SemgrepPattern, Severity,
+    AstNode, ComparisonOperator, Finding, Language, Location, MatchBinding,
+    MetavariableAnalysis, Result, SemgrepMatchResult, Severity,
 };
 use astgrep_dataflow::{DataFlowAnalysis, DataFlowAnalyzer};
-use astgrep_matcher::{AdvancedSemgrepMatcher, PatternMatcher};
+use astgrep_matcher::AdvancedSemgrepMatcher;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,10 +20,6 @@ mod symbolic;
 mod taint;
 mod utils;
 
-pub use conditions::*;
-pub use symbolic::*;
-pub use taint::*;
-pub use utils::*;
 
 pub struct AdvancedRuleExecutor {
     pattern_matcher: AdvancedSemgrepMatcher,
@@ -431,7 +427,7 @@ impl AdvancedRuleExecutor {
         // Replace metavariables in message
         for (name, value) in &match_result.bindings {
             let placeholder = format!("${}", name);
-            message = message.replace(&placeholder, value);
+            message = message.replace(&placeholder, value.as_ref());
         }
 
         let mut metadata = HashMap::new();
@@ -672,6 +668,11 @@ impl AdvancedRuleExecutor {
                 Ok(CoreCondition::NodeAttribute(name.clone(), value.clone()))
             }
             Condition::Custom(value) => Ok(CoreCondition::Custom(value.clone())),
+            Condition::MetavariablePattern(_) => {
+                // MetavariablePattern is handled directly in the executor conditions,
+                // not converted to core Condition. Return a no-op.
+                Ok(CoreCondition::Custom("metavariable_pattern_handled".to_string()))
+            }
         }
     }
 

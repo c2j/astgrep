@@ -28,6 +28,31 @@ impl MatchBinding {
     }
 }
 
+impl std::fmt::Display for MatchBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl std::ops::Deref for MatchBinding {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl AsRef<str> for MatchBinding {
+    fn as_ref(&self) -> &str {
+        &self.value
+    }
+}
+
+impl From<MatchBinding> for String {
+    fn from(binding: MatchBinding) -> String {
+        binding.value
+    }
+}
+
 /// Types of patterns supported by semgrep
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PatternType {

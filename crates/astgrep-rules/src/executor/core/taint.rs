@@ -258,7 +258,7 @@ impl AdvancedRuleExecutor {
                     m.node.text()
                 );
                 // Extract the variable name from bindings if available
-                let mut var_name = None;
+                let mut var_name: Option<String> = None;
 
                 // If focus-metavariables are specified, extract the binding for the first focus variable
                 if !source_pattern.focus_metavariables.is_empty() {
@@ -267,7 +267,7 @@ impl AdvancedRuleExecutor {
                     let focus_key = focus_var.trim_start_matches('$');
                     if let Some(value) = m.bindings.get(focus_key) {
                         if !value.is_empty() {
-                            var_name = Some(value.clone());
+                            var_name = Some(value.value.clone());
                             eprintln!(
                                 "[DEBUG] Extracted var_name from focus-metavariable '{}': {}",
                                 focus_var, value
@@ -280,7 +280,7 @@ impl AdvancedRuleExecutor {
                 if var_name.is_none() {
                     for (key, value) in &m.bindings {
                         if key.starts_with("$") && !value.is_empty() {
-                            var_name = Some(value.clone());
+                            var_name = Some(value.value.clone());
                             break;
                         }
                     }
@@ -401,7 +401,7 @@ impl AdvancedRuleExecutor {
                 // When taint_assume_safe_numbers is true, filter out numeric type sources
                 if dataflow_spec.taint_assume_safe_numbers.unwrap_or(false) {
                     if let Some(ref vname) = var_name {
-                        if self.is_numeric_parameter(m.node.as_ref(), vname) {
+                        if self.is_numeric_parameter(m.node.as_ref(), vname.as_str()) {
                             continue;
                         }
                     }
@@ -411,7 +411,8 @@ impl AdvancedRuleExecutor {
                 let node_ref = m.node.as_ref();
 
                 // First check if we have method name in bindings (e.g., from pattern like "public void $F(...)")
-                let method_name_from_bindings = m.bindings.get("F").cloned();
+                let method_name_from_bindings: Option<String> =
+                    m.bindings.get("F").map(|v| v.value.clone());
 
                 let method_name = if let Some(name) = method_name_from_bindings {
                     Some(name)
@@ -423,9 +424,12 @@ impl AdvancedRuleExecutor {
                     None
                 };
 
+                let str_bindings: HashMap<String, String> = m.bindings.iter()
+                    .map(|(k, v)| (k.clone(), v.value.clone()))
+                    .collect();
                 sources.push(TaintMatch {
                     node: m.node,
-                    bindings: m.bindings,
+                    bindings: str_bindings,
                     var_name,
                     method_name,
                 });
@@ -560,7 +564,7 @@ impl AdvancedRuleExecutor {
                 for focus_var in focus_metavariables {
                     let focus_var_no_dollar = focus_var.trim_start_matches('$');
                     if let Some(value) = m.bindings.get(focus_var_no_dollar) {
-                        var_name = Some(value.clone());
+                        var_name = Some(value.value.clone());
                         break;
                     }
                 }
@@ -599,9 +603,12 @@ impl AdvancedRuleExecutor {
                 }
             }
 
+            let str_bindings: HashMap<String, String> = m.bindings.iter()
+                .map(|(k, v)| (k.clone(), v.value.clone()))
+                .collect();
             sinks.push(TaintMatch {
                 node: m.node,
-                bindings: m.bindings,
+                bindings: str_bindings,
                 var_name,
                 method_name,
             });
