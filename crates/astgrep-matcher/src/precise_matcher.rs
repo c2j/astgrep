@@ -7,8 +7,8 @@
 use crate::parser::{PatternParser, ParsedPattern};
 use crate::metavar::MetavarManager;
 use astgrep_core::{AstNode, Result, AnalysisError, SemgrepPattern, PatternType, constants::defaults::analysis};
-use astgrep_ast::{NodeType, UniversalNode};
-use std::collections::{HashMap, HashSet, VecDeque};
+use astgrep_ast::NodeType;
+use std::collections::{HashMap, HashSet};
 
 /// Precise AST-based pattern matcher
 pub struct PreciseExpressionMatcher {
@@ -403,7 +403,7 @@ impl PreciseExpressionMatcher {
     }
 
     /// Check pattern constraints
-    fn check_pattern_constraints(&self, constraints: &[PatternConstraint], node: &dyn AstNode) -> Result<bool> {
+    fn check_pattern_constraints(&self, constraints: &[PatternConstraint], _node: &dyn AstNode) -> Result<bool> {
         for constraint in constraints {
             match constraint {
                 PatternConstraint::Inside(_) => {
@@ -428,7 +428,7 @@ impl PreciseExpressionMatcher {
     }
 
     /// Try fuzzy matching
-    fn try_fuzzy_match(&self, pattern: &AstPattern, node: &dyn AstNode) -> Result<Option<PreciseMatchResult>> {
+    fn try_fuzzy_match(&self, _pattern: &AstPattern, _node: &dyn AstNode) -> Result<Option<PreciseMatchResult>> {
         // Simplified fuzzy matching - would implement more sophisticated
         // similarity algorithms in practice
         Ok(None)

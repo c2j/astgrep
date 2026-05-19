@@ -1,13 +1,9 @@
 //! Script migration engine for reorganizing test scripts
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::fs;
-use std::time::SystemTime;
-use tokio::fs as async_fs;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use crate::{
     backup::BackupManager,
@@ -18,9 +14,9 @@ use crate::{
     utils::path_utils::PathHandler,
 };
 
-use astgrep_core::models::test_asset::{TestAsset, AssetType, AssetStatus};
-use astgrep_parser::script_discovery::{ScriptDiscovery, DiscoveryConfig, DiscoveredScript};
-use astgrep_matcher::script_classifier::{ScriptClassifier, ClassificationResult};
+use astgrep_core::models::test_asset::{TestAsset, AssetType};
+use astgrep_parser::script_discovery::{ScriptDiscovery, DiscoveryConfig};
+use astgrep_matcher::script_classifier::ScriptClassifier;
 use astgrep_core::models::test_asset::ScriptType;
 
 /// Configuration for script migration
@@ -223,7 +219,7 @@ impl ScriptMigrator {
 
         // Step 3: Create backup if enabled
         let backup_id = if self.config.create_backups {
-            let assets: Vec<TestAsset> = script_mappings.iter().map(|mapping| {
+            let _assets: Vec<TestAsset> = script_mappings.iter().map(|mapping| {
                 TestAsset::new(
                     format!("script-{}", uuid::Uuid::new_v4()),
                     mapping.original_path.file_name()
@@ -369,7 +365,7 @@ impl ScriptMigrator {
         &self,
         original_path: &Path,
         script_type: &ScriptType,
-        confidence: &f64,
+        _confidence: &f64,
     ) -> Result<PathBuf> {
         let file_name = original_path
             .file_name()

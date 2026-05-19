@@ -13,7 +13,7 @@ pub trait AstAdapter: Send + Sync {
     fn adapt_node(&self, node: &dyn std::any::Any, context: &AdapterContext) -> Result<UniversalNode>;
 
     /// Parse source code directly to universal AST
-    fn parse_to_ast(&self, source: &str, context: &AdapterContext) -> Result<UniversalNode> {
+    fn parse_to_ast(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
         // Default implementation - just create a program node with the source
         Ok(UniversalNode::new(NodeType::Program).with_text(source.to_string()))
     }
@@ -156,7 +156,7 @@ impl BaseParser {
     }
 
     /// Create a placeholder AST for demonstration
-    fn create_placeholder_ast(&self, source: &str, context: &AdapterContext) -> Result<UniversalNode> {
+    fn create_placeholder_ast(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
         // This is a simplified implementation
         // Real parsers would use tree-sitter or similar
         

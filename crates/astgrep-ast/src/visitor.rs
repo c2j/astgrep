@@ -2,7 +2,7 @@
 //! 
 //! This module provides visitor patterns for traversing and transforming AST nodes.
 
-use crate::nodes::{NodeType, UniversalNode};
+use crate::nodes::NodeType;
 use astgrep_core::{AstNode, Result};
 
 /// Trait for AST visitors

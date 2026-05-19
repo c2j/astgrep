@@ -3,7 +3,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
 use tracing::{info, warn};
-use astgrep_core::constants::{defaults, paths};
 
 /// Initialize a new configuration file
 pub async fn run(output: PathBuf, template: String, force: bool) -> Result<()> {

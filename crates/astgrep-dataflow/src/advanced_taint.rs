@@ -6,7 +6,7 @@
 //! - Taint merging and splitting
 //! - Context-aware analysis
 
-use crate::taint::{TaintFlow, TaintState};
+use crate::taint::TaintState;
 use crate::graph::{DataFlowGraph, NodeId};
 use astgrep_core::Result;
 use std::collections::{HashMap, HashSet};
@@ -93,7 +93,7 @@ impl AdvancedTaintState {
     pub fn effective_confidence(&self) -> f32 {
         let mut confidence = self.confidence;
         for transformation in &self.transformations {
-            confidence *= (1.0 - transformation.effectiveness());
+            confidence *= 1.0 - transformation.effectiveness();
         }
         confidence
     }

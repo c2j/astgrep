@@ -1,17 +1,16 @@
 //! Script discovery module for finding and analyzing test scripts
 
 use anyhow::{Context, Result};
-use glob::{glob_with, MatchOptions, PatternError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::fs::{self, Permissions};
+use std::fs::{self};
 use std::time::SystemTime;
 use std::os::unix::fs::PermissionsExt;
 use tracing::{debug, info, warn, error};
 use walkdir::{DirEntry, WalkDir};
 
-use astgrep_core::{models::test_asset::{TestAsset, TestScript, ScriptType, AssetType, AssetMetadata}, Language};
+use astgrep_core::{models::test_asset::ScriptType, Language};
 
 /// Configuration for script discovery operations
 #[derive(Debug, Clone, Serialize, Deserialize)]

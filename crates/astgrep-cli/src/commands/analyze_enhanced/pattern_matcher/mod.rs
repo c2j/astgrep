@@ -9,15 +9,10 @@ pub mod utils;
 // Re-export key functions from submodules for convenience
 pub use self::{
     core::{
-        apply_enhanced_pattern_matching, apply_metavariable_pattern, convert_parsed_rule_to_yaml,
-        convert_pattern_to_regex, convert_pattern_to_semgrep_pattern, find_pattern_matches,
+        apply_enhanced_pattern_matching, apply_metavariable_pattern,
     },
-    not_patterns::{
-        apply_rule_with_not_inside, extract_declared_namespace_prefixes,
-        extract_prefix_from_finding, extract_used_namespace_prefixes, is_finding_inside_pattern,
-        is_finding_matching_regex, is_xml_namespace_prefix_declared,
-    },
-    regex::{apply_regex_pattern, replace_capture_groups},
+    not_patterns::apply_rule_with_not_inside,
+    regex::apply_regex_pattern,
     taint::apply_simple_taint_analysis,
     utils::apply_simple_metavariable_pattern,
 };
@@ -28,7 +23,7 @@ use crate::tree_sitter_analyzer::TreeSitterAnalyzer;
 use anyhow::Result;
 use astgrep_core::Language;
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Apply a single rule to source code
 pub fn apply_rule_to_source(

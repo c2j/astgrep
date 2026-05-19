@@ -3,7 +3,7 @@
 //! This module provides tree-sitter parser initialization and
 //! core parsing functionality for various programming languages.
 
-use astgrep_ast::{UniversalNode, NodeType};
+use astgrep_ast::UniversalNode;
 use astgrep_core::{Language, Result};
 use tree_sitter::{Parser, Tree};
 use std::collections::HashMap;

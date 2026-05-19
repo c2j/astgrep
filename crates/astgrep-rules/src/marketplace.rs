@@ -3,7 +3,6 @@
 //! This module provides functionality for managing a marketplace of security rules,
 //! including rule discovery, rating, and community contributions.
 
-use crate::types::Rule;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};

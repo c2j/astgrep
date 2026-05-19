@@ -3,7 +3,7 @@
 //! This module provides AST-based pattern matching operations
 //! for various node types and patterns.
 
-use super::integration::{TreeSitterParser, MetaVariableBindings, PatternType};
+use super::integration::{TreeSitterParser, MetaVariableBindings};
 use astgrep_core::Result;
 use tree_sitter::Node;
 

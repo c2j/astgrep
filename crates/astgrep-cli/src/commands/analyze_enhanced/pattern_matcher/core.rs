@@ -1,9 +1,8 @@
 // Core pattern matching functions
 
-use super::super::types::{determine_language, BasicPattern, ParsedRule};
+use super::super::types::{determine_language, ParsedRule};
 use super::{apply_regex_pattern, apply_simple_metavariable_pattern};
 use crate::output::analysis::{Confidence, Finding, Location};
-use crate::tree_sitter_analyzer::TreeSitterAnalyzer;
 use anyhow::Result;
 use astgrep_core::Language;
 use std::path::PathBuf;
@@ -16,10 +15,10 @@ pub fn apply_metavariable_pattern(
     file_path: &PathBuf,
     source_code: &str,
 ) -> Result<Vec<Finding>> {
-    use astgrep_matcher::AdvancedPatternMatcher;
-    use astgrep_parser::LanguageParserRegistry;
+    
+    
 
-    let mut findings = Vec::new();
+    let findings = Vec::new();
 
     // Determine language
     let language = match determine_language(file_path) {
@@ -118,7 +117,7 @@ pub fn apply_enhanced_pattern_matching(
 ) -> Result<Vec<Finding>> {
     use astgrep_matcher::AdvancedSemgrepMatcher;
     use astgrep_parser::tree_sitter_parser::TreeSitterParser;
-    use astgrep_rules::{Rule, RuleParser};
+    use astgrep_rules::RuleParser;
 
     let mut findings = Vec::new();
 

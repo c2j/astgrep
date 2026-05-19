@@ -1,14 +1,14 @@
 //! Script categorization logic for functional classification
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::fs;
 use regex::Regex;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
-use astgrep_core::models::test_asset::{TestAsset, TestScript, ScriptType, AssetType};
+use astgrep_core::models::test_asset::{TestAsset, ScriptType, AssetType};
 
 /// Configuration for script categorization
 #[derive(Debug, Clone, Serialize, Deserialize)]

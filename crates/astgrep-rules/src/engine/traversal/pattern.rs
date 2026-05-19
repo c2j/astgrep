@@ -4,8 +4,7 @@
 
 use crate::engine::traversal::RuleExecutionEngine;
 use crate::types::*;
-use astgrep_core::{AstNode, Confidence, Finding, Language, Location, Result, Severity};
-use std::collections::HashMap;
+use astgrep_core::{AstNode, Finding, Language, Location, Result};
 use std::path::PathBuf;
 use tracing::debug;
 
@@ -269,7 +268,7 @@ impl RuleExecutionEngine {
     /// Execute pattern-either matching
     fn execute_either_pattern(
         &self,
-        pattern: &Pattern,
+        _pattern: &Pattern,
         subs: &[Pattern],
         rule: &Rule,
         context: &RuleContext,
@@ -422,7 +421,7 @@ impl RuleExecutionEngine {
         rule: &Rule,
         context: &RuleContext,
     ) -> Result<Vec<Finding>> {
-        use astgrep_core::ast_utils;
+        
 
         let mut findings = Vec::new();
         let matches =
@@ -466,7 +465,7 @@ impl RuleExecutionEngine {
     fn select_non_overlapping(
         mm: Vec<((usize, usize), usize, usize, usize, usize, Box<dyn AstNode>)>,
     ) -> Vec<Box<dyn AstNode>> {
-        use std::cmp::Ordering;
+        
 
         let mut sorted = mm;
         sorted.sort_by(|a, b| {

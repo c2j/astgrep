@@ -2,10 +2,9 @@
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
-use std::ffi::OsStr;
 use std::fs;
 use std::env;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Cross-platform path normalizer and validator
 #[derive(Clone)]

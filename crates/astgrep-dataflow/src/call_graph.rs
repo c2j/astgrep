@@ -3,7 +3,6 @@
 //! This module provides functionality to build and analyze call graphs,
 //! enabling cross-function taint tracking and data flow analysis.
 
-use astgrep_core::{AstNode, Result};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Unique identifier for a function

@@ -1,12 +1,12 @@
 //! Migration validation framework with checksum verification
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tokio::fs;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 use crate::services::migration_orchestrator::MigrationOperation;
 
@@ -414,7 +414,7 @@ impl MigrationValidator {
         }
 
         // Run custom validators
-        for (name, validator) in &self.custom_validators {
+        for (_name, validator) in &self.custom_validators {
             if let Ok(check_result) = validator.validate(operation).await {
                 custom_checks.push(check_result);
             }

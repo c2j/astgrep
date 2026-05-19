@@ -3,9 +3,7 @@
 //! This module contains utility and helper functions extracted from core.rs
 //! to improve code organization and maintainability.
 
-use crate::executor::types::TaintMatch;
-use crate::types::*;
-use astgrep_core::{AstNode, Result, SemgrepMatchResult};
+use astgrep_core::SemgrepMatchResult;
 use regex::Regex;
 use std::collections::HashMap;
 
@@ -148,7 +146,7 @@ pub fn resolve_type_with_imports(
 
 /// Extract type information for a variable from the match context
 pub fn extract_type_info(
-    match_result: &SemgrepMatchResult,
+    _match_result: &SemgrepMatchResult,
     var_name: &str,
     full_source: &str,
     import_map: &HashMap<String, String>,
@@ -299,7 +297,7 @@ pub fn simplify_fully_qualified_pattern(pattern: &str) -> Option<String> {
         }
     }
 
-    if let (Some(second), Some(last)) = (second_last_dot, last_dot) {
+    if let (Some(second), Some(_last)) = (second_last_dot, last_dot) {
         let simplified = format!("{}{}", &pattern[second + 1..], &pattern[paren_pos..]);
         Some(simplified)
     } else {

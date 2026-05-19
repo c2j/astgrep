@@ -1,7 +1,7 @@
 // Regex pattern matching functions
 
 use super::super::types::ParsedRule;
-use crate::output::analysis::{Confidence, Severity};
+use crate::output::analysis::Confidence;
 use crate::output::analysis::{Finding, Location};
 use anyhow::Result;
 use std::path::PathBuf;

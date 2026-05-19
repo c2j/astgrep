@@ -1,7 +1,7 @@
 //! Output generation for enhanced analysis
 
 use crate::output::analysis::AnalysisStatistics;
-use crate::output::analysis::{OutputFactory, OutputFormat, OutputFormatter};
+use crate::output::analysis::{OutputFactory, OutputFormat};
 use crate::EnhancedAnalysisConfig;
 use anyhow::Result;
 

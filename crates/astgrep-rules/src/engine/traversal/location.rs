@@ -4,7 +4,7 @@
 
 use crate::engine::traversal::RuleExecutionEngine;
 use crate::types::*;
-use astgrep_core::{AstNode, Finding, Location};
+use astgrep_core::{AstNode, Location};
 use std::path::PathBuf;
 
 impl RuleExecutionEngine {

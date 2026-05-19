@@ -2,7 +2,7 @@
 //! 
 //! This module provides Java-specific parsing and AST adaptation.
 
-use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter, BaseParser};
+use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
 use astgrep_ast::{AstBuilder, UniversalNode, NodeType};
 use astgrep_core::{AstNode, Language, LanguageParser, Result};
 use std::path::Path;
@@ -104,9 +104,9 @@ impl JavaAdapter {
     fn parse_method_declaration(&self, source: &str) -> Result<UniversalNode> {
         let mut method_name = "unknownMethod";
         let mut return_type = "void";
-        let mut is_public = source.contains("public ");
-        let mut is_private = source.contains("private ");
-        let mut is_static = source.contains("static ");
+        let is_public = source.contains("public ");
+        let is_private = source.contains("private ");
+        let is_static = source.contains("static ");
 
         // Extract method name (simplified)
         if let Some(paren_pos) = source.find('(') {

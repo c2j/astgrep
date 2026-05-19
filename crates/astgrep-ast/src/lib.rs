@@ -11,7 +11,7 @@ pub use nodes::*;
 pub use visitor::*;
 pub use builder::*;
 
-use astgrep_core::{AstNode, Result};
+use astgrep_core::AstNode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -2,7 +2,7 @@
 //! 
 //! This module provides JavaScript-specific parsing and AST adaptation.
 
-use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter, BaseParser};
+use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
 use astgrep_ast::{AstBuilder, UniversalNode};
 use astgrep_core::{AstNode, Language, LanguageParser, Result};
 use std::path::Path;
@@ -124,8 +124,8 @@ impl JavaScriptAdapter {
     /// Parse function declaration
     fn parse_function_declaration(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
         let mut function_name = "anonymous";
-        let mut is_async = source.contains("async ");
-        let mut is_generator = source.contains("function*");
+        let is_async = source.contains("async ");
+        let is_generator = source.contains("function*");
         
         // Find function name
         if let Some(func_pos) = source.find("function") {

@@ -3,11 +3,6 @@
 //! This module provides utilities for analyzing and reporting data flows.
 
 use crate::taint::{TaintFlow, FlowSeverity};
-use crate::sources::{Source, SourceType, SourceSeverity};
-use crate::sinks::{Sink, SinkType, SinkSeverity};
-use crate::sanitizers::{Sanitizer, SanitizerType};
-use crate::graph::{DataFlowGraph, NodeId};
-use astgrep_core::{Location, Result};
 use std::collections::{HashMap, HashSet};
 
 /// Flow analyzer for analyzing patterns in data flows

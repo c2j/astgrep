@@ -2,7 +2,7 @@
 
 use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
 use crate::base_adapter::BaseAdapter;
-use astgrep_ast::{NodeType, UniversalNode};
+use astgrep_ast::UniversalNode;
 use astgrep_core::{AstNode, Language, LanguageParser, Result};
 use std::path::Path;
 
