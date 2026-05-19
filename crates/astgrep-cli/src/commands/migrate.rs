@@ -251,6 +251,7 @@ fn setup_logging(verbose: bool) {
 
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive(level.into()))
+        .with_writer(std::io::stderr)
         .with_target(verbose)
         .with_file(verbose)
         .with_line_number(verbose)

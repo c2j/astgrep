@@ -307,24 +307,19 @@ impl PatternParser {
             match &tokens[pos] {
                 Token::Pipe => break,
                 Token::RightParen => {
-                    // Check if we're inside a method call pattern
-                    // (i.e., previous token was a Literal and we saw a "(" earlier)
                     if pos > start
                         && patterns.len() > 0
                         && matches!(&patterns[patterns.len() - 1], ParsedPattern::Literal(_))
                     {
-                        // Check if there's a "(" in the patterns (indicating method call)
                         let has_open_paren = patterns
                             .iter()
                             .any(|p| matches!(p, ParsedPattern::Literal(s) if s == "("));
                         if has_open_paren {
-                            // This is closing a method call, treat as literal
                             patterns.push(ParsedPattern::Literal(")".to_string()));
                             pos += 1;
                             continue;
                         }
                     }
-                    // Otherwise, break (end of grouping)
                     break;
                 }
                 Token::LeftParen => {

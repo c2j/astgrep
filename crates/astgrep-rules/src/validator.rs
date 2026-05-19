@@ -48,7 +48,10 @@ impl RuleValidator {
         // Run custom validators
         for (name, validator) in &self.custom_validators {
             validator(rule).map_err(|e| {
-                AnalysisError::rule_validation_error(format!("Custom validator '{}' failed: {}", name, e))
+                AnalysisError::rule_validation_error(format!(
+                    "Custom validator '{}' failed: {}",
+                    name, e
+                ))
             })?;
         }
 
@@ -73,36 +76,52 @@ impl RuleValidator {
     fn validate_basic_fields(&self, rule: &Rule) -> Result<()> {
         // Validate ID
         if rule.id.is_empty() {
-            return Err(AnalysisError::rule_validation_error("Rule ID cannot be empty"));
+            return Err(AnalysisError::rule_validation_error(
+                "Rule ID cannot be empty",
+            ));
         }
 
-        if !rule.id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        if !rule
+            .id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+        {
             return Err(AnalysisError::rule_validation_error(
-                "Rule ID can only contain alphanumeric characters, hyphens, underscores, and dots"
+                "Rule ID can only contain alphanumeric characters, hyphens, underscores, and dots",
             ));
         }
 
         // Validate name (note: name is auto-generated from id if not provided during parsing)
         if rule.name.is_empty() {
-            return Err(AnalysisError::rule_validation_error("Rule name cannot be empty"));
+            return Err(AnalysisError::rule_validation_error(
+                "Rule name cannot be empty",
+            ));
         }
 
         if rule.name.len() > 100 {
-            return Err(AnalysisError::rule_validation_error("Rule name too long (max 100 characters)"));
+            return Err(AnalysisError::rule_validation_error(
+                "Rule name too long (max 100 characters)",
+            ));
         }
 
         // Validate description (note: description is auto-generated from message if not provided during parsing)
         if rule.description.is_empty() {
-            return Err(AnalysisError::rule_validation_error("Rule description cannot be empty"));
+            return Err(AnalysisError::rule_validation_error(
+                "Rule description cannot be empty",
+            ));
         }
 
         if rule.description.len() > 1000 {
-            return Err(AnalysisError::rule_validation_error("Rule description too long (max 1000 characters)"));
+            return Err(AnalysisError::rule_validation_error(
+                "Rule description too long (max 1000 characters)",
+            ));
         }
 
         // Validate languages
         if rule.languages.is_empty() {
-            return Err(AnalysisError::rule_validation_error("Rule must specify at least one language"));
+            return Err(AnalysisError::rule_validation_error(
+                "Rule must specify at least one language",
+            ));
         }
 
         Ok(())
@@ -119,7 +138,7 @@ impl RuleValidator {
 
         if rule.patterns.is_empty() && rule.dataflow.is_none() {
             return Err(AnalysisError::rule_validation_error(
-                "Rule must have either patterns or dataflow specification"
+                "Rule must have either patterns or dataflow specification",
             ));
         }
 
@@ -136,7 +155,8 @@ impl RuleValidator {
         if let Some(pattern_str) = pattern.get_pattern_string() {
             if pattern_str.is_empty() {
                 return Err(AnalysisError::rule_validation_error(format!(
-                    "Pattern {} cannot be empty", index
+                    "Pattern {} cannot be empty",
+                    index
                 )));
             }
             // Check for balanced metavariables
@@ -196,10 +216,15 @@ impl RuleValidator {
     }
 
     /// Validate metavariable pattern
-    fn validate_metavariable_pattern(&self, metavar_pattern: &MetavariablePattern, pattern_index: usize) -> Result<()> {
+    fn validate_metavariable_pattern(
+        &self,
+        metavar_pattern: &MetavariablePattern,
+        pattern_index: usize,
+    ) -> Result<()> {
         if metavar_pattern.metavariable.is_empty() {
             return Err(AnalysisError::rule_validation_error(format!(
-                "Pattern {} metavariable name cannot be empty", pattern_index
+                "Pattern {} metavariable name cannot be empty",
+                pattern_index
             )));
         }
 
@@ -231,7 +256,12 @@ impl RuleValidator {
     }
 
     /// Validate a condition
-    fn validate_condition(&self, condition: &Condition, pattern_index: usize, condition_index: usize) -> Result<()> {
+    fn validate_condition(
+        &self,
+        condition: &Condition,
+        pattern_index: usize,
+        condition_index: usize,
+    ) -> Result<()> {
         match condition {
             Condition::MetavariableRegex(metavar_regex) => {
                 if metavar_regex.metavariable.is_empty() {
@@ -256,10 +286,17 @@ impl RuleValidator {
             }
             Condition::MetavariableComparison(metavar_comp) => {
                 if metavar_comp.metavariable.is_empty() {
-                    return Err(AnalysisError::rule_validation_error(format!(
-                        "Pattern {} condition {} metavariable cannot be empty",
-                        pattern_index, condition_index
-                    )));
+                    use astgrep_core::ComparisonOperator;
+                    if let ComparisonOperator::PythonExpression(expr) = &metavar_comp.operator {
+                        if expr.contains('$') {
+                            // metavariable is omitted but expression references metavariables directly
+                        } else {
+                            return Err(AnalysisError::rule_validation_error(format!(
+                                "Pattern {} condition {} metavariable or expression with metavariables required",
+                                pattern_index, condition_index
+                            )));
+                        }
+                    }
                 }
                 // For PythonExpression operator, the value is not required (expression is in operator)
                 // For other operators, value is required
@@ -334,6 +371,7 @@ impl RuleValidator {
                     )));
                 }
             }
+            Condition::MetavariablePattern(_metavar_pattern) => {}
             Condition::Custom(custom_condition) => {
                 if custom_condition.is_empty() {
                     return Err(AnalysisError::rule_validation_error(format!(
@@ -351,20 +389,28 @@ impl RuleValidator {
     fn validate_dataflow(&self, rule: &Rule) -> Result<()> {
         if let Some(ref dataflow) = rule.dataflow {
             if dataflow.sources.is_empty() {
-                return Err(AnalysisError::rule_validation_error("Dataflow sources cannot be empty"));
+                return Err(AnalysisError::rule_validation_error(
+                    "Dataflow sources cannot be empty",
+                ));
             }
 
             if dataflow.sinks.is_empty() {
-                return Err(AnalysisError::rule_validation_error("Dataflow sinks cannot be empty"));
+                return Err(AnalysisError::rule_validation_error(
+                    "Dataflow sinks cannot be empty",
+                ));
             }
 
             // Validate max_depth
             if let Some(max_depth) = dataflow.max_depth {
                 if max_depth == 0 {
-                    return Err(AnalysisError::rule_validation_error("Dataflow max_depth must be greater than 0"));
+                    return Err(AnalysisError::rule_validation_error(
+                        "Dataflow max_depth must be greater than 0",
+                    ));
                 }
                 if max_depth > 1000 {
-                    return Err(AnalysisError::rule_validation_error("Dataflow max_depth too large (max 1000)"));
+                    return Err(AnalysisError::rule_validation_error(
+                        "Dataflow max_depth too large (max 1000)",
+                    ));
                 }
             }
         }
@@ -376,21 +422,24 @@ impl RuleValidator {
     fn validate_metadata(&self, rule: &Rule) -> Result<()> {
         for (key, value) in &rule.metadata {
             if key.is_empty() {
-                return Err(AnalysisError::rule_validation_error("Metadata key cannot be empty"));
+                return Err(AnalysisError::rule_validation_error(
+                    "Metadata key cannot be empty",
+                ));
             }
 
             // For string values, check if empty
             if let Some(s) = value.as_str() {
                 if s.is_empty() {
                     return Err(AnalysisError::rule_validation_error(format!(
-                        "Metadata value for key '{}' cannot be empty", key
+                        "Metadata value for key '{}' cannot be empty",
+                        key
                     )));
                 }
 
                 // Validate specific metadata fields for string values
                 if key == "cwe" && !s.starts_with("CWE-") {
                     return Err(AnalysisError::rule_validation_error(
-                        "CWE metadata should start with 'CWE-'"
+                        "CWE metadata should start with 'CWE-'",
                     ));
                 }
             }
@@ -406,10 +455,12 @@ impl RuleValidator {
         // Keep this method for future consistency checks
 
         // Validate severity-confidence combinations
-        if rule.severity == astgrep_core::Severity::Critical && rule.confidence == astgrep_core::Confidence::Low {
+        if rule.severity == astgrep_core::Severity::Critical
+            && rule.confidence == astgrep_core::Confidence::Low
+        {
             if self.strict_validation {
                 return Err(AnalysisError::rule_validation_error(
-                    "Critical severity with low confidence is discouraged"
+                    "Critical severity with low confidence is discouraged",
                 ));
             }
         }
@@ -424,7 +475,8 @@ impl RuleValidator {
         for rule in rules {
             if seen_ids.contains(&rule.id) {
                 return Err(AnalysisError::rule_validation_error(format!(
-                    "Duplicate rule ID: {}", rule.id
+                    "Duplicate rule ID: {}",
+                    rule.id
                 )));
             }
             seen_ids.insert(&rule.id);
@@ -540,10 +592,9 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
 
-        let metavar_pattern = MetavariablePattern::new(
-            "$VAR".to_string(),
-            vec!["pattern".to_string()],
-        ).with_regex("[invalid regex".to_string());
+        let metavar_pattern =
+            MetavariablePattern::new("$VAR".to_string(), vec!["pattern".to_string()])
+                .with_regex("[invalid regex".to_string());
 
         let pattern = Pattern::simple("test($VAR)".to_string());
         rule.patterns = vec![Pattern {
@@ -551,6 +602,7 @@ mod tests {
             metavariable_pattern: Some(metavar_pattern),
             conditions: Vec::new(),
             focus: None,
+            as_binding: None,
         }];
 
         assert!(validator.validate_rule(&rule).is_err());
@@ -581,10 +633,9 @@ mod tests {
         let validator = RuleValidator::new();
         let mut rule = create_valid_rule();
 
-        let dataflow = DataFlowSpec::from_strings(
-            vec!["source".to_string()],
-            vec!["sink".to_string()],
-        ).with_max_depth(0);
+        let dataflow =
+            DataFlowSpec::from_strings(vec!["source".to_string()], vec!["sink".to_string()])
+                .with_max_depth(0);
         rule.dataflow = Some(dataflow);
 
         assert!(validator.validate_rule(&rule).is_err());
@@ -593,16 +644,13 @@ mod tests {
     #[test]
     fn test_custom_validator() {
         let mut validator = RuleValidator::new();
-        validator.add_custom_validator(
-            "test_validator".to_string(),
-            |rule| {
-                if rule.id.contains("forbidden") {
-                    Err(AnalysisError::rule_validation_error("Forbidden ID pattern"))
-                } else {
-                    Ok(())
-                }
-            },
-        );
+        validator.add_custom_validator("test_validator".to_string(), |rule| {
+            if rule.id.contains("forbidden") {
+                Err(AnalysisError::rule_validation_error("Forbidden ID pattern"))
+            } else {
+                Ok(())
+            }
+        });
 
         let mut rule = create_valid_rule();
         rule.id = "forbidden-rule".to_string();
@@ -624,7 +672,4 @@ mod tests {
 
         assert!(validator.validate_rule(&rule).is_ok());
     }
-
 }
-
-

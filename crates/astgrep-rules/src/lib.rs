@@ -2,21 +2,21 @@
 //!
 //! This crate provides rule parsing, validation, and execution functionality.
 
-pub mod parser;
-pub mod validator;
 pub mod engine;
 pub mod executor;
 pub mod integration;
-pub mod types;
 pub mod marketplace;
+pub mod parser;
+pub mod types;
+pub mod validator;
 
-pub use parser::*;
-pub use validator::*;
 pub use engine::*;
 pub use executor::*;
 pub use integration::*;
-pub use types::*;
 pub use marketplace::*;
+pub use parser::*;
+pub use types::*;
+pub use validator::*;
 
 use astgrep_core::{Finding, Language, Result};
 
@@ -44,7 +44,9 @@ impl RuleEngine {
 
         // If no rules were parsed (due to errors in non-strict mode), return error
         if parsed_rules.is_empty() {
-            return Err(astgrep_core::AnalysisError::parse_error("No valid rules found"));
+            return Err(astgrep_core::AnalysisError::parse_error(
+                "No valid rules found",
+            ));
         }
 
         // Validate all rules before adding them
@@ -100,7 +102,11 @@ impl RuleEngine {
         context: &RuleContext,
     ) -> Result<Vec<RuleResult>> {
         let applicable_rules = self.rules_for_language(context.language);
-        let results = self.executor.execute_rules(&applicable_rules.into_iter().cloned().collect::<Vec<_>>(), ast, context);
+        let results = self.executor.execute_rules(
+            &applicable_rules.into_iter().cloned().collect::<Vec<_>>(),
+            ast,
+            context,
+        );
         Ok(results)
     }
 
@@ -119,7 +125,9 @@ impl RuleEngine {
                 Ok(None)
             }
         } else {
-            Err(astgrep_core::AnalysisError::rule_validation_error(&format!("Rule not found: {}", rule_id)))
+            Err(astgrep_core::AnalysisError::rule_validation_error(
+                &format!("Rule not found: {}", rule_id),
+            ))
         }
     }
 
@@ -129,7 +137,6 @@ impl RuleEngine {
         ast: &dyn astgrep_core::AstNode,
         context: &RuleContext,
     ) -> Result<Vec<Finding>> {
-        // Perform constant propagation analysis if enabled
         if context.enable_constant_propagation {
             use astgrep_dataflow::ConstantPropagator;
             let mut propagator = ConstantPropagator::new();
@@ -145,15 +152,49 @@ impl RuleEngine {
                 }
             }
         }
-        
-        // Execute rules
-        let results = self.execute_rules(ast, context)?;
+
+        let rules = self.rules_for_language(context.language);
+
+        let rules_with_conditions: Vec<Rule> = rules
+            .iter()
+            .filter(|r| r.patterns.iter().any(|p| !p.conditions.is_empty()))
+            .map(|r| (*r).clone())
+            .collect();
+
+        let rules_without_conditions: Vec<Rule> = rules
+            .iter()
+            .filter(|r| r.patterns.iter().all(|p| p.conditions.is_empty()))
+            .map(|r| (*r).clone())
+            .collect();
+
         let mut findings = Vec::new();
 
-        for result in results {
-            if result.is_success() {
-                findings.extend(result.findings);
+        // Run simple traverser for rules WITHOUT conditions
+        if !rules_without_conditions.is_empty() {
+            let saved_rules = std::mem::take(&mut self.rules);
+            self.rules = rules_without_conditions.clone();
+            let results = self.execute_rules(ast, context)?;
+            self.rules = saved_rules;
+
+            for result in results {
+                if result.is_success() {
+                    findings.extend(result.findings);
+                }
             }
+        }
+
+        // Run advanced executor for rules WITH conditions
+        if !rules_with_conditions.is_empty() {
+            use crate::executor::core::AdvancedRuleExecutor;
+            let mut advanced = AdvancedRuleExecutor::new();
+            let comp_result = advanced.execute_comprehensive_analysis(
+                &rules_with_conditions,
+                ast,
+                context.language,
+                Some(std::path::Path::new(&context.file_path)),
+                context.enable_constant_propagation,
+            )?;
+            findings.extend(comp_result.findings);
         }
 
         Ok(findings)

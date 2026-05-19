@@ -1,0 +1,48 @@
+[2m2026-02-21T01:24:13.153813Z[0m [32m INFO[0m [2mastgrep[0m[2m:[0m Starting astgrep - Multi-language Static Code Analysis Tool
+[2m2026-02-21T01:24:13.154723Z[0m [32m INFO[0m [2mastgrep_cli[0m[2m:[0m Starting code analysis
+[2m2026-02-21T01:24:13.154751Z[0m [32m INFO[0m [2mastgrep_cli::commands::analyze_enhanced[0m[2m:[0m Starting enhanced analysis
+[2m2026-02-21T01:24:13.154771Z[0m [32m INFO[0m [2mastgrep_cli::commands::analyze_enhanced[0m[2m:[0m Found 1 files to analyze
+[2m2026-02-21T01:24:13.154785Z[0m [32m INFO[0m [2mastgrep_cli::commands::analyze_enhanced[0m[2m:[0m Analyzing file: "tests/categories/rules/taint_basic.py"
+🔍 Executing rule: tainting
+🔍 Rule has 0 patterns
+🔍 Rule is in taint mode
+[2m2026-02-21T01:24:13.717439Z[0m [32m INFO[0m [2mastgrep_cli::commands::analyze_enhanced[0m[2m:[0m enhanced: language for preprocessing check = Other
+{
+  "findings": [
+    {
+      "confidence": "MEDIUM",
+      "fix": null,
+      "location": {
+        "end_column": 10,
+        "end_line": 15,
+        "file": "tests/categories/rules/taint_basic.py",
+        "start_column": 3,
+        "start_line": 15
+      },
+      "message": "tainting: This confirms taint mode works.\n",
+      "rule_id": "tainting",
+      "severity": "ERROR"
+    },
+    {
+      "confidence": "MEDIUM",
+      "fix": null,
+      "location": {
+        "end_column": 10,
+        "end_line": 17,
+        "file": "tests/categories/rules/taint_basic.py",
+        "start_column": 3,
+        "start_line": 17
+      },
+      "message": "tainting: This confirms taint mode works.\n",
+      "rule_id": "tainting",
+      "severity": "ERROR"
+    }
+  ],
+  "summary": {
+    "analysis_time_ms": 562,
+    "files_analyzed": 1,
+    "rules_executed": 1,
+    "total_findings": 2
+  }
+}
+[2m2026-02-21T01:24:13.717560Z[0m [32m INFO[0m [2mastgrep_cli::commands::analyze_enhanced[0m[2m:[0m Analysis completed in 562.756333ms

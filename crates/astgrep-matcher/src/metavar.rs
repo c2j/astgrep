@@ -1,5 +1,5 @@
 //! Metavariable handling
-//! 
+//!
 //! This module provides functionality for handling metavariables in patterns.
 
 use astgrep_core::{AstNode, Result};
@@ -37,6 +37,7 @@ pub struct MetavarBinding {
     pub name: String,
     pub value: String,
     pub node_type: String,
+    pub location: Option<(usize, usize, usize, usize)>,
     pub constraints: Vec<MetavarConstraint>,
 }
 
@@ -47,6 +48,23 @@ impl MetavarBinding {
             name,
             value,
             node_type,
+            location: None,
+            constraints: Vec::new(),
+        }
+    }
+
+    /// Create a new metavariable binding with location
+    pub fn new_with_location(
+        name: String,
+        value: String,
+        node_type: String,
+        location: (usize, usize, usize, usize),
+    ) -> Self {
+        Self {
+            name,
+            value,
+            node_type,
+            location: Some(location),
             constraints: Vec::new(),
         }
     }
@@ -108,16 +126,21 @@ impl MetavarManager {
     /// Bind a metavariable to a value
     pub fn bind(&mut self, name: String, value: String, node: &dyn AstNode) -> Result<bool> {
         let node_type = node.node_type().to_string();
-        
+        let location = node.location();
+
         // Check if this metavariable is already bound
         if let Some(existing_binding) = self.bindings.get(&name) {
             // Check if the new binding is consistent with the existing one
             return Ok(existing_binding.value == value);
         }
 
-        // Create new binding with constraints
-        let mut binding = MetavarBinding::new(name.clone(), value, node_type);
-        
+        // Create new binding with constraints and location
+        let mut binding = if let Some(loc) = location {
+            MetavarBinding::new_with_location(name.clone(), value, node_type, loc)
+        } else {
+            MetavarBinding::new(name.clone(), value, node_type)
+        };
+
         if let Some(constraints) = self.constraints.get(&name) {
             for constraint in constraints {
                 binding = binding.add_constraint(constraint.clone());
@@ -173,7 +196,9 @@ impl MetavarManager {
 
     /// Validate all current bindings
     pub fn validate_bindings(&self) -> bool {
-        self.bindings.values().all(|binding| binding.satisfies_constraints())
+        self.bindings
+            .values()
+            .all(|binding| binding.satisfies_constraints())
     }
 
     /// Create a snapshot of current bindings
@@ -239,8 +264,9 @@ pub mod utils {
 
     /// Create a regex constraint from a pattern string
     pub fn create_regex_constraint(pattern: &str) -> Result<MetavarConstraint> {
-        let regex = Regex::new(pattern)
-            .map_err(|e| astgrep_core::AnalysisError::pattern_match_error(format!("Invalid regex: {}", e)))?;
+        let regex = Regex::new(pattern).map_err(|e| {
+            astgrep_core::AnalysisError::pattern_match_error(format!("Invalid regex: {}", e))
+        })?;
         Ok(MetavarConstraint::Regex(regex))
     }
 
@@ -358,8 +384,12 @@ mod tests {
         let mut manager = MetavarManager::new();
         let node = AstBuilder::identifier("test_var");
 
-        manager.bind("VAR1".to_string(), "value1".to_string(), &node).unwrap();
-        manager.bind("VAR2".to_string(), "value2".to_string(), &node).unwrap();
+        manager
+            .bind("VAR1".to_string(), "value1".to_string(), &node)
+            .unwrap();
+        manager
+            .bind("VAR2".to_string(), "value2".to_string(), &node)
+            .unwrap();
 
         let snapshot = manager.snapshot();
         assert_eq!(snapshot.len(), 2);
@@ -401,8 +431,12 @@ mod tests {
         let mut manager = MetavarManager::new();
         let node = AstBuilder::identifier("test");
 
-        manager.bind("VAR1".to_string(), "value1".to_string(), &node).unwrap();
-        manager.bind("VAR2".to_string(), "value2".to_string(), &node).unwrap();
+        manager
+            .bind("VAR1".to_string(), "value1".to_string(), &node)
+            .unwrap();
+        manager
+            .bind("VAR2".to_string(), "value2".to_string(), &node)
+            .unwrap();
 
         let values = manager.get_binding_values();
         assert_eq!(values.len(), 2);
