@@ -372,7 +372,7 @@ impl ScriptRunner {
         let start_time = Instant::now();
 
         let metadata = std::fs::metadata(script_path)?;
-        let _readonly = metadata.permissions().readonly();
+        let readonly = metadata.permissions().readonly();
 
         #[cfg(unix)]
         {
