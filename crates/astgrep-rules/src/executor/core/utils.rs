@@ -313,7 +313,7 @@ impl AdvancedRuleExecutor {
         node: &dyn AstNode,
         source_text: &str,
     ) -> Option<String> {
-        let node_text = node.text().unwrap_or_default();
+        let _node_text = node.text().unwrap_or_default();
 
         // Get the node's location
         if let Some((start_line, _start_col, _end_line, _end_col)) = node.location() {
@@ -578,7 +578,7 @@ impl AdvancedRuleExecutor {
         node: &dyn AstNode,
         source_text: &str,
     ) -> Option<String> {
-        let node_text = node.text().unwrap_or_default();
+        let _node_text = node.text().unwrap_or_default();
 
         // Get the node's location
         if let Some((start_line, _start_col, _end_line, _end_col)) = node.location() {
