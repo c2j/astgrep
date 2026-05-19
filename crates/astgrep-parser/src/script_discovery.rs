@@ -309,7 +309,8 @@ impl ScriptDiscovery {
     fn is_executable(&self, metadata: &std::fs::Metadata) -> bool {
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
             metadata.permissions().mode() & 0o111 != 0
         }
         #[cfg(not(unix))]
