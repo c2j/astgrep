@@ -4,9 +4,8 @@
 //! adapters to reduce boilerplate code.
 
 use crate::adapters::{AstAdapter, AdapterContext, AdapterMetadata};
-use astgrep_ast::{UniversalNode, NodeType, AstBuilder};
-use astgrep_core::{Language, Result, constants::metadata};
-use std::collections::HashMap;
+use astgrep_ast::{UniversalNode, NodeType};
+use astgrep_core::{Language, Result};
 
 /// Generic base adapter that provides common functionality
 pub struct BaseAdapter {
@@ -88,7 +87,7 @@ impl BaseAdapter {
 
     /// Parse source code into a basic AST structure
     /// This provides a default implementation that can be overridden
-    pub fn parse_basic_ast(&self, source: &str, context: &AdapterContext) -> Result<UniversalNode> {
+    pub fn parse_basic_ast(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
         // Create a basic AST structure based on the language
         let mut root = UniversalNode::new(NodeType::Program)
             .with_text(source.to_string())
@@ -239,8 +238,8 @@ impl BaseAdapter {
     /// Parse XML-style syntax
     fn parse_xml_style(&self, source: &str, root: &mut UniversalNode) -> Result<()> {
         // Simple XML parsing - detect elements
-        let mut in_tag = false;
-        let mut current_tag = String::new();
+        let _in_tag = false;
+        let _current_tag = String::new();
 
         for (line_num, line) in source.lines().enumerate() {
             let line = line.trim();

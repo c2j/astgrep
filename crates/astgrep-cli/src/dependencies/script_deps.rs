@@ -10,9 +10,9 @@ use std::{
     path::{Path, PathBuf},
     fmt,
 };
-use tracing::{debug, info, warn, error, instrument};
+use tracing::{debug, info, instrument};
 use regex::Regex;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 
 /// Types of script dependencies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -462,7 +462,7 @@ impl ScriptDependencyResolver {
             }
         }
 
-        for (var_name, line_num) in env_vars {
+        for (var_name, _line_num) in env_vars {
             let dependency = Dependency {
                 dependency_type: DependencyType::EnvironmentDependency,
                 name: var_name,
@@ -589,7 +589,7 @@ impl ScriptDependencyResolver {
     /// Detect a circular dependency in the remaining scripts
     fn detect_cycle(
         &self,
-        nodes: &HashMap<PathBuf, ScriptDependencyNode>,
+        _nodes: &HashMap<PathBuf, ScriptDependencyNode>,
         remaining_scripts: &HashSet<PathBuf>,
     ) -> Result<CircularDependency> {
         // Simple cycle detection - in practice, you'd use DFS for more complex cycles

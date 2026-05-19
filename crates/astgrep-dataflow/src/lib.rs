@@ -34,7 +34,7 @@ pub use constant_analysis::*;
 pub use symbolic_propagation::*;
 
 use astgrep_core::{AstNode, Result};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Main data flow analyzer
 pub struct DataFlowAnalyzer {

@@ -86,22 +86,26 @@ impl AdvancedRuleExecutor {
                             {
                                 constant
                                     .to_string_value()
-                                    .unwrap_or_else(|| metavar_value.clone())
+                                    .unwrap_or_else(|| metavar_value.value.clone())
                             } else {
-                                metavar_value.clone()
+                                metavar_value.value.clone()
                             }
                         } else {
-                            metavar_value.clone()
+                            metavar_value.value.clone()
                         }
                     } else {
-                        metavar_value.clone()
+                        metavar_value.value.clone()
                     };
 
                     if let ComparisonOperator::PythonExpression(expr) = &metavar_comp.operator {
+                        let str_bindings: std::collections::HashMap<String, String> =
+                            match_result.bindings.iter()
+                                .map(|(k, v)| (k.clone(), v.value.clone()))
+                                .collect();
                         return self.evaluate_python_expression(
                             &resolved_value,
                             expr,
-                            &match_result.bindings,
+                            &str_bindings,
                         );
                     }
 
@@ -118,7 +122,7 @@ impl AdvancedRuleExecutor {
             Condition::NodeType(expected_type) => {
                 Ok(match_result.node.node_type() == *expected_type)
             }
-            Condition::NodeAttribute(attr_name, attr_value) => {
+            Condition::NodeAttribute(_attr_name, attr_value) => {
                 // Check node attribute (simplified implementation)
                 // In a real implementation, this would check actual node attributes
                 Ok(match_result.node.text().unwrap_or("").contains(attr_value))
@@ -205,7 +209,10 @@ impl AdvancedRuleExecutor {
                             if !matches {
                                 return Ok(false);
                             }
-                            combined_bindings.extend(new_bindings);
+                            combined_bindings.extend(
+                                new_bindings.into_iter()
+                                    .map(|(k, v)| (k, MatchBinding::new(v)))
+                            );
                         }
                     }
 
@@ -231,7 +238,7 @@ impl AdvancedRuleExecutor {
     fn evaluate_condition_with_bindings(
         &self,
         condition: &Condition,
-        bindings: &HashMap<String, String>,
+        bindings: &HashMap<String, MatchBinding>,
         original_match: &SemgrepMatchResult,
         full_source: &str,
     ) -> Result<bool> {
@@ -243,7 +250,7 @@ impl AdvancedRuleExecutor {
     /// Extract type information for a variable from the match context
     pub(super) fn extract_type_info(
         &self,
-        match_result: &SemgrepMatchResult,
+        _match_result: &SemgrepMatchResult,
         var_name: &str,
         full_source: &str,
     ) -> Option<String> {

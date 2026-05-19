@@ -3,7 +3,7 @@
 //! This module provides tools and utilities for optimizing the performance
 //! of static analysis operations.
 
-use crate::{AstNode, Result};
+use crate::AstNode;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

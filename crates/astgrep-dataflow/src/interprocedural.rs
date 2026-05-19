@@ -6,8 +6,8 @@
 use crate::call_graph::{CallGraph, FunctionId, FunctionSignature, ParameterMapping};
 use crate::graph::{DataFlowGraph, NodeId};
 use crate::taint::{TaintFlow, TaintState};
-use crate::sources::{Source, SourceType};
-use crate::sinks::{Sink, SinkType};
+use crate::sources::Source;
+use crate::sinks::Sink;
 use crate::sanitizers::Sanitizer;
 use astgrep_core::Result;
 use std::collections::{HashMap, HashSet};

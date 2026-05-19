@@ -13,8 +13,7 @@ use std::time::Instant;
 use tracing::{info, warn};
 use astgrep_core::Language;
 
-use crate::{EnhancedAnalysisConfig, PerformanceProfiler};
-use crate::tree_sitter_analyzer::TreeSitterAnalyzer;
+use crate::EnhancedAnalysisConfig;
 use crate::output::analysis::{Finding, AnalysisStatistics};
 
 // Import submodules
@@ -206,7 +205,7 @@ fn analyze_with_rule_engine(
 
         // Perform constant propagation analysis if enabled
         // Use tree-sitter parser for better AST quality if available
-        let constant_values = if config.enable_constant_propagation {
+        let _constant_values = if config.enable_constant_propagation {
             use astgrep_dataflow::ConstantPropagator;
             use astgrep_parser::tree_sitter_parser::TreeSitterParser;
             
@@ -324,7 +323,7 @@ fn analyze_with_rule_engine(
                             if let Ok(Some(result)) = engine.execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql) {
                                 if result.is_success() {
                                     tracing::debug!("embedded-sql: rule '{}' produced {} findings on snippet #{}", rule.id, result.findings.len(), idx + 1);
-                                    for mut f in result.findings {
+                                    for f in result.findings {
                                         // Adjust location lines by snippet offset
                                         let mut loc = f.location;
                                         let line_off = sn.start_line.saturating_sub(1);

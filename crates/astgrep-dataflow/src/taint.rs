@@ -4,10 +4,10 @@
 
 use crate::graph::{DataFlowGraph, NodeId};
 use crate::sources::{Source, SourceType};
-use crate::sinks::{Sink, SinkType};
+use crate::sinks::Sink;
 use crate::sanitizers::{Sanitizer, SanitizerType};
 use astgrep_core::{Location, Result, constants::defaults::analysis};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 
 /// Taint tracker for analyzing data flow
 pub struct TaintTracker {
@@ -147,7 +147,7 @@ impl TaintTracker {
                 
                 if protected_types.contains(&source_vuln_type.to_string()) {
                     // Reduce confidence based on sanitizer effectiveness
-                    taint.confidence *= (1.0 - effectiveness);
+                    taint.confidence *= 1.0 - effectiveness;
                     
                     // If confidence is very low, consider it sanitized
                     if taint.confidence < analysis::LOW_CONFIDENCE_THRESHOLD as f32 {
@@ -266,7 +266,7 @@ impl TaintTracker {
             let effectiveness = sanitizer.effectiveness_against(source_type, vulnerability_type);
 
             // Reduce confidence based on sanitizer effectiveness
-            confidence *= (1.0 - effectiveness);
+            confidence *= 1.0 - effectiveness;
         }
 
         confidence
@@ -311,7 +311,7 @@ impl TaintTracker {
     /// Propagate taint across function calls
     fn propagate_taint_across_calls(
         &mut self,
-        graph: &DataFlowGraph,
+        _graph: &DataFlowGraph,
         call_graph: &HashMap<NodeId, Vec<NodeId>>,
     ) -> Result<()> {
         let mut changed = true;
@@ -491,7 +491,7 @@ impl TaintInfo {
     pub fn add_transformation(&mut self, transformation: TaintTransformation) {
         match &transformation {
             TaintTransformation::Sanitized { effectiveness, .. } => {
-                self.confidence *= (1.0 - effectiveness);
+                self.confidence *= 1.0 - effectiveness;
             }
             TaintTransformation::Encoded { .. } => {
                 self.confidence *= analysis::taint_multipliers::ENCODING_MULTIPLIER;

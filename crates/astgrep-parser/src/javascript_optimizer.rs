@@ -4,7 +4,7 @@
 //! the accuracy of semgrep-style pattern matching for JavaScript/TypeScript code.
 
 use astgrep_ast::{UniversalNode, NodeType};
-use astgrep_core::{Result, AnalysisError, AstNode};
+use astgrep_core::{Result, AstNode};
 use std::collections::{HashMap, HashSet};
 use regex::Regex;
 

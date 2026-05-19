@@ -28,7 +28,7 @@ pub enum AssetType {
     Report,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssetStatus {
     Pending,
     InProgress,
@@ -551,11 +551,15 @@ mod tests {
 
     #[test]
     fn test_script_argument_creation() {
-        let arg = ScriptArgument::new("verbose", "Enable verbose logging")
-            .short("v")
-            .long("verbose")
-            .required(false)
-            .takes_value(false);
+        let arg = ScriptArgument {
+            name: "verbose".to_string(),
+            short_name: Some("v".to_string()),
+            long_name: Some("verbose".to_string()),
+            required: false,
+            takes_value: false,
+            default_value: None,
+            description: "Enable verbose logging".to_string(),
+        };
 
         assert_eq!(arg.name, "verbose");
         assert_eq!(arg.short_name.as_ref().unwrap(), "v");

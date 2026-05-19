@@ -9,7 +9,7 @@ pub struct PathHandler {
     /// Base directory for operations
     base_dir: PathBuf,
     /// Path separator for the current platform
-    separator: String,
+    _separator: String,
 }
 
 impl PathHandler {
@@ -17,7 +17,7 @@ impl PathHandler {
     pub fn new() -> Self {
         Self {
             base_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-            separator: std::path::MAIN_SEPARATOR.to_string(),
+            _separator: std::path::MAIN_SEPARATOR.to_string(),
         }
     }
 
@@ -25,7 +25,7 @@ impl PathHandler {
     pub fn with_base_dir(base_dir: PathBuf) -> Self {
         Self {
             base_dir,
-            separator: std::path::MAIN_SEPARATOR.to_string(),
+            _separator: std::path::MAIN_SEPARATOR.to_string(),
         }
     }
 

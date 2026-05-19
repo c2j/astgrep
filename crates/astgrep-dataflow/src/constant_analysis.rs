@@ -7,7 +7,6 @@
 //! - Constant propagation through function calls
 
 use crate::constant_propagation::ConstantValue;
-use astgrep_core::Result;
 use std::collections::HashMap;
 
 /// Represents a constant value with metadata

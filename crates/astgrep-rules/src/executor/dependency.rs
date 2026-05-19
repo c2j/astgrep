@@ -596,7 +596,7 @@ impl VariableDependencyGraph {
 
         // For pattern like "$X.forEach" and line like "students.forEach"
         // Extract X = students
-        let var_name = &metavar[1..]; // Remove $
+        let _var_name = &metavar[1..]; // Remove $
 
         // Find pattern prefix before metavar
         if let Some(var_pos) = pattern.find(metavar) {
@@ -730,7 +730,7 @@ impl VariableDependencyGraph {
 
     /// Process getter call pattern: var = obj.getX()
     /// Records mapping from getter call to field
-    fn process_getter_call(&mut self, target_var: &str, expr: &str) {
+    fn process_getter_call(&mut self, _target_var: &str, expr: &str) {
         // Pattern: obj.getX()
         if let Some(get_pos) = expr.find(".get") {
             if let Some(paren_pos) = expr[get_pos..].find('(') {

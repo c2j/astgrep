@@ -5,9 +5,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::fs;
 use tokio::fs as async_fs;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::services::migration_orchestrator::MigrationOperation;
 use crate::utils::path_utils::PathHandler;

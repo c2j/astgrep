@@ -2,16 +2,15 @@
 //!
 //! This module provides functions for finding pattern matches in source code.
 
-use astgrep_core::{AstNode, Confidence, Finding, Location, Result, Severity};
+use astgrep_core::{Confidence, Finding, Location, Result, Severity};
 use regex::Regex;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Find pattern matches in source code
 pub fn find_pattern_matches(
     pattern: &str,
     source: &str,
-    language: astgrep_core::Language,
+    _language: astgrep_core::Language,
 ) -> Result<Vec<Finding>> {
     let mut findings = Vec::new();
 

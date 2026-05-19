@@ -3,7 +3,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -440,6 +439,7 @@ impl MigrationStateManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::migration_orchestrator::OperationType;
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -482,7 +482,7 @@ mod tests {
         state_manager.save_state(&state).await.unwrap();
 
         // Load state
-        let loaded_state = state_manager.load_state(&migration_id).await.unwrap().unwrap();
+        let mut loaded_state = state_manager.load_state(&migration_id).await.unwrap().unwrap();
 
         assert_eq!(loaded_state.migration_id, migration_id);
         assert_eq!(loaded_state.operations.len(), 2);

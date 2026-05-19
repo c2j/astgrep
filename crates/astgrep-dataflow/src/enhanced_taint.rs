@@ -1,7 +1,7 @@
 //! Enhanced taint analysis with improved precision
 
 use crate::sources::{Source, SourceType};
-use crate::sinks::{Sink, SinkType};
+use crate::sinks::Sink;
 use crate::sanitizers::Sanitizer;
 use crate::graph::{DataFlowGraph, NodeId};
 use astgrep_core::Result;
@@ -314,7 +314,7 @@ impl EnhancedTaintTracker {
     /// Find enhanced taint flows from sources to sinks
     fn find_enhanced_flows(
         &self,
-        graph: &DataFlowGraph,
+        _graph: &DataFlowGraph,
         sources: &[Source],
         sinks: &[Sink],
         sanitizers: &[Sanitizer],

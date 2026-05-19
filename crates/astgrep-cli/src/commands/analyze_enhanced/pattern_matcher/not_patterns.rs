@@ -3,8 +3,7 @@
 use super::super::types::ParsedRule;
 use super::core::apply_metavariable_pattern;
 use super::regex::apply_regex_pattern;
-use crate::output::analysis::{Confidence, Severity};
-use crate::output::analysis::{Finding, Location};
+use crate::output::analysis::Finding;
 use anyhow::Result;
 use std::path::PathBuf;
 use tracing::info;

@@ -131,7 +131,7 @@ impl TreeSitterParser {
     }
 
     /// Extract syntax highlighting information
-    fn extract_syntax_info(&self, node: &Node, text: &str) -> Option<String> {
+    fn extract_syntax_info(&self, node: &Node, _text: &str) -> Option<String> {
         match node.kind() {
             "string" | "string_literal" => Some("string".to_string()),
             "number" | "integer" | "float" => Some("number".to_string()),
@@ -214,7 +214,7 @@ impl TreeSitterParser {
             "comment" | "line_comment" | "block_comment" | "documentation_comment" => NodeType::Comment,
 
             // Language-specific constructs
-            "lambda" | "lambda_expression" | "arrow_function" => NodeType::LambdaExpression,
+            "lambda" | "lambda_expression" => NodeType::LambdaExpression,
 
             // Switch statements
             "switch_statement" => NodeType::SwitchStatement,
@@ -222,13 +222,13 @@ impl TreeSitterParser {
 
             // Bash-specific constructs
             "command" | "simple_command" | "pipeline" | "command_substitution" => NodeType::CallExpression,
-            "variable_assignment" | "assignment" => NodeType::AssignmentExpression,
-            "word" | "variable_name" | "command_name" => NodeType::Identifier,
-            "string" | "raw_string" | "ansi_c_quoting" | "quoted_string" => NodeType::Literal,
-            "expansion" | "command_substitution" | "process_substitution" => NodeType::CallExpression,
+            "variable_assignment" => NodeType::AssignmentExpression,
+            "word" | "command_name" => NodeType::Identifier,
+            "ansi_c_quoting" | "quoted_string" => NodeType::Literal,
+            "expansion" | "process_substitution" => NodeType::CallExpression,
             "if_statement" | "while_statement" | "for_statement" | "case_statement" => NodeType::ControlFlowStatement,
             "function_definition" => NodeType::FunctionDeclaration,
-            "compound_statement" | "subshell" => NodeType::BlockStatement,
+            "subshell" => NodeType::BlockStatement,
             "test_command" | "test_operator" => NodeType::BinaryExpression,
             "redirected_statement" | "file_redirect" => NodeType::ExpressionStatement,
 
@@ -248,9 +248,9 @@ impl TreeSitterParser {
             // Common SQL tokens
             "column_reference" | "table_reference" | "field" => NodeType::Identifier,
             "function_call" | "aggregate_function" => NodeType::CallExpression,
-            "binary_expression" | "comparison_predicate" | "in_predicate" |
+            "comparison_predicate" | "in_predicate" |
             "like_predicate" | "between_predicate" | "union" | "intersect" | "except" => NodeType::BinaryExpression,
-            "literal" | "string_literal" | "number_literal" | "boolean_literal" => NodeType::Literal,
+            "literal" | "number_literal" | "boolean_literal" => NodeType::Literal,
 
             // Error handling
             "ERROR" => NodeType::Unknown,

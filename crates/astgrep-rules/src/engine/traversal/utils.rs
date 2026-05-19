@@ -3,7 +3,6 @@
 //! This module provides tokenization and utility functions for pattern matching.
 
 use crate::engine::traversal::RuleExecutionEngine;
-use astgrep_core::Language;
 
 impl RuleExecutionEngine {
     /// Tokenize a string, preserving operators and punctuation as separate tokens.
@@ -59,11 +58,11 @@ impl RuleExecutionEngine {
                     if ch == '.' {
                         // check next two chars form "..."
                         let mut consumed_two = false;
-                        if let Some(&(i2, ch2)) = it.peek() {
+                        if let Some(&(_i2, ch2)) = it.peek() {
                             if ch2 == '.' {
                                 // consume second '.'
                                 let _ = it.next();
-                                if let Some(&(i3, ch3)) = it.peek() {
+                                if let Some(&(_i3, ch3)) = it.peek() {
                                     if ch3 == '.' {
                                         // consume third '.' and push ellipsis token
                                         let _ = it.next();
@@ -93,7 +92,7 @@ impl RuleExecutionEngine {
                     let start = i;
                     let mut val = String::new();
                     val.push(quote);
-                    while let Some((j, c)) = it.next() {
+                    while let Some((_j, c)) = it.next() {
                         val.push(c);
                         if c == '\\' {
                             if let Some((_, c2)) = it.next() {

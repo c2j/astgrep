@@ -9,15 +9,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::time::SystemTime;
-use tracing::{info, warn, debug, error, instrument};
+use tracing::{info, debug, error, instrument};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use walkdir::{WalkDir, DirEntry};
+use walkdir::WalkDir;
 
-use astgrep_core::{
-    models::{TestCase, TestType, TestComplexity, TestCaseStatus, TestCategory, TestPriority, TestCaseMetadata, LanguageMapping, LanguageConfig, ValidationResult},
-    error::Result as AstGrepResult,
-};
+use astgrep_core::models::{TestCase, TestType, TestComplexity, TestCaseStatus, TestCaseMetadata, LanguageMapping};
 use crate::validation::{ValidationReport};
 use crate::validation::migration_validator::{MigrationValidator, ValidationConfig};
 use crate::backup::backup_manager::BackupManager;
@@ -272,9 +269,9 @@ impl TestCaseMigrator {
         let mut language_distribution = HashMap::new();
         let mut type_distribution = HashMap::new();
         let mut cross_references_updated = Vec::new();
-        let mut warnings = Vec::new();
+        let warnings = Vec::new();
         let mut total_bytes_migrated = 0u64;
-        let mut files_backed_up = 0usize;
+        let files_backed_up = 0usize;
 
         // Discover test cases to migrate
         let test_cases = self.discover_test_cases().await
@@ -481,7 +478,7 @@ impl TestCaseMigrator {
                 let target_path = self.generate_target_path(file_path, &language, &test_type).await?;
 
                 // Create test case
-                let test_case_id = format!("tc-{}", chrono::Utc::now().timestamp_nanos());
+                let test_case_id = format!("tc-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default());
                 let test_case_name = filename.to_string();
 
                 let test_case = TestCase {
@@ -518,9 +515,8 @@ impl TestCaseMigrator {
 
         // Build path: newtest/testcases/{language}/{test-type}/
         let test_type_dir = match test_type {
-            TestType::RuleValidation => "basic",
-            TestType::PatternMatching => "pattern-matching",
             TestType::RuleValidation => "rule-validation",
+            TestType::PatternMatching => "pattern-matching",
             TestType::Parsing => "parsing",
             TestType::Integration => "integration",
             TestType::Performance => "performance",
@@ -556,7 +552,7 @@ impl TestCaseMigrator {
     async fn migrate_single_test_case(
         test_case: TestCase,
         config: TestCaseMigrationConfig,
-        path_handler: PathHandler,
+        _path_handler: PathHandler,
     ) -> Result<MigratedTestCase, FailedMigration> {
         let original_path = test_case.current_path.clone();
         let target_path = test_case.target_path.clone();
@@ -565,7 +561,7 @@ impl TestCaseMigrator {
                original_path.display(),
                target_path.display());
 
-        let migration_start = SystemTime::now();
+        let _migration_start = SystemTime::now();
         let mut operations_performed = Vec::new();
 
         // Get original file metadata
@@ -617,7 +613,7 @@ impl TestCaseMigrator {
 
             // Preserve timestamps if requested
             if config.preserve_timestamps {
-                let modified = original_metadata.modified()
+                let _modified = original_metadata.modified()
                     .map_err(|e| FailedMigration {
                         original_path: original_path.clone(),
                         error_message: format!("Failed to get modification time: {}", e),
@@ -625,7 +621,7 @@ impl TestCaseMigrator {
                         partial_results: None,
                     })?;
 
-                let accessed = original_metadata.accessed()
+                let _accessed = original_metadata.accessed()
                     .map_err(|e| FailedMigration {
                         original_path: original_path.clone(),
                         error_message: format!("Failed to get access time: {}", e),
@@ -675,8 +671,8 @@ impl TestCaseMigrator {
     }
 
     /// Update cross-references between migrated test cases
-    async fn update_cross_references(&mut self, migrated_cases: &[MigratedTestCase]) -> Result<Vec<String>> {
-        let mut updated_refs = Vec::new();
+    async fn update_cross_references(&mut self, _migrated_cases: &[MigratedTestCase]) -> Result<Vec<String>> {
+        let updated_refs = Vec::new();
 
         // TODO: Implement cross-reference update logic
         // This would involve:

@@ -3,8 +3,8 @@
 //! This module contains the core analysis algorithms and AST traversal
 //! logic for constant propagation.
 
-use crate::graph::{DataFlowGraph, NodeId};
-use crate::constant_propagation::state::{ConstantPropagator, ConstantValue, SourceLocation, Scope, VariableDefinition, VisitContext};
+use crate::graph::DataFlowGraph;
+use crate::constant_propagation::state::{ConstantPropagator, ConstantValue, SourceLocation, VariableDefinition, VisitContext};
 use crate::constant_propagation::utils::{
     get_node_location,
     is_static_block_context,
@@ -33,7 +33,7 @@ impl ConstantPropagator {
     }
 
     /// Collect constant assignments from the graph
-    fn collect_constants(&mut self, graph: &DataFlowGraph, symbol_table: &crate::symbol_table::SymbolTable) -> Result<()> {
+    fn collect_constants(&mut self, graph: &DataFlowGraph, _symbol_table: &crate::symbol_table::SymbolTable) -> Result<()> {
         for node_id in graph.get_all_nodes() {
             if let Some(node) = graph.get_node(node_id) {
                 // Check if this is a constant assignment
@@ -82,14 +82,14 @@ impl ConstantPropagator {
     }
 
     /// Extract constant value from a node
-    fn extract_constant_from_node(&self, node: &dyn std::any::Any) -> Option<ConstantValue> {
+    fn extract_constant_from_node(&self, _node: &dyn std::any::Any) -> Option<ConstantValue> {
         // This is a placeholder - in real implementation, we would parse the node
         // to extract string literals, integer literals, etc.
         None
     }
 
     /// Get variable name from a node
-    fn get_variable_name_from_node(&self, node: &dyn std::any::Any) -> Option<String> {
+    fn get_variable_name_from_node(&self, _node: &dyn std::any::Any) -> Option<String> {
         // This is a placeholder - in real implementation, we would extract
         // the variable name from assignment nodes
         None

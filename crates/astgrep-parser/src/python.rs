@@ -97,7 +97,7 @@ impl PythonAdapter {
     fn parse_function_definition(&self, source: &str, _context: &AdapterContext) -> Result<UniversalNode> {
         // def function_name(params): -> return_type
         let mut function_name = "unknown";
-        let mut is_async = source.trim_start().starts_with("async def");
+        let is_async = source.trim_start().starts_with("async def");
         
         let def_start = if is_async { 
             source.find("async def").unwrap_or(0) + 9 

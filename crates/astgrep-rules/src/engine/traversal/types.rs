@@ -3,11 +3,9 @@
 //! This module provides type definitions for the rule execution engine.
 
 use crate::types::*;
-use astgrep_core::{AstNode, Finding, Location, Result};
+use astgrep_core::{AstNode, Finding, Result};
 use astgrep_matcher::PatternMatcher;
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::time::Instant;
 
 /// Taint match information
 pub struct TaintMatch {
@@ -182,8 +180,8 @@ impl RuleExecutionEngine {
     /// Find pattern matches using the pattern matcher
     pub(crate) fn find_pattern_matches(
         &self,
-        pattern: &crate::types::Pattern,
-        ast: &dyn AstNode,
+        _pattern: &crate::types::Pattern,
+        _ast: &dyn AstNode,
         _language: astgrep_core::Language,
         _source: &str,
     ) -> Result<Vec<Box<dyn AstNode>>> {

@@ -4,7 +4,7 @@
 
 use crate::engine::traversal::RuleExecutionEngine;
 use crate::types::*;
-use astgrep_core::{AstNode, Finding, Result};
+use astgrep_core::AstNode;
 use std::time::Instant;
 use tracing::debug;
 

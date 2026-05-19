@@ -7,7 +7,7 @@ use std::time::Duration;
 
 /// Default configuration constants
 pub mod defaults {
-    use super::*;
+    
 
     /// Default server configuration
     pub mod server {

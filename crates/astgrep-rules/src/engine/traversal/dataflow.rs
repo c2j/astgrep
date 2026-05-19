@@ -5,7 +5,6 @@
 use crate::engine::traversal::RuleExecutionEngine;
 use crate::types::*;
 use astgrep_core::{AstNode, Finding, Location, Result};
-use serde_yaml::Value;
 use std::path::PathBuf;
 
 impl RuleExecutionEngine {

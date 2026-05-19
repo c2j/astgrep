@@ -3,7 +3,6 @@
 //! This module provides convenient builders for creating AST nodes.
 
 use crate::nodes::{BinaryOperator, LiteralValue, NodeType, UnaryOperator, UniversalNode};
-use astgrep_core::Result;
 
 /// Builder for creating AST nodes with a fluent interface
 pub struct AstBuilder;

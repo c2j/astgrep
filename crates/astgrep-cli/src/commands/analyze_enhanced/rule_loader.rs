@@ -101,7 +101,7 @@ fn parse_single_rule(
     // Generate semgrep-compatible rule ID with path prefix
     let id = if let Some(path) = file_path {
         // Convert path to semgrep-style ID prefix (exclude filename, only use directory path)
-        let path_str = path.to_string_lossy();
+        let _path_str = path.to_string_lossy();
         let dir_path = path
             .parent()
             .map(|p| p.to_string_lossy())

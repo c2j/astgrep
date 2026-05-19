@@ -14,7 +14,7 @@ impl AdvancedRuleExecutor {
         ast: &dyn AstNode,
         type_constraints: &[(String, String)],
     ) -> Result<Vec<astgrep_core::SemgrepMatchResult>> {
-        use astgrep_core::SemgrepMatchResult;
+        
 
         eprintln!(
             "DEBUG: Searching for symbolic propagation matches with {} type constraints",
@@ -127,11 +127,11 @@ impl AdvancedRuleExecutor {
         start_method: &str,
         end_method: &str,
         propagator: &astgrep_dataflow::SymbolicPropagator,
-        full_source: &str,
+        _full_source: &str,
         matches: &mut Vec<astgrep_core::SemgrepMatchResult>,
     ) -> Result<()> {
         use astgrep_core::SemgrepMatchResult;
-        use astgrep_dataflow::SymbolicValue;
+        
 
         eprintln!(
             "DEBUG: Searching for matches: {}(). ... .{}()",
@@ -462,7 +462,7 @@ impl AdvancedRuleExecutor {
     pub(super) fn check_if_statement_symbolic_match(
         &self,
         if_node: &dyn AstNode,
-        pattern_str: &str,
+        _pattern_str: &str,
         type_constraints: &[(String, String)],
         propagator: &astgrep_dataflow::SymbolicPropagator,
         full_source: &str,
@@ -506,7 +506,7 @@ impl AdvancedRuleExecutor {
                     eprintln!("DEBUG: Variable '{}' matches type '{}' via symbolic propagation and involves contains()",
                              cond_var, expected_type);
                     // Bind the pattern variable to this condition variable
-                    bindings.insert(var_name.clone(), cond_var);
+                    bindings.insert(var_name.clone(), astgrep_core::MatchBinding::new(cond_var));
                 }
             }
         }
@@ -590,7 +590,7 @@ impl AdvancedRuleExecutor {
         propagator: &astgrep_dataflow::SymbolicPropagator,
         full_source: &str,
     ) -> bool {
-        use astgrep_dataflow::SymbolicValue;
+        
 
         eprintln!(
             "DEBUG check_var_type_sym: Checking if '{}' traces to type '{}'",
@@ -737,7 +737,7 @@ impl AdvancedRuleExecutor {
         propagator: &astgrep_dataflow::SymbolicPropagator,
         full_source: &str,
     ) -> bool {
-        use astgrep_dataflow::SymbolicValue;
+        
 
         let state = propagator.state();
         if let Some(symbolic_value) = state.get(var_value) {

@@ -4,14 +4,11 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use console::{style, Color};
 use prettytable::{format::TableFormat, row, Table};
 
 use crate::services::migration_orchestrator::MigrationOperation;
-use crate::backup::BackupManager;
-use crate::validation::MigrationValidator;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OutputFormat {

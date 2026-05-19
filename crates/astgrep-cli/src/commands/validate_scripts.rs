@@ -11,7 +11,7 @@ use std::{
     process::Stdio,
 };
 use tokio::process::Command;
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{warn, debug, instrument};
 
 /// Configuration for script validation
 #[derive(Debug, Clone)]

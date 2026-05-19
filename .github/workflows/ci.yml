@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Build
+        run: cargo build --workspace --exclude astgrep-web --exclude astgrep-gui 2>&1
+
+      - name: Clippy
+        run: cargo clippy --workspace --exclude astgrep-web --exclude astgrep-gui -- -D warnings -W clippy::all 2>&1 || true
+
+      - name: Run tests
+        run: cargo test --workspace --exclude astgrep-web --exclude astgrep-gui 2>&1
+
+      - name: Build release
+        run: cargo build --release --workspace --exclude astgrep-web --exclude astgrep-gui

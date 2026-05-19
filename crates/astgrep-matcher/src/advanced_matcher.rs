@@ -7,15 +7,14 @@
 use crate::metavar::MetavarManager;
 use crate::parser::{ParsedPattern, PatternParser};
 use astgrep_core::{
-    AnalysisError, AstNode, ComparisonOperator, Condition, MetavariableComparison,
-    MetavariableRegex, PatternType, Result, SemgrepMatchResult, SemgrepPattern,
+    AnalysisError, AstNode, ComparisonOperator, Condition, MatchBinding, PatternType, Result, SemgrepMatchResult,
+    SemgrepPattern,
 };
 use astgrep_core::{ComplexityAnalysis, EntropyAnalysis, MetavariableAnalysis, TypeAnalysis};
 // Note: These types are defined in cr_rules but we'll use them through cr_core for now
 use astgrep_dataflow::ConstantValue;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
-use std::iter::Peekable;
 
 /// Advanced pattern matcher with full semgrep support
 pub struct AdvancedSemgrepMatcher {
@@ -146,7 +145,11 @@ impl AdvancedSemgrepMatcher {
                     node.node_type(),
                     bindings
                 );
-                matches.push(SemgrepMatchResult::new(node.clone_node(), bindings));
+                let match_bindings: HashMap<String, MatchBinding> = bindings
+                    .into_iter()
+                    .map(|(k, v)| (k, MatchBinding::new(v)))
+                    .collect();
+                matches.push(SemgrepMatchResult::new(node.clone_node(), match_bindings));
                 self.metavar_manager.restore(snapshot);
                 return Ok(true);
             }
@@ -229,7 +232,7 @@ impl AdvancedSemgrepMatcher {
         node: &dyn AstNode,
     ) -> Result<bool> {
         // Check if the current node or any of its ancestors match the inner pattern
-        let mut current = Some(node);
+        let current = Some(node);
         while let Some(current_node) = current {
             if self.matches_pattern(inner_pattern, current_node)? {
                 return Ok(true);
@@ -1246,7 +1249,7 @@ impl AdvancedSemgrepMatcher {
 
     /// Convert a symbolic value to a list of tokens
     fn symbolic_value_to_tokens(&self, value: &astgrep_dataflow::SymbolicValue) -> Vec<String> {
-        use astgrep_dataflow::SymbolicValue;
+        
         let mut visited = HashSet::new();
         self.symbolic_value_to_tokens_inner(value, &mut visited)
     }
@@ -1667,7 +1670,7 @@ impl AdvancedSemgrepMatcher {
                                 }
                                 text_idx = next_pos;
                                 // Match the rest of the pattern
-                                for (i, pattern) in remaining_patterns.iter().enumerate() {
+                                for (_i, pattern) in remaining_patterns.iter().enumerate() {
                                     if text_idx >= text_tokens.len() {
                                         return Ok(false);
                                     }
@@ -1757,7 +1760,7 @@ impl AdvancedSemgrepMatcher {
                                 // Found a match!
                                 text_idx = next_pos;
                                 // Match rest of pattern
-                                for (i, pattern) in remaining_patterns.iter().enumerate() {
+                                for (_i, pattern) in remaining_patterns.iter().enumerate() {
                                     if text_idx >= text_tokens.len() {
                                         return Ok(false);
                                     }
@@ -2140,7 +2143,7 @@ impl AdvancedSemgrepMatcher {
                     // This is likely a parameter name
                     // Bind it to the next metavariable
                     if let Some(metavar) = metavars.get(bound_metavars) {
-                        let snapshot = self.metavar_manager.snapshot();
+                        let _snapshot = self.metavar_manager.snapshot();
                         if self
                             .metavar_manager
                             .bind(metavar.clone(), token.clone(), node)?
@@ -2307,10 +2310,6 @@ impl AdvancedSemgrepMatcher {
             }
             Condition::NodeAttribute(_, _) => {
                 // This would need access to the matched node
-                Ok(true) // Simplified for now
-            }
-            Condition::MetavariablePattern(_metavar_pattern) => {
-                // MetavariablePattern evaluation is handled in the executor
                 Ok(true) // Simplified for now
             }
             Condition::Custom(_) => {
@@ -2679,7 +2678,7 @@ impl AdvancedSemgrepMatcher {
 
     /// Calculate Shannon entropy of a string
     fn calculate_entropy(&self, s: &str) -> f64 {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashMap;
 
         if s.is_empty() {
             return 0.0;

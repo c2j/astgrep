@@ -146,13 +146,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Roadmap
 
-- [ ] Complete AST implementation for all languages
-- [ ] Advanced pattern matching with metavariables
-- [ ] Data flow and taint analysis
-- [ ] IDE integrations (VS Code, IntelliJ)
-- [ ] CI/CD pipeline integrations
-- [ ] Web interface
-- [ ] Custom rule development tools
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the detailed, prioritized roadmap.
+
+### Current Priorities
+
+1. **Codebase Health** — Fix pre-existing test compilation errors, reduce warnings, add CI/CD
+2. **Refactoring** — Break up oversized files (REFACTORING_PLAN.md Phase 1-4)
+3. **Semgrep Compatibility** — Complete remaining 16/38 compatibility fixes
+4. **Test Infrastructure** — Complete Spec 001 test directory reorganization (Phase 4-6)
 
 ## Support
 

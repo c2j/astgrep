@@ -8,13 +8,12 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     time::{Duration, Instant},
-    process::{Stdio, Command},
+    process::Stdio,
     sync::{Arc, Mutex},
-    thread,
 };
 use tokio::process::Command as TokioCommand;
-use tracing::{info, warn, error, debug, instrument};
-use anyhow::{Result, anyhow};
+use tracing::{info, debug, instrument};
+use anyhow::Result;
 
 /// Configuration for script execution verification
 #[derive(Debug, Clone)]
@@ -201,7 +200,7 @@ impl ScriptRunner {
         info!("Starting verification of {} scripts", scripts.len());
 
         let start_time = Instant::now();
-        let mut execution_results = Vec::new();
+        let execution_results;
 
         if self.config.parallel_execution {
             execution_results = self.verify_scripts_parallel(scripts).await?;
@@ -242,9 +241,9 @@ impl ScriptRunner {
             .map(|script| {
                 let semaphore = std::sync::Arc::clone(&semaphore);
                 let config = self.config.clone();
-                let execution_count = execution_count.clone();
-                let success_count = success_count.clone();
-                let failure_count = failure_count.clone();
+                let _execution_count = execution_count.clone();
+                let _success_count = success_count.clone();
+                let _failure_count = failure_count.clone();
 
                 async move {
                     let _permit = semaphore.acquire().await;
@@ -373,7 +372,7 @@ impl ScriptRunner {
         let start_time = Instant::now();
 
         let metadata = std::fs::metadata(script_path)?;
-        let readonly = metadata.permissions().readonly();
+        let _readonly = metadata.permissions().readonly();
 
         #[cfg(unix)]
         {
@@ -607,7 +606,7 @@ impl ScriptRunner {
     }
 
     /// Execute script and capture results
-    async fn execute_script(&self, script_path: &PathBuf, metadata: &ScriptMetadata) -> Result<ExecutionResult> {
+    async fn execute_script(&self, script_path: &PathBuf, _metadata: &ScriptMetadata) -> Result<ExecutionResult> {
         let result = tokio::time::timeout(
             self.config.execution_timeout,
             self.execute_script_with_timeout(script_path)

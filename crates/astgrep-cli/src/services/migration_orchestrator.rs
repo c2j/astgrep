@@ -4,12 +4,10 @@ use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tokio::process::Command as TokioCommand;
 use tracing::{debug, error, info, warn};
 use chrono::{DateTime, Utc};
 
-use super::migration_state::MigrationState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MigrationOperation {
@@ -391,7 +389,6 @@ mod tests {
     use tempfile::tempdir;
     use std::fs;
     use std::io::Write;
-    use tokio::fs;
 
     #[tokio::test]
     async fn test_checksum_calculation() {
