@@ -718,18 +718,32 @@ impl AdvancedRuleExecutor {
         }
 
         // Search backwards from the given line to find the method declaration
-        // Method declarations typically look like: "public void methodName(...)" or "public static void methodName(...)"
+        // Python: "def methodName(...):" or "async def methodName(...):"
+        // Java: "public [static] [final] [returnType] methodName("
         for i in (0..line_num).rev() {
-            let line = lines[i];
+            let line = lines[i].trim();
+
+            // Skip class declarations
+            if line.contains("class ") {
+                continue;
+            }
+
+            // Python method declaration
+            if let Some(captures) = regex::Regex::new(r"(?:async\s+)?def\s+(\w+)\s*\(")
+                .ok()?
+                .captures(line)
+            {
+                if let Some(method_name) = captures.get(1) {
+                    return Some(method_name.as_str().to_string());
+                }
+            }
 
             // Skip class declarations (contain "class" keyword)
             if line.contains("class") && line.contains("public") {
                 continue;
             }
 
-            // Look for method declaration patterns
-            // Pattern: public [static] [final] [returnType] methodName(
-            // Return type can be: void, primitive types, or ClassName (with possible generics)
+            // Look for Java method declaration patterns
             if let Some(captures) = regex::Regex::new(r"public\s+(?:static\s+)?(?:final\s+)?(?:void|int|long|short|byte|float|double|boolean|char|\w+(?:<[^>]+>)?)\s+(\w+)\s*\(").ok()?.captures(line) {
                 if let Some(method_name) = captures.get(1) {
                     return Some(method_name.as_str().to_string());

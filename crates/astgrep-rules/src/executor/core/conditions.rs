@@ -39,13 +39,13 @@ impl AdvancedRuleExecutor {
     ) -> Result<bool> {
         match condition {
             Condition::MetavariableRegex(metavar_regex) => {
-                // Check if metavariable exists and matches regex
-                if let Some(metavar_value) = match_result.bindings.get(&metavar_regex.metavariable)
-                {
-                    // Support (?i) case-insensitive flag and other inline regex flags
+                let key = metavar_regex
+                    .metavariable
+                    .trim_start_matches('$')
+                    .to_string();
+                if let Some(metavar_value) = match_result.bindings.get(&key) {
                     let regex_str = &metavar_regex.regex;
                     let regex = if regex_str.starts_with("(?i)") {
-                        // Case-insensitive regex
                         regex::Regex::new(&format!("(?i){}", &regex_str[4..]))
                     } else {
                         regex::Regex::new(regex_str)
@@ -61,37 +61,32 @@ impl AdvancedRuleExecutor {
                 }
             }
             Condition::MetavariableComparison(metavar_comp) => {
-                // Check if metavariable exists and satisfies comparison
+                let key = metavar_comp
+                    .metavariable
+                    .trim_start_matches('$')
+                    .to_string();
                 eprintln!(
                     "DEBUG evaluate_condition: MetavariableComparison for '{}', bindings: {:?}",
-                    metavar_comp.metavariable,
+                    key,
                     match_result.bindings.keys().collect::<Vec<_>>()
                 );
-                if let Some(metavar_value) = match_result.bindings.get(&metavar_comp.metavariable) {
+                if let Some(metavar_value) = match_result.bindings.get(&key) {
                     eprintln!(
                         "DEBUG: Found value '{}' for metavariable '{}'",
-                        metavar_value, metavar_comp.metavariable
+                        metavar_value, key
                     );
 
-                    // Try to resolve the variable to its constant value using constant propagation
                     let resolved_value = if let Some(ref propagator) = self.constant_propagator {
-                        // Get the location of the matched node
                         if let Some((start_line, start_col, _, _)) = match_result.node.location() {
                             use astgrep_dataflow::constant_propagation::SourceLocation;
                             let location = SourceLocation::new(start_line, start_col);
 
-                            // Try to get the constant value at this location
                             if let Some(constant) =
                                 propagator.get_variable_value_at_location(metavar_value, location)
                             {
-                                let constant_str = constant
+                                constant
                                     .to_string_value()
-                                    .unwrap_or_else(|| metavar_value.clone());
-                                eprintln!(
-                                    "DEBUG: Resolved variable '{}' to constant '{}' at {:?}",
-                                    metavar_value, constant_str, location
-                                );
-                                constant_str
+                                    .unwrap_or_else(|| metavar_value.clone())
                             } else {
                                 metavar_value.clone()
                             }
@@ -102,21 +97,25 @@ impl AdvancedRuleExecutor {
                         metavar_value.clone()
                     };
 
+                    if let ComparisonOperator::PythonExpression(expr) = &metavar_comp.operator {
+                        return self.evaluate_python_expression(
+                            &resolved_value,
+                            expr,
+                            &match_result.bindings,
+                        );
+                    }
+
                     self.evaluate_comparison(
                         &resolved_value,
                         &metavar_comp.operator,
                         &metavar_comp.value,
                     )
                 } else {
-                    eprintln!(
-                        "DEBUG: Metavariable '{}' not found in bindings",
-                        metavar_comp.metavariable
-                    );
+                    eprintln!("DEBUG: Metavariable '{}' not found in bindings", key);
                     Ok(false)
                 }
             }
             Condition::NodeType(expected_type) => {
-                // Check if the matched node has the expected type
                 Ok(match_result.node.node_type() == *expected_type)
             }
             Condition::NodeAttribute(attr_name, attr_value) => {
@@ -175,10 +174,70 @@ impl AdvancedRuleExecutor {
                 }
             }
             Condition::Custom(custom_condition) => {
-                // Custom condition evaluation
                 self.evaluate_custom_condition(custom_condition, match_result)
             }
+            Condition::MetavariablePattern(metavar_pattern) => {
+                let metavar_key = metavar_pattern.metavariable.trim_start_matches('$');
+                eprintln!(
+                    "DEBUG MetavariablePattern: key='{}', patterns={:?}, bindings={:?}",
+                    metavar_key, metavar_pattern.patterns, match_result.bindings
+                );
+                if let Some(bound_value) = match_result.bindings.get(metavar_key) {
+                    let mut combined_bindings = match_result.bindings.clone();
+                    for pattern_str in &metavar_pattern.patterns {
+                        if pattern_str.starts_with("__NOT__:") {
+                            let neg_pattern = &pattern_str[8..];
+                            let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
+                            eprintln!(
+                                "DEBUG MetavariablePattern NOT: neg_pattern='{}', value='{}', matches={}",
+                                neg_pattern, bound_value, matches
+                            );
+                            if matches {
+                                return Ok(false);
+                            }
+                        } else {
+                            let (matches, new_bindings) =
+                                self.pattern_text_matches_with_bindings(pattern_str, bound_value);
+                            eprintln!(
+                                "DEBUG MetavariablePattern: pattern='{}', value='{}', matches={}, new_bindings={:?}",
+                                pattern_str, bound_value, matches, new_bindings
+                            );
+                            if !matches {
+                                return Ok(false);
+                            }
+                            combined_bindings.extend(new_bindings);
+                        }
+                    }
+
+                    for nested in &metavar_pattern.nested_conditions {
+                        if !self.evaluate_condition_with_bindings(
+                            nested,
+                            &combined_bindings,
+                            match_result,
+                            full_source,
+                        )? {
+                            eprintln!("DEBUG MetavariablePattern: nested condition FAILED");
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
         }
+    }
+
+    fn evaluate_condition_with_bindings(
+        &self,
+        condition: &Condition,
+        bindings: &HashMap<String, String>,
+        original_match: &SemgrepMatchResult,
+        full_source: &str,
+    ) -> Result<bool> {
+        let temp_result =
+            SemgrepMatchResult::new(original_match.node.clone_node(), bindings.clone());
+        self.evaluate_condition(condition, &temp_result, None, full_source)
     }
 
     /// Extract type information for a variable from the match context
@@ -360,11 +419,7 @@ impl AdvancedRuleExecutor {
                     Ok(metavar_value < expected_value)
                 }
             }
-            ComparisonOperator::PythonExpression(expr) => {
-                // For now, we'll implement a simplified version
-                // In a full implementation, this would use a Python interpreter
-                self.evaluate_python_expression(metavar_value, expr)
-            }
+            _ => Ok(false),
         }
     }
 
@@ -573,7 +628,12 @@ impl AdvancedRuleExecutor {
     }
 
     /// Simplified Python expression evaluation
-    pub(super) fn evaluate_python_expression(&self, value: &str, expr: &str) -> Result<bool> {
+    pub(super) fn evaluate_python_expression(
+        &self,
+        value: &str,
+        expr: &str,
+        bindings: &std::collections::HashMap<String, String>,
+    ) -> Result<bool> {
         // This is a simplified implementation
         // In a full implementation, this would use a Python interpreter
 
@@ -840,9 +900,85 @@ impl AdvancedRuleExecutor {
             }
         }
 
-        // For now, just return true for unsupported expressions
-        eprintln!("DEBUG: Expression '{}' not handled, returning true", expr);
-        Ok(true)
+        // Handle "in" operator: str($VAR) in "abc" or $VAR not in [150, 312]
+        if expr.contains(" in ") || expr.contains(" not in ") {
+            let negated = expr.contains(" not in ");
+            let in_expr = if negated {
+                expr.split(" not in ").collect::<Vec<_>>()
+            } else {
+                expr.split(" in ").collect::<Vec<_>>()
+            };
+            if in_expr.len() == 2 {
+                let left = in_expr[0].trim();
+                let right = in_expr[1].trim();
+
+                let check_value = if left == "str($VAR)" || left == format!("str({})", value) {
+                    value.to_string()
+                } else if left.starts_with('$') {
+                    value.to_string()
+                } else {
+                    value.to_string()
+                };
+
+                if right.starts_with('"') && right.ends_with('"') {
+                    let target = &right[1..right.len() - 1];
+                    let result = target.contains(&check_value);
+                    return Ok(if negated { !result } else { result });
+                } else if right.starts_with('[') && right.ends_with(']') {
+                    let inner = &right[1..right.len() - 1];
+                    let items: Vec<&str> = inner
+                        .split(',')
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    let result = items.iter().any(|item| item == &check_value.as_str());
+                    return Ok(if negated { !result } else { result });
+                }
+            }
+        }
+
+        // Handle ** (power) operator: $X ** $Y == N
+        if expr.contains("**") && expr.contains("==") {
+            let parts: Vec<&str> = expr.split("==").collect();
+            if parts.len() == 2 {
+                let expected = parts[1].trim();
+                if let Ok(expected_val) = expected.parse::<f64>() {
+                    let left = parts[0].trim();
+                    let power_parts: Vec<&str> = left.split("**").collect();
+                    if power_parts.len() == 2 {
+                        let base_str = power_parts[0].trim();
+                        let exp_str = power_parts[1].trim();
+
+                        let base_val = if base_str.starts_with('$') {
+                            let key = base_str.trim_start_matches('$');
+                            bindings
+                                .get(key)
+                                .and_then(|v| v.parse::<f64>().ok())
+                                .unwrap_or_else(|| value.parse::<f64>().unwrap_or(0.0))
+                        } else {
+                            value.parse::<f64>().unwrap_or(0.0)
+                        };
+
+                        let exp_val = if exp_str.starts_with('$') {
+                            let key = exp_str.trim_start_matches('$');
+                            bindings
+                                .get(key)
+                                .and_then(|v| v.parse::<f64>().ok())
+                                .unwrap_or(0.0)
+                        } else {
+                            exp_str.parse::<f64>().unwrap_or(0.0)
+                        };
+
+                        let result = base_val.powf(exp_val);
+                        let matches = (result - expected_val).abs() < 1e-9;
+                        return Ok(matches);
+                    }
+                }
+            }
+        }
+
+        eprintln!("DEBUG: Expression '{}' not handled, returning false", expr);
+        Ok(false)
     }
 
     /// Evaluate custom condition
@@ -854,7 +990,143 @@ impl AdvancedRuleExecutor {
         match condition_name {
             "always_true" => Ok(true),
             "always_false" => Ok(false),
-            _ => Ok(true), // Default to true for unknown conditions
+            _ => Ok(true),
         }
+    }
+
+    fn pattern_text_matches_value(&self, pattern_str: &str, value: &str) -> bool {
+        let (matches, _) = self.pattern_text_matches_with_bindings(pattern_str, value);
+        matches
+    }
+
+    fn pattern_text_matches_with_bindings(
+        &self,
+        pattern_str: &str,
+        value: &str,
+    ) -> (bool, HashMap<String, String>) {
+        let pattern = pattern_str.trim();
+        let value = value.trim();
+
+        if pattern.contains("...") {
+            let matches = self.ellipsis_pattern_matches(pattern, value);
+            return (matches, HashMap::new());
+        }
+
+        let metavar_re = match regex::Regex::new(r"\$([A-Za-z_]\w*)") {
+            Ok(re) => re,
+            Err(_) => {
+                let matches = pattern == value;
+                return (matches, HashMap::new());
+            }
+        };
+
+        if !metavar_re.is_match(pattern) {
+            let pattern_tokens: Vec<&str> = pattern.split_whitespace().collect();
+            let value_tokens: Vec<&str> = value.split_whitespace().collect();
+            let matches = pattern_tokens.len() == value_tokens.len()
+                && pattern_tokens
+                    .iter()
+                    .zip(value_tokens.iter())
+                    .all(|(p, v)| *p == *v);
+            return (matches, HashMap::new());
+        }
+
+        struct Segment {
+            literal: String,
+            metavar: Option<String>,
+        }
+
+        let mut segments: Vec<Segment> = Vec::new();
+        let mut last_end = 0;
+
+        for cap in metavar_re.find_iter(pattern) {
+            if cap.start() > last_end {
+                segments.push(Segment {
+                    literal: pattern[last_end..cap.start()].to_string(),
+                    metavar: None,
+                });
+            }
+            segments.push(Segment {
+                literal: String::new(),
+                metavar: Some(cap.as_str()[1..].to_string()),
+            });
+            last_end = cap.end();
+        }
+        if last_end < pattern.len() {
+            segments.push(Segment {
+                literal: pattern[last_end..].to_string(),
+                metavar: None,
+            });
+        }
+
+        let mut bindings = HashMap::new();
+        let mut val_pos: usize = 0;
+
+        for (i, seg) in segments.iter().enumerate() {
+            if let Some(ref mv) = seg.metavar {
+                let next_literal_idx = segments[i + 1..]
+                    .iter()
+                    .position(|s| !s.literal.is_empty())
+                    .map(|p| i + 1 + p);
+
+                if let Some(next_idx) = next_literal_idx {
+                    let next_lit = &segments[next_idx].literal;
+                    if let Some(pos) = value[val_pos..].find(next_lit.as_str()) {
+                        bindings.insert(mv.clone(), value[val_pos..val_pos + pos].to_string());
+                        val_pos += pos;
+                    } else {
+                        return (false, HashMap::new());
+                    }
+                }
+            } else if !seg.literal.is_empty() {
+                if !value[val_pos..].starts_with(&seg.literal) {
+                    return (false, HashMap::new());
+                }
+                val_pos += seg.literal.len();
+            }
+        }
+
+        if let Some(last) = segments.last() {
+            if last.metavar.is_some() && val_pos <= value.len() {
+                bindings.insert(
+                    last.metavar.as_ref().unwrap().clone(),
+                    value[val_pos..].to_string(),
+                );
+                val_pos = value.len();
+            }
+        }
+
+        let matches = val_pos == value.len();
+        (matches, bindings)
+    }
+
+    fn ellipsis_pattern_matches(&self, pattern_str: &str, value: &str) -> bool {
+        let norm_pat: String = pattern_str.split_whitespace().collect::<Vec<_>>().join(" ");
+        let norm_val: String = value.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        let parts: Vec<&str> = norm_pat.split("...").filter(|s| !s.is_empty()).collect();
+
+        if parts.is_empty() {
+            return true;
+        }
+
+        let mut search_from = 0;
+        for part in parts {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(pos) = norm_val[search_from..].find(trimmed) {
+                search_from += pos + trimmed.len();
+            } else {
+                let no_space: String = trimmed.split_whitespace().collect();
+                if let Some(pos) = norm_val[search_from..].find(&no_space) {
+                    search_from += pos + no_space.len();
+                } else {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }

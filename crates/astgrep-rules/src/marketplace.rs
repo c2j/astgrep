@@ -66,7 +66,7 @@ impl MarketplaceRule {
         if rating < 0.0 || rating > 5.0 {
             return;
         }
-        
+
         let total = self.rating * self.rating_count as f32;
         self.rating_count += 1;
         self.rating = (total + rating) / self.rating_count as f32;
@@ -140,11 +140,7 @@ impl RuleMarketplace {
     pub fn search_by_category(&self, category: &str) -> Vec<&MarketplaceRule> {
         self.categories
             .get(category)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| self.rules.get(id))
-                    .collect()
-            })
+            .map(|ids| ids.iter().filter_map(|id| self.rules.get(id)).collect())
             .unwrap_or_default()
     }
 
@@ -152,11 +148,7 @@ impl RuleMarketplace {
     pub fn search_by_tag(&self, tag: &str) -> Vec<&MarketplaceRule> {
         self.tags
             .get(tag)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| self.rules.get(id))
-                    .collect()
-            })
+            .map(|ids| ids.iter().filter_map(|id| self.rules.get(id)).collect())
             .unwrap_or_default()
     }
 
@@ -172,7 +164,11 @@ impl RuleMarketplace {
     /// Get top rated rules
     pub fn get_top_rated(&self, limit: usize) -> Vec<&MarketplaceRule> {
         let mut rules: Vec<_> = self.rules.values().collect();
-        rules.sort_by(|a, b| b.rating.partial_cmp(&a.rating).unwrap_or(std::cmp::Ordering::Equal));
+        rules.sort_by(|a, b| {
+            b.rating
+                .partial_cmp(&a.rating)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         rules.into_iter().take(limit).collect()
     }
 
@@ -185,10 +181,7 @@ impl RuleMarketplace {
 
     /// Get all verified rules
     pub fn get_verified_rules(&self) -> Vec<&MarketplaceRule> {
-        self.rules
-            .values()
-            .filter(|rule| rule.verified)
-            .collect()
+        self.rules.values().filter(|rule| rule.verified).collect()
     }
 
     /// Get all rules
@@ -264,11 +257,11 @@ mod tests {
             "Test Rule".to_string(),
             "author".to_string(),
         );
-        
+
         rule.add_rating(5.0);
         assert_eq!(rule.rating, 5.0);
         assert_eq!(rule.rating_count, 1);
-        
+
         rule.add_rating(3.0);
         assert_eq!(rule.rating, 4.0);
         assert_eq!(rule.rating_count, 2);
@@ -281,7 +274,7 @@ mod tests {
             "Test Rule".to_string(),
             "author".to_string(),
         );
-        
+
         assert_eq!(rule.downloads, 0);
         rule.increment_downloads();
         assert_eq!(rule.downloads, 1);
@@ -301,7 +294,7 @@ mod tests {
             "Test Rule".to_string(),
             "author".to_string(),
         );
-        
+
         marketplace.add_rule(rule);
         assert_eq!(marketplace.rule_count(), 1);
     }
@@ -314,7 +307,7 @@ mod tests {
             "Test Rule".to_string(),
             "author".to_string(),
         );
-        
+
         marketplace.add_rule(rule);
         assert!(marketplace.get_rule("rule1").is_some());
         assert!(marketplace.get_rule("nonexistent").is_none());
@@ -329,7 +322,7 @@ mod tests {
             "author".to_string(),
         );
         rule.category = "security".to_string();
-        
+
         marketplace.add_rule(rule);
         let results = marketplace.search_by_category("security");
         assert_eq!(results.len(), 1);
@@ -343,7 +336,7 @@ mod tests {
             "SQL Injection".to_string(),
             "author".to_string(),
         );
-        
+
         marketplace.add_rule(rule);
         let results = marketplace.search_by_name("SQL");
         assert_eq!(results.len(), 1);
@@ -357,12 +350,11 @@ mod tests {
             "Test Rule".to_string(),
             "author".to_string(),
         );
-        
+
         marketplace.add_rule(rule);
         assert_eq!(marketplace.rule_count(), 1);
-        
+
         marketplace.remove_rule("rule1");
         assert_eq!(marketplace.rule_count(), 0);
     }
 }
-

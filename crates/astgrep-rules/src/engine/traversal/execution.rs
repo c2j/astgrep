@@ -6,6 +6,7 @@ use crate::engine::traversal::RuleExecutionEngine;
 use crate::types::*;
 use astgrep_core::{AstNode, Finding, Result};
 use std::time::Instant;
+use tracing::debug;
 
 impl RuleExecutionEngine {
     /// Execute a single rule against an AST
@@ -104,14 +105,14 @@ impl RuleExecutionEngine {
             }
         }
 
-        println!("🔍 Executing rule: {}", rule.id);
-        println!("🔍 Rule has {} patterns", rule.patterns.len());
+        debug!("Executing rule: {}", rule.id);
+        debug!("Rule has {} patterns", rule.patterns.len());
 
         let mut findings = Vec::new();
 
         // For taint mode, use special handling
         if rule.mode == crate::types::RuleMode::Taint {
-            println!("🔍 Rule is in taint mode");
+            debug!("Rule is in taint mode");
             if let Some(ref dataflow) = rule.dataflow {
                 match self.execute_taint_mode(dataflow, ast, rule, context) {
                     Ok(mut taint_findings) => {
@@ -135,18 +136,18 @@ impl RuleExecutionEngine {
 
         // Execute pattern matching
         for (i, pattern) in rule.patterns.iter().enumerate() {
-            println!("🔍 Processing pattern {} of {}", i + 1, rule.patterns.len());
+            debug!("Processing pattern {} of {}", i + 1, rule.patterns.len());
             match self.execute_pattern(pattern, ast, rule, context) {
                 Ok(mut pattern_findings) => {
-                    println!(
-                        "🔍 Pattern {} generated {} findings",
+                    debug!(
+                        "Pattern {} generated {} findings",
                         i + 1,
                         pattern_findings.len()
                     );
                     findings.append(&mut pattern_findings)
                 }
                 Err(e) => {
-                    println!("🔍 Pattern {} failed with error: {}", i + 1, e);
+                    debug!("Pattern {} failed with error: {}", i + 1, e);
                     return RuleResult::error(
                         rule.id.clone(),
                         format!("Pattern execution error: {}", e),

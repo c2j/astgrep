@@ -191,6 +191,8 @@ fn analyze_with_rule_engine(
     if let Some(parser) = parser_opt {
         let ast = parser.parse(source_code, Path::new(file_path))?;
 
+        let ast = try_tree_sitter_ast(source_code, language).unwrap_or(ast);
+
         // 3) Execute rules with unified context
         let mut context = RuleContext::new(
             file_path.to_string_lossy().to_string(),
@@ -531,4 +533,15 @@ fn normalize_sql(raw: &str) -> String {
     if let Ok(re_ws) = Regex::new(r"(?s)\s+") { s = re_ws.replace_all(&s, " ").into_owned(); }
     let s = s.trim().to_string();
     if s.ends_with(';') { s } else { format!("{};", s) }
+}
+
+fn try_tree_sitter_ast(
+    source_code: &str,
+    language: Language,
+) -> Option<Box<dyn astgrep_core::AstNode>> {
+    use astgrep_parser::tree_sitter_parser::TreeSitterParser;
+    let mut ts_parser = TreeSitterParser::new().ok()?;
+    let tree = ts_parser.parse(source_code, language).ok()??;
+    let ts_ast = ts_parser.tree_to_universal_ast(&tree, source_code).ok()?;
+    Some(Box::new(ts_ast))
 }

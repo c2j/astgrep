@@ -5,6 +5,29 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// A binding for a metavariable with its value and optional location
+#[derive(Debug, Clone)]
+pub struct MatchBinding {
+    pub value: String,
+    pub location: Option<(usize, usize, usize, usize)>,
+}
+
+impl MatchBinding {
+    pub fn new(value: String) -> Self {
+        Self {
+            value,
+            location: None,
+        }
+    }
+
+    pub fn with_location(value: String, location: (usize, usize, usize, usize)) -> Self {
+        Self {
+            value,
+            location: Some(location),
+        }
+    }
+}
+
 /// Types of patterns supported by semgrep
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PatternType {
@@ -102,7 +125,10 @@ pub struct MetavariableRegex {
 
 impl MetavariableRegex {
     pub fn new(metavariable: String, regex: String) -> Self {
-        Self { metavariable, regex }
+        Self {
+            metavariable,
+            regex,
+        }
     }
 }
 
@@ -116,7 +142,11 @@ pub struct MetavariableComparison {
 
 impl MetavariableComparison {
     pub fn new(metavariable: String, operator: ComparisonOperator, value: String) -> Self {
-        Self { metavariable, operator, value }
+        Self {
+            metavariable,
+            operator,
+            value,
+        }
     }
 }
 
@@ -129,7 +159,10 @@ pub struct MetavariableName {
 
 impl MetavariableName {
     pub fn new(metavariable: String, name_pattern: String) -> Self {
-        Self { metavariable, name_pattern }
+        Self {
+            metavariable,
+            name_pattern,
+        }
     }
 }
 
@@ -142,7 +175,10 @@ pub struct MetavariableAnalysisCondition {
 
 impl MetavariableAnalysisCondition {
     pub fn new(metavariable: String, analysis: MetavariableAnalysis) -> Self {
-        Self { metavariable, analysis }
+        Self {
+            metavariable,
+            analysis,
+        }
     }
 }
 
@@ -155,7 +191,10 @@ pub struct MetavariableType {
 
 impl MetavariableType {
     pub fn new(metavariable: String, var_type: String) -> Self {
-        Self { metavariable, var_type }
+        Self {
+            metavariable,
+            var_type,
+        }
     }
 }
 
@@ -178,9 +217,9 @@ pub enum ComparisonOperator {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnhancedMetavariableComparison {
     pub metavariable: String,
-    pub comparison: String, // Full Python expression
+    pub comparison: String,                 // Full Python expression
     pub functions: Vec<ComparisonFunction>, // Available functions
-    pub variables: Vec<String>, // Available variables in scope
+    pub variables: Vec<String>,             // Available variables in scope
 }
 
 /// Available functions for metavariable comparison
@@ -188,7 +227,7 @@ pub struct EnhancedMetavariableComparison {
 pub enum ComparisonFunction {
     Today,
     Strptime(String), // Format string
-    ReMatch(String), // Regex pattern
+    ReMatch(String),  // Regex pattern
     Len,
     Int,
     Float,
@@ -328,12 +367,12 @@ impl MetavariablePattern {
 /// Result of a semgrep-style pattern match
 pub struct SemgrepMatchResult {
     pub node: Box<dyn crate::AstNode>,
-    pub bindings: HashMap<String, String>,
+    pub bindings: HashMap<String, MatchBinding>,
     pub confidence: f64,
 }
 
 impl SemgrepMatchResult {
-    pub fn new(node: Box<dyn crate::AstNode>, bindings: HashMap<String, String>) -> Self {
+    pub fn new(node: Box<dyn crate::AstNode>, bindings: HashMap<String, MatchBinding>) -> Self {
         Self {
             node,
             bindings,
@@ -349,9 +388,11 @@ impl SemgrepMatchResult {
 
 impl std::fmt::Debug for SemgrepMatchResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let binding_values: HashMap<_, _> =
+            self.bindings.iter().map(|(k, v)| (k, &v.value)).collect();
         f.debug_struct("SemgrepMatchResult")
             .field("node_type", &self.node.node_type())
-            .field("bindings", &self.bindings)
+            .field("bindings", &binding_values)
             .field("confidence", &self.confidence)
             .finish()
     }

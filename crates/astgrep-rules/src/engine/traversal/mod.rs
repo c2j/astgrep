@@ -11,13 +11,13 @@
 //! - `matching`: Find pattern matches and span utilities
 //! - `location`: Location utilities and message generation
 
+pub mod dataflow;
+pub mod execution;
+pub mod location;
+pub mod matching;
+pub mod pattern;
 pub mod types;
 pub mod utils;
-pub mod pattern;
-pub mod execution;
-pub mod dataflow;
-pub mod matching;
-pub mod location;
 
 // Re-export main types for backward compatibility
 pub use types::{RuleExecutionEngine, TaintMatch};

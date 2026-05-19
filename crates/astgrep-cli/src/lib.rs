@@ -461,6 +461,7 @@ fn setup_logging(verbose: bool, quiet: bool) -> Result<()> {
     let _ = tracing::subscriber::set_global_default(
         fmt::Subscriber::builder()
             .with_env_filter(EnvFilter::from_default_env().add_directive(level.into()))
+            .with_writer(std::io::stderr)
             .with_target(false)
             .with_thread_ids(verbose)
             .with_file(verbose)

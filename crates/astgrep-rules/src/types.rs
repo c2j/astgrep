@@ -331,6 +331,8 @@ pub struct MetavariablePattern {
     pub type_constraint: Option<String>,
     pub name_constraint: Option<String>, // metavariable-name support
     pub analysis: Option<MetavariableAnalysis>, // metavariable-analysis support
+    /// Nested conditions from nested metavariable-pattern within patterns array
+    pub nested_conditions: Vec<Condition>,
 }
 
 impl MetavariablePattern {
@@ -343,6 +345,7 @@ impl MetavariablePattern {
             type_constraint: None,
             name_constraint: None,
             analysis: None,
+            nested_conditions: Vec::new(),
         }
     }
 
@@ -372,6 +375,7 @@ pub enum Condition {
     MetavariableName(MetavariableName),
     MetavariableAnalysis(MetavariableAnalysisCondition),
     MetavariableType(MetavariableType),
+    MetavariablePattern(MetavariablePattern),
     NodeType(String),
     NodeAttribute(String, String),
     Custom(String),

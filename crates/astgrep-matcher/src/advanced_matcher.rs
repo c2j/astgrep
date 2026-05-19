@@ -14,7 +14,7 @@ use astgrep_core::{ComplexityAnalysis, EntropyAnalysis, MetavariableAnalysis, Ty
 // Note: These types are defined in cr_rules but we'll use them through cr_core for now
 use astgrep_dataflow::ConstantValue;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 
 /// Advanced pattern matcher with full semgrep support
@@ -117,15 +117,6 @@ impl AdvancedSemgrepMatcher {
         );
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                // Skip simple identifiers in assignment contexts to avoid false positives
-                // (e.g., 'd' in 'Object d = b.z();' should not be expanded via symbolic propagation)
-                if child.node_type() == "identifier" {
-                    let text = child.text().unwrap_or("");
-                    if !text.contains(".") && !text.contains("(") {
-                        continue;
-                    }
-                }
-
                 eprintln!(
                     "DEBUG: Processing child {} of type: {}",
                     i,
@@ -203,8 +194,9 @@ impl AdvancedSemgrepMatcher {
     /// Match a simple pattern string
     fn matches_simple_pattern(&mut self, pattern_str: &str, node: &dyn AstNode) -> Result<bool> {
         eprintln!(
-            "DEBUG matches_simple_pattern: pattern='{}', node_text='{}'",
-            pattern_str,
+            "DEBUG matches_simple_pattern: pattern='{}' (len={}), node_text='{}'",
+            pattern_str.lines().next().unwrap_or(pattern_str),
+            pattern_str.len(),
             node.text().unwrap_or("<none>")
         );
         let parsed_pattern = self.parser.parse(pattern_str)?;
@@ -342,10 +334,7 @@ impl AdvancedSemgrepMatcher {
             node.text().map(|t| &t[..t.len().min(30)])
         );
 
-        // Separate patterns into categories:
-        // 1. Context patterns (Inside, NotInside) - establish context for matching
-        // 2. Negative patterns (Not, NotRegex) - must NOT match
-        // 3. Positive content patterns - must ALL match
+        // Separate patterns into categories
         let (context_patterns, rest): (Vec<_>, Vec<_>) = patterns.iter().partition(|p| {
             matches!(
                 p.pattern_type,
@@ -368,17 +357,17 @@ impl AdvancedSemgrepMatcher {
             context_patterns.len()
         );
 
-        // IMPORTANT: Process context patterns FIRST to capture metavariable bindings
-        // This ensures that metavariables bound in pattern-inside (like $X in "private int $X")
-        // are available when matching content patterns, enabling proper metavariable unification.
-        // For example, if pattern-inside binds $X="x", then pattern "foo(this.$X)" should only
-        // match "foo(this.x)" and NOT "foo(this.y)".
+        let snapshot = self.metavar_manager.snapshot();
+
+        // Step 1: Check ALL context patterns (pattern-inside) to establish bindings
+        // ALL context patterns must match (intersection semantics)
         for pattern in &context_patterns {
             eprintln!(
-                "DEBUG: checking context pattern first: {:?}",
+                "DEBUG: checking context pattern: {:?}",
                 pattern.pattern_type
             );
-            let matches = match &pattern.pattern_type {
+
+            let context_matches = match &pattern.pattern_type {
                 PatternType::Inside(inner) => self.matches_inside_context(inner, node, patterns)?,
                 PatternType::NotInside(inner) => {
                     let inside_matches = self.matches_inside_context(inner, node, patterns)?;
@@ -386,25 +375,41 @@ impl AdvancedSemgrepMatcher {
                 }
                 _ => unreachable!(),
             };
-            if !matches {
+
+            if !context_matches {
                 eprintln!("DEBUG: context pattern did not match");
+                self.metavar_manager.restore(snapshot);
                 return Ok(false);
             }
+
             eprintln!(
                 "DEBUG: context pattern matched! bindings: {:?}",
                 self.metavar_manager.get_binding_values()
             );
-            // Keep bindings from successful context matches - these will constrain content patterns
         }
 
-        // Process negative patterns (Not, NotRegex) - these must NOT match
-        // If any negative pattern matches, the overall pattern fails
+        // Step 2: Match content patterns with established bindings
+        // Content patterns must match using the bindings from context patterns
+        for pattern in &content_patterns {
+            eprintln!(
+                "DEBUG: matching content pattern with bindings: {:?}",
+                pattern.pattern_type
+            );
+            if !self.matches_pattern(pattern, node)? {
+                eprintln!("DEBUG: content pattern did not match");
+                self.metavar_manager.restore(snapshot);
+                return Ok(false);
+            }
+            eprintln!("DEBUG: content pattern matched!");
+        }
+
+        // Step 3: Check negative patterns (must NOT match)
         for pattern in &negative_patterns {
             eprintln!(
                 "DEBUG: checking negative pattern: {:?}",
                 pattern.pattern_type
             );
-            let snapshot = self.metavar_manager.snapshot();
+            let neg_snapshot = self.metavar_manager.snapshot();
             let negative_matches = match &pattern.pattern_type {
                 PatternType::Not(inner) => self.matches_not_pattern(inner.as_ref(), node)?,
                 PatternType::NotRegex(regex) => {
@@ -412,31 +417,12 @@ impl AdvancedSemgrepMatcher {
                 }
                 _ => unreachable!(),
             };
-            // Note: matches_not_pattern and matches_not_regex_pattern return true if the inner pattern does NOT match
-            // So if negative_matches is false, it means the negative pattern matched (which is bad)
             if !negative_matches {
-                eprintln!("DEBUG: negative pattern matched - excluding this match");
+                eprintln!("DEBUG: negative pattern matched - excluding");
                 self.metavar_manager.restore(snapshot);
                 return Ok(false);
             }
-            eprintln!("DEBUG: negative pattern did not match (good)");
-            self.metavar_manager.restore(snapshot);
-        }
-
-        // Then, match content patterns with context bindings already set
-        for pattern in &content_patterns {
-            eprintln!(
-                "DEBUG: matching content pattern with context bindings: {:?}",
-                pattern.pattern_type
-            );
-            let snapshot = self.metavar_manager.snapshot();
-            if !self.matches_pattern(pattern, node)? {
-                eprintln!("DEBUG: content pattern did not match");
-                self.metavar_manager.restore(snapshot);
-                return Ok(false);
-            }
-            eprintln!("DEBUG: content pattern matched!");
-            // Keep bindings from successful matches
+            self.metavar_manager.restore(neg_snapshot);
         }
 
         eprintln!("DEBUG: matches_all_patterns returning true!");
@@ -561,7 +547,204 @@ impl AdvancedSemgrepMatcher {
             }
         }
 
+        // General text-based region matching for pattern-inside
+        if let PatternType::Simple(inside_str) = &inner_pattern.pattern_type {
+            if let Some(ref full_source) = self.full_source {
+                if let Some((node_start, node_end)) =
+                    self.get_node_byte_offset_range(node, full_source)
+                {
+                    eprintln!(
+                        "DEBUG inside_region: checking node bytes ({}, {}) against pattern '{}'",
+                        node_start,
+                        node_end,
+                        inside_str.trim().chars().take(30).collect::<String>()
+                    );
+                    if let Some(regions) = self.find_inside_regions(inside_str, full_source) {
+                        eprintln!("DEBUG inside_region: found {} regions", regions.len());
+                        for (reg_start, reg_end, bindings) in &regions {
+                            eprintln!(
+                                "DEBUG inside_region: checking region ({}-{}) with bindings {:?}",
+                                reg_start, reg_end, bindings
+                            );
+                            if node_start >= *reg_start && node_end <= *reg_end {
+                                // Apply captured metavariable bindings from pattern-inside match
+                                for (var_name, value) in bindings {
+                                    let normalized_name = if var_name.starts_with('$') {
+                                        var_name[1..].to_string()
+                                    } else {
+                                        var_name.clone()
+                                    };
+                                    let _ = self.metavar_manager.bind(
+                                        normalized_name,
+                                        value.clone(),
+                                        node,
+                                    );
+                                }
+                                eprintln!(
+                                    "DEBUG inside_region: MATCHED region ({}-{})",
+                                    reg_start, reg_end
+                                );
+                                return Ok(true);
+                            }
+                        }
+                    }
+                } else {
+                    eprintln!("DEBUG inside_region: could not get node byte range");
+                }
+            } else {
+                eprintln!("DEBUG inside_region: no full_source");
+            }
+        }
+
         Ok(false)
+    }
+
+    fn find_inside_regions(
+        &self,
+        pattern_str: &str,
+        source: &str,
+    ) -> Option<Vec<(usize, usize, HashMap<String, String>)>> {
+        let trimmed = pattern_str.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let mut regex_str = String::new();
+        let mut metavar_groups: Vec<String> = Vec::new(); // Track which group index -> metavar name
+        let chars: Vec<char> = trimmed.chars().collect();
+        let mut i = 0;
+
+        while i < chars.len() {
+            if chars[i] == '$' && i + 1 < chars.len() && chars[i + 1].is_alphabetic() {
+                // Metavariable: match non-whitespace sequence, track for binding extraction
+                let mut var_name = String::new();
+                i += 1;
+                while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                    var_name.push(chars[i]);
+                    i += 1;
+                }
+                metavar_groups.push(var_name);
+                regex_str.push_str(r"(\S+)");
+            } else if chars[i] == '.'
+                && i + 2 < chars.len()
+                && chars[i + 1] == '.'
+                && chars[i + 2] == '.'
+            {
+                // Check if this ellipsis follows a comma (optional args pattern)
+                // The regex_str contains backslash escape sequences like "\S" for \S in the actual regex
+                let ends_with_comma_pattern = regex_str.contains(",")
+                    && (regex_str.ends_with(",[ \t]*")
+                        || regex_str.ends_with("),[ \t]*")
+                        || regex_str.ends_with("\\S+),[ \\t]*")
+                        || regex_str.ends_with("(\\S+),[ \\t]*"));
+
+                if ends_with_comma_pattern {
+                    // Find and remove the comma before the ellipsis to make args optional
+                    if let Some(pos) = regex_str.rfind(",") {
+                        regex_str.truncate(pos);
+                        regex_str.push_str(r"(?:[ \t]*,[ \t]*(?:[\s\S]*))?");
+                    } else {
+                        regex_str.push_str(r"(?:[\s\S]*)");
+                    }
+                } else {
+                    // Use non-greedy matching for ellipsis to avoid consuming too much
+                    regex_str.push_str(r"(?:[\s\S]*?)");
+                }
+                i += 3;
+            } else if chars[i] == ' ' || chars[i] == '\t' {
+                regex_str.push_str(r"[ \t]*");
+                i += 1;
+                while i < chars.len() && (chars[i] == ' ' || chars[i] == '\t') {
+                    i += 1;
+                }
+            } else if chars[i] == '\n' || chars[i] == '\r' {
+                regex_str.push_str(r"[\r\n]*");
+                i += 1;
+                while i < chars.len() && (chars[i] == '\n' || chars[i] == '\r') {
+                    i += 1;
+                }
+            } else if chars[i] == '('
+                || chars[i] == ')'
+                || chars[i] == '['
+                || chars[i] == ']'
+                || chars[i] == '{'
+                || chars[i] == '}'
+                || chars[i] == '+'
+                || chars[i] == '*'
+                || chars[i] == '?'
+                || chars[i] == '^'
+                || chars[i] == '$'
+                || chars[i] == '|'
+                || chars[i] == '\\'
+            {
+                regex_str.push('\\');
+                regex_str.push(chars[i]);
+                i += 1;
+            } else {
+                regex_str.push(chars[i]);
+                i += 1;
+            }
+        }
+
+        if let Ok(re) = regex::Regex::new(&regex_str) {
+            let mut results = Vec::new();
+            for cap in re.captures_iter(source) {
+                let mut bindings = HashMap::new();
+                for (idx, var_name) in metavar_groups.iter().enumerate() {
+                    if let Some(matched) = cap.get(idx + 1) {
+                        bindings.insert(var_name.clone(), matched.as_str().to_string());
+                    }
+                }
+                if let Some(full_match) = cap.get(0) {
+                    results.push((full_match.start(), full_match.end(), bindings));
+                }
+            }
+            eprintln!(
+                "DEBUG find_inside_regions: pattern '{}' -> regex '{}' -> {} results",
+                trimmed.lines().next().unwrap_or(trimmed),
+                regex_str.chars().take(80).collect::<String>(),
+                results.len()
+            );
+            if !results.is_empty() {
+                return Some(results);
+            }
+        } else {
+            eprintln!(
+                "DEBUG find_inside_regions: regex compile failed for '{}'",
+                regex_str.chars().take(80).collect::<String>()
+            );
+        }
+
+        None
+    }
+
+    fn get_node_byte_offset_range(
+        &self,
+        node: &dyn AstNode,
+        source: &str,
+    ) -> Option<(usize, usize)> {
+        let (start_line, start_col, end_line, end_col) = node.location()?;
+
+        let mut byte_offset = 0;
+        let mut current_line = 1;
+
+        while current_line < start_line && byte_offset < source.len() {
+            if source.as_bytes()[byte_offset] == b'\n' {
+                current_line += 1;
+            }
+            byte_offset += 1;
+        }
+        let start = byte_offset + start_col;
+
+        while current_line < end_line && byte_offset < source.len() {
+            if source.as_bytes()[byte_offset] == b'\n' {
+                current_line += 1;
+            }
+            byte_offset += 1;
+        }
+        let end = byte_offset + end_col;
+
+        Some((start, end.min(source.len())))
     }
 
     /// Extract field bindings from a class context pattern
@@ -732,7 +915,19 @@ impl AdvancedSemgrepMatcher {
     }
 
     /// Match metavariable
+    /// Only matches identifier nodes to avoid matching keywords, operators, etc.
     fn match_metavariable(&mut self, metavar: &str, node: &dyn AstNode) -> Result<bool> {
+        // Only match identifier nodes
+        let node_type = node.node_type();
+        eprintln!(
+            "DEBUG match_metavariable: node_type='{}', metavar='{}'",
+            node_type, metavar
+        );
+        if node_type != "identifier" && !node_type.contains("identifier") {
+            eprintln!("DEBUG match_metavariable: rejecting non-identifier node");
+            return Ok(false);
+        }
+
         if let Some(text) = node.text() {
             let existing = self.metavar_manager.get_binding_values();
             eprintln!(
@@ -1052,12 +1247,26 @@ impl AdvancedSemgrepMatcher {
     /// Convert a symbolic value to a list of tokens
     fn symbolic_value_to_tokens(&self, value: &astgrep_dataflow::SymbolicValue) -> Vec<String> {
         use astgrep_dataflow::SymbolicValue;
+        let mut visited = HashSet::new();
+        self.symbolic_value_to_tokens_inner(value, &mut visited)
+    }
+
+    fn symbolic_value_to_tokens_inner(
+        &self,
+        value: &astgrep_dataflow::SymbolicValue,
+        visited: &mut HashSet<String>,
+    ) -> Vec<String> {
+        use astgrep_dataflow::SymbolicValue;
 
         match value {
             SymbolicValue::Variable(name) => {
+                if visited.contains(name) {
+                    return vec![name.clone()];
+                }
+                visited.insert(name.clone());
                 if let Some(propagator) = &self.symbolic_propagator {
                     if let Some(symbolic_value) = propagator.state().get(name) {
-                        self.symbolic_value_to_tokens(symbolic_value)
+                        self.symbolic_value_to_tokens_inner(symbolic_value, visited)
                     } else {
                         vec![name.clone()]
                     }
@@ -1364,35 +1573,49 @@ impl AdvancedSemgrepMatcher {
                             }
 
                             if found_delim && end_pos > text_idx {
-                                // Bind to all tokens between current position and delimiter
                                 let value = text_tokens[text_idx..end_pos].join("");
+                                let bind_key = if metavar == "_" {
+                                    format!("__anon_{}", pattern_idx)
+                                } else {
+                                    metavar.clone()
+                                };
                                 eprintln!(
-                                    "DEBUG try_match_sequence: binding metavariable '{}' to multi-token value '{}'",
-                                    metavar, value
+                                    "DEBUG try_match_sequence: binding metavariable '{}' (key='{}') to multi-token value '{}'",
+                                    metavar, bind_key, value
                                 );
-                                if !self.metavar_manager.bind(
-                                    metavar.clone(),
-                                    value.clone(),
-                                    node,
-                                )? {
+                                if !self.metavar_manager.bind(bind_key, value.clone(), node)? {
                                     return Ok(false);
                                 }
                                 text_idx = end_pos;
                                 continue;
+                            } else if found_delim && end_pos == text_idx {
+                                return Ok(false);
+                            } else {
+                                eprintln!(
+                                    "DEBUG try_match_sequence: is_arg={}, found_delim={}, end_pos={}, text_idx={}",
+                                    is_arg_position, found_delim, end_pos, text_idx
+                                );
                             }
                         }
                     }
 
-                    // Default: bind to single token
+                    // When in argument position with no explicit closing delimiter in pattern,
+                    // don't bind to the closing paren token itself
+                    if is_arg_position && text_tokens[text_idx] == ")" {
+                        return Ok(false);
+                    }
+
                     let value = &text_tokens[text_idx];
+                    let bind_key = if metavar == "_" {
+                        format!("__anon_{}", pattern_idx)
+                    } else {
+                        metavar.clone()
+                    };
                     eprintln!(
-                        "DEBUG try_match_sequence: binding metavariable '{}' to value '{}'",
-                        metavar, value
+                        "DEBUG try_match_sequence: binding metavariable '{}' (key='{}') to value '{}'",
+                        metavar, bind_key, value
                     );
-                    if !self
-                        .metavar_manager
-                        .bind(metavar.clone(), value.clone(), node)?
-                    {
+                    if !self.metavar_manager.bind(bind_key, value.clone(), node)? {
                         eprintln!("DEBUG try_match_sequence: binding '{}' to '{}' failed - already bound to different value", metavar, value);
                         return Ok(false);
                     }
@@ -2003,9 +2226,17 @@ impl AdvancedSemgrepMatcher {
     ) -> Result<bool> {
         match condition {
             Condition::MetavariableRegex(metavar_regex) => {
-                if let Some(value) = bindings.get(&metavar_regex.metavariable) {
-                    if let Ok(regex) = Regex::new(&metavar_regex.regex) {
-                        Ok(regex.is_match(value))
+                let key = metavar_regex.metavariable.trim_start_matches('$');
+                if let Some(value) = bindings.get(key) {
+                    // Support (?i) case-insensitive flag and other inline regex flags
+                    let regex_str = &metavar_regex.regex;
+                    let regex = if regex_str.starts_with("(?i)") {
+                        regex::Regex::new(&format!("(?i){}", &regex_str[4..]))
+                    } else {
+                        regex::Regex::new(regex_str)
+                    };
+                    if let Ok(re) = regex {
+                        Ok(re.is_match(value))
                     } else {
                         Ok(false)
                     }
@@ -2014,7 +2245,9 @@ impl AdvancedSemgrepMatcher {
                 }
             }
             Condition::MetavariableComparison(metavar_comp) => {
-                if let Some(value) = bindings.get(&metavar_comp.metavariable) {
+                if let ComparisonOperator::PythonExpression(_) = &metavar_comp.operator {
+                    Ok(true)
+                } else if let Some(value) = bindings.get(&metavar_comp.metavariable) {
                     self.evaluate_comparison(value, &metavar_comp.operator, &metavar_comp.value)
                 } else {
                     Ok(false)
@@ -2074,6 +2307,10 @@ impl AdvancedSemgrepMatcher {
             }
             Condition::NodeAttribute(_, _) => {
                 // This would need access to the matched node
+                Ok(true) // Simplified for now
+            }
+            Condition::MetavariablePattern(_metavar_pattern) => {
+                // MetavariablePattern evaluation is handled in the executor
                 Ok(true) // Simplified for now
             }
             Condition::Custom(_) => {
@@ -2317,7 +2554,51 @@ impl AdvancedSemgrepMatcher {
             }
         }
 
-        // For now, just return true for unsupported expressions
+        if expr.contains(" in ") || expr.contains(" not in ") {
+            let negated = expr.contains(" not in ");
+            let in_expr = if negated {
+                expr.split(" not in ").collect::<Vec<_>>()
+            } else {
+                expr.split(" in ").collect::<Vec<_>>()
+            };
+            if in_expr.len() == 2 {
+                let left = in_expr[0].trim();
+                let right = in_expr[1].trim();
+                let check_value = if left.starts_with('$') { value } else { value };
+                if right.starts_with('"') && right.ends_with('"') {
+                    let target = &right[1..right.len() - 1];
+                    let result = target.contains(&check_value);
+                    return Ok(if negated { !result } else { result });
+                } else if right.starts_with('[') && right.ends_with(']') {
+                    let inner = &right[1..right.len() - 1];
+                    let items: Vec<&str> = inner
+                        .split(',')
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    let result = items.iter().any(|item| item == &check_value);
+                    return Ok(if negated { !result } else { result });
+                }
+            }
+        }
+
+        if expr.contains("**") && expr.contains("==") {
+            let parts: Vec<&str> = expr.split("==").collect();
+            if parts.len() == 2 {
+                if let Ok(expected_val) = parts[1].trim().parse::<f64>() {
+                    let left = parts[0].trim();
+                    let power_parts: Vec<&str> = left.split("**").collect();
+                    if power_parts.len() == 2 {
+                        if let Ok(base_val) = value.parse::<f64>() {
+                            if let Ok(exp_val) = power_parts[1].trim().parse::<f64>() {
+                                return Ok((base_val.powf(exp_val) - expected_val).abs() < 1e-9);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         eprintln!("DEBUG: Expression '{}' not handled, returning true", expr);
         Ok(true)
     }
@@ -2398,7 +2679,7 @@ impl AdvancedSemgrepMatcher {
 
     /// Calculate Shannon entropy of a string
     fn calculate_entropy(&self, s: &str) -> f64 {
-        use std::collections::HashMap;
+        use std::collections::{HashMap, HashSet};
 
         if s.is_empty() {
             return 0.0;

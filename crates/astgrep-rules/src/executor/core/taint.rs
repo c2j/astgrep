@@ -100,6 +100,7 @@ impl AdvancedRuleExecutor {
             only_propagate_through_assignments,
             &source_text,
             &dataflow_spec.propagators,
+            &dataflow_spec,
         )?;
 
         // Step 4: Create findings for each unique sink with taint flow
@@ -621,6 +622,7 @@ impl AdvancedRuleExecutor {
         taint_only_propagate_through_assignments: bool,
         source_text: &str,
         propagators: &[crate::types::PropagatorPattern],
+        dataflow_spec: &crate::types::DataFlowSpec,
     ) -> Result<Vec<(TaintMatch, TaintMatch)>> {
         eprintln!("[DEBUG] detect_taint_flows: {} sources, {} sinks, assume_safe_booleans={}, assume_safe_numbers={}, only_assignments={}",
                   sources.len(), sinks.len(), taint_assume_safe_booleans, taint_assume_safe_numbers, taint_only_propagate_through_assignments);
@@ -661,6 +663,22 @@ impl AdvancedRuleExecutor {
                         taint_only_propagate_through_assignments,
                         source_text,
                     ) {
+                        // Check if the sink variable is sanitized
+                        if !dataflow_spec.sanitizers.is_empty() {
+                            if let Some(sink_var) = self.extract_sink_argument(sink.node.as_ref()) {
+                                if self.is_sink_variable_sanitized(
+                                    &sink_var,
+                                    source_text,
+                                    dataflow_spec,
+                                ) {
+                                    eprintln!(
+                                        "[DEBUG] Sink variable '{}' is sanitized, skipping flow",
+                                        sink_var
+                                    );
+                                    continue;
+                                }
+                            }
+                        }
                         eprintln!("[DEBUG] FLOW FOUND: source {} -> sink {}", i, j);
                         flows.push((source.clone(), sink.clone()));
                         continue;
@@ -1302,5 +1320,56 @@ impl AdvancedRuleExecutor {
             }
         }
         None
+    }
+
+    fn extract_sink_argument(&self, sink_node: &dyn AstNode) -> Option<String> {
+        let sink_text = sink_node.text().unwrap_or_default().trim();
+        if let Some(open_paren) = sink_text.find('(') {
+            let args = sink_text[open_paren + 1..].trim_end_matches(')');
+            let args = args.trim();
+            if !args.is_empty() {
+                return Some(args.to_string());
+            }
+        }
+        if sink_node.node_type() == "call_expression" {
+            for i in (0..sink_node.child_count()).rev() {
+                if let Some(child) = sink_node.child(i) {
+                    if child.node_type() == "identifier" || child.node_type() == "argument_list" {
+                        if let Some(text) = child.text() {
+                            let trimmed = text.trim().trim_end_matches(')');
+                            if !trimmed.is_empty() && !trimmed.starts_with('(') {
+                                return Some(trimmed.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn is_sink_variable_sanitized(
+        &self,
+        sink_var: &str,
+        source_text: &str,
+        dataflow_spec: &crate::types::DataFlowSpec,
+    ) -> bool {
+        for sanitizer_pattern in &dataflow_spec.sanitizers {
+            let sanitizer_func = sanitizer_pattern
+                .trim_end_matches("(...)")
+                .split("::")
+                .last()
+                .unwrap_or(sanitizer_pattern);
+
+            let pattern = format!("{} = {}({})", sink_var, sanitizer_func, sink_var);
+            if source_text.contains(&pattern) {
+                return true;
+            }
+            let alt_pattern = format!("{} = {}()", sink_var, sanitizer_func);
+            if source_text.contains(&alt_pattern) {
+                return true;
+            }
+        }
+        false
     }
 }

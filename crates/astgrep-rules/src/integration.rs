@@ -3,8 +3,8 @@
 //! This module provides examples and integration tests for the rule execution engine.
 
 use crate::*;
-use astgrep_core::{AstNode, Language, Severity, Confidence};
 use astgrep_ast::{AstBuilder, UniversalNode};
+use astgrep_core::{AstNode, Confidence, Language, Severity};
 use serde_yaml::Value;
 use std::path::Path;
 
@@ -22,22 +22,32 @@ impl RuleExecutionExample {
             confidence: Confidence::High,
             languages: vec![Language::Java, Language::JavaScript, Language::Python],
             patterns: vec![
-                Pattern::simple("executeQuery($QUERY)".to_string())
-                    .add_condition(Condition::MetavariableRegex(MetavariableRegex::new(
+                Pattern::simple("executeQuery($QUERY)".to_string()).add_condition(
+                    Condition::MetavariableRegex(MetavariableRegex::new(
                         "QUERY".to_string(),
-                        r".*\+.*".to_string()
-                    )))
+                        r".*\+.*".to_string(),
+                    )),
+                ),
             ],
-            dataflow: Some(DataFlowSpec::from_strings(
-                vec!["user_input".to_string(), "request_parameter".to_string()],
-                vec!["sql_execution".to_string(), "database_query".to_string()],
-            ).with_sanitizers(vec!["sql_escape".to_string(), "prepared_statement".to_string()])),
+            dataflow: Some(
+                DataFlowSpec::from_strings(
+                    vec!["user_input".to_string(), "request_parameter".to_string()],
+                    vec!["sql_execution".to_string(), "database_query".to_string()],
+                )
+                .with_sanitizers(vec![
+                    "sql_escape".to_string(),
+                    "prepared_statement".to_string(),
+                ]),
+            ),
             fix: Some("Use prepared statements instead of string concatenation".to_string()),
             fix_regex: None,
             paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
-                metadata.insert("category".to_string(), Value::String("security".to_string()));
+                metadata.insert(
+                    "category".to_string(),
+                    Value::String("security".to_string()),
+                );
                 metadata.insert("cwe".to_string(), Value::String("89".to_string()));
                 metadata.insert("owasp".to_string(), Value::String("A03:2021".to_string()));
                 metadata
@@ -58,22 +68,29 @@ impl RuleExecutionExample {
             confidence: Confidence::Medium,
             languages: vec![Language::JavaScript, Language::Java],
             patterns: vec![
-                Pattern::simple("innerHTML = $VALUE".to_string())
-                    .add_condition(Condition::MetavariableRegex(MetavariableRegex::new(
+                Pattern::simple("innerHTML = $VALUE".to_string()).add_condition(
+                    Condition::MetavariableRegex(MetavariableRegex::new(
                         "VALUE".to_string(),
-                        r".*user.*".to_string()
-                    )))
+                        r".*user.*".to_string(),
+                    )),
+                ),
             ],
-            dataflow: Some(DataFlowSpec::from_strings(
-                vec!["user_input".to_string(), "url_parameter".to_string()],
-                vec!["html_output".to_string(), "dom_manipulation".to_string()],
-            ).with_sanitizers(vec!["html_encode".to_string(), "sanitize_html".to_string()])),
+            dataflow: Some(
+                DataFlowSpec::from_strings(
+                    vec!["user_input".to_string(), "url_parameter".to_string()],
+                    vec!["html_output".to_string(), "dom_manipulation".to_string()],
+                )
+                .with_sanitizers(vec!["html_encode".to_string(), "sanitize_html".to_string()]),
+            ),
             fix: Some("Encode HTML output to prevent XSS".to_string()),
             fix_regex: None,
             paths: None,
             metadata: {
                 let mut metadata = std::collections::HashMap::new();
-                metadata.insert("category".to_string(), Value::String("security".to_string()));
+                metadata.insert(
+                    "category".to_string(),
+                    Value::String("security".to_string()),
+                );
                 metadata.insert("cwe".to_string(), Value::String("79".to_string()));
                 metadata.insert("owasp".to_string(), Value::String("A03:2021".to_string()));
                 metadata
@@ -89,8 +106,9 @@ impl RuleExecutionExample {
         // Create a simple method call that could be vulnerable
         AstBuilder::call_expression(
             AstBuilder::identifier("executeQuery"),
-            vec![AstBuilder::identifier("userInput")]
-        ).with_text("executeQuery(userInput)".to_string())
+            vec![AstBuilder::identifier("userInput")],
+        )
+        .with_text("executeQuery(userInput)".to_string())
     }
 
     /// Demonstrate rule execution
@@ -136,13 +154,14 @@ impl RuleExecutionExample {
             println!("  Message: {}", finding.message);
             println!("  Severity: {:?}", finding.severity);
             println!("  Confidence: {:?}", finding.confidence);
-            println!("  Location: {}:{}-{}:{}", 
-                finding.location.start_line, 
+            println!(
+                "  Location: {}:{}-{}:{}",
+                finding.location.start_line,
                 finding.location.start_column,
-                finding.location.end_line, 
+                finding.location.end_line,
                 finding.location.end_column
             );
-            
+
             if !finding.metadata.is_empty() {
                 println!("  Metadata:");
                 for (key, value) in &finding.metadata {
@@ -173,10 +192,7 @@ impl RuleExecutionExample {
         let mut executor = AdvancedRuleExecutor::new();
 
         // Create rules
-        let rules = vec![
-            Self::create_sql_injection_rule(),
-            Self::create_xss_rule(),
-        ];
+        let rules = vec![Self::create_sql_injection_rule(), Self::create_xss_rule()];
 
         // Create sample AST
         let ast = Self::create_sample_ast();
@@ -208,8 +224,9 @@ impl RuleExecutionExample {
         // Display rule execution details
         println!("\nRule Execution Details:");
         for rule_result in &result.rule_results {
-            println!("  Rule {}: {} findings in {:?}", 
-                rule_result.rule_id, 
+            println!(
+                "  Rule {}: {} findings in {:?}",
+                rule_result.rule_id,
                 rule_result.findings.len(),
                 rule_result.execution_time
             );
@@ -280,7 +297,8 @@ mod tests {
             "test.java".to_string(),
             Language::Java,
             "public class Test {}".to_string(),
-        ).add_data("test".to_string(), "value".to_string());
+        )
+        .add_data("test".to_string(), "value".to_string());
 
         assert_eq!(context.language, Language::Java);
         assert_eq!(context.file_path, "test.java");

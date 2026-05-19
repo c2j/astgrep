@@ -7,6 +7,7 @@ use crate::types::*;
 use astgrep_core::{AstNode, Confidence, Finding, Language, Location, Result, Severity};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tracing::debug;
 
 // Helper functions from matching module are available through super::matching
 
@@ -19,8 +20,8 @@ impl RuleExecutionEngine {
         rule: &Rule,
         context: &RuleContext,
     ) -> Result<Vec<Finding>> {
-        println!("🔍 Executing pattern for rule: {}", rule.id);
-        println!("🔍 Pattern: {:?}", pattern);
+        debug!("Executing pattern for rule: {}", rule.id);
+        debug!("Pattern: {:?}", pattern);
 
         let mut findings = Vec::new();
 
@@ -245,7 +246,7 @@ impl RuleExecutionEngine {
         use crate::executor::AdvancedRuleExecutor;
 
         // Use AdvancedRuleExecutor for proper AST-based matching
-        println!("🔍 Pattern has {} sub-patterns and {} conditions, using AdvancedRuleExecutor for All pattern", subs.len(), pattern.conditions.len());
+        debug!("Pattern has {} sub-patterns and {} conditions, using AdvancedRuleExecutor for All pattern", subs.len(), pattern.conditions.len());
         let mut advanced_executor = AdvancedRuleExecutor::new();
 
         // Create a rule with the combined pattern
