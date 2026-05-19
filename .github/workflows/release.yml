@@ -9,8 +9,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  verify-main:
+    name: Verify tag is on main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "::error::Tag ${{ github.ref_name }} is not on main branch. Release workflow aborted."
+            exit 1
+          }
+
   build-linux-x86_64:
     name: Linux x86_64 (glibc ≥ 2.22)
+    needs: verify-main
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +45,7 @@ jobs:
         run: |
           cargo zigbuild --release \
             --target x86_64-unknown-linux-gnu.2.22 \
-            --workspace --exclude astgrep-web --exclude astgrep-gui
+            --workspace --exclude astgrep-web --exclude astgrep-gui --exclude test-utils
 
       - name: Strip binary
         run: strip target/x86_64-unknown-linux-gnu/release/astgrep
@@ -48,6 +63,7 @@ jobs:
 
   build-linux-aarch64:
     name: Linux aarch64 (glibc ≥ 2.22)
+    needs: verify-main
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +83,7 @@ jobs:
         run: |
           cargo zigbuild --release \
             --target aarch64-unknown-linux-gnu.2.22 \
-            --workspace --exclude astgrep-web --exclude astgrep-gui
+            --workspace --exclude astgrep-web --exclude astgrep-gui --exclude test-utils
 
       - name: Install aarch64 strip tool
         run: sudo apt-get update && sudo apt-get install -y binutils-aarch64-linux-gnu
@@ -88,6 +104,7 @@ jobs:
 
   build-windows-x86_64:
     name: Windows x86_64 (Win7+)
+    needs: verify-main
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,7 +126,7 @@ jobs:
         run: |
           cargo build --release \
             --target x86_64-pc-windows-gnu \
-            --workspace --exclude astgrep-web --exclude astgrep-gui
+            --workspace --exclude astgrep-web --exclude astgrep-gui --exclude test-utils
         env:
           RUSTFLAGS: '-C link-arg=-static'
 
