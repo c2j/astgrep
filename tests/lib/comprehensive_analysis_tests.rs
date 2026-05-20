@@ -91,6 +91,8 @@ public class VulnerableApp {
         language: Language::Java,
         source_code: java_source.clone(),
         custom_data: std::collections::HashMap::new(),
+        enable_constant_propagation: true,
+        sql_stmt_boundary: None,
     };
 
     // Run comprehensive analysis

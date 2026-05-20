@@ -113,9 +113,14 @@ fn apply_filters<'a>(
     rules
         .iter()
         .filter(|rule| {
-            // Simplified filtering - just check if rule name contains the filter
             if let Some(ref lang) = language_filter {
-                if !rule.name.to_lowercase().contains(&lang.to_lowercase()) {
+                let lang_lower = lang.to_lowercase();
+                let matches_name = rule.name.to_lowercase().contains(&lang_lower);
+                let matches_lang = rule
+                    .languages
+                    .iter()
+                    .any(|l| format!("{:?}", l).to_lowercase() == lang_lower);
+                if !matches_name && !matches_lang {
                     return false;
                 }
             }

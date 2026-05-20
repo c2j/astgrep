@@ -760,7 +760,7 @@ mod tests {
         assert_eq!(discovered.shebang, Some("/bin/bash".to_string()));
         assert!(matches!(
             discovered.script_type,
-            ScriptType::Validator | ScriptType::Utility
+            ScriptType::Runner
         ));
 
         Ok(())

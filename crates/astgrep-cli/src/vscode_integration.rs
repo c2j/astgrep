@@ -245,16 +245,23 @@ impl VsCodeExtension {
         }
 
         if pattern.contains('*') {
-            // Handle patterns like "**/*.java"
             if pattern.starts_with("**/") {
-                let suffix = &pattern[3..]; // Remove "**/"
+                let suffix = &pattern[3..];
+                return self.matches_pattern(file, suffix);
+            }
+
+            if pattern.starts_with("*.") {
+                let suffix = &pattern[1..];
                 return file.ends_with(suffix);
             }
 
-            // Handle patterns like "*.java"
-            if pattern.starts_with("*.") {
-                let suffix = &pattern[1..]; // Remove "*"
-                return file.ends_with(suffix);
+            if pattern.starts_with(".") {
+                return file.ends_with(pattern);
+            }
+
+            if pattern.ends_with("/**") {
+                let prefix = &pattern[..pattern.len() - 3];
+                return file.starts_with(prefix);
             }
 
             let parts: Vec<&str> = pattern.split('*').collect();

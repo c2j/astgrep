@@ -290,7 +290,7 @@ impl ResultsPanel {
                                 for (key, value) in &finding.metadata {
                                     ui.horizontal(|ui| {
                                         ui.label(format!("{}:", key));
-                                        ui.label(value);
+                                        ui.label(value.as_str().unwrap_or("?"));
                                     });
                                 }
                             }

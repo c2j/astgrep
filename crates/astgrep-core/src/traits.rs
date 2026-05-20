@@ -193,11 +193,11 @@ mod tests {
     #[test]
     fn test_language_extensions() {
         // Test that language extensions are correctly defined
-        assert!(Language::Java.extensions().contains(&"java"));
-        assert!(Language::JavaScript.extensions().contains(&"js"));
-        assert!(Language::Python.extensions().contains(&"py"));
-        assert!(Language::Sql.extensions().contains(&"sql"));
-        assert!(Language::Bash.extensions().contains(&"sh"));
+        assert!(Language::Java.extensions().contains(&".java"));
+        assert!(Language::JavaScript.extensions().contains(&".js"));
+        assert!(Language::Python.extensions().contains(&".py"));
+        assert!(Language::Sql.extensions().contains(&".sql"));
+        assert!(Language::Bash.extensions().contains(&".sh"));
     }
 
     #[test]
