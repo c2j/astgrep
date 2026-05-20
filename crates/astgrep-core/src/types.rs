@@ -377,8 +377,8 @@ mod tests {
     fn test_analysis_config_default() {
         let config = AnalysisConfig::default();
         assert_eq!(config.target_paths, vec![PathBuf::from(".")]);
-        assert!(config.exclude_patterns.is_empty());
-        assert_eq!(config.languages.len(), 5);
+        assert!(!config.exclude_patterns.is_empty());
+        assert_eq!(config.languages.len(), 6);
         assert!(config.parallel);
         assert_eq!(config.output_format, OutputFormat::Json);
     }

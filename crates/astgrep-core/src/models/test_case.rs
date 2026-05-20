@@ -152,15 +152,15 @@ pub struct TestCaseMetadata {
 /// Priority levels for test execution
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum TestPriority {
-    /// Critical tests (must pass)
-    Critical,
-    /// High priority tests
-    High,
+    /// Low priority tests
+    Low,
     /// Normal priority tests
     #[default]
     Normal,
-    /// Low priority tests
-    Low,
+    /// High priority tests
+    High,
+    /// Critical tests (must pass)
+    Critical,
 }
 
 /// Result of migrating a test case

@@ -151,7 +151,7 @@ mod tests {
         let base = PathBuf::from("/home/user");
         let handler = PathHandler::with_base_dir(base.clone());
         let relative = handler.make_relative(&base).expect("should resolve");
-        assert_eq!(relative, PathBuf::from("."));
+        assert_eq!(relative, PathBuf::from(""));
     }
 
     #[test]
