@@ -171,4 +171,38 @@ mod tests {
         assert!(types.contains(&"literal".to_string()));
         assert_eq!(types.len(), 3);
     }
+
+    #[test]
+    fn test_ast_metadata_custom_attributes() {
+        let mut attrs = HashMap::new();
+        attrs.insert("author".to_string(), "test".to_string());
+        let metadata = AstMetadata {
+            language: "java".to_string(),
+            file_path: "Main.java".to_string(),
+            source_hash: "deadbeef".to_string(),
+            parse_time_ms: 42,
+            node_count: 100,
+            custom_attributes: attrs,
+        };
+        assert_eq!(metadata.custom_attributes.get("author"), Some(&"test".to_string()));
+    }
+
+    #[test]
+    fn test_universal_ast_empty_tree() {
+        let root = UniversalNode::new(NodeType::Program);
+        let metadata = AstMetadata {
+            language: "test".to_string(),
+            file_path: "empty.txt".to_string(),
+            source_hash: "0".to_string(),
+            parse_time_ms: 0,
+            node_count: 1,
+            custom_attributes: HashMap::new(),
+        };
+        let ast = UniversalAst::new(root, metadata);
+        assert_eq!(ast.node_count(), 1);
+        assert_eq!(ast.find_nodes_by_type("identifier").len(), 0);
+        let types = ast.get_node_types();
+        assert_eq!(types.len(), 1);
+        assert!(types.contains(&"program".to_string()));
+    }
 }

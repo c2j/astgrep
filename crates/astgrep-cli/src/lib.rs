@@ -556,7 +556,7 @@ fn build_enhanced_analysis_config(
     } else {
         let mut parsed = Vec::new();
         for lang_str in languages {
-            match Language::from_str(&lang_str) {
+            match Language::parse_name(&lang_str) {
                 Some(lang) => parsed.push(lang),
                 None => {
                     warn!("Unknown language: {}, skipping", lang_str);
@@ -658,7 +658,7 @@ fn build_analysis_config(
     } else {
         let mut parsed = Vec::new();
         for lang_str in languages {
-            match Language::from_str(&lang_str) {
+            match Language::parse_name(&lang_str) {
                 Some(lang) => parsed.push(lang),
                 None => {
                     warn!("Unknown language: {}, skipping", lang_str);
@@ -671,7 +671,7 @@ fn build_analysis_config(
         parsed
     };
 
-    let output_format = OutputFormat::from_str(&format)
+    let output_format = OutputFormat::parse_name(&format)
         .ok_or_else(|| anyhow::anyhow!("Unknown output format: {}", format))?;
 
     Ok(AnalysisConfig {

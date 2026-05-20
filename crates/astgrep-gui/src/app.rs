@@ -1735,7 +1735,7 @@ impl CrGuiApp {
             &FileOperations::get_export_file_filters(),
         ) {
             let ext = FileOperations::get_extension(&path).unwrap_or_else(|| "json".to_string());
-            let format = OutputFormat::from_str(&ext).unwrap_or(OutputFormat::Json);
+            let format = OutputFormat::parse_name(&ext).unwrap_or(OutputFormat::Json);
             let content_res = match format {
                 OutputFormat::Json => serde_json::to_string_pretty(&self.analysis_results)
                     .map_err(|e| anyhow::anyhow!(e)),
