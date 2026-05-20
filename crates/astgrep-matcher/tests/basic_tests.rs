@@ -216,14 +216,14 @@ fn test_node_type_conversions() {
 
     // Test from_str conversion
     assert_eq!(
-        NodeType::from_str("assignment_expression"),
+        NodeType::parse_name("assignment_expression"),
         Some(NodeType::AssignmentExpression)
     );
     assert_eq!(
-        NodeType::from_str("call_expression"),
+        NodeType::parse_name("call_expression"),
         Some(NodeType::CallExpression)
     );
-    assert_eq!(NodeType::from_str("unknown_type"), None);
+    assert_eq!(NodeType::parse_name("unknown_type"), None);
 }
 
 #[test]
@@ -385,7 +385,7 @@ fn test_enhanced_node_types() {
 
     // Test from_str for new types
     assert_eq!(
-        NodeType::from_str("template_string"),
+        NodeType::parse_name("template_string"),
         Some(NodeType::TemplateString)
     );
 }

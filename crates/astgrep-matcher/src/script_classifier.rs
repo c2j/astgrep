@@ -360,7 +360,7 @@ impl ScriptClassifier {
             supporting_evidence: best_evidence.clone(),
             alternative_types: Vec::new(),
             metadata: ClassificationMetadata {
-                keywords_found: best_evidence.iter().map(|e| e.clone()).collect(),
+                keywords_found: best_evidence.iter().cloned().collect(),
                 file_patterns_matched: Vec::new(),
                 shebang_detected: None,
                 dependencies_found: Vec::new(),
@@ -396,7 +396,7 @@ impl ScriptClassifier {
             utility_score += 0.3;
         }
 
-        let scores = vec![
+        let scores = [
             (ScriptType::Validator, validator_score),
             (ScriptType::Runner, runner_score),
             (ScriptType::CiIntegration, ci_score),
@@ -502,7 +502,7 @@ impl ScriptClassifier {
             }
             ClassificationCondition::ShebangMatches { pattern } => {
                 let shebang = self.read_shebang(&asset.current_path)?;
-                Ok(shebang.map_or(false, |s| s.contains(pattern)))
+                Ok(shebang.is_some_and(|s| s.contains(pattern)))
             }
             ClassificationCondition::FileExtension { extension } => {
                 let file_extension = asset
@@ -538,7 +538,7 @@ impl ScriptClassifier {
             // Fallback classification
             return Ok(ClassificationResult {
                 script_type: ScriptType::Utility,
-                confidence: self.config.enable_fallback.then_some(0.1).unwrap_or(0.0),
+                confidence: if self.config.enable_fallback { 0.1 } else { 0.0 },
                 classification_method: "fallback".to_string(),
                 supporting_evidence: vec!["No classification methods available".to_string()],
                 alternative_types: Vec::new(),
@@ -593,12 +593,12 @@ impl ScriptClassifier {
     fn read_shebang(&self, path: &Path) -> Result<Option<String>> {
         let content = fs::read_to_string(path)?;
 
-        if content.starts_with("#!") {
+        if let Some(rest) = content.strip_prefix("#!") {
             if let Some(end_line) = content.find('\n') {
-                let shebang_line = &content[2..end_line]; // Skip #!
+                let shebang_line = &rest[..end_line - 2];
                 return Ok(Some(shebang_line.trim().to_string()));
             } else {
-                return Ok(Some(content[2..].trim().to_string()));
+                return Ok(Some(rest.trim().to_string()));
             }
         }
 
@@ -871,7 +871,7 @@ mod tests {
         let result = classifier.classify_by_shebang(&asset)?;
 
         assert_eq!(
-            result.shebang_detected,
+            result.metadata.shebang_detected,
             Some("/usr/bin/python3".to_string())
         );
 
@@ -902,6 +902,962 @@ mod tests {
 
         assert!(result.confidence > 0.0); // Should detect validation keywords
         assert!(result.metadata.content_analyzed);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_script_classifier_default() {
+        let classifier: ScriptClassifier = Default::default();
+        // Should not panic
+        assert!(true);
+    }
+
+    #[test]
+    fn test_script_classifier_with_config() {
+        let config = ClassificationConfig {
+            keyword_matching: false,
+            content_analysis: false,
+            shebang_analysis: false,
+            filename_analysis: false,
+            dependency_analysis: false,
+            custom_rules: Vec::new(),
+            confidence_threshold: 0.8,
+            enable_fallback: false,
+        };
+        let classifier = ScriptClassifier::with_config(config);
+        // Should not panic
+        assert!(true);
+    }
+
+    #[test]
+    fn test_classify_script_empty_file() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("empty.sh");
+
+        // Create an empty script
+        fs::write(&script_path, "")?;
+
+        let asset = TestAsset::new(
+            "test-empty".to_string(),
+            "Empty Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_script(&asset)?;
+
+        // Empty file should fall back to Utility with low confidence
+        assert!(matches!(result.script_type, ScriptType::Utility));
+        assert!(result.confidence >= 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_no_shebang() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("no_shebang.sh");
+
+        // Create a script without shebang
+        fs::write(&script_path, "echo 'hello world'\n")?;
+
+        let asset = TestAsset::new(
+            "test-no-shebang".to_string(),
+            "No Shebang Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_script(&asset)?;
+
+        // Should still classify without panicking
+        assert!(result.confidence >= 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_bash_shebang() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("bash_script.sh");
+
+        // Create a script with bash shebang
+        fs::write(&script_path, "#!/bin/bash\necho 'hello'\n")?;
+
+        let asset = TestAsset::new(
+            "test-bash".to_string(),
+            "Bash Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_script(&asset)?;
+
+        // Bash shebang should be detected
+        assert_eq!(result.metadata.shebang_detected, Some("/bin/bash".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_python_shebang() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("python_script.py");
+
+        // Create a script with python shebang
+        fs::write(&script_path, "#!/usr/bin/python3\nprint('hello')\n")?;
+
+        let asset = TestAsset::new(
+            "test-python".to_string(),
+            "Python Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_script(&asset)?;
+
+        // Python shebang should be detected
+        assert_eq!(result.metadata.shebang_detected, Some("/usr/bin/python3".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_node_shebang() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("node_script.js");
+
+        // Create a script with node shebang
+        fs::write(&script_path, "#!/usr/bin/node\nconsole.log('hello')\n")?;
+
+        let asset = TestAsset::new(
+            "test-node".to_string(),
+            "Node Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_script(&asset)?;
+
+        // Node shebang should be detected
+        assert_eq!(result.metadata.shebang_detected, Some("/usr/bin/node".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_runner_keywords() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("runner_script.sh");
+
+        // Create a script with runner keywords
+        fs::write(&script_path, "#!/bin/bash\nrun_tests() {\n  execute_all\n  launch_app\n}\n")?;
+
+        let asset = TestAsset::new(
+            "test-runner".to_string(),
+            "Runner Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_keywords(&asset)?;
+
+        // Should detect runner keywords
+        assert!(result.confidence > 0.0);
+        assert!(result.metadata.content_analyzed);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_ci_keywords() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("ci_script.sh");
+
+        // Create a script with CI keywords
+        fs::write(&script_path, "#!/bin/bash\necho 'ci pipeline build deploy'\n")?;
+
+        let asset = TestAsset::new(
+            "test-ci".to_string(),
+            "CI Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_keywords(&asset)?;
+
+        // Should detect CI keywords
+        assert!(result.confidence > 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_utility_content() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("util_script.sh");
+
+        fs::write(&script_path, "#!/bin/bash\nhelper_function() {\n  util\n  tool\n  library\n  import\n}\n")?;
+
+        let asset = TestAsset::new(
+            "test-utility".to_string(),
+            "Utility Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_content(&asset)?;
+
+        assert!(result.confidence > 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_by_content_validation() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("validate_content.sh");
+
+        // Create a script with validation patterns
+        fs::write(&script_path, "#!/bin/bash\nvalidate_input() {\n  assert_equal\n  check_result\n  verify_output\n  expect_true\n}\n")?;
+
+        let asset = TestAsset::new(
+            "test-validate-content".to_string(),
+            "Validate Content Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_content(&asset)?;
+
+        // Should detect validation patterns in content
+        assert!(result.confidence > 0.0);
+        assert!(result.metadata.content_analyzed);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_by_content_runner() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("run_content.sh");
+
+        // Create a script with runner patterns
+        fs::write(&script_path, "#!/bin/bash\nrun_all_tests() {\n  execute_command\n  start_service\n  launch_app\n}\n")?;
+
+        let asset = TestAsset::new(
+            "test-run-content".to_string(),
+            "Run Content Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_content(&asset)?;
+
+        // Should detect runner patterns
+        assert!(result.confidence > 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_script_by_content_ci() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("build_content.sh");
+
+        // Create a script with CI patterns
+        fs::write(&script_path, "#!/bin/bash\necho 'ci build pipeline deploy jenkins'\n")?;
+
+        let asset = TestAsset::new(
+            "test-ci-content".to_string(),
+            "CI Content Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_content(&asset)?;
+
+        // Should detect CI patterns
+        assert!(result.confidence > 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_scripts_multiple() -> Result<()> {
+        let temp_dir = tempdir()?;
+
+        let script1_path = temp_dir.path().join("validate_test.sh");
+        fs::write(&script1_path, "#!/bin/bash\nvalidate\n")?;
+
+        let script2_path = temp_dir.path().join("run_test.sh");
+        fs::write(&script2_path, "#!/bin/bash\nrun\n")?;
+
+        let fixture_path = temp_dir.path().join("fixture.txt");
+        fs::write(&fixture_path, "fixture data\n")?;
+
+        let assets = vec![
+            TestAsset::new(
+                "test-001".to_string(),
+                "Validate Script".to_string(),
+                AssetType::Script,
+                script1_path.clone(),
+                script1_path.clone(),
+            ),
+            TestAsset::new(
+                "test-002".to_string(),
+                "Run Script".to_string(),
+                AssetType::Script,
+                script2_path.clone(),
+                script2_path.clone(),
+            ),
+            TestAsset::new(
+                "test-003".to_string(),
+                "Fixture".to_string(),
+                AssetType::Fixture,
+                fixture_path.clone(),
+                fixture_path.clone(),
+            ),
+        ];
+
+        let classifier = ScriptClassifier::new();
+        let results = classifier.classify_scripts(&assets)?;
+
+        // Should only classify Script assets
+        assert_eq!(results.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classification_result_fields() {
+        let result = ClassificationResult {
+            script_type: ScriptType::Validator,
+            confidence: 0.95,
+            classification_method: "test_method".to_string(),
+            supporting_evidence: vec!["evidence1".to_string()],
+            alternative_types: vec![(ScriptType::Runner, 0.3)],
+            metadata: ClassificationMetadata {
+                keywords_found: vec!["validate".to_string()],
+                file_patterns_matched: vec!["*validate*".to_string()],
+                shebang_detected: Some("/bin/bash".to_string()),
+                dependencies_found: vec![],
+                content_analyzed: true,
+                processing_time_ms: 100,
+            },
+        };
+
+        assert!(matches!(result.script_type, ScriptType::Validator));
+        assert_eq!(result.confidence, 0.95);
+        assert_eq!(result.classification_method, "test_method");
+        assert_eq!(result.supporting_evidence.len(), 1);
+        assert_eq!(result.alternative_types.len(), 1);
+        assert_eq!(result.metadata.keywords_found.len(), 1);
+        assert_eq!(result.metadata.processing_time_ms, 100);
+    }
+
+    #[test]
+    fn test_classification_metadata_default() {
+        let metadata = ClassificationMetadata {
+            keywords_found: Vec::new(),
+            file_patterns_matched: Vec::new(),
+            shebang_detected: None,
+            dependencies_found: Vec::new(),
+            content_analyzed: false,
+            processing_time_ms: 0,
+        };
+
+        assert!(metadata.keywords_found.is_empty());
+        assert!(metadata.shebang_detected.is_none());
+        assert!(!metadata.content_analyzed);
+    }
+
+    #[test]
+    fn test_script_type_variants() {
+        let validator = ScriptType::Validator;
+        let runner = ScriptType::Runner;
+        let utility = ScriptType::Utility;
+        let ci = ScriptType::CiIntegration;
+
+        let _ = validator.clone();
+        let _ = runner.clone();
+        let _ = utility.clone();
+        let _ = ci.clone();
+    }
+
+    #[test]
+    fn test_classification_rule_creation() {
+        let rule = ClassificationRule {
+            name: "test_rule".to_string(),
+            script_type: ScriptType::Validator,
+            conditions: vec![
+                ClassificationCondition::FilenameContains {
+                    pattern: "validate".to_string(),
+                    case_sensitive: false,
+                },
+            ],
+            weight: 1.0,
+            description: "Test rule".to_string(),
+        };
+
+        assert_eq!(rule.name, "test_rule");
+        assert!(matches!(rule.script_type, ScriptType::Validator));
+        assert_eq!(rule.conditions.len(), 1);
+        assert_eq!(rule.weight, 1.0);
+    }
+
+    #[test]
+    fn test_classification_condition_variants() {
+        let filename = ClassificationCondition::FilenameContains {
+            pattern: "test".to_string(),
+            case_sensitive: true,
+        };
+        let content = ClassificationCondition::ContentContains {
+            pattern: "test".to_string(),
+            case_sensitive: false,
+        };
+        let shebang = ClassificationCondition::ShebangMatches {
+            pattern: "bash".to_string(),
+        };
+        let extension = ClassificationCondition::FileExtension {
+            extension: "sh".to_string(),
+        };
+        let size = ClassificationCondition::FileSize {
+            min_bytes: Some(10),
+            max_bytes: Some(1000),
+        };
+        let custom = ClassificationCondition::CustomCondition {
+            name: "custom".to_string(),
+            parameters: std::collections::HashMap::new(),
+        };
+
+        let _ = filename;
+        let _ = content;
+        let _ = shebang;
+        let _ = extension;
+        let _ = size;
+        let _ = custom;
+    }
+
+    #[test]
+    fn test_custom_rule_classification() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("my_custom_script.sh");
+        fs::write(&script_path, "#!/bin/bash\necho 'hello'\n")?;
+
+        let asset = TestAsset::new(
+            "test-custom".to_string(),
+            "Custom Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let config = ClassificationConfig {
+            keyword_matching: false,
+            content_analysis: false,
+            shebang_analysis: false,
+            filename_analysis: false,
+            dependency_analysis: false,
+            custom_rules: vec![ClassificationRule {
+                name: "custom_validator".to_string(),
+                script_type: ScriptType::Validator,
+                conditions: vec![ClassificationCondition::FilenameContains {
+                    pattern: "custom".to_string(),
+                    case_sensitive: false,
+                }],
+                weight: 1.0,
+                description: "Custom validator rule".to_string(),
+            }],
+            confidence_threshold: 0.5,
+            enable_fallback: true,
+        };
+
+        let classifier = ScriptClassifier::with_config(config);
+        let result = classifier.classify_script(&asset)?;
+
+        // Custom rule should match
+        assert!(result.confidence > 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_evaluate_condition_filename_contains() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("validate_test.sh");
+        fs::write(&script_path, "#!/bin/bash\n")?;
+
+        let asset = TestAsset::new(
+            "test-eval".to_string(),
+            "Eval Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+
+        let condition = ClassificationCondition::FilenameContains {
+            pattern: "validate".to_string(),
+            case_sensitive: false,
+        };
+        let result = classifier.evaluate_condition(&asset, &condition)?;
+        assert!(result);
+
+        let condition_case = ClassificationCondition::FilenameContains {
+            pattern: "VALIDATE".to_string(),
+            case_sensitive: true,
+        };
+        let result_case = classifier.evaluate_condition(&asset, &condition_case)?;
+        assert!(!result_case);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_evaluate_condition_content_contains() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("test.sh");
+        fs::write(&script_path, "#!/bin/bash\necho 'validate_result'\n")?;
+
+        let asset = TestAsset::new(
+            "test-content".to_string(),
+            "Content Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+
+        let condition = ClassificationCondition::ContentContains {
+            pattern: "validate".to_string(),
+            case_sensitive: false,
+        };
+        let result = classifier.evaluate_condition(&asset, &condition)?;
+        assert!(result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_evaluate_condition_file_extension() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("test.sh");
+        fs::write(&script_path, "#!/bin/bash\n")?;
+
+        let asset = TestAsset::new(
+            "test-ext".to_string(),
+            "Extension Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+
+        let condition = ClassificationCondition::FileExtension {
+            extension: "sh".to_string(),
+        };
+        let result = classifier.evaluate_condition(&asset, &condition)?;
+        assert!(result);
+
+        let condition_bad = ClassificationCondition::FileExtension {
+            extension: "py".to_string(),
+        };
+        let result_bad = classifier.evaluate_condition(&asset, &condition_bad)?;
+        assert!(!result_bad);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_evaluate_condition_file_size() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("test.sh");
+        fs::write(&script_path, "#!/bin/bash\necho 'hello'\n")?;
+
+        let asset = TestAsset::new(
+            "test-size".to_string(),
+            "Size Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+
+        let condition = ClassificationCondition::FileSize {
+            min_bytes: Some(1),
+            max_bytes: Some(10000),
+        };
+        let result = classifier.evaluate_condition(&asset, &condition)?;
+        assert!(result);
+
+        let condition_too_small = ClassificationCondition::FileSize {
+            min_bytes: Some(10000),
+            max_bytes: None,
+        };
+        let result_small = classifier.evaluate_condition(&asset, &condition_too_small)?;
+        assert!(!result_small);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_evaluate_condition_shebang_matches() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("test.sh");
+        fs::write(&script_path, "#!/usr/bin/python3\nprint('hello')\n")?;
+
+        let asset = TestAsset::new(
+            "test-shebang-cond".to_string(),
+            "Shebang Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+
+        let condition = ClassificationCondition::ShebangMatches {
+            pattern: "python".to_string(),
+        };
+        let result = classifier.evaluate_condition(&asset, &condition)?;
+        assert!(result);
+
+        let condition_bad = ClassificationCondition::ShebangMatches {
+            pattern: "ruby".to_string(),
+        };
+        let result_bad = classifier.evaluate_condition(&asset, &condition_bad)?;
+        assert!(!result_bad);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_evaluate_condition_custom() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("test.sh");
+        fs::write(&script_path, "#!/bin/bash\n")?;
+
+        let asset = TestAsset::new(
+            "test-custom-cond".to_string(),
+            "Custom Cond Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+
+        let condition = ClassificationCondition::CustomCondition {
+            name: "always_false".to_string(),
+            parameters: std::collections::HashMap::new(),
+        };
+        let result = classifier.evaluate_condition(&asset, &condition)?;
+        assert!(!result);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_combine_classification_results_empty_with_fallback() {
+        let classifier = ScriptClassifier::new();
+        let results: Vec<ClassificationResult> = Vec::new();
+        let start_time = std::time::Instant::now();
+
+        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+
+        assert!(matches!(result.script_type, ScriptType::Utility));
+        assert!(result.confidence > 0.0); // Fallback enabled by default
+        assert_eq!(result.classification_method, "fallback");
+    }
+
+    #[test]
+    fn test_combine_classification_results_empty_no_fallback() {
+        let config = ClassificationConfig {
+            keyword_matching: true,
+            content_analysis: true,
+            shebang_analysis: true,
+            filename_analysis: true,
+            dependency_analysis: false,
+            custom_rules: Vec::new(),
+            confidence_threshold: 0.5,
+            enable_fallback: false,
+        };
+        let classifier = ScriptClassifier::with_config(config);
+        let results: Vec<ClassificationResult> = Vec::new();
+        let start_time = std::time::Instant::now();
+
+        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+
+        assert!(matches!(result.script_type, ScriptType::Utility));
+        assert_eq!(result.confidence, 0.0); // No fallback
+    }
+
+    #[test]
+    fn test_combine_classification_results_low_confidence() {
+        let classifier = ScriptClassifier::new();
+        let results = vec![ClassificationResult {
+            script_type: ScriptType::Runner,
+            confidence: 0.1,
+            classification_method: "test".to_string(),
+            supporting_evidence: vec![],
+            alternative_types: vec![],
+            metadata: ClassificationMetadata {
+                keywords_found: Vec::new(),
+                file_patterns_matched: Vec::new(),
+                shebang_detected: None,
+                dependencies_found: Vec::new(),
+                content_analyzed: false,
+                processing_time_ms: 0,
+            },
+        }];
+        let start_time = std::time::Instant::now();
+
+        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+
+        // Low confidence with fallback should return Utility
+        assert!(matches!(result.script_type, ScriptType::Utility));
+    }
+
+    #[test]
+    fn test_combine_classification_results_high_confidence() {
+        let classifier = ScriptClassifier::new();
+        let results = vec![ClassificationResult {
+            script_type: ScriptType::Validator,
+            confidence: 0.9,
+            classification_method: "test".to_string(),
+            supporting_evidence: vec!["evidence".to_string()],
+            alternative_types: vec![],
+            metadata: ClassificationMetadata {
+                keywords_found: Vec::new(),
+                file_patterns_matched: Vec::new(),
+                shebang_detected: None,
+                dependencies_found: Vec::new(),
+                content_analyzed: false,
+                processing_time_ms: 0,
+            },
+        }];
+        let start_time = std::time::Instant::now();
+
+        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+
+        // High confidence should return the original result
+        assert!(matches!(result.script_type, ScriptType::Validator));
+        assert_eq!(result.confidence, 0.9);
+    }
+
+    #[test]
+    fn test_read_shebang_none() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("no_shebang.txt");
+        fs::write(&script_path, "just some text\n")?;
+
+        let classifier = ScriptClassifier::new();
+        let shebang = classifier.read_shebang(&script_path)?;
+
+        assert!(shebang.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_shebang_with_newline() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("with_shebang.sh");
+        fs::write(&script_path, "#!/usr/bin/env python3\nprint('hello')\n")?;
+
+        let classifier = ScriptClassifier::new();
+        let shebang = classifier.read_shebang(&script_path)?;
+
+        assert_eq!(shebang, Some("/usr/bin/env python3".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_shebang_no_newline() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("shebang_only.sh");
+        fs::write(&script_path, "#!/bin/bash")?;
+
+        let classifier = ScriptClassifier::new();
+        let shebang = classifier.read_shebang(&script_path)?;
+
+        assert_eq!(shebang, Some("/bin/bash".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_contains_validation_patterns() {
+        let classifier = ScriptClassifier::new();
+        assert!(classifier.contains_validation_patterns("validate input"));
+        assert!(classifier.contains_validation_patterns("check output"));
+        assert!(classifier.contains_validation_patterns("verify result"));
+        assert!(classifier.contains_validation_patterns("assertEqual"));
+        assert!(!classifier.contains_validation_patterns("hello world"));
+    }
+
+    #[test]
+    fn test_contains_runner_patterns() {
+        let classifier = ScriptClassifier::new();
+        assert!(classifier.contains_runner_patterns("run tests"));
+        assert!(classifier.contains_runner_patterns("execute command"));
+        assert!(classifier.contains_runner_patterns("launch app"));
+        assert!(classifier.contains_runner_patterns("main function"));
+        assert!(!classifier.contains_runner_patterns("hello world"));
+    }
+
+    #[test]
+    fn test_contains_ci_patterns() {
+        let classifier = ScriptClassifier::new();
+        assert!(classifier.contains_ci_patterns("ci pipeline"));
+        assert!(classifier.contains_ci_patterns("build project"));
+        assert!(classifier.contains_ci_patterns("deploy to production"));
+        assert!(classifier.contains_ci_patterns("github actions"));
+        assert!(!classifier.contains_ci_patterns("hello world"));
+    }
+
+    #[test]
+    fn test_contains_utility_patterns() {
+        let classifier = ScriptClassifier::new();
+        assert!(classifier.contains_utility_patterns("helper function"));
+        assert!(classifier.contains_utility_patterns("util module"));
+        assert!(classifier.contains_utility_patterns("library import"));
+        assert!(classifier.contains_utility_patterns("package tool"));
+        assert!(!classifier.contains_utility_patterns("hello world"));
+    }
+
+    #[test]
+    fn test_classify_by_filename_no_match() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("random_name.sh");
+        fs::write(&script_path, "#!/bin/bash\n")?;
+
+        let asset = TestAsset::new(
+            "test-no-match".to_string(),
+            "No Match Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_filename(&asset)?;
+
+        // No filename match should return Utility with 0 confidence
+        assert!(matches!(result.script_type, ScriptType::Utility));
+        assert_eq!(result.confidence, 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_by_shebang_no_match() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("test.sh");
+        fs::write(&script_path, "#!/usr/bin/ruby\nputs 'hello'\n")?;
+
+        let asset = TestAsset::new(
+            "test-shebang-no-match".to_string(),
+            "Shebang No Match Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_shebang(&asset)?;
+
+        // Unknown shebang should return Utility with 0 confidence
+        assert!(matches!(result.script_type, ScriptType::Utility));
+        assert_eq!(result.confidence, 0.0);
+        assert_eq!(result.metadata.shebang_detected, Some("/usr/bin/ruby".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_by_keywords_no_match() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("plain.sh");
+        fs::write(&script_path, "#!/bin/bash\necho 'hello world'\n")?;
+
+        let asset = TestAsset::new(
+            "test-keywords-no-match".to_string(),
+            "Plain Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let result = classifier.classify_by_keywords(&asset)?;
+
+        // No keyword match should return Utility with 0 confidence
+        assert!(matches!(result.script_type, ScriptType::Utility));
+        assert_eq!(result.confidence, 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_classify_by_custom_rule_no_match() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let script_path = temp_dir.path().join("test.sh");
+        fs::write(&script_path, "#!/bin/bash\n")?;
+
+        let asset = TestAsset::new(
+            "test-custom-no-match".to_string(),
+            "Custom No Match Script".to_string(),
+            AssetType::Script,
+            script_path.clone(),
+            script_path.clone(),
+        );
+
+        let classifier = ScriptClassifier::new();
+        let rule = ClassificationRule {
+            name: "no_match_rule".to_string(),
+            script_type: ScriptType::Validator,
+            conditions: vec![ClassificationCondition::FilenameContains {
+                pattern: "nonexistent".to_string(),
+                case_sensitive: true,
+            }],
+            weight: 1.0,
+            description: "Rule that won't match".to_string(),
+        };
+
+        let result = classifier.classify_by_custom_rule(&asset, &rule)?;
+
+        // No conditions met should return 0 confidence
+        assert_eq!(result.confidence, 0.0);
 
         Ok(())
     }

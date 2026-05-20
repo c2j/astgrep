@@ -119,7 +119,7 @@ impl MetavarManager {
     pub fn add_constraint(&mut self, metavar_name: String, constraint: MetavarConstraint) {
         self.constraints
             .entry(metavar_name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(constraint);
     }
 

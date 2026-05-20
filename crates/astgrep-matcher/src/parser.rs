@@ -58,6 +58,7 @@ impl fmt::Display for ParsedPattern {
 
 /// Pattern parser
 pub struct PatternParser {
+    #[allow(dead_code)]
     strict_mode: bool,
 }
 
@@ -213,7 +214,7 @@ impl PatternParser {
                     let mut literal = String::new();
                     let mut escaped = false;
 
-                    while let Some(next_ch) = chars.next() {
+                    for next_ch in chars.by_ref() {
                         current_pos += 1;
 
                         if escaped {
@@ -308,7 +309,7 @@ impl PatternParser {
                 Token::Pipe => break,
                 Token::RightParen => {
                     if pos > start
-                        && patterns.len() > 0
+                        && !patterns.is_empty()
                         && matches!(&patterns[patterns.len() - 1], ParsedPattern::Literal(_))
                     {
                         let has_open_paren = patterns

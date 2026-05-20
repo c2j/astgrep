@@ -46,7 +46,7 @@ pub enum ComparisonOp {
 
 impl ComparisonOp {
     /// Parse comparison operator from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_name(s: &str) -> Option<Self> {
         match s {
             "==" | "eq" => Some(ComparisonOp::Equals),
             "!=" | "ne" => Some(ComparisonOp::NotEquals),
@@ -343,13 +343,13 @@ mod tests {
 
     #[test]
     fn test_comparison_op_from_str() {
-        assert_eq!(ComparisonOp::from_str("=="), Some(ComparisonOp::Equals));
-        assert_eq!(ComparisonOp::from_str("!="), Some(ComparisonOp::NotEquals));
+        assert_eq!(ComparisonOp::parse_name("=="), Some(ComparisonOp::Equals));
+        assert_eq!(ComparisonOp::parse_name("!="), Some(ComparisonOp::NotEquals));
         assert_eq!(
-            ComparisonOp::from_str("contains"),
+            ComparisonOp::parse_name("contains"),
             Some(ComparisonOp::Contains)
         );
-        assert_eq!(ComparisonOp::from_str("unknown"), None);
+        assert_eq!(ComparisonOp::parse_name("unknown"), None);
     }
 
     #[test]
