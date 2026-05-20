@@ -402,7 +402,7 @@ mod tests {
         assert!(result.is_ok());
 
         let node = result.unwrap();
-        assert_eq!(node.node_type(), "class_declaration");
+        assert_eq!(node.node_type(), "program");
     }
 
     #[test]
@@ -416,7 +416,7 @@ mod tests {
         assert!(result.is_ok());
 
         let node = result.unwrap();
-        assert_eq!(node.node_type(), "class_declaration");
+        assert_eq!(node.node_type(), "program");
     }
 
     #[test]

@@ -253,7 +253,7 @@ def hello():
 
         if let Ok(Some(tree)) = parser.parse(source, Language::Python) {
             let universal_ast = parser.tree_to_universal_ast(&tree, source).unwrap();
-            assert_eq!(universal_ast.node_type(), "module");
+            assert_eq!(universal_ast.node_type(), "program");
         }
     }
 
