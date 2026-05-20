@@ -14,6 +14,7 @@ pub struct BaseAdapter {
     version: String,
     description: String,
     features: Vec<String>,
+    #[allow(dead_code)]
     extensions: Vec<String>,
 }
 
@@ -191,6 +192,7 @@ impl BaseAdapter {
     }
 
     /// Parse PHP-style syntax
+    #[allow(dead_code)]
     fn parse_php_style(&self, source: &str, root: &mut UniversalNode) -> Result<()> {
         for (line_num, line) in source.lines().enumerate() {
             let line = line.trim();
@@ -408,6 +410,14 @@ macro_rules! create_language_adapter {
         }
 
         impl AstAdapter for $name {
+            fn adapt_node(
+                &self,
+                _node: &dyn std::any::Any,
+                context: &AdapterContext,
+            ) -> Result<UniversalNode> {
+                self.base.parse_to_ast(&context.source_code, context)
+            }
+
             fn language(&self) -> Language {
                 self.base.language()
             }

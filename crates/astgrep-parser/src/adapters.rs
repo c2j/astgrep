@@ -132,6 +132,7 @@ impl AdapterMetadata {
 /// Base parser implementation with adapter support
 pub struct BaseParser {
     language: Language,
+    #[allow(dead_code)]
     adapter: Box<dyn AstAdapter>,
 }
 
@@ -191,15 +192,7 @@ impl LanguageParser for BaseParser {
 
     fn supports_file(&self, file_path: &Path) -> bool {
         if let Some(extension) = file_path.extension().and_then(|e| e.to_str()) {
-            match (self.language, extension.to_lowercase().as_str()) {
-                (Language::Java, "java") => true,
-                (Language::JavaScript, "js" | "jsx" | "ts" | "tsx") => true,
-                (Language::Python, "py" | "pyw") => true,
-                (Language::Sql, "sql" | "ddl" | "dml") => true,
-                (Language::Bash, "sh" | "bash" | "zsh") => true,
-
-                _ => false,
-            }
+            matches!((self.language, extension.to_lowercase().as_str()), (Language::Java, "java") | (Language::JavaScript, "js" | "jsx" | "ts" | "tsx") | (Language::Python, "py" | "pyw") | (Language::Sql, "sql" | "ddl" | "dml") | (Language::Bash, "sh" | "bash" | "zsh"))
         } else {
             false
         }

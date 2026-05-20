@@ -33,6 +33,7 @@ struct JsPattern {
 
 /// Types of JavaScript-specific patterns
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum JsPatternType {
     DomManipulation,
     EventHandler,
@@ -79,11 +80,13 @@ struct DomApiTracker {
 #[derive(Debug, Clone)]
 struct AsyncTracker {
     async_functions: HashSet<String>,
+    #[allow(dead_code)]
     promise_chains: Vec<PromiseChain>,
 }
 
 /// Promise chain information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct PromiseChain {
     start_location: (usize, usize),
     chain_length: usize,
@@ -102,8 +105,11 @@ struct ModuleTracker {
 #[derive(Debug, Clone)]
 struct ImportInfo {
     module_name: String,
+    #[allow(dead_code)]
     imported_names: Vec<String>,
+    #[allow(dead_code)]
     is_default: bool,
+    #[allow(dead_code)]
     is_namespace: bool,
 }
 
@@ -111,7 +117,9 @@ struct ImportInfo {
 #[derive(Debug, Clone)]
 struct ExportInfo {
     exported_name: String,
+    #[allow(dead_code)]
     is_default: bool,
+    #[allow(dead_code)]
     source_module: Option<String>,
 }
 
@@ -119,6 +127,7 @@ struct ExportInfo {
 #[derive(Debug, Clone)]
 struct RequireInfo {
     module_name: String,
+    #[allow(dead_code)]
     assigned_to: Option<String>,
 }
 
@@ -127,6 +136,12 @@ struct RequireInfo {
 struct FrameworkDetector {
     detected_frameworks: HashSet<String>,
     framework_patterns: HashMap<String, Regex>,
+}
+
+impl Default for JavaScriptOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JavaScriptOptimizer {
@@ -314,6 +329,7 @@ impl JavaScriptOptimizer {
     }
 
     /// Enhance JavaScript-specific constructs
+    #[allow(clippy::only_used_in_recursion)]
     fn enhance_js_constructs(&mut self, ast: &mut UniversalNode, source: &str) -> Result<()> {
         let text_copy = ast.text().map(|s| s.to_string());
         if let Some(text) = &text_copy {
@@ -354,6 +370,7 @@ impl JavaScriptOptimizer {
     }
 
     /// Track DOM API usage
+    #[allow(clippy::only_used_in_recursion)]
     fn track_dom_apis(&mut self, ast: &mut UniversalNode, source: &str) -> Result<()> {
         let text_copy = ast.text().map(|s| s.to_string());
         if let Some(text) = &text_copy {
@@ -382,6 +399,7 @@ impl JavaScriptOptimizer {
     }
 
     /// Track async patterns
+    #[allow(clippy::only_used_in_recursion)]
     fn track_async_patterns(&mut self, ast: &mut UniversalNode, source: &str) -> Result<()> {
         let text_copy = ast.text().map(|s| s.to_string());
         if let Some(text) = &text_copy {
@@ -411,6 +429,7 @@ impl JavaScriptOptimizer {
     }
 
     /// Track module usage
+    #[allow(clippy::only_used_in_recursion)]
     fn track_module_usage(&mut self, ast: &mut UniversalNode, source: &str) -> Result<()> {
         let text_copy = ast.text().map(|s| s.to_string());
         if let Some(text) = &text_copy {

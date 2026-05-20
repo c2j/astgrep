@@ -10,6 +10,12 @@ use std::path::Path;
 /// Python AST adapter
 pub struct PythonAdapter;
 
+impl Default for PythonAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PythonAdapter {
     /// Create a new Python adapter
     pub fn new() -> Self {
@@ -83,9 +89,7 @@ impl PythonAdapter {
                     "Invalid from import statement",
                 ))
             }
-        } else if source.starts_with("import ") {
-            // import module1, module2
-            let imports_part = &source[7..]; // Skip "import "
+        } else if let Some(imports_part) = source.strip_prefix("import ") {
             let mut import_node = AstBuilder::import_declaration("", false);
 
             for module_name in imports_part.split(',') {
@@ -132,7 +136,7 @@ impl PythonAdapter {
         let after_def = &source[def_start..].trim_start();
 
         if let Some(paren_pos) = after_def.find('(') {
-            function_name = &after_def[..paren_pos].trim();
+            function_name = after_def[..paren_pos].trim();
         }
 
         let mut func_node = AstBuilder::simple_function_declaration(function_name);
@@ -262,10 +266,9 @@ impl PythonAdapter {
     ) -> Result<UniversalNode> {
         if source.starts_with("try:") {
             Ok(AstBuilder::try_statement().with_text(source.to_string()))
-        } else if source.starts_with("except ") {
-            let exception_part = &source[7..]; // Skip "except "
+        } else if let Some(exception_part) = source.strip_prefix("except ") {
             if let Some(colon_pos) = exception_part.find(':') {
-                let exception_type = &exception_part[..colon_pos].trim();
+                let exception_type = exception_part[..colon_pos].trim();
                 Ok(AstBuilder::except_statement(exception_type).with_text(source.to_string()))
             } else {
                 Ok(AstBuilder::except_statement("").with_text(source.to_string()))

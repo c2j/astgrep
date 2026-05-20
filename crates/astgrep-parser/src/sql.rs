@@ -10,6 +10,12 @@ use std::path::Path;
 /// SQL AST adapter
 pub struct SqlAdapter;
 
+impl Default for SqlAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SqlAdapter {
     /// Create a new SQL adapter
     pub fn new() -> Self {
@@ -375,6 +381,220 @@ impl Default for SqlParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use astgrep_core::AstNode;
+
+    #[test]
+    fn test_sql_adapter_new() {
+        let adapter = SqlAdapter::new();
+        assert_eq!(adapter.language(), Language::Sql);
+    }
+
+    #[test]
+    fn test_sql_adapter_default() {
+        let adapter: SqlAdapter = Default::default();
+        assert_eq!(adapter.language(), Language::Sql);
+    }
+
+    #[test]
+    fn test_sql_adapter_language() {
+        let adapter = SqlAdapter::new();
+        assert_eq!(adapter.language(), Language::Sql);
+    }
+
+    #[test]
+    fn test_parse_simple_select() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_select_statement("SELECT * FROM table");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+        assert_eq!(node.text(), Some("SELECT * FROM table"));
+    }
+
+    #[test]
+    fn test_parse_select_with_columns() {
+        let adapter = SqlAdapter::new();
+        let result =
+            adapter.parse_select_statement("SELECT col1, col2 FROM table WHERE condition");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+        assert_eq!(
+            node.get_attribute("columns").map(|s| s.as_str()),
+            Some("col1,col2"),
+            "expected columns attribute"
+        );
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("table"));
+        assert_eq!(node.get_attribute("where").map(|s| s.as_str()), Some("condition"));
+    }
+
+    #[test]
+    fn test_parse_insert() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_insert_statement("INSERT INTO users (name, email) VALUES ('John', 'john@example.com')");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "insert_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("users"));
+        assert_eq!(node.get_attribute("columns").map(|s| s.as_str()), Some("name,email"));
+    }
+
+    #[test]
+    fn test_parse_update() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_update_statement("UPDATE table SET col=val WHERE condition");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "update_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("table"));
+        assert_eq!(node.get_attribute("assignments").map(|s| s.as_str()), Some("col=val"));
+        assert_eq!(node.get_attribute("where").map(|s| s.as_str()), Some("condition"));
+    }
+
+    #[test]
+    fn test_parse_delete() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_delete_statement("DELETE FROM table WHERE condition");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "delete_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("table"));
+        assert_eq!(node.get_attribute("where").map(|s| s.as_str()), Some("condition"));
+    }
+
+    #[test]
+    fn test_parse_create_table() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_create_table("CREATE TABLE name (col INT, col2 VARCHAR(255))");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "create_table_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("name"));
+        assert_eq!(node.get_attribute("column_definitions").map(|s| s.as_str()), Some("col INT,col2 VARCHAR(255)"));
+    }
+
+    #[test]
+    fn test_parse_join() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_select_statement("SELECT * FROM t1 JOIN t2 ON t1.id = t2.id");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("t1 JOIN t2 ON t1.id = t2.id"));
+    }
+
+    #[test]
+    fn test_parse_subquery() {
+        let adapter = SqlAdapter::new();
+        let result =
+            adapter.parse_select_statement("SELECT * FROM (SELECT id FROM inner_table) AS sub");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+    }
+
+    #[test]
+    fn test_parse_group_by_having() {
+        let adapter = SqlAdapter::new();
+        let result = adapter
+            .parse_select_statement("SELECT dept, COUNT(*) FROM employees GROUP BY dept HAVING COUNT(*) > 1");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("employees"));
+    }
+
+    #[test]
+    fn test_parse_order_limit() {
+        let adapter = SqlAdapter::new();
+        let result = adapter
+            .parse_select_statement("SELECT * FROM users ORDER BY age LIMIT 10");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("users"));
+    }
+
+    #[test]
+    fn test_parse_union() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_select_statement("SELECT a FROM t1 UNION SELECT b FROM t2");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+        assert_eq!(node.get_attribute("table").map(|s| s.as_str()), Some("t1 UNION SELECT b FROM t2"));
+    }
+
+    #[test]
+    fn test_parse_expression() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_sql_construct("1 + 2 * 3", &AdapterContext::new("expr.sql".to_string(), "1 + 2 * 3".to_string(), Language::Sql));
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "sql_expression");
+        assert_eq!(node.get_attribute("expression").map(|s| s.as_str()), Some("1 + 2 * 3"));
+    }
+
+    #[test]
+    fn test_parse_function_call() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_sql_construct("COUNT(*)", &AdapterContext::new("func.sql".to_string(), "COUNT(*)".to_string(), Language::Sql));
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "sql_expression");
+        assert_eq!(node.get_attribute("expression").map(|s| s.as_str()), Some("COUNT(*)"));
+    }
+
+    #[test]
+    fn test_parse_malformed_sql() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_select_statement("SELECT");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+
+        let result = adapter.parse_insert_statement("INSERT INTO");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_empty_input() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_sql_construct("", &AdapterContext::new("empty.sql".to_string(), "".to_string(), Language::Sql));
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "sql_expression");
+    }
+
+    #[test]
+    fn test_parse_whitespace_only() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_sql_construct("   \n\t   ", &AdapterContext::new("ws.sql".to_string(), "   \n\t   ".to_string(), Language::Sql));
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "sql_expression");
+    }
+
+    #[test]
+    fn test_statement_boundary_default() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_select_statement("SELECT 1; SELECT 2");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+    }
+
+    #[test]
+    fn test_statement_boundary_enabled() {
+        let adapter = SqlAdapter::new();
+        let result = adapter.parse_sql_construct(
+            "SELECT 1; SELECT 2",
+            &AdapterContext::new("multi.sql".to_string(), "SELECT 1; SELECT 2".to_string(), Language::Sql),
+        );
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "select_statement");
+    }
 
     #[test]
     fn test_sql_parser_creation() {
@@ -390,59 +610,6 @@ mod tests {
         assert!(parser.supports_file(Path::new("data.dml")));
         assert!(!parser.supports_file(Path::new("test.py")));
         assert!(!parser.supports_file(Path::new("test.js")));
-    }
-
-    #[test]
-    fn test_parse_select_statement() {
-        let adapter = SqlAdapter::new();
-
-        let result = adapter.parse_select_statement("SELECT id, name FROM users WHERE age > 18");
-        assert!(result.is_ok());
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "select_statement");
-    }
-
-    #[test]
-    fn test_parse_insert_statement() {
-        let adapter = SqlAdapter::new();
-
-        let result = adapter.parse_insert_statement(
-            "INSERT INTO users (name, email) VALUES ('John', 'john@example.com')",
-        );
-        assert!(result.is_ok());
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "insert_statement");
-    }
-
-    #[test]
-    fn test_parse_update_statement() {
-        let adapter = SqlAdapter::new();
-
-        let result = adapter.parse_update_statement("UPDATE users SET name = 'Jane' WHERE id = 1");
-        assert!(result.is_ok());
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "update_statement");
-    }
-
-    #[test]
-    fn test_parse_delete_statement() {
-        let adapter = SqlAdapter::new();
-
-        let result = adapter.parse_delete_statement("DELETE FROM users WHERE age < 18");
-        assert!(result.is_ok());
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "delete_statement");
-    }
-
-    #[test]
-    fn test_parse_create_table() {
-        let adapter = SqlAdapter::new();
-
-        let result = adapter
-            .parse_create_table("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))");
-        assert!(result.is_ok());
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "create_table_statement");
     }
 
     #[test]

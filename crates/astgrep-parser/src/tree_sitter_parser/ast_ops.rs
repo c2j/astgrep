@@ -95,9 +95,7 @@ impl TreeSitterParser {
     /// Extract module path from import pattern (e.g., "foo.bar" from "import foo.bar")
     fn extract_module_path_from_pattern(&self, pattern: &str) -> Option<String> {
         let pattern = pattern.trim();
-        if pattern.starts_with("import ") {
-            let module_part = &pattern[7..]; // Remove "import "
-                                             // Handle "import foo.bar as alias" -> "foo.bar"
+        if let Some(module_part) = pattern.strip_prefix("import ") {
             let module_path = module_part.split_whitespace().next().unwrap_or("");
             if !module_path.is_empty() {
                 Some(module_path.to_string())

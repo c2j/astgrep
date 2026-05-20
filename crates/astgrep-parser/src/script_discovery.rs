@@ -177,7 +177,7 @@ impl ScriptDiscovery {
                         results
                             .scripts_by_type
                             .entry(script.script_type.clone())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(script.clone());
 
                         // Categorize by language
@@ -186,7 +186,7 @@ impl ScriptDiscovery {
                             results
                                 .scripts_by_language
                                 .entry(lang_str)
-                                .or_insert_with(Vec::new)
+                                .or_default()
                                 .push(script.clone());
                         }
 
@@ -195,7 +195,7 @@ impl ScriptDiscovery {
                             results
                                 .scripts_by_platform
                                 .entry(platform.clone())
-                                .or_insert_with(Vec::new)
+                                .or_default()
                                 .push(script.clone());
                         }
                     }
@@ -306,12 +306,10 @@ impl ScriptDiscovery {
         let path_str = path.to_string_lossy();
         match glob::glob(pattern) {
             Ok(paths) => {
-                for p in paths {
-                    if let Ok(p) = p {
-                        let p_str = p.to_string_lossy();
-                        if path.starts_with(&p) || path_str.contains(&*p_str) {
-                            return true;
-                        }
+                for p in paths.flatten() {
+                    let p_str = p.to_string_lossy();
+                    if path.starts_with(&p) || path_str.contains(&*p_str) {
+                        return true;
                     }
                 }
                 false
@@ -594,7 +592,7 @@ impl ScriptDiscovery {
                     let rest = &trimmed[start + 8..];
                     if let Some(end) = rest.find(')') {
                         let dep = &rest[..end];
-                        dependencies.push(dep.trim_matches(&['"', '\'']).to_string());
+                        dependencies.push(dep.trim_matches(['"', '\'']).to_string());
                     }
                 }
             }
@@ -646,7 +644,7 @@ impl ScriptDiscovery {
                 if let Some(eq_pos) = trimmed.find('=') {
                     let version_part = &trimmed[eq_pos + 1..].trim();
                     if !version_part.is_empty() {
-                        return Ok(Some(version_part.trim_matches(&['"', '\'']).to_string()));
+                        return Ok(Some(version_part.trim_matches(['"', '\'']).to_string()));
                     }
                 }
             }
@@ -667,7 +665,7 @@ impl ScriptDiscovery {
                 if let Some(eq_pos) = trimmed.find('=') {
                     let author_part = &trimmed[eq_pos + 1..].trim();
                     if !author_part.is_empty() {
-                        return Ok(Some(author_part.trim_matches(&['"', '\'']).to_string()));
+                        return Ok(Some(author_part.trim_matches(['"', '\'']).to_string()));
                     }
                 }
             }
@@ -688,7 +686,6 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
-    use tokio::fs;
 
     #[tokio::test]
     async fn test_script_discovery_config_default() {

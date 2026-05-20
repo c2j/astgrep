@@ -33,6 +33,12 @@ pub struct MetaVariableBindings {
     bindings: std::collections::HashMap<String, String>,
 }
 
+impl Default for MetaVariableBindings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetaVariableBindings {
     pub fn new() -> Self {
         Self {
@@ -149,17 +155,15 @@ impl TreeSitterParser {
         } else if pattern.chars().all(|c| c.is_ascii_digit() || c == '.') {
             // Numeric literal: 42, 3.14
             PatternType::NumericLiteral(pattern.to_string())
-        } else if pattern.ends_with("(...)") {
-            // Function call: eval(...) or $FUNC(...)
-            let func_name = pattern[..pattern.len() - 5].to_string();
+        } else if let Some(func_name) = pattern.strip_suffix("(...)") {
             if func_name.starts_with('$') {
-                PatternType::MetaFunctionCall(func_name, vec![])
+                PatternType::MetaFunctionCall(func_name.to_string(), vec![])
             } else {
-                PatternType::FunctionCall(func_name)
+                PatternType::FunctionCall(func_name.to_string())
             }
         } else if pattern.contains('(') && pattern.contains(')') && pattern.contains('$') {
             // Function call with metavariables: eval($CODE), $FUNC($ARG)
-            return self.parse_meta_function_call(pattern);
+            self.parse_meta_function_call(pattern)
         } else if pattern.starts_with("import ") {
             // Import statement: import foo.bar
             PatternType::ImportStatement(pattern.to_string())
@@ -184,10 +188,8 @@ impl TreeSitterParser {
 
     /// Classify metavariable patterns
     fn classify_metavariable_pattern(&self, pattern: &str) -> PatternType {
-        if pattern.ends_with("(...)") {
-            // Meta function call: $FUNC(...)
-            let func_name = pattern[..pattern.len() - 5].to_string();
-            PatternType::MetaFunctionCall(func_name, vec![])
+        if let Some(func_name) = pattern.strip_suffix("(...)") {
+            PatternType::MetaFunctionCall(func_name.to_string(), vec![])
         } else if pattern.contains('(') && pattern.contains(')') {
             // Meta function call with args: $FUNC($ARG1, $ARG2)
             self.parse_meta_function_call(pattern)

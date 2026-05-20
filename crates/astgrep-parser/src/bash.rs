@@ -10,6 +10,12 @@ use std::path::Path;
 /// Bash AST adapter
 pub struct BashAdapter;
 
+impl Default for BashAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BashAdapter {
     /// Create a new Bash adapter
     pub fn new() -> Self {
@@ -186,13 +192,9 @@ impl BashAdapter {
 
     /// Parse source statement
     fn parse_source_statement(&self, source: &str) -> Result<UniversalNode> {
-        let file_path = if source.starts_with("source ") {
-            &source[7..] // Skip "source "
-        } else if source.starts_with(". ") {
-            &source[2..] // Skip ". "
-        } else {
-            ""
-        };
+        let file_path = source.strip_prefix("source ")
+            .or_else(|| source.strip_prefix(". "))
+            .unwrap_or_default();
 
         Ok(AstBuilder::source_statement(file_path.trim()).with_text(source.to_string()))
     }
