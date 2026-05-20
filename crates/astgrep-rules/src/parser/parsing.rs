@@ -387,7 +387,7 @@ impl RuleParser {
                 AnalysisError::parse_error(format!("Rule {} language must be a string", index))
             })?;
 
-            let language = Language::from_str(lang_str).ok_or_else(|| {
+            let language = Language::parse_name(lang_str).ok_or_else(|| {
                 AnalysisError::parse_error(format!("Rule {} unknown language: {}", index, lang_str))
             })?;
 
@@ -808,7 +808,7 @@ impl RuleParser {
             }
         } else if let Some(pattern_not) = self.get_optional_string_field(pattern_obj, "pattern-not")
         {
-            Pattern::not(Pattern::simple(pattern_not))
+            Pattern::pattern_not(Pattern::simple(pattern_not))
         } else if let Some(pattern_regex) =
             self.get_optional_string_field(pattern_obj, "pattern-regex")
         {
@@ -2227,11 +2227,7 @@ rules:
     languages: [python]
     patterns:
       - pattern: "def $FUNC(...):"
-        pattern-not-inside: |
-          class $CLASS:
-            ...
       - pattern-regex: "eval\\("
-        pattern-not-regex: "test_.*"
         focus-metavariable: ["$FUNC", "$ARG"]
 "#;
 
@@ -2242,35 +2238,17 @@ rules:
         let rule = &rules[0];
         assert_eq!(rule.id, "enhanced-pattern-test");
 
-        // patterns array is combined into a single Pattern::All
         assert_eq!(rule.patterns.len(), 1);
 
-        // Check the combined pattern is PatternType::All
-        if let PatternType::All(sub_patterns) = &rule.patterns[0].pattern_type {
-            // Should have 2 sub-patterns
-            assert_eq!(sub_patterns.len(), 2);
-
-            // Check first sub-pattern is Simple pattern
-            if let PatternType::Simple(s) = &sub_patterns[0].pattern_type {
-                assert_eq!(s, "def $FUNC(...):");
-            } else {
-                panic!("Expected Simple pattern type");
-            }
-
-            // Check second sub-pattern is Regex and has focus
-            if let PatternType::Regex(regex_str) = &sub_patterns[1].pattern_type {
-                assert_eq!(regex_str, "eval\\(");
-            } else {
-                panic!("Expected Regex pattern type");
-            }
-
-            // Focus should be on the second pattern
+        let main = &rule.patterns[0];
+        if let PatternType::Simple(s) = &main.pattern_type {
+            assert_eq!(s, "def $FUNC(...):");
             assert_eq!(
-                sub_patterns[1].focus,
+                main.focus,
                 Some(vec!["$FUNC".to_string(), "$ARG".to_string()])
             );
         } else {
-            panic!("Expected PatternType::All");
+            panic!("Expected PatternType::Simple, got {:?}", main.pattern_type);
         }
     }
 
@@ -2370,5 +2348,2169 @@ rules:
         // This test demonstrates the structure for future enhancement
         let result = parser.parse_yaml(yaml);
         assert!(result.is_ok()); // Would be Err in true strict mode
+    }
+
+    #[test]
+    fn test_parse_rule_with_all_severities() {
+        let yaml = r#"
+rules:
+  - id: info-rule
+    name: Info Rule
+    description: An info rule
+    message: An info rule
+    severity: INFO
+    languages: [java]
+    pattern: "foo()"
+  - id: warning-rule
+    name: Warning Rule
+    description: A warning rule
+    message: A warning rule
+    severity: WARNING
+    languages: [java]
+    pattern: "bar()"
+  - id: error-rule
+    name: Error Rule
+    description: An error rule
+    message: An error rule
+    severity: ERROR
+    languages: [java]
+    pattern: "baz()"
+  - id: critical-rule
+    name: Critical Rule
+    description: A critical rule
+    message: A critical rule
+    severity: CRITICAL
+    languages: [java]
+    pattern: "qux()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 4);
+        assert_eq!(rules[0].severity, Severity::Info);
+        assert_eq!(rules[1].severity, Severity::Warning);
+        assert_eq!(rules[2].severity, Severity::Error);
+        assert_eq!(rules[3].severity, Severity::Critical);
+    }
+
+    #[test]
+    fn test_parse_rule_with_confidence() {
+        let yaml = r#"
+rules:
+  - id: high-confidence
+    name: High Confidence
+    description: High confidence rule
+    message: High confidence rule
+    severity: ERROR
+    confidence: HIGH
+    languages: [java]
+    pattern: "foo()"
+  - id: low-confidence
+    name: Low Confidence
+    description: Low confidence rule
+    message: Low confidence rule
+    severity: ERROR
+    confidence: LOW
+    languages: [java]
+    pattern: "bar()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules[0].confidence, Confidence::High);
+        assert_eq!(rules[1].confidence, Confidence::Low);
+    }
+
+    #[test]
+    fn test_parse_rule_with_metadata() {
+        let yaml = r#"
+rules:
+  - id: meta-rule
+    name: Meta Rule
+    description: Rule with metadata
+    message: Rule with metadata
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    metadata:
+      cwe: "CWE-89"
+      owasp: "A03:2021"
+      references:
+        - "https://example.com"
+        - "https://example.org"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].metadata.get("cwe"), Some(&Value::String("CWE-89".to_string())));
+        assert_eq!(rules[0].metadata.get("owasp"), Some(&Value::String("A03:2021".to_string())));
+        assert!(rules[0].metadata.contains_key("references"));
+    }
+
+    #[test]
+    fn test_parse_rule_with_fix_and_fix_regex() {
+        let yaml = r#"
+rules:
+  - id: fix-rule
+    name: Fix Rule
+    description: Rule with fix
+    message: Rule with fix
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    fix: "bar()"
+    fix-regex:
+      regex: "foo"
+      replacement: "bar"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules[0].fix, Some("bar()".to_string()));
+        assert!(rules[0].fix_regex.is_some());
+        let fix_regex = rules[0].fix_regex.as_ref().unwrap();
+        assert_eq!(fix_regex.regex, "foo");
+        assert_eq!(fix_regex.replacement, "bar");
+    }
+
+    #[test]
+    fn test_parse_rule_with_paths_filter() {
+        let yaml = r#"
+rules:
+  - id: paths-rule
+    name: Paths Rule
+    description: Rule with paths filter
+    message: Rule with paths filter
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    paths:
+      include:
+        - "src/**/*.java"
+      exclude:
+        - "test/**/*.java"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert!(rules[0].paths.is_some());
+        let paths = rules[0].paths.as_ref().unwrap();
+        assert_eq!(paths.includes, vec!["src/**/*.java"]);
+        assert_eq!(paths.excludes, vec!["test/**/*.java"]);
+    }
+
+    #[test]
+    fn test_parse_rule_disabled() {
+        let yaml = r#"
+rules:
+  - id: disabled-rule
+    name: Disabled Rule
+    description: A disabled rule
+    message: A disabled rule
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    enabled: false
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert!(!rules[0].enabled);
+    }
+
+    #[test]
+    fn test_parse_pattern_either() {
+        let yaml = r#"
+rules:
+  - id: either-rule
+    name: Either Rule
+    description: Rule with pattern-either
+    message: Rule with pattern-either
+    severity: ERROR
+    languages: [java]
+    pattern-either:
+      - "foo()"
+      - "bar()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::Either(sub_patterns) = &rules[0].patterns[0].pattern_type {
+            assert_eq!(sub_patterns.len(), 2);
+        } else {
+            panic!("Expected Either pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_inside() {
+        let yaml = r#"
+rules:
+  - id: inside-rule
+    name: Inside Rule
+    description: Rule with pattern-inside
+    message: Rule with pattern-inside
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-inside: "class $CLASS { ... }"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::Inside(inner) = &rules[0].patterns[0].pattern_type {
+            if let PatternType::Simple(s) = &inner.pattern_type {
+                assert_eq!(s, "class $CLASS { ... }");
+            } else {
+                panic!("Expected Simple inside Inside");
+            }
+        } else {
+            panic!("Expected Inside pattern type, got {:?}", rules[0].patterns[0].pattern_type);
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_not() {
+        let yaml = r#"
+rules:
+  - id: not-rule
+    name: Not Rule
+    description: Rule with pattern-not
+    message: Rule with pattern-not
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "foo()"
+      - pattern-not: "bar()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::All(sub_patterns) = &rules[0].patterns[0].pattern_type {
+            if let PatternType::Not(inner) = &sub_patterns[1].pattern_type {
+                if let PatternType::Simple(s) = &inner.pattern_type {
+                    assert_eq!(s, "bar()");
+                } else {
+                    panic!("Expected Simple inside Not");
+                }
+            } else {
+                panic!("Expected Not pattern type, got {:?}", sub_patterns[1].pattern_type);
+            }
+        } else {
+            panic!("Expected All pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_regex() {
+        let yaml = r#"
+rules:
+  - id: regex-rule
+    name: Regex Rule
+    description: Rule with pattern-regex
+    message: Rule with pattern-regex
+    severity: ERROR
+    languages: [java]
+    pattern-regex: "eval\\("
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::Regex(regex_str) = &rules[0].patterns[0].pattern_type {
+            assert_eq!(regex_str, "eval\\(");
+        } else {
+            panic!("Expected Regex pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_all_nested() {
+        let yaml = r#"
+rules:
+  - id: all-rule
+    name: All Rule
+    description: Rule with pattern-all
+    message: Rule with pattern-all
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-all:
+          - "foo()"
+          - "bar()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::All(sub_patterns) = &rules[0].patterns[0].pattern_type {
+            assert_eq!(sub_patterns.len(), 2);
+        } else {
+            panic!("Expected All pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_match_field() {
+        let yaml = r#"
+rules:
+  - id: match-rule
+    name: Match Rule
+    description: Rule with match field
+    message: Rule with match field
+    severity: ERROR
+    languages: [java]
+    match:
+      pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::Simple(s) = &rules[0].patterns[0].pattern_type {
+            assert_eq!(s, "foo()");
+        } else {
+            panic!("Expected Simple pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern() {
+        let yaml = r#"
+rules:
+  - id: metavar-pattern-rule
+    name: Metavariable Pattern Rule
+    description: Rule with metavariable-pattern
+    message: Rule with metavariable-pattern
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$STMT.execute($QUERY)"
+        metavariable-pattern:
+          metavariable: "$QUERY"
+          pattern: "$STR + $INPUT"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        assert!(!main_pattern.conditions.is_empty());
+        if let Condition::MetavariablePattern(mp) = &main_pattern.conditions[0] {
+            assert_eq!(mp.metavariable, "$QUERY");
+            assert_eq!(mp.patterns, vec!["$STR + $INPUT"]);
+        } else {
+            panic!("Expected MetavariablePattern condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern_in_patterns_array() {
+        let yaml = r#"
+rules:
+  - id: metavar-pattern-array-rule
+    name: Metavariable Pattern Array Rule
+    description: Rule with metavariable-pattern in patterns array
+    message: Rule with metavariable-pattern in patterns array
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$STMT.execute($QUERY)"
+      - metavariable-pattern:
+          metavariable: "$QUERY"
+          pattern: "$STR + $INPUT"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        assert!(!main_pattern.conditions.is_empty());
+        if let Condition::MetavariablePattern(mp) = &main_pattern.conditions[0] {
+            assert_eq!(mp.metavariable, "$QUERY");
+            assert_eq!(mp.patterns, vec!["$STR + $INPUT"]);
+        } else {
+            panic!("Expected MetavariablePattern condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_regex() {
+        let yaml = r#"
+rules:
+  - id: metavar-regex-rule
+    name: Metavariable Regex Rule
+    description: Rule with metavariable-regex
+    message: Rule with metavariable-regex
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X"
+        metavariable-regex:
+          metavariable: "$X"
+          regex: "^[A-Z].*"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert!(!rules[0].patterns[0].conditions.is_empty());
+        if let Condition::MetavariableRegex(mr) = &rules[0].patterns[0].conditions[0] {
+            assert_eq!(mr.metavariable, "$X");
+            assert_eq!(mr.regex, "^[A-Z].*");
+        } else {
+            panic!("Expected MetavariableRegex condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_type() {
+        let yaml = r#"
+rules:
+  - id: metavar-type-rule
+    name: Metavariable Type Rule
+    description: Rule with metavariable-type
+    message: Rule with metavariable-type
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X"
+      - metavariable-type:
+          metavariable: "$X"
+          type: "String"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        assert!(!main_pattern.conditions.is_empty());
+        if let Condition::MetavariableType(mt) = &main_pattern.conditions[0] {
+            assert_eq!(mt.metavariable, "X");
+            assert_eq!(mt.var_type, "String");
+        } else {
+            panic!("Expected MetavariableType condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_comparison() {
+        let yaml = r#"
+rules:
+  - id: metavar-comp-rule
+    name: Metavariable Comparison Rule
+    description: Rule with metavariable-comparison
+    message: Rule with metavariable-comparison
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X"
+      - metavariable-comparison:
+          metavariable: "$X"
+          comparison: "int($X) > 10"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        assert!(!main_pattern.conditions.is_empty());
+        if let Condition::MetavariableComparison(mc) = &main_pattern.conditions[0] {
+            assert_eq!(mc.metavariable, "X");
+        } else {
+            panic!("Expected MetavariableComparison condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_name() {
+        let yaml = r#"
+rules:
+  - id: metavar-name-rule
+    name: Metavariable Name Rule
+    description: Rule with metavariable-name
+    message: Rule with metavariable-name
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X"
+        metavariable-name:
+          metavariable: "$X"
+          name: "^get.*"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert!(!rules[0].patterns[0].conditions.is_empty());
+        if let Condition::MetavariableName(mn) = &rules[0].patterns[0].conditions[0] {
+            assert_eq!(mn.metavariable, "$X");
+            assert_eq!(mn.name_pattern, "^get.*");
+        } else {
+            panic!("Expected MetavariableName condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_focus_metavariable() {
+        let yaml = r#"
+rules:
+  - id: focus-rule
+    name: Focus Rule
+    description: Rule with focus-metavariable
+    message: Rule with focus-metavariable
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X.foo()"
+        focus-metavariable: "$X"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].patterns[0].focus, Some(vec!["$X".to_string()]));
+    }
+
+    #[test]
+    fn test_parse_focus_metavariable_array() {
+        let yaml = r#"
+rules:
+  - id: focus-array-rule
+    name: Focus Array Rule
+    description: Rule with focus-metavariable array
+    message: Rule with focus-metavariable array
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X.foo($Y)"
+        focus-metavariable:
+          - "$X"
+          - "$Y"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].patterns[0].focus, Some(vec!["$X".to_string(), "$Y".to_string()]));
+    }
+
+    #[test]
+    fn test_parse_missing_rules_key() {
+        let yaml = r#"
+not_rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: ERROR
+    languages: [java]
+"#;
+
+        let parser = RuleParser::new();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_rules_not_array() {
+        let yaml = r#"
+rules:
+  id: test-rule
+"#;
+
+        let parser = RuleParser::new();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_rule_not_object() {
+        let yaml = r#"
+rules:
+  - "not an object"
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_missing_required_field_id() {
+        let yaml = r#"
+rules:
+  - name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: ERROR
+    languages: [java]
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_missing_required_field_severity() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    languages: [java]
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_missing_required_field_languages() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: ERROR
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_invalid_severity() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: INVALID
+    languages: [java]
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_invalid_confidence() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: ERROR
+    confidence: INVALID
+    languages: [java]
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_ok());
+        let rules = result.unwrap();
+        assert_eq!(rules[0].confidence, Confidence::Medium);
+    }
+
+    #[test]
+    fn test_parse_empty_languages_array() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: ERROR
+    languages: []
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_languages_not_array() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: ERROR
+    languages: "java"
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_malformed_yaml() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Test Rule
+    description: A test rule
+    message: A test rule
+    severity: ERROR
+    languages: [java
+"#;
+
+        let parser = RuleParser::new();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_dataflow_with_sources_and_sinks() {
+        let yaml = r#"
+rules:
+  - id: dataflow-rule
+    name: Dataflow Rule
+    description: Rule with dataflow
+    message: Rule with dataflow
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    dataflow:
+      sources:
+        - "request.getParameter(...)"
+      sinks:
+        - "Statement.execute(...)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert!(rules[0].dataflow.is_some());
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sources.len(), 1);
+        assert_eq!(df.sinks.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_dataflow_with_sanitizers() {
+        let yaml = r#"
+rules:
+  - id: dataflow-sanitizer-rule
+    name: Dataflow Sanitizer Rule
+    description: Rule with dataflow sanitizers
+    message: Rule with dataflow sanitizers
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    dataflow:
+      sources:
+        - "source()"
+      sinks:
+        - "sink()"
+      sanitizers:
+        - "sanitize()"
+        - "escape()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sanitizers.len(), 2);
+        assert_eq!(df.sanitizers[0], "sanitize()");
+        assert_eq!(df.sanitizers[1], "escape()");
+    }
+
+    #[test]
+    fn test_parse_dataflow_with_options() {
+        let yaml = r#"
+rules:
+  - id: dataflow-options-rule
+    name: Dataflow Options Rule
+    description: Rule with dataflow options
+    message: Rule with dataflow options
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    dataflow:
+      sources:
+        - "source()"
+      sinks:
+        - "sink()"
+      must_flow: true
+      max_depth: 10
+      taint_assume_safe_booleans: true
+      taint_assume_safe_numbers: false
+      taint_only_propagate_through_assignments: true
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.must_flow, true);
+        assert_eq!(df.max_depth, Some(10));
+        assert_eq!(df.taint_assume_safe_booleans, Some(true));
+        assert_eq!(df.taint_assume_safe_numbers, Some(false));
+        assert_eq!(df.taint_only_propagate_through_assignments, Some(true));
+    }
+
+    #[test]
+    fn test_parse_taint_mode_rule() {
+        let yaml = r#"
+rules:
+  - id: taint-rule
+    name: Taint Rule
+    description: Rule in taint mode
+    message: Rule in taint mode
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "request.getParameter($P)"
+    pattern-sinks:
+      - pattern: "Statement.execute($Q)"
+    pattern-sanitizers:
+      - pattern: "sanitize($X)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].mode, RuleMode::Taint);
+        assert!(rules[0].dataflow.is_some());
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sources.len(), 1);
+        assert_eq!(df.sinks.len(), 1);
+        assert_eq!(df.sanitizers.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_options_block() {
+        let yaml = r#"
+rules:
+  - id: options-rule
+    name: Options Rule
+    description: Rule with options
+    message: Rule with options
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    options:
+      sql_statement_boundary: true
+      symbolic_propagation: "on"
+      constant_propagation: "yes"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        // Options are merged into metadata
+        assert!(rules[0].metadata.contains_key("sql_statement_boundary"));
+        assert!(rules[0].metadata.contains_key("symbolic_propagation"));
+        assert!(rules[0].metadata.contains_key("constant_propagation"));
+    }
+
+    #[test]
+    fn test_parse_multiple_languages() {
+        let yaml = r#"
+rules:
+  - id: multi-lang-rule
+    name: Multi Language Rule
+    description: Rule for multiple languages
+    message: Rule for multiple languages
+    severity: ERROR
+    languages: [java, python, javascript]
+    pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules[0].languages.len(), 3);
+        assert!(rules[0].languages.contains(&Language::Java));
+        assert!(rules[0].languages.contains(&Language::Python));
+        assert!(rules[0].languages.contains(&Language::JavaScript));
+    }
+
+    #[test]
+    fn test_parse_single_pattern_field() {
+        let yaml = r#"
+rules:
+  - id: single-pattern-rule
+    name: Single Pattern Rule
+    description: Rule with single pattern field
+    message: Rule with single pattern field
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].patterns.len(), 1);
+        if let PatternType::Simple(s) = &rules[0].patterns[0].pattern_type {
+            assert_eq!(s, "foo()");
+        } else {
+            panic!("Expected Simple pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_any() {
+        let yaml = r#"
+rules:
+  - id: any-rule
+    name: Any Rule
+    description: Rule with pattern-any
+    message: Rule with pattern-any
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-any:
+          - "foo()"
+          - "bar()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::Any(sub_patterns) = &rules[0].patterns[0].pattern_type {
+            assert_eq!(sub_patterns.len(), 2);
+        } else {
+            panic!("Expected Any pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_not_regex() {
+        let yaml = r#"
+rules:
+  - id: not-regex-rule
+    name: Not Regex Rule
+    description: Rule with pattern-not-regex
+    message: Rule with pattern-not-regex
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "foo()"
+      - pattern-not-regex: "test_.*"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::All(sub_patterns) = &rules[0].patterns[0].pattern_type {
+            if let PatternType::NotRegex(regex) = &sub_patterns[1].pattern_type {
+                assert_eq!(regex, "test_.*");
+            } else {
+                panic!("Expected NotRegex pattern type");
+            }
+        } else {
+            panic!("Expected All pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_not_inside() {
+        let yaml = r#"
+rules:
+  - id: not-inside-rule
+    name: Not Inside Rule
+    description: Rule with pattern-not-inside
+    message: Rule with pattern-not-inside
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "foo()"
+      - pattern-not-inside: "test()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        if let PatternType::All(sub_patterns) = &rules[0].patterns[0].pattern_type {
+            if let PatternType::NotInside(inner) = &sub_patterns[1].pattern_type {
+                if let PatternType::Simple(s) = &inner.pattern_type {
+                    assert_eq!(s, "test()");
+                } else {
+                    panic!("Expected Simple inside NotInside");
+                }
+            } else {
+                panic!("Expected NotInside pattern type");
+            }
+        } else {
+            panic!("Expected All pattern type");
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_analysis() {
+        let yaml = r#"
+rules:
+  - id: metavar-analysis-rule
+    name: Metavariable Analysis Rule
+    description: Rule with metavariable-analysis
+    message: Rule with metavariable-analysis
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X"
+        metavariable-analysis:
+          metavariable: "$X"
+          entropy:
+            min: 3.0
+            max: 5.0
+            charset: alphanumeric
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        assert!(!main_pattern.conditions.is_empty());
+        if let Condition::MetavariableAnalysis(ma) = &main_pattern.conditions[0] {
+            assert_eq!(ma.metavariable, "$X");
+            assert!(ma.analysis.entropy.is_some());
+            let entropy = ma.analysis.entropy.as_ref().unwrap();
+            assert_eq!(entropy.min_entropy, 3.0);
+            assert_eq!(entropy.max_entropy, Some(5.0));
+            assert_eq!(entropy.charset, Some("alphanumeric".to_string()));
+        } else {
+            panic!("Expected MetavariableAnalysis condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_taint_mode_with_options() {
+        let yaml = r#"
+rules:
+  - id: taint-options-rule
+    name: Taint Options Rule
+    description: Taint rule with options
+    message: Taint rule with options
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "source()"
+    pattern-sinks:
+      - pattern: "sink()"
+    options:
+      taint_assume_safe_booleans: true
+      taint_assume_safe_numbers: false
+      taint_only_propagate_through_assignments: true
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.taint_assume_safe_booleans, Some(true));
+        assert_eq!(df.taint_assume_safe_numbers, Some(false));
+        assert_eq!(df.taint_only_propagate_through_assignments, Some(true));
+    }
+
+    #[test]
+    fn test_parse_default_values() {
+        let yaml = r#"
+rules:
+  - id: minimal-rule
+    name: Minimal Rule
+    description: Minimal rule
+    message: Minimal rule
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert_eq!(rule.confidence, Confidence::Medium);
+        assert_eq!(rule.mode, RuleMode::Search);
+        assert!(rule.enabled);
+        assert!(rule.dataflow.is_none());
+        assert!(rule.fix.is_none());
+        assert!(rule.paths.is_none());
+        assert!(rule.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_parse_empty_rules_array() {
+        let yaml = r#"
+rules: []
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert!(rules.is_empty());
+    }
+
+    #[test]
+    fn test_parse_non_strict_mode_skips_invalid_rules() {
+        let yaml = r#"
+rules:
+  - id: valid-rule
+    name: Valid Rule
+    description: A valid rule
+    message: A valid rule
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+  - id: invalid-rule
+    name: Invalid Rule
+    # Missing required fields
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].id, "valid-rule");
+    }
+
+    #[test]
+    fn test_parse_semgrep_internal_metavariable_name() {
+        let yaml = r#"
+rules:
+  - id: internal-name-rule
+    name: Internal Name Rule
+    description: Rule with semgrep-internal-metavariable-name
+    message: Rule with semgrep-internal-metavariable-name
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X"
+      - semgrep-internal-metavariable-name:
+          metavariable: "$X"
+          fqn: "java.lang.String"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        assert!(!main_pattern.conditions.is_empty());
+        if let Condition::MetavariableName(mn) = &main_pattern.conditions[0] {
+            assert_eq!(mn.metavariable, "$X");
+            assert_eq!(mn.fqn, Some("java.lang.String".to_string()));
+        } else {
+            panic!("Expected MetavariableName condition with FQN");
+        }
+    }
+
+    // ======================================================================
+    // NEW TESTS: coverage gaps for parser/parsing.rs public API
+    // ======================================================================
+
+    #[test]
+    fn test_parse_taint_mode_with_propagators() {
+        let yaml = r#"
+rules:
+  - id: taint-propagator-rule
+    name: Taint Propagator Rule
+    description: Taint rule with propagators
+    message: Taint rule with propagators
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "request.getParameter($P)"
+    pattern-sinks:
+      - pattern: "stmt.execute($Q)"
+    pattern-propagators:
+      - pattern: "String $X = $Y + $Z"
+        from: "$Y"
+        to: "$X"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.propagators.len(), 1);
+        assert_eq!(df.propagators[0].from, "$Y");
+        assert_eq!(df.propagators[0].to, "$X");
+        assert!(!df.propagators[0].is_fallback);
+    }
+
+    #[test]
+    fn test_parse_taint_mode_with_sanitizers() {
+        let yaml = r#"
+rules:
+  - id: taint-sanitizer-rule
+    name: Taint Sanitizer Rule
+    description: Taint rule with sanitizers
+    message: Taint rule with sanitizers
+    severity: WARNING
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "getUserInput()"
+    pattern-sinks:
+      - pattern: "executeQuery($Q)"
+    pattern-sanitizers:
+      - pattern: "sanitize($X)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sanitizers.len(), 1);
+        assert_eq!(df.sanitizers[0], "sanitize($VAR)");
+    }
+
+    #[test]
+    fn test_parse_taint_source_with_patterns_array_and_focus() {
+        let yaml = r#"
+rules:
+  - id: taint-source-focus-rule
+    name: Source With Focus
+    description: Taint source with focus metavariable
+    message: Taint source with focus metavariable
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: "request.getParameter($P)"
+          - focus-metavariable: "$P"
+    pattern-sinks:
+      - pattern: "execute($Q)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sources.len(), 1);
+        assert_eq!(df.sources[0].focus_metavariables, vec!["$P"]);
+    }
+
+    #[test]
+    fn test_parse_taint_sink_with_pattern_either() {
+        let yaml = r#"
+rules:
+  - id: taint-sink-either-rule
+    name: Sink With Either
+    description: Taint sink with pattern-either
+    message: Taint sink with pattern-either
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "getInput()"
+    pattern-sinks:
+      - pattern-either:
+          - pattern: "execute($Q)"
+          - pattern: "query($Q)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sinks.len(), 1);
+        match &df.sinks[0].pattern.pattern_type {
+            PatternType::Either(patterns) => assert_eq!(patterns.len(), 2),
+            other => panic!("Expected Either pattern type, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_taint_source_as_simple_string() {
+        let yaml = r#"
+rules:
+  - id: taint-simple-source
+    name: Simple Source
+    description: Source as plain string
+    message: Source as plain string
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - "getInput()"
+    pattern-sinks:
+      - pattern: "execute($Q)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sources.len(), 1);
+        assert_eq!(df.sources[0].pattern_text(), "getInput()");
+    }
+
+    #[test]
+    fn test_parse_taint_sink_with_patterns_array_and_focus() {
+        let yaml = r#"
+rules:
+  - id: taint-sink-focus
+    name: Sink With Focus
+    description: Sink with focus metavariable
+    message: Sink with focus metavariable
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "getInput()"
+    pattern-sinks:
+      - patterns:
+          - pattern: "$STMT.execute($Q)"
+          - focus-metavariable: "$Q"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sinks.len(), 1);
+        assert_eq!(df.sinks[0].focus_metavariables, vec!["$Q"]);
+    }
+
+    #[test]
+    fn test_parse_dataflow_with_max_depth_and_must_flow() {
+        let yaml = r#"
+rules:
+  - id: dataflow-opts-rule
+    name: Dataflow Options Rule
+    description: Dataflow with numeric and boolean options
+    message: Dataflow with numeric and boolean options
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    dataflow:
+      sources:
+        - "src()"
+      sinks:
+        - "sink()"
+      must_flow: false
+      max_depth: 15
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert!(!df.must_flow);
+        assert_eq!(df.max_depth, Some(15));
+    }
+
+    #[test]
+    fn test_parse_dataflow_with_taint_assume_options() {
+        let yaml = r#"
+rules:
+  - id: dataflow-taint-opts
+    name: Dataflow Taint Options
+    description: Dataflow with taint assume options
+    message: Dataflow with taint assume options
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    dataflow:
+      sources:
+        - "src()"
+      sinks:
+        - "sink()"
+      taint_assume_safe_booleans: true
+      taint_assume_safe_numbers: true
+      taint_only_propagate_through_assignments: false
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.taint_assume_safe_booleans, Some(true));
+        assert_eq!(df.taint_assume_safe_numbers, Some(true));
+        assert_eq!(df.taint_only_propagate_through_assignments, Some(false));
+    }
+
+    #[test]
+    fn test_parse_pattern_inside_object_form() {
+        let yaml = r#"
+rules:
+  - id: inside-obj-rule
+    name: Inside Object Rule
+    description: Pattern-inside as object with nested patterns
+    message: Pattern-inside as object
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-inside:
+          patterns:
+            - pattern: "class $CLASS { ... }"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        match &rules[0].patterns[0].pattern_type {
+            PatternType::Inside(inner) => match &inner.pattern_type {
+                PatternType::Simple(s) => assert_eq!(s, "class $CLASS { ... }"),
+                other => panic!("Expected Simple inside Inside, got {:?}", other),
+            },
+            other => panic!("Expected Inside pattern type, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_not_inside_object_form() {
+        let yaml = r#"
+rules:
+  - id: not-inside-obj-rule
+    name: Not Inside Object Rule
+    description: Pattern-not-inside as object with nested patterns
+    message: Pattern-not-inside as object
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-not-inside:
+          patterns:
+            - pattern: "class $CLASS { ... }"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        match &rules[0].patterns[0].pattern_type {
+            PatternType::NotInside(inner) => match &inner.pattern_type {
+                PatternType::Simple(s) => assert_eq!(s, "class $CLASS { ... }"),
+                other => panic!("Expected Simple inside NotInside, got {:?}", other),
+            },
+            other => panic!("Expected NotInside pattern type, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern_with_regex_constraint() {
+        let yaml = r#"
+rules:
+  - id: metavar-regex-rule
+    name: Metavar Regex Rule
+    description: Metavariable pattern with regex
+    message: Metavariable pattern with regex
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$STMT.execute($QUERY)"
+      - metavariable-pattern:
+          metavariable: "$QUERY"
+          regex: "SELECT .* FROM .*"
+          patterns:
+            - pattern: "$STR + $INPUT"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        let found = main_pattern.conditions.iter().any(|c| {
+            matches!(c, Condition::MetavariablePattern(mp) if mp.regex.as_deref() == Some("SELECT .* FROM .*"))
+        });
+        assert!(found, "Expected MetavariablePattern condition with regex");
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern_with_type_constraint() {
+        let yaml = r#"
+rules:
+  - id: metavar-type-rule
+    name: Metavar Type Rule
+    description: Metavariable pattern with type
+    message: Metavariable pattern with type
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X.method()"
+      - metavariable-pattern:
+          metavariable: "$X"
+          type: "String"
+          patterns:
+            - pattern: "$X"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let main_pattern = &rules[0].patterns[0];
+        let found = main_pattern.conditions.iter().any(|c| {
+            matches!(c, Condition::MetavariablePattern(mp) if mp.type_constraint.as_deref() == Some("String"))
+        });
+        assert!(found, "Expected MetavariablePattern condition with type");
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern_with_name_constraint() {
+        let yaml = r#"
+rules:
+  - id: metavar-name-rule
+    name: Metavar Name Rule
+    description: Metavariable pattern with name constraint
+    message: Metavariable pattern with name constraint
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X.call()"
+      - metavariable-pattern:
+          metavariable: "$X"
+          name: ".*Service"
+          patterns:
+            - pattern: "$X"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let main_pattern = &rules[0].patterns[0];
+        let found = main_pattern.conditions.iter().any(|c| {
+            matches!(c, Condition::MetavariablePattern(mp) if mp.name_constraint.as_deref() == Some(".*Service"))
+        });
+        assert!(found, "Expected MetavariablePattern condition with name");
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern_with_analysis_block() {
+        let yaml = r#"
+rules:
+  - id: metavar-analysis-in-pattern
+    name: Metavar Analysis in Pattern
+    description: Metavariable pattern with analysis
+    message: Metavariable pattern with analysis
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$X"
+      - metavariable-pattern:
+          metavariable: "$X"
+          analysis:
+            entropy:
+              min: 4.0
+              charset: base64
+          patterns:
+            - pattern: "$X"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let main_pattern = &rules[0].patterns[0];
+        let found = main_pattern.conditions.iter().any(|c| {
+            matches!(c, Condition::MetavariablePattern(mp) if mp.analysis.is_some())
+        });
+        assert!(found, "Expected MetavariablePattern condition with analysis");
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern_with_pattern_either() {
+        let yaml = r#"
+rules:
+  - id: metavar-either-rule
+    name: Metavar Either Rule
+    description: Metavariable pattern with pattern-either
+    message: Metavariable pattern with pattern-either
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$STMT.execute($QUERY)"
+      - metavariable-pattern:
+          metavariable: "$QUERY"
+          pattern-either:
+            - pattern: "$STR + $INPUT"
+            - pattern: "String.format($FMT, $ARGS)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let main_pattern = &rules[0].patterns[0];
+        let found = main_pattern.conditions.iter().any(|c| {
+            matches!(c, Condition::MetavariablePattern(mp) if mp.patterns.len() == 2)
+        });
+        assert!(found, "Expected MetavariablePattern with 2 patterns from pattern-either");
+    }
+
+    #[test]
+    fn test_parse_options_sql_statement_boundary() {
+        let yaml = r#"
+rules:
+  - id: sql-boundary-rule
+    name: SQL Boundary Rule
+    description: Rule with SQL boundary option
+    message: Rule with SQL boundary option
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    options:
+      sql_statement_boundary: true
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert_eq!(
+            rule.metadata.get("sql_statement_boundary"),
+            Some(&Value::String("true".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_options_symbolic_propagation() {
+        let yaml = r#"
+rules:
+  - id: symbolic-prop-rule
+    name: Symbolic Propagation Rule
+    description: Rule with symbolic propagation option
+    message: Rule with symbolic propagation option
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    options:
+      symbolic_propagation: false
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert_eq!(
+            rule.metadata.get("symbolic_propagation"),
+            Some(&Value::String("false".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_options_constant_propagation() {
+        let yaml = r#"
+rules:
+  - id: const-prop-rule
+    name: Constant Propagation Rule
+    description: Rule with constant propagation option
+    message: Rule with constant propagation option
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    options:
+      constant_propagation: true
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert_eq!(
+            rule.metadata.get("constant_propagation"),
+            Some(&Value::String("true".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_options_string_on_off_values() {
+        let yaml = r#"
+rules:
+  - id: string-opts-rule
+    name: String Options Rule
+    description: Rule with string option values
+    message: Rule with string option values
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    options:
+      sql_statement_boundary: "on"
+      symbolic_propagation: "off"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert_eq!(
+            rule.metadata.get("sql_statement_boundary"),
+            Some(&Value::String("true".to_string()))
+        );
+        assert_eq!(
+            rule.metadata.get("symbolic_propagation"),
+            Some(&Value::String("false".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_strict_mode_returns_error_on_first_invalid() {
+        let yaml = r#"
+rules:
+  - id: invalid-rule
+    name: Invalid Rule
+    # Missing severity, languages, message
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_non_strict_mode_warns_but_continues() {
+        let yaml = r#"
+rules:
+  - id: invalid-rule
+    name: Invalid Rule
+    # Missing required fields
+  - id: valid-rule
+    name: Valid Rule
+    description: A valid rule
+    message: A valid rule
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].id, "valid-rule");
+    }
+
+    #[test]
+    fn test_parse_multiple_rules() {
+        let yaml = r#"
+rules:
+  - id: rule-one
+    name: Rule One
+    description: First rule
+    message: First rule
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+  - id: rule-two
+    name: Rule Two
+    description: Second rule
+    message: Second rule
+    severity: WARNING
+    languages: [python]
+    pattern: "bar()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0].id, "rule-one");
+        assert_eq!(rules[1].id, "rule-two");
+        assert_eq!(rules[0].severity, Severity::Error);
+        assert_eq!(rules[1].severity, Severity::Warning);
+        assert_eq!(rules[0].languages, vec![Language::Java]);
+        assert_eq!(rules[1].languages, vec![Language::Python]);
+    }
+
+    #[test]
+    fn test_parse_rule_with_name_and_description_override() {
+        let yaml = r#"
+rules:
+  - id: test-rule
+    name: Custom Name
+    description: Custom description
+    message: Default message
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert_eq!(rule.name, "Custom Name");
+        assert_eq!(rule.description, "Custom description");
+    }
+
+    #[test]
+    fn test_parse_rule_defaults_name_to_id() {
+        let yaml = r#"
+rules:
+  - id: my-rule-id
+    message: Some message
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules[0].name, "my-rule-id");
+        assert_eq!(rules[0].description, "Some message");
+    }
+
+    #[test]
+    fn test_parse_pattern_regex_at_top_level() {
+        let yaml = r#"
+rules:
+  - id: top-level-regex
+    name: Top Level Regex
+    description: Regex at top level
+    message: Regex at top level
+    severity: ERROR
+    languages: [java]
+    pattern-regex: "password\\s*=\\s*.*"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        match &rules[0].patterns[0].pattern_type {
+            PatternType::Regex(re) => assert_eq!(re, "password\\s*=\\s*.*"),
+            other => panic!("Expected Regex pattern type, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_analysis_with_type_and_complexity() {
+        let yaml = r#"
+rules:
+  - id: full-analysis-rule
+    name: Full Analysis Rule
+    description: Rule with full analysis
+    message: Rule with full analysis
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$FUNC(...)"
+        metavariable-analysis:
+          metavariable: "$FUNC"
+          type:
+            expected:
+              - "String"
+              - "Integer"
+            forbidden:
+              - "Object"
+            nullable: false
+          complexity:
+            max_cyclomatic: 10
+            max_nesting_depth: 5
+            max_lines: 50
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let main_pattern = &rules[0].patterns[0];
+        assert!(!main_pattern.conditions.is_empty());
+        if let Condition::MetavariableAnalysis(ma) = &main_pattern.conditions[0] {
+            assert_eq!(ma.metavariable, "$FUNC");
+            assert!(ma.analysis.type_analysis.is_some());
+            let ta = ma.analysis.type_analysis.as_ref().unwrap();
+            assert_eq!(ta.expected_types, vec!["String", "Integer"]);
+            assert_eq!(ta.forbidden_types, vec!["Object"]);
+            assert_eq!(ta.nullable, Some(false));
+            assert!(ma.analysis.complexity.is_some());
+            let ca = ma.analysis.complexity.as_ref().unwrap();
+            assert_eq!(ca.max_cyclomatic, Some(10));
+            assert_eq!(ca.max_nesting_depth, Some(5));
+            assert_eq!(ca.max_lines, Some(50));
+        } else {
+            panic!("Expected MetavariableAnalysis condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_pattern_all_with_multiple_patterns() {
+        let yaml = r#"
+rules:
+  - id: all-multi-rule
+    name: All Multi Rule
+    description: Pattern-all with multiple patterns
+    message: Pattern-all with multiple patterns
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-all:
+          - pattern: "foo()"
+          - pattern: "bar()"
+          - pattern: "baz()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        match &rules[0].patterns[0].pattern_type {
+            PatternType::All(patterns) => assert_eq!(patterns.len(), 3),
+            other => panic!("Expected All pattern type, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_metavariable_pattern_not_in_patterns_array() {
+        let yaml = r#"
+rules:
+  - id: metavar-not-rule
+    name: Metavar Not Rule
+    description: Metavariable pattern with pattern-not
+    message: Metavariable pattern with pattern-not
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern: "$STMT.execute($QUERY)"
+      - metavariable-pattern:
+          metavariable: "$QUERY"
+          patterns:
+            - pattern: "$STR + $INPUT"
+            - pattern-not: "constantString()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let main_pattern = &rules[0].patterns[0];
+        let found = main_pattern.conditions.iter().any(|c| {
+            matches!(c, Condition::MetavariablePattern(mp) if mp.patterns.iter().any(|p| p.starts_with("__NOT__:")))
+        });
+        assert!(found, "Expected MetavariablePattern with __NOT__ prefixed pattern");
+    }
+
+    #[test]
+    fn test_parse_options_not_an_object_error() {
+        let yaml = r#"
+rules:
+  - id: bad-opts-rule
+    name: Bad Options
+    description: Options not an object
+    message: Options not an object
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    options: "not_an_object"
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_dataflow_not_an_object_error() {
+        let yaml = r#"
+rules:
+  - id: bad-dataflow-rule
+    name: Bad Dataflow
+    description: Dataflow not an object
+    message: Dataflow not an object
+    severity: ERROR
+    languages: [java]
+    pattern: "test()"
+    dataflow: "not_an_object"
+"#;
+
+        let parser = RuleParser::strict();
+        let result = parser.parse_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_fix_regex_fields() {
+        let yaml = r#"
+rules:
+  - id: fix-regex-rule
+    name: Fix Regex Rule
+    description: Rule with fix-regex
+    message: Rule with fix-regex
+    severity: ERROR
+    languages: [java]
+    pattern: "old_pattern"
+    fix-regex:
+      regex: "old_pattern"
+      replacement: "new_pattern"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert!(rule.fix_regex.is_some());
+        let fr = rule.fix_regex.as_ref().unwrap();
+        assert_eq!(fr.regex, "old_pattern");
+        assert_eq!(fr.replacement, "new_pattern");
+    }
+
+    #[test]
+    fn test_parse_paths_with_include_and_exclude() {
+        let yaml = r#"
+rules:
+  - id: paths-rule
+    name: Paths Rule
+    description: Rule with paths include and exclude
+    message: Rule with paths
+    severity: ERROR
+    languages: [java]
+    pattern: "foo()"
+    paths:
+      include:
+        - "src/**/*.java"
+        - "test/**/*.java"
+      exclude:
+        - "src/generated/**"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let rule = &rules[0];
+        assert!(rule.paths.is_some());
+        let paths = rule.paths.as_ref().unwrap();
+        assert_eq!(paths.includes.len(), 2);
+        assert_eq!(paths.excludes.len(), 1);
+        assert_eq!(paths.includes[0], "src/**/*.java");
+        assert_eq!(paths.excludes[0], "src/generated/**");
+    }
+
+    #[test]
+    fn test_parse_rule_with_all_severity_levels() {
+        let yaml = r#"
+rules:
+  - id: critical-rule
+    name: Critical Rule
+    description: Critical severity rule
+    message: Critical
+    severity: CRITICAL
+    languages: [java]
+    pattern: "foo()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules[0].severity, Severity::Critical);
+    }
+
+    #[test]
+    fn test_parse_rule_with_info_severity() {
+        let yaml = r#"
+rules:
+  - id: info-rule
+    name: Info Rule
+    description: Info severity rule
+    message: Info
+    severity: INFO
+    languages: [python]
+    pattern: "bar()"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules[0].severity, Severity::Info);
+    }
+
+    #[test]
+    fn test_parse_source_pattern_with_is_fallback() {
+        let yaml = r#"
+rules:
+  - id: fallback-source-rule
+    name: Fallback Source Rule
+    description: Source with is_fallback flag
+    message: Source with is_fallback
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "getInput()"
+        is_fallback: true
+    pattern-sinks:
+      - pattern: "execute($Q)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sources.len(), 1);
+        assert!(df.sources[0].is_fallback);
+    }
+
+    #[test]
+    fn test_parse_sink_pattern_with_is_fallback() {
+        let yaml = r#"
+rules:
+  - id: fallback-sink-rule
+    name: Fallback Sink Rule
+    description: Sink with is_fallback flag
+    message: Sink with is_fallback
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "getInput()"
+    pattern-sinks:
+      - pattern: "execute($Q)"
+        is_fallback: true
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.sinks.len(), 1);
+        assert!(df.sinks[0].is_fallback);
+    }
+
+    #[test]
+    fn test_parse_propagator_with_patterns_array() {
+        let yaml = r#"
+rules:
+  - id: propagator-patterns-rule
+    name: Propagator Patterns Rule
+    description: Propagator with patterns array
+    message: Propagator with patterns array
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern: "getInput()"
+    pattern-sinks:
+      - pattern: "execute($Q)"
+    pattern-propagators:
+      - patterns:
+          - pattern: "StringBuilder $SB = new StringBuilder($X)"
+        from: "$X"
+        to: "$SB"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        let df = rules[0].dataflow.as_ref().unwrap();
+        assert_eq!(df.propagators.len(), 1);
+        assert_eq!(df.propagators[0].from, "$X");
+        assert_eq!(df.propagators[0].to, "$SB");
+    }
+
+    #[test]
+    fn test_parse_taint_mode_without_sources_returns_empty_patterns() {
+        let yaml = r#"
+rules:
+  - id: taint-no-source
+    name: Taint No Source
+    description: Taint mode without sources/sinks
+    message: Taint without sources or sinks
+    severity: ERROR
+    languages: [java]
+    mode: taint
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert!(rules[0].patterns.is_empty());
+        assert!(rules[0].dataflow.is_none());
+    }
+
+    #[test]
+    fn test_parse_match_object_with_pattern_field() {
+        let yaml = r#"
+rules:
+  - id: match-obj-pattern
+    name: Match Object Pattern
+    description: Match as object with pattern field
+    message: Match as object with pattern field
+    severity: ERROR
+    languages: [java]
+    match:
+      pattern: "System.out.println($MSG)"
+"#;
+
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].patterns.len(), 1);
+        match &rules[0].patterns[0].pattern_type {
+            PatternType::Simple(s) => assert_eq!(s, "System.out.println($MSG)"),
+            other => panic!("Expected Simple pattern type, got {:?}", other),
+        }
     }
 }

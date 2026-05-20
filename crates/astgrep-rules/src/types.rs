@@ -231,7 +231,7 @@ impl Pattern {
     }
 
     /// Create a pattern-not
-    pub fn not(inner_pattern: Pattern) -> Self {
+    pub fn pattern_not(inner_pattern: Pattern) -> Self {
         Self {
             pattern_type: PatternType::Not(Box::new(inner_pattern)),
             metavariable_pattern: None,

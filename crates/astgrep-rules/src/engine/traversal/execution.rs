@@ -191,3 +191,222 @@ impl RuleExecutionEngine {
         format!("{}_{:x}", rule.id, hasher.finish())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use astgrep_core::{AstNode, Language, Severity, Confidence};
+
+    #[derive(Clone)]
+    struct MockAstNode {
+        node_type: String,
+        text: Option<String>,
+        loc: Option<(usize, usize, usize, usize)>,
+        children: Vec<MockAstNode>,
+    }
+
+    impl MockAstNode {
+        fn new(node_type: &str) -> Self {
+            Self {
+                node_type: node_type.to_string(),
+                text: None,
+                loc: None,
+                children: Vec::new(),
+            }
+        }
+
+        fn with_text(mut self, text: &str) -> Self {
+            self.text = Some(text.to_string());
+            self
+        }
+    }
+
+    impl AstNode for MockAstNode {
+        fn node_type(&self) -> &str {
+            &self.node_type
+        }
+
+        fn child_count(&self) -> usize {
+            self.children.len()
+        }
+
+        fn child(&self, index: usize) -> Option<&dyn AstNode> {
+            self.children.get(index).map(|c| c as &dyn AstNode)
+        }
+
+        fn location(&self) -> Option<(usize, usize, usize, usize)> {
+            self.loc
+        }
+
+        fn text(&self) -> Option<&str> {
+            self.text.as_deref()
+        }
+
+        fn clone_node(&self) -> Box<dyn AstNode> {
+            Box::new(self.clone())
+        }
+    }
+
+    fn create_test_rule(id: &str, pattern: &str) -> Rule {
+        Rule::new(
+            id.to_string(),
+            id.to_string(),
+            "Test description".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        )
+        .add_pattern(Pattern::simple(pattern.to_string()))
+    }
+
+    fn create_test_context(source: &str) -> RuleContext {
+        RuleContext::new(
+            "test.java".to_string(),
+            Language::Java,
+            source.to_string(),
+        )
+    }
+
+    #[test]
+    fn test_execute_rule_simple_pattern() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = create_test_rule("test-rule", "foo");
+        let ast = MockAstNode::new("program").with_text("foo bar foo");
+        let context = create_test_context("foo bar foo");
+
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.finding_count(), 2);
+        assert_eq!(result.rule_id, "test-rule");
+    }
+
+    #[test]
+    fn test_execute_rule_no_match() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = create_test_rule("no-match", "xyz");
+        let ast = MockAstNode::new("program").with_text("foo bar baz");
+        let context = create_test_context("foo bar baz");
+
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.finding_count(), 0);
+    }
+
+    #[test]
+    fn test_execute_rules_filters_by_language() {
+        let mut engine = RuleExecutionEngine::new().set_parallel_execution(false);
+        let java_rule = create_test_rule("java-rule", "foo");
+        let python_rule = Rule::new(
+            "python-rule".to_string(),
+            "python-rule".to_string(),
+            "Test".to_string(),
+            Severity::Warning,
+            Confidence::Medium,
+            vec![Language::Python],
+        )
+        .add_pattern(Pattern::simple("bar".to_string()));
+
+        let ast = MockAstNode::new("program").with_text("foo bar");
+        let context = create_test_context("foo bar");
+
+        let results = engine.execute_rules(&[java_rule, python_rule], &ast, &context);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].rule_id, "java-rule");
+    }
+
+    #[test]
+    fn test_execute_rules_empty() {
+        let mut engine = RuleExecutionEngine::new();
+        let ast = MockAstNode::new("program");
+        let context = create_test_context("");
+
+        let results = engine.execute_rules(&[], &ast, &context);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_execute_rule_with_cache() {
+        let mut engine = RuleExecutionEngine::new().set_cache_enabled(true);
+        let rule = create_test_rule("cached-rule", "test");
+        let ast = MockAstNode::new("program").with_text("test content");
+        let context = create_test_context("test content");
+
+        let result1 = engine.execute_rule(&rule, &ast, &context);
+        assert!(result1.is_success());
+        assert_eq!(result1.finding_count(), 1);
+
+        let result2 = engine.execute_rule(&rule, &ast, &context);
+        assert!(result2.is_success());
+        assert_eq!(result2.finding_count(), 1);
+
+        let (count, enabled) = engine.cache_stats();
+        assert_eq!(count, 1);
+        assert!(enabled);
+    }
+
+    #[test]
+    fn test_execute_rule_disabled_rule() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "disabled-rule".to_string(),
+            "disabled-rule".to_string(),
+            "Test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        )
+        .set_enabled(false)
+        .add_pattern(Pattern::simple("foo".to_string()));
+
+        let ast = MockAstNode::new("program").with_text("foo");
+        let context = create_test_context("foo");
+
+        let results = engine.execute_rules(&[rule], &ast, &context);
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_execute_rule_regex_pattern() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "regex-rule".to_string(),
+            "regex-rule".to_string(),
+            "Test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        )
+        .add_pattern(Pattern::regex(r"\d+".to_string()));
+
+        let ast = MockAstNode::new("program").with_text("abc 123 def 456");
+        let context = create_test_context("abc 123 def 456");
+
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.finding_count(), 2);
+    }
+
+    #[test]
+    fn test_execute_rule_with_fix() {
+        let mut engine = RuleExecutionEngine::new();
+        let rule = Rule::new(
+            "fix-rule".to_string(),
+            "fix-rule".to_string(),
+            "Test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        )
+        .add_pattern(Pattern::simple("old".to_string()))
+        .with_fix("new".to_string());
+
+        let ast = MockAstNode::new("program").with_text("old code");
+        let context = create_test_context("old code");
+
+        let result = engine.execute_rule(&rule, &ast, &context);
+        assert!(result.is_success());
+        assert_eq!(result.finding_count(), 1);
+        assert!(result.findings[0].fix_suggestion.is_some());
+        assert_eq!(result.findings[0].fix_suggestion.as_ref().unwrap(), "new");
+    }
+}
