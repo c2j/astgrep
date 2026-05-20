@@ -79,21 +79,6 @@ impl SettingsPanel {
                         astgrep_core::Language::Python,
                         "Python",
                     );
-                    ui.selectable_value(
-                        &mut settings.selected_language,
-                        astgrep_core::Language::C,
-                        "C",
-                    );
-                    ui.selectable_value(
-                        &mut settings.selected_language,
-                        astgrep_core::Language::CSharp,
-                        "C#",
-                    );
-                    ui.selectable_value(
-                        &mut settings.selected_language,
-                        astgrep_core::Language::Php,
-                        "PHP",
-                    );
                 });
         });
 

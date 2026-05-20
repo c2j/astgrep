@@ -136,7 +136,7 @@ impl RuleEditor {
                             for (key, value) in &rule.metadata {
                                 ui.horizontal(|ui| {
                                     ui.label(format!("{}:", key));
-                                    ui.label(value);
+                                    ui.label(value.as_str().unwrap_or("?"));
                                 });
                             }
                         });
