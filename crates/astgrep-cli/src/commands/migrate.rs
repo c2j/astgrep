@@ -710,11 +710,11 @@ mod tests {
     fn test_migrate_subcommand_parsing() {
         let cmd = MigrateCommand::try_parse_from(&[
             "migrate",
-            "migrate",
             "--dry-run",
             "--backup",
             "--threads",
             "8",
+            "migrate",
         ])
         .unwrap();
 

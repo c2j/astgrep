@@ -189,6 +189,7 @@ rules:
   - id: test-rule
     name: Test Rule
     description: A test rule
+    message: Test message
     severity: ERROR
     languages: [java]
     patterns:
@@ -256,6 +257,7 @@ rules:
   - id: test-rule
     name: Test Rule
     description: A test rule
+    message: Test message
     severity: INVALID
     languages: [java]
 "#;
@@ -264,7 +266,7 @@ rules:
 
         let result = validate_rule_file(&rule_file).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid severity"));
+        assert!(result.unwrap_err().to_string().to_lowercase().contains("invalid severity"));
     }
 
     #[tokio::test]
