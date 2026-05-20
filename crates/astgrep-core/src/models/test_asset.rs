@@ -246,7 +246,7 @@ impl TestAsset {
         self.metadata.file_size.or_else(|| {
             std::fs::metadata(&self.current_path)
                 .ok()
-                .map(|m| m.len() as u64)
+                .map(|m| m.len())
         })
     }
 

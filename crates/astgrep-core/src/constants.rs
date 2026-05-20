@@ -62,7 +62,7 @@ pub mod defaults {
         pub const BASH_TIMEOUT_MS: u64 = 15000;
 
         /// Bash maximum file size (1MB)
-        pub const BASH_MAX_FILE_SIZE: usize = 1 * 1024 * 1024;
+        pub const BASH_MAX_FILE_SIZE: usize = 1024 * 1024;
     }
 
     /// Analysis configuration constants

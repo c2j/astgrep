@@ -43,7 +43,7 @@ impl Language {
     }
 
     /// Parse language from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_name(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "java" => Some(Language::Java),
             "javascript" | "js" | "typescript" | "ts" => Some(Language::JavaScript),
@@ -63,12 +63,7 @@ impl Language {
             &format!(".{}", ext)
         };
 
-        for &lang in crate::constants::languages::ALL_LANGUAGES {
-            if lang.extensions().contains(&ext) {
-                return Some(lang);
-            }
-        }
-        None
+        crate::constants::languages::ALL_LANGUAGES.iter().find(|&&lang| lang.extensions().contains(&ext)).copied()
     }
 }
 
@@ -248,7 +243,7 @@ impl OutputFormat {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_name(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "json" => Some(OutputFormat::Json),
             "yaml" | "yml" => Some(OutputFormat::Yaml),
@@ -278,12 +273,12 @@ mod tests {
 
     #[test]
     fn test_language_from_str() {
-        assert_eq!(Language::from_str("java"), Some(Language::Java));
-        assert_eq!(Language::from_str("JavaScript"), Some(Language::JavaScript));
-        assert_eq!(Language::from_str("python"), Some(Language::Python));
-        assert_eq!(Language::from_str("sql"), Some(Language::Sql));
-        assert_eq!(Language::from_str("bash"), Some(Language::Bash));
-        assert_eq!(Language::from_str("unknown"), None);
+        assert_eq!(Language::parse_name("java"), Some(Language::Java));
+        assert_eq!(Language::parse_name("JavaScript"), Some(Language::JavaScript));
+        assert_eq!(Language::parse_name("python"), Some(Language::Python));
+        assert_eq!(Language::parse_name("sql"), Some(Language::Sql));
+        assert_eq!(Language::parse_name("bash"), Some(Language::Bash));
+        assert_eq!(Language::parse_name("unknown"), None);
     }
 
     #[test]
@@ -370,12 +365,12 @@ mod tests {
 
     #[test]
     fn test_output_format_from_str() {
-        assert_eq!(OutputFormat::from_str("json"), Some(OutputFormat::Json));
-        assert_eq!(OutputFormat::from_str("YAML"), Some(OutputFormat::Yaml));
-        assert_eq!(OutputFormat::from_str("sarif"), Some(OutputFormat::Sarif));
-        assert_eq!(OutputFormat::from_str("text"), Some(OutputFormat::Text));
-        assert_eq!(OutputFormat::from_str("xml"), Some(OutputFormat::Xml));
-        assert_eq!(OutputFormat::from_str("unknown"), None);
+        assert_eq!(OutputFormat::parse_name("json"), Some(OutputFormat::Json));
+        assert_eq!(OutputFormat::parse_name("YAML"), Some(OutputFormat::Yaml));
+        assert_eq!(OutputFormat::parse_name("sarif"), Some(OutputFormat::Sarif));
+        assert_eq!(OutputFormat::parse_name("text"), Some(OutputFormat::Text));
+        assert_eq!(OutputFormat::parse_name("xml"), Some(OutputFormat::Xml));
+        assert_eq!(OutputFormat::parse_name("unknown"), None);
     }
 
     #[test]

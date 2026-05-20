@@ -131,3 +131,128 @@ impl ScriptExecutor {
         Ok(execution_result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_execution_config_default_values() {
+        let config = ExecutionConfig::default();
+        assert_eq!(config.timeout, std::time::Duration::from_secs(60));
+        assert_eq!(config.working_directory, None);
+        assert!(config.environment_variables.is_empty());
+        assert_eq!(config.capture_output, true);
+    }
+
+    #[test]
+    fn test_execution_config_custom_values() {
+        let config = ExecutionConfig {
+            timeout: std::time::Duration::from_secs(120),
+            working_directory: Some(PathBuf::from("/workspace")),
+            environment_variables: HashMap::from([("KEY".to_string(), "VALUE".to_string())]),
+            capture_output: false,
+        };
+        assert_eq!(config.timeout, std::time::Duration::from_secs(120));
+        assert_eq!(config.working_directory, Some(PathBuf::from("/workspace")));
+        assert_eq!(config.environment_variables.get("KEY"), Some(&"VALUE".to_string()));
+        assert_eq!(config.capture_output, false);
+    }
+
+    #[test]
+    fn test_execution_context_construction() {
+        let script_path = PathBuf::from("/scripts/test.sh");
+        let args = vec!["arg1".to_string(), "arg2".to_string()];
+        let working_directory = PathBuf::from("/workspace");
+        let env_vars = HashMap::from([("KEY".to_string(), "VALUE".to_string())]);
+
+        let context = ExecutionContext {
+            script_path: script_path.clone(),
+            args: args.clone(),
+            working_directory: working_directory.clone(),
+            environment_variables: env_vars.clone(),
+        };
+
+        assert_eq!(context.script_path, script_path);
+        assert_eq!(context.args, args);
+        assert_eq!(context.working_directory, working_directory);
+        assert_eq!(context.environment_variables, env_vars);
+    }
+
+    #[test]
+    fn test_execution_context_empty_args() {
+        let context = ExecutionContext {
+            script_path: PathBuf::from("/scripts/run.sh"),
+            args: vec![],
+            working_directory: PathBuf::from("/workspace"),
+            environment_variables: HashMap::new(),
+        };
+        assert!(context.args.is_empty());
+        assert!(context.environment_variables.is_empty());
+    }
+
+    #[test]
+    fn test_execution_result_successful() {
+        let result = ExecutionResult {
+            stdout: Some("output".to_string()),
+            stderr: None,
+            exit_code: Some(0),
+            timed_out: false,
+            duration_ms: 150,
+        };
+        assert_eq!(result.stdout.as_ref().unwrap(), "output");
+        assert_eq!(result.stderr, None);
+        assert_eq!(result.exit_code, Some(0));
+        assert_eq!(result.timed_out, false);
+        assert_eq!(result.duration_ms, 150);
+    }
+
+    #[test]
+    fn test_execution_result_timed_out() {
+        let result = ExecutionResult {
+            stdout: None,
+            stderr: Some("Script execution timed out".to_string()),
+            exit_code: None,
+            timed_out: true,
+            duration_ms: 60000,
+        };
+        assert_eq!(result.stdout, None);
+        assert_eq!(result.stderr.as_ref().unwrap(), "Script execution timed out");
+        assert_eq!(result.exit_code, None);
+        assert_eq!(result.timed_out, true);
+        assert_eq!(result.duration_ms, 60000);
+    }
+
+    #[test]
+    fn test_execution_result_error() {
+        let result = ExecutionResult {
+            stdout: None,
+            stderr: Some("Failed to execute script: permission denied".to_string()),
+            exit_code: None,
+            timed_out: false,
+            duration_ms: 5,
+        };
+        assert_eq!(result.stdout, None);
+        assert_eq!(result.timed_out, false);
+        assert!(result.stderr.as_ref().unwrap().contains("permission denied"));
+    }
+
+    #[test]
+    fn test_script_executor_new_succeeds() {
+        let config = ExecutionConfig::default();
+        let executor = ScriptExecutor::new(config);
+        assert!(executor.is_ok());
+    }
+
+    #[test]
+    fn test_script_executor_new_with_custom_config() {
+        let config = ExecutionConfig {
+            timeout: std::time::Duration::from_secs(30),
+            working_directory: Some(PathBuf::from("/custom")),
+            environment_variables: HashMap::new(),
+            capture_output: false,
+        };
+        let executor = ScriptExecutor::new(config);
+        assert!(executor.is_ok());
+    }
+}
