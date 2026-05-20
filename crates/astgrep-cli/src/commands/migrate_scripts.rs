@@ -593,20 +593,20 @@ mod tests {
         let temp_dir = tempdir()?;
         let config = ScriptMigrationConfig {
             target_directory: temp_dir.path().join("newtest/scripts"),
+            enable_progress: false,
             ..Default::default()
         };
 
         let migrator = ScriptMigrator::with_config(config)?;
 
-        let target_dir = migrator.determine_target_path(
+        let target_path = migrator.determine_target_path(
             &PathBuf::from("/test/script.sh"),
             &ScriptType::Utility,
             &0.5,
         )?;
 
-        // Directory should be created
-        assert!(target_dir.exists());
-        assert!(target_dir.is_dir());
+        assert!(target_path.parent().map_or(false, |p| p.exists()));
+        assert!(target_path.parent().map_or(false, |p| p.is_dir()));
 
         Ok(())
     }
