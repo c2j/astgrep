@@ -259,7 +259,7 @@ impl SanitizerDetector {
     pub fn add_pattern(&mut self, node_type: String, pattern: SanitizerPattern) {
         self.patterns
             .entry(node_type)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(pattern);
     }
 

@@ -185,7 +185,7 @@ impl FlowAnalysisResult {
     pub fn add_flow(&mut self, flow: TaintFlow, category: VulnerabilityCategory) {
         self.flows_by_category
             .entry(category)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(flow);
     }
 
@@ -331,7 +331,7 @@ impl FlowReporter {
             "Sanitization rate: {:.1}%\n",
             stats.sanitization_rate() * 100.0
         ));
-        report.push_str("\n");
+        report.push('\n');
 
         report.push_str("Severity breakdown:\n");
         if stats.critical_count > 0 {
@@ -396,10 +396,10 @@ impl FlowReporter {
                         for sanitizer in &flow.sanitizers {
                             report.push_str(&format!("{} ", sanitizer.sanitizer_type.as_str()));
                         }
-                        report.push_str("\n");
+                        report.push('\n');
                     }
 
-                    report.push_str("\n");
+                    report.push('\n');
                 }
             }
         }
@@ -411,8 +411,8 @@ impl FlowReporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sinks::Sink;
-    use crate::sources::Source;
+    use crate::sinks::{Sink, SinkType};
+    use crate::sources::{Source, SourceType};
 
     #[test]
     fn test_flow_analyzer_creation() {
@@ -486,5 +486,61 @@ mod tests {
         assert!(report.contains("Total flows: 5"));
         assert!(report.contains("Vulnerable flows: 2"));
         assert!(report.contains("Critical: 1"));
+    }
+
+    #[test]
+    fn test_flow_analysis_result_vulnerability_types() {
+        let mut result = FlowAnalysisResult::new();
+
+        let source = Source::new(0, SourceType::UserInput, "Test source".to_string());
+        let sink = Sink::new(
+            1,
+            SinkType::SqlExecution,
+            "SQL_INJECTION".to_string(),
+            "Test sink".to_string(),
+        );
+
+        let flow = TaintFlow {
+            source,
+            sink,
+            path: vec![0, 1],
+            sanitizers: Vec::new(),
+            confidence: 0.9,
+            vulnerability_type: "SQL_INJECTION".to_string(),
+            context: None,
+            transformations: Vec::new(),
+            flow_type: crate::taint::FlowType::Direct,
+        };
+
+        result.add_flow(flow, VulnerabilityCategory::Critical);
+        result.calculate_statistics();
+
+        let types = result.vulnerability_types();
+        assert!(types.contains("SQL_INJECTION"));
+    }
+
+    #[test]
+    fn test_flow_statistics_highest_severity() {
+        let mut stats = FlowStatistics::default();
+        assert_eq!(stats.highest_severity(), None);
+
+        stats.high_count = 1;
+        assert_eq!(stats.highest_severity(), Some(VulnerabilityCategory::High));
+
+        stats.critical_count = 1;
+        assert_eq!(stats.highest_severity(), Some(VulnerabilityCategory::Critical));
+    }
+
+    #[test]
+    fn test_flow_reporter_detailed() {
+        let mut result = FlowAnalysisResult::new();
+        result.statistics.total_flows = 1;
+        result.statistics.vulnerable_flows = 1;
+        result.statistics.critical_count = 1;
+
+        let analyzer = FlowAnalyzer::new();
+        let report = FlowReporter::generate_detailed_report(&result, &analyzer);
+        assert!(report.contains("Total flows: 1"));
+        assert!(report.contains("Vulnerable flows: 1"));
     }
 }

@@ -67,9 +67,11 @@ pub struct TaintContext {
 pub struct EnhancedTaintState {
     /// Set of taint information
     taints: HashSet<EnhancedTaintInfo>,
-    /// Applied sanitizers
+    /// Applied sanitizers (kept for future taint policy analysis)
+    #[allow(dead_code)]
     sanitizers: Vec<AppliedSanitizer>,
-    /// Field-specific taint information
+    /// Field-specific taint information (kept for future field-sensitive analysis)
+    #[allow(dead_code)]
     field_taints: HashMap<String, HashSet<EnhancedTaintInfo>>,
 }
 
@@ -129,9 +131,11 @@ impl Default for TaintAnalysisConfig {
 pub struct EnhancedTaintTracker {
     /// Taint states for each node
     taint_states: HashMap<NodeId, EnhancedTaintState>,
-    /// Call graph for inter-procedural analysis
+    /// Call graph for inter-procedural analysis (kept for future inter-procedural taint tracking)
+    #[allow(dead_code)]
     call_graph: HashMap<NodeId, Vec<NodeId>>,
-    /// Field mappings for field-sensitive analysis
+    /// Field mappings for field-sensitive analysis (kept for future field-sensitive taint tracking)
+    #[allow(dead_code)]
     field_mappings: HashMap<NodeId, FieldInfo>,
     /// Context stack for tracking call contexts
     context_stack: Vec<NodeId>,
@@ -173,8 +177,15 @@ impl EnhancedTaintState {
         self.taints.insert(taint);
     }
 
+    #[allow(dead_code)]
     fn add_sanitizer(&mut self, sanitizer: AppliedSanitizer) {
         self.sanitizers.push(sanitizer);
+    }
+}
+
+impl Default for EnhancedTaintTracker {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -406,5 +417,125 @@ impl EnhancedTaintTracker {
         }
 
         (confidence * 100.0) as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::{DataFlowGraph, DataFlowNode, EdgeType};
+    use crate::sinks::{Sink, SinkType};
+    use crate::sources::{Source, SourceType};
+    use crate::sanitizers::{Sanitizer, SanitizerType};
+
+    #[test]
+    fn test_enhanced_taint_tracker_new() {
+        let tracker = EnhancedTaintTracker::new();
+        assert!(tracker.taint_states.is_empty());
+    }
+
+    #[test]
+    fn test_enhanced_taint_tracker_with_config() {
+        let config = TaintAnalysisConfig {
+            max_path_length: 100,
+            max_contexts: 50,
+            field_sensitive: false,
+            context_sensitive: false,
+            path_sensitive: true,
+            min_confidence: 20,
+            min_confidence_threshold: 40,
+        };
+        let tracker = EnhancedTaintTracker::with_config(config.clone());
+        assert_eq!(tracker.config.max_path_length, 100);
+        assert_eq!(tracker.config.min_confidence_threshold, 40);
+    }
+
+    #[test]
+    fn test_taint_analysis_config_default() {
+        let config = TaintAnalysisConfig::default();
+        assert_eq!(config.max_path_length, 50);
+        assert_eq!(config.max_contexts, 100);
+        assert!(config.field_sensitive);
+        assert!(config.context_sensitive);
+        assert!(!config.path_sensitive);
+    }
+
+    #[test]
+    fn test_enhanced_taint_tracker_analyze_taint() {
+        let mut tracker = EnhancedTaintTracker::new();
+        let mut graph = DataFlowGraph::new();
+
+        let source_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("request.getParameter".to_string()));
+        let sink_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("executeQuery".to_string()));
+        graph.add_edge(source_node, sink_node, EdgeType::DataFlow);
+
+        let source = Source::new(source_node, SourceType::UserInput, "HTTP request parameter".to_string());
+        let sink = Sink::new(sink_node, SinkType::SqlExecution, "SQL_INJECTION".to_string(), "SQL query execution".to_string());
+
+        let flows = tracker.analyze_taint(&graph, &[source], &[sink], &[]).unwrap();
+        assert_eq!(flows.len(), 1);
+        assert_eq!(flows[0].confidence, 90);
+    }
+
+    #[test]
+    fn test_enhanced_taint_tracker_analyze_taint_with_sanitizer() {
+        let mut tracker = EnhancedTaintTracker::new();
+        let mut graph = DataFlowGraph::new();
+
+        let source_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("request.getParameter".to_string()));
+        let sanitizer_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("htmlEncode".to_string()));
+        let sink_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("innerHTML".to_string()));
+        graph.add_edge(source_node, sanitizer_node, EdgeType::DataFlow);
+        graph.add_edge(sanitizer_node, sink_node, EdgeType::DataFlow);
+
+        let source = Source::new(source_node, SourceType::UserInput, "HTTP request parameter".to_string());
+        let sink = Sink::new(sink_node, SinkType::HtmlOutput, "XSS".to_string(), "HTML output".to_string());
+        let sanitizer = Sanitizer::new(sanitizer_node, SanitizerType::HtmlEncoding, "HTML encoder".to_string())
+            .with_effectiveness(0.9)
+            .with_vulnerability_types(vec!["XSS".to_string()]);
+
+        let flows = tracker.analyze_taint(&graph, &[source], &[sink], &[sanitizer]).unwrap();
+        assert_eq!(flows.len(), 1);
+        assert!(flows[0].confidence < 100);
+        assert_eq!(flows[0].sanitizers_bypassed.len(), 1);
+    }
+
+    #[test]
+    fn test_enhanced_taint_info_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let info1 = EnhancedTaintInfo {
+            id: 1,
+            source_id: 0,
+            source_type: SourceType::UserInput,
+            confidence: 100,
+            path: vec![0, 1],
+            context: TaintContext::new(),
+            field_path: vec![],
+            vulnerability_types: {
+                let mut set = std::collections::HashSet::new();
+                set.insert("XSS".to_string());
+                set
+            },
+        };
+
+        let mut hasher = DefaultHasher::new();
+        info1.hash(&mut hasher);
+        let _hash = hasher.finish();
+    }
+
+    #[test]
+    fn test_taint_context_new() {
+        let context = TaintContext::new();
+        assert!(context.call_stack.is_empty());
+        assert_eq!(context.loop_depth, 0);
+        assert!(context.conditional_context.is_empty());
+    }
+
+    #[test]
+    fn test_enhanced_taint_state_new() {
+        let state = EnhancedTaintState::new();
+        assert!(state.taints.is_empty());
     }
 }

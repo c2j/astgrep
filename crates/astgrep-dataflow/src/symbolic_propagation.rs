@@ -211,11 +211,11 @@ impl SymbolicState {
         if let SymbolicValue::Variable(src) = &value {
             self.aliases
                 .entry(src.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(var.clone());
             self.aliases
                 .entry(var.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(src.clone());
         }
 
@@ -450,6 +450,7 @@ impl SymbolicPropagator {
     }
 
     /// Analyze a declarator node
+    #[allow(dead_code)]
     fn analyze_declarator(
         &self,
         node: &dyn AstNode,
@@ -571,17 +572,20 @@ impl SymbolicPropagator {
     }
 
     /// Helper to extract method call from any AstNode reference
+    #[allow(dead_code)]
     fn extract_method_call_from_ref<T: AstNode>(&self, node: &T) -> SymbolicValue {
         // Convert to dyn AstNode and delegate
         self.extract_method_call_dyn(node)
     }
 
     /// Extract a field access symbolic value
+    #[allow(dead_code)]
     fn extract_field_access<T: AstNode>(&self, node: &T) -> SymbolicValue {
         self.extract_field_access_dyn(node)
     }
 
     /// Internal implementation using dyn trait object
+    #[allow(dead_code)]
     fn extract_field_access_dyn(&self, node: &dyn AstNode) -> SymbolicValue {
         let mut base = None;
         let mut field = None;
@@ -591,7 +595,7 @@ impl SymbolicPropagator {
                 match child.node_type() {
                     "identifier" => {
                         if base.is_none() {
-                            base = child.text().map(|s| SymbolicValue::variable(&s));
+                            base = child.text().map(SymbolicValue::variable);
                         } else if field.is_none() {
                             field = child.text().map(|s| s.to_string());
                         }
@@ -618,11 +622,13 @@ impl SymbolicPropagator {
     }
 
     /// Extract a method call symbolic value
+    #[allow(dead_code)]
     fn extract_method_call<T: AstNode>(&self, node: &T) -> SymbolicValue {
         self.extract_method_call_dyn(node)
     }
 
     /// Internal implementation using dyn trait object
+    #[allow(dead_code)]
     fn extract_method_call_dyn(&self, node: &dyn AstNode) -> SymbolicValue {
         let mut base = None;
         let mut method = None;
@@ -635,7 +641,7 @@ impl SymbolicPropagator {
                 match child_type {
                     "identifier" => {
                         if base.is_none() {
-                            base = child_text.map(|s| SymbolicValue::variable(&s));
+                            base = child_text.map(SymbolicValue::variable);
                         } else if method.is_none() {
                             method = child_text.map(|s| s.to_string());
                         }
@@ -681,13 +687,10 @@ impl SymbolicPropagator {
         // Try to extract the class name from the constructor call
         // The pattern should be: new ClassName(...)
         if let Some(text) = node_text {
-            if text.starts_with("new ") {
-                // Extract class name after "new " and before "(" or whitespace + "("
-                let rest = &text[4..]; // Skip "new "
+            if let Some(rest) = text.strip_prefix("new ") {
                 let rest = rest.trim();
-                // Find the class name (everything before "(")
                 if let Some(paren_pos) = rest.find('(') {
-                    let class_name = &rest[..paren_pos].trim();
+                    let class_name = rest[..paren_pos].trim();
                     if !class_name.is_empty() {
                         class = Some(class_name.to_string());
                     }
@@ -821,11 +824,85 @@ mod tests {
         state.bind("a".to_string(), SymbolicValue::variable("b"));
         state.bind("c".to_string(), SymbolicValue::variable("b"));
 
-        // a and c should be transitively aliased through b
         assert!(state.is_alias("a", "c"));
 
         let aliases_a = state.get_all_aliases("a");
         assert!(aliases_a.contains("b"));
         assert!(aliases_a.contains("c"));
+    }
+
+    #[test]
+    fn test_symbolic_state_merge() {
+        let mut state1 = SymbolicState::new();
+        state1.bind("x".to_string(), SymbolicValue::variable("a"));
+        state1.bind("y".to_string(), SymbolicValue::variable("b"));
+
+        let mut state2 = SymbolicState::new();
+        state2.bind("x".to_string(), SymbolicValue::variable("a"));
+        state2.bind("z".to_string(), SymbolicValue::variable("c"));
+
+        let merged = state1.merge(&state2);
+        assert!(merged.get("x").is_some());
+        assert!(merged.get("y").is_some());
+        assert!(merged.get("z").is_some());
+    }
+
+    #[test]
+    fn test_source_location() {
+        let loc = SourceLocation::new(10, 5);
+        assert_eq!(loc.line, 10);
+        assert_eq!(loc.column, 5);
+    }
+
+    #[test]
+    fn test_symbolic_propagator_new() {
+        let propagator = SymbolicPropagator::new();
+        assert!(propagator.state().variables.is_empty());
+    }
+
+    #[test]
+    fn test_symbolic_propagator_with_deep_propagation() {
+        let propagator = SymbolicPropagator::new().with_deep_propagation(false);
+        assert!(!propagator.enable_deep_propagation);
+    }
+
+    #[test]
+    fn test_symbolic_propagator_reset() {
+        let mut propagator = SymbolicPropagator::new();
+        propagator.state.bind("x".to_string(), SymbolicValue::variable("y"));
+        propagator.reset();
+        assert!(propagator.state().variables.is_empty());
+    }
+
+    #[test]
+    fn test_symbolic_propagator_is_derived_from() {
+        let mut propagator = SymbolicPropagator::new();
+        propagator.state.bind("a".to_string(), SymbolicValue::variable("b"));
+
+        assert!(propagator.is_derived_from("a", &SymbolicValue::variable("b")));
+        assert!(!propagator.is_derived_from("a", &SymbolicValue::variable("c")));
+    }
+
+    #[test]
+    fn test_symbolic_propagator_contains_alias() {
+        let mut propagator = SymbolicPropagator::new();
+        propagator.state.bind("a".to_string(), SymbolicValue::variable("b"));
+        propagator.state.bind("c".to_string(), SymbolicValue::variable("b"));
+
+        assert!(propagator.contains_alias("value_of_b", "b"));
+        assert!(propagator.contains_alias("value_of_a", "b"));
+        assert!(!propagator.contains_alias("value_of_x", "z"));
+    }
+
+    #[test]
+    fn test_symbolic_value_root_variable() {
+        let var = SymbolicValue::variable("x");
+        assert_eq!(var.root_variable(), Some("x"));
+
+        let field = SymbolicValue::field_access(SymbolicValue::variable("obj"), "field");
+        assert_eq!(field.root_variable(), Some("obj"));
+
+        let constructor = SymbolicValue::constructor_call("MyClass");
+        assert_eq!(constructor.root_variable(), None);
     }
 }

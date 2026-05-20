@@ -3,6 +3,8 @@
 //! This crate provides data flow analysis and taint tracking functionality for
 //! detecting security vulnerabilities and code quality issues.
 
+#![allow(ambiguous_glob_reexports)]
+
 pub mod advanced_taint;
 pub mod call_graph;
 pub mod constant_analysis;
@@ -226,4 +228,188 @@ pub struct DataFlowStatistics {
     pub sanitizer_count: usize,
     pub flow_count: usize,
     pub vulnerable_flow_count: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::{DataFlowGraph, DataFlowNode, EdgeType};
+    use crate::sinks::{Sink, SinkType};
+    use crate::sources::{Source, SourceType};
+    use crate::taint::TaintFlow;
+
+    #[test]
+    fn test_dataflow_analyzer_new() {
+        let analyzer = DataFlowAnalyzer::new();
+        assert_eq!(analyzer.graph().node_count(), 0);
+        assert_eq!(analyzer.graph().edge_count(), 0);
+    }
+
+    #[test]
+    fn test_dataflow_analyzer_default() {
+        let analyzer: DataFlowAnalyzer = Default::default();
+        assert_eq!(analyzer.graph().node_count(), 0);
+        assert_eq!(analyzer.graph().edge_count(), 0);
+    }
+
+    #[test]
+    fn test_dataflow_analyzer_reset() {
+        let mut analyzer = DataFlowAnalyzer::new();
+        analyzer.reset();
+        assert_eq!(analyzer.graph().node_count(), 0);
+        assert_eq!(analyzer.graph().edge_count(), 0);
+    }
+
+    #[test]
+    fn test_dataflow_analysis_statistics() {
+        let mut graph = DataFlowGraph::new();
+        let id1 = graph.add_node(DataFlowNode::new("identifier".to_string()));
+        let id2 = graph.add_node(DataFlowNode::new("literal".to_string()));
+        graph.add_edge(id1, id2, EdgeType::DataFlow);
+
+        let source = Source::new(id1, SourceType::UserInput, "Test source".to_string());
+        let sink = Sink::new(
+            id2,
+            SinkType::SqlExecution,
+            "SQL_INJECTION".to_string(),
+            "Test sink".to_string(),
+        );
+        let flow = TaintFlow::new(source.clone(), sink, vec![id1, id2], 0.9, "SQL_INJECTION".to_string());
+
+        let analysis = DataFlowAnalysis {
+            graph: graph.clone(),
+            sources: vec![source],
+            sinks: vec![Sink::new(
+                id2,
+                SinkType::SqlExecution,
+                "SQL_INJECTION".to_string(),
+                "Test sink".to_string(),
+            )],
+            sanitizers: vec![],
+            taint_flows: vec![flow],
+            constant_values: std::collections::HashMap::new(),
+        };
+
+        let stats = analysis.statistics();
+        assert_eq!(stats.node_count, 2);
+        assert_eq!(stats.edge_count, 1);
+        assert_eq!(stats.source_count, 1);
+        assert_eq!(stats.sink_count, 1);
+        assert_eq!(stats.sanitizer_count, 0);
+        assert_eq!(stats.flow_count, 1);
+        assert_eq!(stats.vulnerable_flow_count, 1);
+    }
+
+    #[test]
+    fn test_dataflow_analysis_has_vulnerable_flows() {
+        let source = Source::new(0, SourceType::UserInput, "Test source".to_string());
+        let sink = Sink::new(
+            1,
+            SinkType::SqlExecution,
+            "SQL_INJECTION".to_string(),
+            "Test sink".to_string(),
+        );
+        let vulnerable_flow = TaintFlow::new(
+            source.clone(),
+            sink.clone(),
+            vec![0, 1],
+            0.9,
+            "SQL_INJECTION".to_string(),
+        );
+
+        let analysis_with_vuln = DataFlowAnalysis {
+            graph: DataFlowGraph::new(),
+            sources: vec![source.clone()],
+            sinks: vec![sink.clone()],
+            sanitizers: vec![],
+            taint_flows: vec![vulnerable_flow],
+            constant_values: std::collections::HashMap::new(),
+        };
+
+        assert!(analysis_with_vuln.has_vulnerable_flows());
+
+        let sanitized_sink = Sink::new(
+            1,
+            SinkType::SqlExecution,
+            "SQL_INJECTION".to_string(),
+            "Test sink".to_string(),
+        );
+        let sanitized_flow = TaintFlow::new(
+            source.clone(),
+            sanitized_sink,
+            vec![0, 1],
+            0.01,
+            "SQL_INJECTION".to_string(),
+        );
+
+        let analysis_no_vuln = DataFlowAnalysis {
+            graph: DataFlowGraph::new(),
+            sources: vec![source],
+            sinks: vec![sink],
+            sanitizers: vec![],
+            taint_flows: vec![sanitized_flow],
+            constant_values: std::collections::HashMap::new(),
+        };
+
+        assert!(!analysis_no_vuln.has_vulnerable_flows());
+    }
+
+    #[test]
+    fn test_dataflow_analysis_vulnerable_flows() {
+        let source = Source::new(0, SourceType::UserInput, "Test source".to_string());
+        let sink = Sink::new(
+            1,
+            SinkType::SqlExecution,
+            "SQL_INJECTION".to_string(),
+            "Test sink".to_string(),
+        );
+        let vulnerable_flow = TaintFlow::new(
+            source.clone(),
+            sink.clone(),
+            vec![0, 1],
+            0.9,
+            "SQL_INJECTION".to_string(),
+        );
+        let sanitized_flow = TaintFlow::new(
+            source.clone(),
+            sink.clone(),
+            vec![0, 1],
+            0.01,
+            "SQL_INJECTION".to_string(),
+        );
+
+        let analysis = DataFlowAnalysis {
+            graph: DataFlowGraph::new(),
+            sources: vec![source],
+            sinks: vec![sink],
+            sanitizers: vec![],
+            taint_flows: vec![vulnerable_flow.clone(), sanitized_flow],
+            constant_values: std::collections::HashMap::new(),
+        };
+
+        let vulnerable = analysis.vulnerable_flows();
+        assert_eq!(vulnerable.len(), 1);
+        assert_eq!(vulnerable[0].confidence, vulnerable_flow.confidence);
+    }
+
+    #[test]
+    fn test_dataflow_statistics_fields() {
+        let stats = DataFlowStatistics {
+            node_count: 10,
+            edge_count: 15,
+            source_count: 2,
+            sink_count: 3,
+            sanitizer_count: 1,
+            flow_count: 5,
+            vulnerable_flow_count: 2,
+        };
+
+        assert_eq!(stats.node_count, 10);
+        assert_eq!(stats.edge_count, 15);
+        assert_eq!(stats.source_count, 2);
+        assert_eq!(stats.sink_count, 3);
+        assert_eq!(stats.sanitizer_count, 1);
+        assert_eq!(stats.flow_count, 5);
+        assert_eq!(stats.vulnerable_flow_count, 2);
+    }
 }

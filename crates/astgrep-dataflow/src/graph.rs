@@ -48,11 +48,11 @@ impl DataFlowGraph {
 
         self.edges
             .entry(from)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(edge.clone());
         self.reverse_edges
             .entry(to)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(edge);
     }
 
