@@ -16,6 +16,8 @@ fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
         language: lang,
         source_code: source.to_string(),
         custom_data: std::collections::HashMap::new(),
+        enable_constant_propagation: true,
+        sql_stmt_boundary: None,
     }
 }
 
@@ -69,7 +71,7 @@ public class ConcurrentTest {
             let ast = parser_registry.parse_file(&path, &source)
                 .expect(&format!("parse iteration {}", i));
             let ctx = make_context("ConcurrentTest.java", Language::Java, &source);
-            let engine = rule_engine.lock().unwrap();
+            let mut engine = rule_engine.lock().unwrap();
             let findings = engine.analyze(&*ast, &ctx).expect("analyze");
             let mut results = results.lock().unwrap();
             results.push((i, findings.len()));
@@ -138,7 +140,7 @@ rules:
             let ast = parser_registry.parse_file(&path, &content)
                 .expect(&format!("parse {}", name));
             let ctx = make_context(&name, Language::JavaScript, &content);
-            let engine = rule_engine.lock().unwrap();
+            let mut engine = rule_engine.lock().unwrap();
             let findings = engine.analyze(&*ast, &ctx).expect("analyze");
             let mut results = results.lock().unwrap();
             results.push((name, findings.len()));
@@ -299,7 +301,7 @@ rules:
                 let ast = parser_registry.parse_file(&path, &source)
                     .expect(&format!("parse {}", name));
                 let ctx = make_context(&name, lang, &source);
-                let engine = rule_engine.lock().unwrap();
+                let mut engine = rule_engine.lock().unwrap();
                 let findings = engine.analyze(&*ast, &ctx).expect("analyze");
                 let mut results = results.lock().unwrap();
                 results.push((name, findings.len()));
