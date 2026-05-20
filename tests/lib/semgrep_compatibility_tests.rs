@@ -151,7 +151,7 @@ rules:
     assert!(rule.fix.is_some());
     assert!(rule.fix_regex.is_some());
     assert!(rule.paths.is_some());
-    assert_eq!(rule.metadata.get("cwe"), Some(&"CWE-89".to_string()));
+    assert_eq!(rule.metadata.get("cwe").and_then(|v| v.as_str()), Some("CWE-89"));
 }
 
 #[test]

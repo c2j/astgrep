@@ -38,6 +38,8 @@ fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
         language: lang,
         source_code: source.to_string(),
         custom_data: std::collections::HashMap::new(),
+        enable_constant_propagation: true,
+        sql_stmt_boundary: None,
     }
 }
 
@@ -81,7 +83,7 @@ function λ(x) { return x + 1; }
     assert!(result.is_ok(), "JS parser should handle unicode identifiers without crashing");
 
     let ast = result.unwrap();
-    assert!(!ast.children().is_empty(), "Unicode source should produce AST children");
+    assert!(ast.child_count() > 0, "Unicode source should produce AST children");
 }
 
 #[test]
@@ -152,7 +154,7 @@ WHERE active = true; -- end comment
     let result = parser_registry.parse_file(&PathBuf::from("comments.sql"), source);
     match result {
         Ok(ast) => {
-            let text = ast.text();
+            let text = ast.text().unwrap_or("");
             assert!(text.contains("SELECT"), "AST text should preserve SQL keywords");
         }
         Err(e) => {
