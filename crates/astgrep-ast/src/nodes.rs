@@ -177,7 +177,7 @@ impl NodeType {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_name(s: &str) -> Option<Self> {
         match s {
             "identifier" => Some(NodeType::Identifier),
             "literal" => Some(NodeType::Literal),
@@ -747,12 +747,12 @@ mod tests {
             "function_declaration"
         );
 
-        assert_eq!(NodeType::from_str("identifier"), Some(NodeType::Identifier));
+        assert_eq!(NodeType::parse_name("identifier"), Some(NodeType::Identifier));
         assert_eq!(
-            NodeType::from_str("binary_expression"),
+            NodeType::parse_name("binary_expression"),
             Some(NodeType::BinaryExpression)
         );
-        assert_eq!(NodeType::from_str("unknown"), None);
+        assert_eq!(NodeType::parse_name("not_a_type"), None);
     }
 
     #[test]
@@ -830,5 +830,515 @@ mod tests {
             node.literal(),
             Some(&LiteralValue::String("hello world".to_string()))
         );
+    }
+
+    #[test]
+    fn test_all_node_type_variants_construct_and_compare() {
+        let all = vec![
+            NodeType::Identifier,
+            NodeType::Literal,
+            NodeType::Comment,
+            NodeType::BinaryExpression,
+            NodeType::UnaryExpression,
+            NodeType::CallExpression,
+            NodeType::MemberExpression,
+            NodeType::AssignmentExpression,
+            NodeType::ConditionalExpression,
+            NodeType::ArrayExpression,
+            NodeType::ObjectExpression,
+            NodeType::LambdaExpression,
+            NodeType::ExpressionStatement,
+            NodeType::DeclarationStatement,
+            NodeType::ControlFlowStatement,
+            NodeType::ReturnStatement,
+            NodeType::BlockStatement,
+            NodeType::BreakStatement,
+            NodeType::ContinueStatement,
+            NodeType::ThrowStatement,
+            NodeType::TryStatement,
+            NodeType::FunctionDeclaration,
+            NodeType::VariableDeclaration,
+            NodeType::ClassDeclaration,
+            NodeType::ImportDeclaration,
+            NodeType::ExportDeclaration,
+            NodeType::InterfaceDeclaration,
+            NodeType::IfStatement,
+            NodeType::WhileStatement,
+            NodeType::ForStatement,
+            NodeType::SwitchStatement,
+            NodeType::CaseStatement,
+            NodeType::SqlQuery,
+            NodeType::SqlProcedure,
+            NodeType::ShellCommand,
+            NodeType::Program,
+            NodeType::Module,
+            NodeType::Package,
+            NodeType::PackageDeclaration,
+            NodeType::FieldDeclaration,
+            NodeType::MethodDeclaration,
+            NodeType::ArrowFunction,
+            NodeType::Decorator,
+            NodeType::ElifStatement,
+            NodeType::ElseStatement,
+            NodeType::ExceptStatement,
+            NodeType::FinallyStatement,
+            NodeType::Unknown,
+            NodeType::TemplateString,
+            NodeType::SqlExpression,
+            NodeType::SelectStatement,
+            NodeType::InsertStatement,
+            NodeType::UpdateStatement,
+            NodeType::DeleteStatement,
+            NodeType::CreateStatement,
+            NodeType::CreateTableStatement,
+            NodeType::CreateIndexStatement,
+            NodeType::CreateViewStatement,
+            NodeType::CreateSequenceStatement,
+            NodeType::DropStatement,
+            NodeType::AlterStatement,
+            NodeType::Shebang,
+            NodeType::ExportStatement,
+            NodeType::SourceStatement,
+            NodeType::Command,
+            NodeType::StringLiteral,
+            NodeType::IntegerLiteral,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i == j {
+                    assert_eq!(a, b);
+                } else {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_all_node_type_roundtrip() {
+        let all = vec![
+            NodeType::Identifier,
+            NodeType::Literal,
+            NodeType::Comment,
+            NodeType::BinaryExpression,
+            NodeType::UnaryExpression,
+            NodeType::CallExpression,
+            NodeType::MemberExpression,
+            NodeType::AssignmentExpression,
+            NodeType::ConditionalExpression,
+            NodeType::ArrayExpression,
+            NodeType::ObjectExpression,
+            NodeType::LambdaExpression,
+            NodeType::ExpressionStatement,
+            NodeType::DeclarationStatement,
+            NodeType::ControlFlowStatement,
+            NodeType::ReturnStatement,
+            NodeType::BlockStatement,
+            NodeType::BreakStatement,
+            NodeType::ContinueStatement,
+            NodeType::ThrowStatement,
+            NodeType::TryStatement,
+            NodeType::FunctionDeclaration,
+            NodeType::VariableDeclaration,
+            NodeType::ClassDeclaration,
+            NodeType::ImportDeclaration,
+            NodeType::ExportDeclaration,
+            NodeType::InterfaceDeclaration,
+            NodeType::IfStatement,
+            NodeType::WhileStatement,
+            NodeType::ForStatement,
+            NodeType::SwitchStatement,
+            NodeType::CaseStatement,
+            NodeType::SqlQuery,
+            NodeType::SqlProcedure,
+            NodeType::ShellCommand,
+            NodeType::Program,
+            NodeType::Module,
+            NodeType::Package,
+            NodeType::PackageDeclaration,
+            NodeType::FieldDeclaration,
+            NodeType::MethodDeclaration,
+            NodeType::ArrowFunction,
+            NodeType::Decorator,
+            NodeType::ElifStatement,
+            NodeType::ElseStatement,
+            NodeType::ExceptStatement,
+            NodeType::FinallyStatement,
+            NodeType::Unknown,
+            NodeType::TemplateString,
+            NodeType::SqlExpression,
+            NodeType::SelectStatement,
+            NodeType::InsertStatement,
+            NodeType::UpdateStatement,
+            NodeType::DeleteStatement,
+            NodeType::CreateStatement,
+            NodeType::CreateTableStatement,
+            NodeType::CreateIndexStatement,
+            NodeType::CreateViewStatement,
+            NodeType::CreateSequenceStatement,
+            NodeType::DropStatement,
+            NodeType::AlterStatement,
+            NodeType::Shebang,
+            NodeType::ExportStatement,
+            NodeType::SourceStatement,
+            NodeType::Command,
+            NodeType::StringLiteral,
+            NodeType::IntegerLiteral,
+        ];
+        for nt in &all {
+            let s = nt.as_str();
+            let parsed = NodeType::parse_name(s);
+            assert_eq!(parsed, Some(nt.clone()), "roundtrip failed for {:?}", nt);
+        }
+        assert_eq!(NodeType::parse_name("not_a_type"), None);
+    }
+
+    #[test]
+    fn test_node_type_display() {
+        assert_eq!(format!("{}", NodeType::Identifier), "identifier");
+        assert_eq!(format!("{}", NodeType::BinaryExpression), "binary_expression");
+    }
+
+    #[test]
+    fn test_literal_value_all_variants() {
+        let s = LiteralValue::String("x".to_string());
+        let n = LiteralValue::Number(3.14);
+        let i = LiteralValue::Integer(42);
+        let b = LiteralValue::Boolean(false);
+        let null = LiteralValue::Null;
+        let undef = LiteralValue::Undefined;
+        assert_ne!(s, n);
+        assert_eq!(s, LiteralValue::String("x".to_string()));
+        assert_eq!(n, LiteralValue::Number(3.14));
+        assert_eq!(i, LiteralValue::Integer(42));
+        assert_eq!(b, LiteralValue::Boolean(false));
+        assert_eq!(null, LiteralValue::Null);
+        assert_eq!(undef, LiteralValue::Undefined);
+    }
+
+    #[test]
+    fn test_binary_operator_all_variants() {
+        let ops = vec![
+            BinaryOperator::Add,
+            BinaryOperator::Subtract,
+            BinaryOperator::Multiply,
+            BinaryOperator::Divide,
+            BinaryOperator::Modulo,
+            BinaryOperator::Power,
+            BinaryOperator::Equal,
+            BinaryOperator::NotEqual,
+            BinaryOperator::LessThan,
+            BinaryOperator::LessThanOrEqual,
+            BinaryOperator::GreaterThan,
+            BinaryOperator::GreaterThanOrEqual,
+            BinaryOperator::And,
+            BinaryOperator::Or,
+            BinaryOperator::BitwiseAnd,
+            BinaryOperator::BitwiseOr,
+            BinaryOperator::BitwiseXor,
+            BinaryOperator::LeftShift,
+            BinaryOperator::RightShift,
+            BinaryOperator::Assign,
+            BinaryOperator::AddAssign,
+            BinaryOperator::SubtractAssign,
+            BinaryOperator::MultiplyAssign,
+            BinaryOperator::DivideAssign,
+            BinaryOperator::In,
+            BinaryOperator::InstanceOf,
+            BinaryOperator::Typeof,
+        ];
+        for (i, a) in ops.iter().enumerate() {
+            for (j, b) in ops.iter().enumerate() {
+                if i == j {
+                    assert_eq!(a, b);
+                } else {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_unary_operator_all_variants() {
+        let ops = vec![
+            UnaryOperator::Plus,
+            UnaryOperator::Minus,
+            UnaryOperator::Not,
+            UnaryOperator::BitwiseNot,
+            UnaryOperator::Typeof,
+            UnaryOperator::Void,
+            UnaryOperator::Delete,
+            UnaryOperator::PreIncrement,
+            UnaryOperator::PostIncrement,
+            UnaryOperator::PreDecrement,
+            UnaryOperator::PostDecrement,
+        ];
+        for (i, a) in ops.iter().enumerate() {
+            for (j, b) in ops.iter().enumerate() {
+                if i == j {
+                    assert_eq!(a, b);
+                } else {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_universal_node_with_text_and_location() {
+        let node = UniversalNode::new(NodeType::Identifier)
+            .with_text("foo".to_string())
+            .with_location(2, 3, 2, 6);
+        assert_eq!(node.text(), Some("foo"));
+        assert_eq!(node.location(), Some((2, 3, 2, 6)));
+    }
+
+    #[test]
+    fn test_universal_node_add_child_and_counts() {
+        let mut parent = UniversalNode::new(NodeType::BlockStatement);
+        assert_eq!(parent.child_count(), 0);
+        parent = parent.add_child(UniversalNode::new(NodeType::ReturnStatement));
+        assert_eq!(parent.child_count(), 1);
+        parent = parent.add_child(UniversalNode::new(NodeType::BreakStatement));
+        assert_eq!(parent.child_count(), 2);
+        let kids: Vec<_> = parent.children.iter().collect();
+        assert_eq!(kids.len(), 2);
+        assert_eq!(kids[0].node_type(), "return_statement");
+        assert_eq!(kids[1].node_type(), "break_statement");
+    }
+
+    #[test]
+    fn test_universal_node_children_method() {
+        let root = UniversalNode::new(NodeType::Program)
+            .add_child(UniversalNode::new(NodeType::Identifier))
+            .add_child(UniversalNode::new(NodeType::Literal))
+            .add_child(UniversalNode::new(NodeType::Comment));
+        let types: Vec<_> = root.children.iter().map(|c| c.node_type().to_string()).collect();
+        assert_eq!(types, vec!["identifier", "literal", "comment"]);
+    }
+
+    #[test]
+    fn test_universal_node_parent_child_relationships() {
+        let child = UniversalNode::new(NodeType::Identifier).with_identifier("child".to_string());
+        let parent = UniversalNode::new(NodeType::BinaryExpression).add_child(child);
+        assert_eq!(parent.child_count(), 1);
+        assert_eq!(parent.child(0).unwrap().node_type(), "identifier");
+        assert!(parent.child(1).is_none());
+    }
+
+    #[test]
+    fn test_universal_node_node_type_checking_methods() {
+        assert!(NodeType::BinaryExpression.is_expression());
+        assert!(NodeType::UnaryExpression.is_expression());
+        assert!(NodeType::CallExpression.is_expression());
+        assert!(NodeType::MemberExpression.is_expression());
+        assert!(NodeType::AssignmentExpression.is_expression());
+        assert!(NodeType::ConditionalExpression.is_expression());
+        assert!(NodeType::ArrayExpression.is_expression());
+        assert!(NodeType::ObjectExpression.is_expression());
+        assert!(NodeType::LambdaExpression.is_expression());
+        assert!(NodeType::Identifier.is_expression());
+        assert!(NodeType::Literal.is_expression());
+        assert!(!NodeType::IfStatement.is_expression());
+        assert!(!NodeType::Program.is_expression());
+
+        assert!(NodeType::ExpressionStatement.is_statement());
+        assert!(NodeType::DeclarationStatement.is_statement());
+        assert!(NodeType::ControlFlowStatement.is_statement());
+        assert!(NodeType::ReturnStatement.is_statement());
+        assert!(NodeType::BlockStatement.is_statement());
+        assert!(NodeType::BreakStatement.is_statement());
+        assert!(NodeType::ContinueStatement.is_statement());
+        assert!(NodeType::ThrowStatement.is_statement());
+        assert!(NodeType::TryStatement.is_statement());
+        assert!(NodeType::IfStatement.is_statement());
+        assert!(NodeType::WhileStatement.is_statement());
+        assert!(NodeType::ForStatement.is_statement());
+        assert!(NodeType::SwitchStatement.is_statement());
+        assert!(NodeType::CaseStatement.is_statement());
+        assert!(!NodeType::Identifier.is_statement());
+        assert!(!NodeType::Program.is_statement());
+
+        assert!(NodeType::FunctionDeclaration.is_declaration());
+        assert!(NodeType::VariableDeclaration.is_declaration());
+        assert!(NodeType::ClassDeclaration.is_declaration());
+        assert!(NodeType::ImportDeclaration.is_declaration());
+        assert!(NodeType::ExportDeclaration.is_declaration());
+        assert!(NodeType::InterfaceDeclaration.is_declaration());
+        assert!(!NodeType::Identifier.is_declaration());
+        assert!(!NodeType::Program.is_declaration());
+    }
+
+    #[test]
+    fn test_universal_node_builder_methods() {
+        let node = UniversalNode::new(NodeType::FunctionDeclaration)
+            .with_modifier("public")
+            .with_parent("BaseClass".to_string())
+            .with_interface("Serializable".to_string())
+            .with_interface("Cloneable".to_string())
+            .with_specifier("foo".to_string())
+            .with_specifier("bar".to_string())
+            .with_namespace("ns".to_string())
+            .with_default("default_export".to_string())
+            .with_wildcard(true)
+            .with_alias("orig".to_string(), "ali".to_string())
+            .with_module("mod".to_string())
+            .with_decorator("@Override")
+            .with_parameter("a".to_string())
+            .with_parameter("b".to_string())
+            .with_column("col1".to_string())
+            .with_column("col2".to_string())
+            .with_table("users".to_string())
+            .with_where("id = 1".to_string())
+            .with_assignment("x = 1".to_string())
+            .with_assignment("y = 2".to_string())
+            .with_column_definition("id INT".to_string())
+            .with_column_definition("name VARCHAR".to_string())
+            .with_sequence_name("seq".to_string())
+            .with_argument("arg1".to_string())
+            .with_argument("arg2".to_string())
+            .with_pipe(true)
+            .with_redirection(false)
+            .with_value("42".to_string());
+
+        assert_eq!(node.get_attribute("modifier"), Some(&"public".to_string()));
+        assert_eq!(node.get_attribute("parent"), Some(&"BaseClass".to_string()));
+        assert_eq!(node.get_attribute("interfaces"), Some(&"Serializable,Cloneable".to_string()));
+        assert_eq!(node.get_attribute("specifiers"), Some(&"foo,bar".to_string()));
+        assert_eq!(node.get_attribute("namespace"), Some(&"ns".to_string()));
+        assert_eq!(node.get_attribute("default"), Some(&"default_export".to_string()));
+        assert_eq!(node.get_attribute("wildcard"), Some(&"true".to_string()));
+        assert_eq!(node.get_attribute("original"), Some(&"orig".to_string()));
+        assert_eq!(node.get_attribute("alias"), Some(&"ali".to_string()));
+        assert_eq!(node.get_attribute("module"), Some(&"mod".to_string()));
+        assert_eq!(node.get_attribute("decorator"), Some(&"@Override".to_string()));
+        assert_eq!(node.get_attribute("parameters"), Some(&"a,b".to_string()));
+        assert_eq!(node.get_attribute("columns"), Some(&"col1,col2".to_string()));
+        assert_eq!(node.get_attribute("table"), Some(&"users".to_string()));
+        assert_eq!(node.get_attribute("where"), Some(&"id = 1".to_string()));
+        assert_eq!(node.get_attribute("assignments"), Some(&"x = 1,y = 2".to_string()));
+        assert_eq!(node.get_attribute("column_definitions"), Some(&"id INT,name VARCHAR".to_string()));
+        assert_eq!(node.get_attribute("sequence_name"), Some(&"seq".to_string()));
+        assert_eq!(node.get_attribute("arguments"), Some(&"arg1,arg2".to_string()));
+        assert_eq!(node.get_attribute("pipe"), Some(&"true".to_string()));
+        assert_eq!(node.get_attribute("redirection"), Some(&"false".to_string()));
+        assert_eq!(node.get_attribute("value"), Some(&"42".to_string()));
+    }
+
+    #[test]
+    fn test_universal_node_mut_methods() {
+        let mut node = UniversalNode::new(NodeType::Identifier);
+        *node.node_type_mut() = NodeType::Literal;
+        assert_eq!(node.node_type(), "literal");
+        node.children_mut().push(UniversalNode::new(NodeType::Comment));
+        assert_eq!(node.child_count(), 1);
+    }
+
+    #[test]
+    fn test_universal_node_add_attribute_and_metadata() {
+        let mut node = UniversalNode::new(NodeType::Identifier);
+        node.add_attribute("key1".to_string(), "val1".to_string());
+        assert_eq!(node.get_attribute("key1"), Some(&"val1".to_string()));
+        let node2 = UniversalNode::new(NodeType::Identifier)
+            .with_metadata("key2".to_string(), "val2".to_string());
+        assert_eq!(node2.get_attribute("key2"), Some(&"val2".to_string()));
+    }
+
+    #[test]
+    fn test_universal_node_add_children() {
+        let node = UniversalNode::new(NodeType::Program)
+            .add_children(vec![
+                UniversalNode::new(NodeType::Identifier),
+                UniversalNode::new(NodeType::Literal),
+            ]);
+        assert_eq!(node.child_count(), 2);
+    }
+
+    #[test]
+    fn test_universal_node_clone_node() {
+        let node = UniversalNode::new(NodeType::Identifier)
+            .with_text("clone_me".to_string())
+            .with_location(1, 1, 1, 8);
+        let cloned = node.clone_node();
+        assert_eq!(cloned.node_type(), "identifier");
+        assert_eq!(cloned.text(), Some("clone_me"));
+        assert_eq!(cloned.location(), Some((1, 1, 1, 8)));
+    }
+
+    #[test]
+    fn test_universal_node_with_literal_binary_unary_operators() {
+        let lit = UniversalNode::new(NodeType::Literal)
+            .with_literal(LiteralValue::Integer(7));
+        assert_eq!(lit.literal(), Some(&LiteralValue::Integer(7)));
+
+        let bin = UniversalNode::new(NodeType::BinaryExpression)
+            .with_binary_operator(BinaryOperator::Multiply);
+        assert_eq!(bin.binary_operator, Some(BinaryOperator::Multiply));
+
+        let un = UniversalNode::new(NodeType::UnaryExpression)
+            .with_unary_operator(UnaryOperator::Not);
+        assert_eq!(un.unary_operator, Some(UnaryOperator::Not));
+    }
+
+    #[test]
+    fn test_node_type_hash_usage() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(NodeType::Identifier);
+        set.insert(NodeType::BinaryExpression);
+        set.insert(NodeType::Identifier);
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&NodeType::Identifier));
+        assert!(set.contains(&NodeType::BinaryExpression));
+        assert!(!set.contains(&NodeType::Literal));
+    }
+
+    #[test]
+    fn test_binary_operator_hash_usage() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(BinaryOperator::Add);
+        set.insert(BinaryOperator::Equal);
+        set.insert(BinaryOperator::Add);
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&BinaryOperator::Add));
+        assert!(set.contains(&BinaryOperator::Equal));
+        assert!(!set.contains(&BinaryOperator::Subtract));
+    }
+
+    #[test]
+    fn test_unary_operator_hash_usage() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(UnaryOperator::Not);
+        set.insert(UnaryOperator::Minus);
+        set.insert(UnaryOperator::Not);
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&UnaryOperator::Not));
+        assert!(set.contains(&UnaryOperator::Minus));
+        assert!(!set.contains(&UnaryOperator::Plus));
+    }
+
+    #[test]
+    fn test_universal_node_clone_equality() {
+        let original = UniversalNode::new(NodeType::FunctionDeclaration)
+            .with_identifier("foo".to_string())
+            .with_location(1, 1, 10, 2)
+            .with_text("function foo() {}".to_string())
+            .with_attribute("scope".to_string(), "global".to_string())
+            .add_child(UniversalNode::new(NodeType::Identifier).with_identifier("x".to_string()));
+        let cloned = original.clone();
+        assert_eq!(cloned.node_type, original.node_type);
+        assert_eq!(cloned.identifier_name, original.identifier_name);
+        assert_eq!(cloned.location, original.location);
+        assert_eq!(cloned.text, original.text);
+        assert_eq!(cloned.child_count(), original.child_count());
+        assert_eq!(cloned.attributes, original.attributes);
+    }
+
+    #[test]
+    fn test_literal_value_number_equality() {
+        assert_eq!(LiteralValue::Number(1.0), LiteralValue::Number(1.0));
+        assert_ne!(LiteralValue::Number(1.0), LiteralValue::Number(2.0));
     }
 }

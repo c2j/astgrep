@@ -115,7 +115,7 @@ impl CallGraph {
 
         self.calls
             .entry(caller_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(call);
 
         // Create parameter mapping
@@ -353,5 +353,116 @@ mod tests {
         let reachable = graph.reachable_functions(main_id);
         assert!(reachable.contains(&main_id));
         assert!(reachable.contains(&foo_id));
+    }
+
+    #[test]
+    fn test_find_callers() {
+        let mut graph = CallGraph::new();
+        let sig_main = FunctionSignature {
+            name: "main".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+        let sig_foo = FunctionSignature {
+            name: "foo".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+
+        let main_id = graph.add_function(sig_main.clone(), vec![], None, 0);
+        graph.add_function(sig_foo.clone(), vec![], None, 1);
+
+        graph.add_call(main_id, sig_foo.clone(), vec![], 2);
+
+        let callers = graph.find_callers(&sig_foo);
+        assert_eq!(callers.len(), 1);
+        assert_eq!(callers[0], main_id);
+    }
+
+    #[test]
+    fn test_find_callees() {
+        let mut graph = CallGraph::new();
+        let sig_main = FunctionSignature {
+            name: "main".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+        let sig_foo = FunctionSignature {
+            name: "foo".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+
+        let main_id = graph.add_function(sig_main.clone(), vec![], None, 0);
+        graph.add_function(sig_foo.clone(), vec![], None, 1);
+
+        graph.add_call(main_id, sig_foo.clone(), vec![], 2);
+
+        let callees = graph.find_callees(main_id);
+        assert_eq!(callees.len(), 1);
+        assert_eq!(callees[0], sig_foo);
+    }
+
+    #[test]
+    fn test_has_call_path() {
+        let mut graph = CallGraph::new();
+        let sig_main = FunctionSignature {
+            name: "main".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+        let sig_foo = FunctionSignature {
+            name: "foo".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+
+        let main_id = graph.add_function(sig_main.clone(), vec![], None, 0);
+        let foo_id = graph.add_function(sig_foo.clone(), vec![], None, 1);
+
+        graph.add_call(main_id, sig_foo.clone(), vec![], 2);
+
+        assert!(graph.has_call_path(main_id, foo_id));
+        assert!(!graph.has_call_path(foo_id, main_id));
+    }
+
+    #[test]
+    fn test_get_param_mapping() {
+        let mut graph = CallGraph::new();
+        let sig_main = FunctionSignature {
+            name: "main".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+        let sig_foo = FunctionSignature {
+            name: "foo".to_string(),
+            param_count: 2,
+            language: "java".to_string(),
+        };
+
+        let main_id = graph.add_function(sig_main.clone(), vec![], None, 0);
+        graph.add_function(sig_foo.clone(), vec!["a".to_string(), "b".to_string()], None, 1);
+
+        let call_id = graph.add_call(main_id, sig_foo.clone(), vec!["1".to_string(), "2".to_string()], 2);
+
+        let mapping = graph.get_param_mapping(call_id);
+        assert!(mapping.is_some());
+        assert_eq!(mapping.unwrap().mappings.len(), 2);
+    }
+
+    #[test]
+    fn test_call_graph_clear() {
+        let mut graph = CallGraph::new();
+        let sig = FunctionSignature {
+            name: "foo".to_string(),
+            param_count: 0,
+            language: "java".to_string(),
+        };
+
+        let id = graph.add_function(sig.clone(), vec![], None, 0);
+        graph.clear();
+
+        assert!(graph.functions().is_empty());
+        assert!(graph.calls_from(id).is_none());
     }
 }

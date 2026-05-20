@@ -10,6 +10,12 @@ use std::path::Path;
 /// JavaScript AST adapter
 pub struct JavaScriptAdapter;
 
+impl Default for JavaScriptAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JavaScriptAdapter {
     /// Create a new JavaScript adapter
     pub fn new() -> Self {
@@ -101,14 +107,11 @@ impl JavaScriptAdapter {
     fn parse_export_statement(&self, source: &str) -> Result<UniversalNode> {
         let export_line = source.trim_end_matches(';');
 
-        if export_line.starts_with("export default ") {
-            // Default export
-            let exported = &export_line[15..]; // Skip "export default "
+        if let Some(exported) = export_line.strip_prefix("export default ") {
             Ok(AstBuilder::export_declaration(exported, true).with_text(source.to_string()))
         } else if export_line.starts_with("export {") {
-            // Named exports
             let end_brace = export_line.find('}').unwrap_or(export_line.len());
-            let specifiers = &export_line[8..end_brace]; // Skip "export {"
+            let specifiers = &export_line[8..end_brace];
 
             let mut export_node = AstBuilder::export_declaration("", false);
             for spec in specifiers.split(',') {
@@ -119,10 +122,10 @@ impl JavaScriptAdapter {
             }
 
             Ok(export_node.with_text(source.to_string()))
-        } else {
-            // Export declaration
-            let exported = &export_line[7..]; // Skip "export "
+        } else if let Some(exported) = export_line.strip_prefix("export ") {
             Ok(AstBuilder::export_declaration(exported, false).with_text(source.to_string()))
+        } else {
+            Ok(AstBuilder::export_declaration(export_line, false).with_text(source.to_string()))
         }
     }
 
@@ -144,10 +147,8 @@ impl JavaScriptAdapter {
                 if let Some(paren_pos) = after_star.find('(') {
                     function_name = after_star[..paren_pos].trim();
                 }
-            } else {
-                if let Some(paren_pos) = after_function.find('(') {
-                    function_name = after_function[..paren_pos].trim();
-                }
+            } else if let Some(paren_pos) = after_function.find('(') {
+                function_name = after_function[..paren_pos].trim();
             }
         }
 
@@ -213,25 +214,22 @@ impl JavaScriptAdapter {
         let mut var_type = "var";
         let mut var_name = "unknown";
 
-        if source.starts_with("const ") {
+        if let Some(after_const) = source.strip_prefix("const ") {
             var_type = "const";
-            let after_const = &source[6..];
             if let Some(eq_pos) = after_const.find('=') {
                 var_name = after_const[..eq_pos].trim();
             } else if let Some(space_pos) = after_const.find(' ') {
                 var_name = after_const[..space_pos].trim();
             }
-        } else if source.starts_with("let ") {
+        } else if let Some(after_let) = source.strip_prefix("let ") {
             var_type = "let";
-            let after_let = &source[4..];
             if let Some(eq_pos) = after_let.find('=') {
                 var_name = after_let[..eq_pos].trim();
             } else if let Some(space_pos) = after_let.find(' ') {
                 var_name = after_let[..space_pos].trim();
             }
-        } else if source.starts_with("var ") {
+        } else if let Some(after_var) = source.strip_prefix("var ") {
             var_type = "var";
-            let after_var = &source[4..];
             if let Some(eq_pos) = after_var.find('=') {
                 var_name = after_var[..eq_pos].trim();
             } else if let Some(space_pos) = after_var.find(' ') {

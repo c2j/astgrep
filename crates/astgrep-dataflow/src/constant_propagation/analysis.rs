@@ -75,8 +75,8 @@ impl ConstantPropagator {
 
                 for pred_id in predecessors {
                     if let Some(pred_constant) = self.node_constants.get(&pred_id).cloned() {
-                        if !self.node_constants.contains_key(&node_id) {
-                            self.node_constants.insert(node_id, pred_constant);
+                        if let std::collections::hash_map::Entry::Vacant(e) = self.node_constants.entry(node_id) {
+                            e.insert(pred_constant);
                             changed = true;
                         }
                     }

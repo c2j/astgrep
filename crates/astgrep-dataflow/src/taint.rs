@@ -726,6 +726,8 @@ impl TaintFlow {
 mod tests {
     use super::*;
     use crate::graph::DataFlowGraph;
+    use crate::sinks::SinkType;
+    use crate::sources::SourceType;
 
     #[test]
     fn test_taint_tracker_creation() {

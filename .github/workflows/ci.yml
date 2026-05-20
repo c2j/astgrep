@@ -35,10 +35,61 @@ jobs:
         run: cargo build --workspace --exclude astgrep-web --exclude astgrep-gui 2>&1
 
       - name: Clippy
-        run: cargo clippy --workspace --exclude astgrep-web --exclude astgrep-gui -- -D warnings -W clippy::all 2>&1 || true
+        run: cargo clippy --workspace --exclude astgrep-web --exclude astgrep-gui -- -D warnings 2>&1
 
       - name: Run tests
         run: cargo test --workspace --exclude astgrep-web --exclude astgrep-gui 2>&1
 
       - name: Build release
         run: cargo build --release --workspace --exclude astgrep-web --exclude astgrep-gui
+
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
+      - name: Generate coverage
+        run: cargo llvm-cov --workspace --exclude astgrep-web --exclude astgrep-gui --summary-only 2>&1 | tee coverage.txt
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.txt
+
+  benchmark:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run benchmarks
+        run: cargo bench --workspace --exclude astgrep-web --exclude astgrep-gui 2>&1 | tee bench-results.txt
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: bench-results.txt
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Run audit
+        run: cargo audit
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+      - name: Check dependencies
+        run: cargo deny check

@@ -141,7 +141,7 @@ impl ConstantAnalyzer {
     pub fn register_function_return(&mut self, func_name: String, return_value: ConstantValue) {
         self.function_returns
             .entry(func_name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(return_value);
     }
 
@@ -286,5 +286,45 @@ mod tests {
         let returns = analyzer.get_function_returns("get_password");
         assert!(returns.is_some());
         assert_eq!(returns.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_constant_info_increment_assignments() {
+        let mut info = ConstantInfo::new(ConstantValue::Integer(42));
+        assert_eq!(info.assignment_count, 1);
+        info.increment_assignments();
+        assert_eq!(info.assignment_count, 2);
+    }
+
+    #[test]
+    fn test_constant_analyzer_get_all_constants() {
+        let mut analyzer = ConstantAnalyzer::new();
+        analyzer.register_constant("x".to_string(), ConstantValue::Integer(42));
+        analyzer.register_constant("y".to_string(), ConstantValue::String("hello".to_string()));
+
+        let all = analyzer.get_all_constants();
+        assert_eq!(all.len(), 2);
+        assert!(all.contains_key("x"));
+        assert!(all.contains_key("y"));
+    }
+
+    #[test]
+    fn test_constant_analyzer_get_sensitive_constants() {
+        let mut analyzer = ConstantAnalyzer::new();
+        analyzer.register_constant("password".to_string(), ConstantValue::String("secret123".to_string()));
+        analyzer.register_constant("x".to_string(), ConstantValue::Integer(42));
+
+        let sensitive = analyzer.get_sensitive_constants();
+        assert_eq!(sensitive.len(), 1);
+        assert_eq!(sensitive[0].0, "password");
+    }
+
+    #[test]
+    fn test_constant_analyzer_add_sensitive_pattern() {
+        let mut analyzer = ConstantAnalyzer::new();
+        analyzer.add_sensitive_pattern("api_secret".to_string());
+        analyzer.register_constant("my_api_secret".to_string(), ConstantValue::String("key".to_string()));
+
+        assert!(analyzer.is_sensitive("my_api_secret"));
     }
 }

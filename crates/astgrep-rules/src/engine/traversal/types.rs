@@ -216,3 +216,64 @@ impl Default for RuleExecutionEngine {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_engine_new_default() {
+        let engine = RuleExecutionEngine::new();
+        assert!(engine.parallel_execution);
+        assert_eq!(engine.max_execution_time_ms, Some(30000));
+        assert!(!engine.cache_enabled);
+        assert!(engine.execution_cache.is_empty());
+        assert!(engine.constant_values.is_empty());
+
+        let default_engine = RuleExecutionEngine::default();
+        assert!(default_engine.parallel_execution);
+    }
+
+    #[test]
+    fn test_engine_set_parallel_execution() {
+        let engine = RuleExecutionEngine::new().set_parallel_execution(false);
+        assert!(!engine.parallel_execution);
+    }
+
+    #[test]
+    fn test_engine_set_max_execution_time() {
+        let engine = RuleExecutionEngine::new().set_max_execution_time(5000);
+        assert_eq!(engine.max_execution_time_ms, Some(5000));
+    }
+
+    #[test]
+    fn test_engine_cache_enable_disable() {
+        let engine = RuleExecutionEngine::new().set_cache_enabled(true);
+        let (count, enabled) = engine.cache_stats();
+        assert_eq!(count, 0);
+        assert!(enabled);
+
+        let engine = engine.set_cache_enabled(false);
+        let (_, enabled) = engine.cache_stats();
+        assert!(!enabled);
+    }
+
+    #[test]
+    fn test_engine_clear_cache() {
+        let mut engine = RuleExecutionEngine::new();
+        engine.execution_cache.insert("key".to_string(), vec![]);
+        assert_eq!(engine.execution_cache.len(), 1);
+        engine.clear_cache();
+        assert!(engine.execution_cache.is_empty());
+    }
+
+    #[test]
+    fn test_engine_set_constant_values() {
+        use astgrep_dataflow::ConstantValue;
+        let mut engine = RuleExecutionEngine::new();
+        let mut constants = HashMap::new();
+        constants.insert("x".to_string(), ConstantValue::String("hello".to_string()));
+        engine.set_constant_values(constants);
+        assert_eq!(engine.constant_values.len(), 1);
+    }
+}

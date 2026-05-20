@@ -116,11 +116,9 @@ impl MockParserRegistry {
             Language::Java,
             Language::JavaScript,
             Language::Python,
-            Language::C,
-            Language::CSharp,
-            Language::Php,
             Language::Bash,
             Language::Sql,
+            Language::Xml,
         ] {
             registry.register(language, MockParser::simple_program_parser(language));
         }

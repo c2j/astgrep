@@ -72,7 +72,7 @@ impl InterproceduralTaintTracker {
         let calls_to_process: Vec<_> = self
             .call_graph
             .calls_from(func_id)
-            .map(|calls| calls.clone())
+            .cloned()
             .unwrap_or_default();
 
         for call in calls_to_process {
@@ -110,6 +110,7 @@ impl InterproceduralTaintTracker {
     }
 
     /// Trace taint through function parameters
+    #[allow(clippy::too_many_arguments)]
     fn trace_parameter_taint(
         &self,
         _caller_id: FunctionId,
@@ -122,7 +123,7 @@ impl InterproceduralTaintTracker {
         _flows: &mut Vec<TaintFlow>,
     ) -> Result<()> {
         // For each parameter mapping, check if the argument is tainted
-        for (_param_idx, arg_expr) in &param_mapping.mappings {
+        for arg_expr in param_mapping.mappings.values() {
             // Check if argument matches any source
             for source in sources {
                 if self.matches_expression(arg_expr, source) {
@@ -199,7 +200,7 @@ impl SymbolPropagator {
 
     /// Record a symbol use
     pub fn use_symbol(&mut self, name: String, node_id: NodeId) {
-        self.uses.entry(name).or_insert_with(Vec::new).push(node_id);
+        self.uses.entry(name).or_default().push(node_id);
     }
 
     /// Get the definition of a symbol
@@ -285,5 +286,63 @@ mod tests {
 
         let uses = propagator.get_uses("y").unwrap();
         assert_eq!(uses.len(), 3);
+    }
+
+    #[test]
+    fn test_interprocedural_tracker_set_and_get_taints() {
+        let call_graph = CallGraph::new();
+        let mut tracker = InterproceduralTaintTracker::new(call_graph);
+
+        let func_id = FunctionId(0);
+        let taints = vec![TaintState::default()];
+
+        tracker.set_entry_taints(func_id, taints.clone());
+        tracker.set_exit_taints(func_id, taints.clone());
+
+        assert!(tracker.entry_taints(func_id).is_some());
+        assert!(tracker.exit_taints(func_id).is_some());
+        assert_eq!(tracker.entry_taints(func_id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_interprocedural_tracker_clear() {
+        let call_graph = CallGraph::new();
+        let mut tracker = InterproceduralTaintTracker::new(call_graph);
+
+        let func_id = FunctionId(0);
+        tracker.set_entry_taints(func_id, vec![TaintState::default()]);
+        tracker.clear();
+
+        assert!(tracker.entry_taints(func_id).is_none());
+        assert!(tracker.exit_taints(func_id).is_none());
+    }
+
+    #[test]
+    fn test_symbol_propagator_trace_symbol() {
+        let mut propagator = SymbolPropagator::new();
+        let mut graph = crate::graph::DataFlowGraph::new();
+
+        let def_node = graph.add_node(crate::graph::DataFlowNode::new("identifier".to_string()));
+        let use_node = graph.add_node(crate::graph::DataFlowNode::new("identifier".to_string()));
+        graph.add_edge(def_node, use_node, crate::graph::EdgeType::DataFlow);
+
+        propagator.define_symbol("x".to_string(), def_node, "int".to_string());
+        propagator.use_symbol("x".to_string(), use_node);
+
+        let path = propagator.trace_symbol("x", &graph);
+        assert!(path.is_some());
+    }
+
+    #[test]
+    fn test_symbol_propagator_clear() {
+        let mut propagator = SymbolPropagator::new();
+        propagator.define_symbol("x".to_string(), 0, "int".to_string());
+        propagator.use_symbol("x".to_string(), 1);
+
+        propagator.clear();
+
+        assert!(propagator.get_definition("x").is_none());
+        assert!(propagator.get_uses("x").is_none());
+        assert!(propagator.get_type("x").is_none());
     }
 }

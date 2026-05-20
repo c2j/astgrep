@@ -70,6 +70,7 @@ cargo run -- analyze --format sarif -o results.sarif  # SARIF output
 - **Release profile**: LTO=true, codegen-units=1, panic=abort — benchmark before merging perf-sensitive changes
 - **Test infrastructure**: Tests follow semgrep-core format — `.sgrep` pattern files + target source files with `// MATCH:` / `// ERROR:` inline annotations
 - **SQL statement boundary**: Configurable via CLI `--sql-statement-boundary` flag or YAML `options.sql_statement_boundary`
+- **Pre-commit hooks**: Run `lefthook install` after cloning. Hooks enforce fmt + clippy on commit, full test + audit on push.
 - **No CI/CD** pipeline yet — manual validation via `cargo test`
 
 ## Error Handling

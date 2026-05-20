@@ -602,7 +602,6 @@ mod tests {
             metavariable_pattern: Some(metavar_pattern),
             conditions: Vec::new(),
             focus: None,
-            as_binding: None,
         }];
 
         assert!(validator.validate_rule(&rule).is_err());

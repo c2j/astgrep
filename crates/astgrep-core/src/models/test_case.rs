@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
 /// Represents a collection of test files for specific functionality
@@ -149,13 +150,14 @@ pub struct TestCaseMetadata {
 }
 
 /// Priority levels for test execution
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum TestPriority {
     /// Critical tests (must pass)
     Critical,
     /// High priority tests
     High,
     /// Normal priority tests
+    #[default]
     Normal,
     /// Low priority tests
     Low,
@@ -248,7 +250,7 @@ pub struct TestCaseCollection {
 }
 
 /// Metadata for a test case collection
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CollectionMetadata {
     /// Total number of test cases
     pub total_test_cases: usize,
@@ -518,9 +520,9 @@ impl Default for TestCaseMetadata {
     }
 }
 
-impl Default for TestPriority {
+impl Default for LanguageMapping {
     fn default() -> Self {
-        TestPriority::Normal
+        Self::new()
     }
 }
 
@@ -646,7 +648,7 @@ impl LanguageMapping {
     }
 
     /// Detect language from file path and content
-    pub fn detect_language(&self, file_path: &PathBuf, content: Option<&str>) -> String {
+    pub fn detect_language(&self, file_path: &Path, content: Option<&str>) -> String {
         // First try to detect from file extension
         if let Some(extension) = file_path.extension().and_then(|e| e.to_str()) {
             if let Some(language) = self.extension_to_language.get(extension) {
@@ -774,22 +776,6 @@ impl TestCaseCollection {
         self.metadata.estimated_execution_time_sec = total_execution_time;
 
         self.updated_at = Utc::now();
-    }
-}
-
-impl Default for CollectionMetadata {
-    fn default() -> Self {
-        Self {
-            total_test_cases: 0,
-            total_size_bytes: 0,
-            covered_languages: Vec::new(),
-            frameworks: Vec::new(),
-            estimated_execution_time_sec: 0,
-            maintainer: None,
-            tags: Vec::new(),
-            version: None,
-            license: None,
-        }
     }
 }
 

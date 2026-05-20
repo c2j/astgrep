@@ -50,13 +50,14 @@ impl TypeInfo {
             _ => false,
         }
     }
+}
 
-    /// Get a string representation
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for TypeInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeInfo::Primitive(name) => name.clone(),
-            TypeInfo::Object(name) => name.clone(),
-            TypeInfo::Array(inner) => format!("{}[]", inner.to_string()),
+            TypeInfo::Primitive(name) => write!(f, "{}", name),
+            TypeInfo::Object(name) => write!(f, "{}", name),
+            TypeInfo::Array(inner) => write!(f, "{}[]", inner),
             TypeInfo::Function {
                 params,
                 return_type,
@@ -66,14 +67,17 @@ impl TypeInfo {
                     .map(|t| t.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("({}) -> {}", param_str, return_type.to_string())
+                write!(f, "({}) -> {}", param_str, return_type)
             }
-            TypeInfo::Union(types) => types
-                .iter()
-                .map(|t| t.to_string())
-                .collect::<Vec<_>>()
-                .join(" | "),
-            TypeInfo::Unknown => "unknown".to_string(),
+            TypeInfo::Union(types) => {
+                let type_str = types
+                    .iter()
+                    .map(|t| t.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                write!(f, "{}", type_str)
+            }
+            TypeInfo::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -200,17 +204,13 @@ impl SymbolTable {
     pub fn resolve_symbol(&self, name: &str) -> Option<&Symbol> {
         let mut current_scope_id = self.current_scope_id;
 
-        loop {
-            if let Some(scope) = self.scopes.get(&current_scope_id) {
-                if let Some(symbol) = scope.get_symbol(name) {
-                    return Some(symbol);
-                }
+        while let Some(scope) = self.scopes.get(&current_scope_id) {
+            if let Some(symbol) = scope.get_symbol(name) {
+                return Some(symbol);
+            }
 
-                if let Some(parent_id) = scope.parent_id {
-                    current_scope_id = parent_id;
-                } else {
-                    break;
-                }
+            if let Some(parent_id) = scope.parent_id {
+                current_scope_id = parent_id;
             } else {
                 break;
             }
@@ -366,5 +366,59 @@ mod tests {
         let type_info = table.get_symbol_type("x");
         assert!(type_info.is_some());
         assert_eq!(type_info.unwrap(), &TypeInfo::Primitive("int".to_string()));
+    }
+
+    #[test]
+    fn test_symbol_table_get_current_scope_symbols() {
+        let mut table = SymbolTable::new();
+        table
+            .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+            .ok();
+        table
+            .define_symbol("y".to_string(), 2, TypeInfo::Primitive("string".to_string()))
+            .ok();
+
+        let symbols = table.get_current_scope_symbols();
+        assert!(symbols.is_some());
+        assert_eq!(symbols.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_symbol_table_get_current_scope_type() {
+        let mut table = SymbolTable::new();
+        let scope_type = table.get_current_scope_type();
+        assert!(matches!(scope_type, Some(ScopeType::Global)));
+
+        table.enter_scope(ScopeType::Function("foo".to_string()));
+        let func_scope = table.get_current_scope_type();
+        assert!(matches!(func_scope, Some(ScopeType::Function(name)) if name == "foo"));
+    }
+
+    #[test]
+    fn test_symbol_table_update_symbol_type() {
+        let mut table = SymbolTable::new();
+        table
+            .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+            .ok();
+
+        table.update_symbol_type("x".to_string(), TypeInfo::Primitive("string".to_string()));
+
+        let type_info = table.get_symbol_type("x");
+        assert_eq!(type_info.unwrap(), &TypeInfo::Primitive("string".to_string()));
+    }
+
+    #[test]
+    fn test_symbol_table_clear() {
+        let mut table = SymbolTable::new();
+        table
+            .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+            .ok();
+        table.enter_scope(ScopeType::Function("foo".to_string()));
+
+        table.clear();
+
+        assert_eq!(table.current_scope_id, 0);
+        assert!(table.resolve_symbol("x").is_none());
+        assert!(matches!(table.get_current_scope_type(), Some(ScopeType::Global)));
     }
 }

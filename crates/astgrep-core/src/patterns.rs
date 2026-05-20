@@ -292,7 +292,7 @@ impl SemgrepPattern {
     }
 
     /// Create a pattern-not
-    pub fn not(inner_pattern: SemgrepPattern) -> Self {
+    pub fn pattern_not(inner_pattern: SemgrepPattern) -> Self {
         Self {
             pattern_type: PatternType::Not(Box::new(inner_pattern)),
             metavariable_pattern: None,
@@ -420,5 +420,537 @@ impl std::fmt::Debug for SemgrepMatchResult {
             .field("bindings", &binding_values)
             .field("confidence", &self.confidence)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_match_binding_new() {
+        let binding = MatchBinding::new("hello".to_string());
+        assert_eq!(binding.value, "hello");
+        assert_eq!(binding.location, None);
+    }
+
+    #[test]
+    fn test_match_binding_new_empty() {
+        let binding = MatchBinding::new("".to_string());
+        assert_eq!(binding.value, "");
+        assert_eq!(binding.location, None);
+    }
+
+    #[test]
+    fn test_match_binding_with_location() {
+        let binding = MatchBinding::with_location("world".to_string(), (1, 2, 3, 4));
+        assert_eq!(binding.value, "world");
+        assert_eq!(binding.location, Some((1, 2, 3, 4)));
+    }
+
+    #[test]
+    fn test_match_binding_display() {
+        let binding = MatchBinding::new("display_test".to_string());
+        assert_eq!(format!("{}", binding), "display_test");
+    }
+
+    #[test]
+    fn test_match_binding_deref() {
+        let binding = MatchBinding::new("deref_test".to_string());
+        assert_eq!(&*binding, "deref_test");
+        assert!(binding.starts_with("deref"));
+    }
+
+    #[test]
+    fn test_match_binding_as_ref() {
+        let binding = MatchBinding::new("as_ref_test".to_string());
+        assert_eq!(binding.as_ref(), "as_ref_test");
+    }
+
+    #[test]
+    fn test_match_binding_into_string() {
+        let binding = MatchBinding::new("into_test".to_string());
+        let s: String = binding.into();
+        assert_eq!(s, "into_test");
+    }
+
+    #[test]
+    fn test_pattern_type_simple() {
+        let simple = PatternType::Simple("foo".to_string());
+        assert!(matches!(simple, PatternType::Simple(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_either() {
+        let either = PatternType::Either(vec![]);
+        assert!(matches!(either, PatternType::Either(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_inside() {
+        let inside = PatternType::Inside(Box::new(SemgrepPattern::simple("x".to_string())));
+        assert!(matches!(inside, PatternType::Inside(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_not_inside() {
+        let not_inside = PatternType::NotInside(Box::new(SemgrepPattern::simple("y".to_string())));
+        assert!(matches!(not_inside, PatternType::NotInside(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_not() {
+        let not = PatternType::Not(Box::new(SemgrepPattern::simple("z".to_string())));
+        assert!(matches!(not, PatternType::Not(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_regex() {
+        let regex = PatternType::Regex("r.*".to_string());
+        assert!(matches!(regex, PatternType::Regex(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_not_regex() {
+        let not_regex = PatternType::NotRegex("n.*".to_string());
+        assert!(matches!(not_regex, PatternType::NotRegex(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_all() {
+        let all = PatternType::All(vec![]);
+        assert!(matches!(all, PatternType::All(_)));
+    }
+
+    #[test]
+    fn test_pattern_type_any() {
+        let any = PatternType::Any(vec![]);
+        assert!(matches!(any, PatternType::Any(_)));
+    }
+
+    #[test]
+    fn test_semgrep_pattern_simple() {
+        let pattern = SemgrepPattern::simple("$X + $Y".to_string());
+        assert_eq!(pattern.get_pattern_string().map(|s| s.as_str()), Some("$X + $Y"));
+        assert!(pattern.conditions.is_empty());
+        assert!(pattern.focus.is_none());
+        assert!(pattern.metavariable_pattern.is_none());
+    }
+
+    #[test]
+    fn test_semgrep_pattern_either() {
+        let p1 = SemgrepPattern::simple("a".to_string());
+        let p2 = SemgrepPattern::simple("b".to_string());
+        let pattern = SemgrepPattern::either(vec![p1, p2]);
+        assert!(matches!(pattern.pattern_type, PatternType::Either(_)));
+        assert!(pattern.get_pattern_string().is_none());
+    }
+
+    #[test]
+    fn test_semgrep_pattern_inside() {
+        let inner = SemgrepPattern::simple("inner".to_string());
+        let pattern = SemgrepPattern::inside(inner);
+        assert!(matches!(pattern.pattern_type, PatternType::Inside(_)));
+        assert!(pattern.get_pattern_string().is_none());
+    }
+
+    #[test]
+    fn test_semgrep_pattern_pattern_not() {
+        let inner = SemgrepPattern::simple("inner".to_string());
+        let pattern = SemgrepPattern::pattern_not(inner);
+        assert!(matches!(pattern.pattern_type, PatternType::Not(_)));
+        assert!(pattern.get_pattern_string().is_none());
+    }
+
+    #[test]
+    fn test_semgrep_pattern_regex() {
+        let pattern = SemgrepPattern::regex("foo.*bar".to_string());
+        assert_eq!(pattern.get_pattern_string().map(|s| s.as_str()), Some("foo.*bar"));
+    }
+
+    #[test]
+    fn test_semgrep_pattern_with_condition() {
+        let pattern = SemgrepPattern::simple("$X".to_string())
+            .with_condition(Condition::NodeType("identifier".to_string()));
+        assert_eq!(pattern.conditions.len(), 1);
+        assert!(matches!(&pattern.conditions[0], Condition::NodeType(s) if s == "identifier"));
+    }
+
+    #[test]
+    fn test_semgrep_pattern_with_multiple_conditions() {
+        let pattern = SemgrepPattern::simple("$X".to_string())
+            .with_condition(Condition::NodeType("identifier".to_string()))
+            .with_condition(Condition::Custom("check".to_string()));
+        assert_eq!(pattern.conditions.len(), 2);
+    }
+
+    #[test]
+    fn test_semgrep_pattern_with_metavariable_pattern() {
+        let mv = MetavariablePattern::new("$X".to_string());
+        let pattern = SemgrepPattern::simple("$X".to_string())
+            .with_metavariable_pattern(mv);
+        assert!(pattern.metavariable_pattern.is_some());
+        assert_eq!(pattern.metavariable_pattern.as_ref().unwrap().metavariable, "$X");
+    }
+
+    #[test]
+    fn test_semgrep_pattern_with_focus() {
+        let pattern = SemgrepPattern::simple("$X".to_string())
+            .with_focus("$X".to_string());
+        assert_eq!(pattern.focus, Some(vec!["$X".to_string()]));
+    }
+
+    #[test]
+    fn test_semgrep_pattern_with_focus_metavariables() {
+        let pattern = SemgrepPattern::simple("$X".to_string())
+            .with_focus_metavariables(vec!["$X".to_string(), "$Y".to_string()]);
+        assert_eq!(pattern.focus, Some(vec!["$X".to_string(), "$Y".to_string()]));
+    }
+
+    #[test]
+    fn test_metavariable_pattern_new() {
+        let mv = MetavariablePattern::new("$VAR".to_string());
+        assert_eq!(mv.metavariable, "$VAR");
+        assert!(mv.patterns.is_empty());
+        assert!(mv.regex.is_none());
+        assert!(mv.type_constraint.is_none());
+        assert!(mv.name_constraint.is_none());
+        assert!(mv.analysis.is_none());
+    }
+
+    #[test]
+    fn test_metavariable_pattern_with_patterns() {
+        let mv = MetavariablePattern::with_patterns("$VAR".to_string(), vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(mv.metavariable, "$VAR");
+        assert_eq!(mv.patterns.len(), 2);
+    }
+
+    #[test]
+    fn test_metavariable_pattern_with_pattern_builder() {
+        let mv = MetavariablePattern::new("$VAR".to_string())
+            .with_pattern("a".to_string())
+            .with_pattern("b".to_string());
+        assert_eq!(mv.patterns, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_metavariable_pattern_with_regex() {
+        let mv = MetavariablePattern::new("$VAR".to_string()).with_regex(".*".to_string());
+        assert_eq!(mv.regex, Some(".*".to_string()));
+    }
+
+    #[test]
+    fn test_metavariable_pattern_with_type_constraint() {
+        let mv = MetavariablePattern::new("$VAR".to_string()).with_type_constraint("String".to_string());
+        assert_eq!(mv.type_constraint, Some("String".to_string()));
+    }
+
+    #[test]
+    fn test_metavariable_pattern_full_builder() {
+        let mv = MetavariablePattern::new("$X".to_string())
+            .with_pattern("a".to_string())
+            .with_regex("[0-9]+".to_string())
+            .with_type_constraint("int".to_string());
+        assert_eq!(mv.patterns.len(), 1);
+        assert_eq!(mv.regex, Some("[0-9]+".to_string()));
+        assert_eq!(mv.type_constraint, Some("int".to_string()));
+    }
+
+    #[test]
+    fn test_entropy_analysis_fields() {
+        let analysis = EntropyAnalysis {
+            min_entropy: 3.5,
+            max_entropy: Some(8.0),
+            charset: Some("base64".to_string()),
+        };
+        assert_eq!(analysis.min_entropy, 3.5);
+        assert_eq!(analysis.max_entropy, Some(8.0));
+        assert_eq!(analysis.charset, Some("base64".to_string()));
+    }
+
+    #[test]
+    fn test_entropy_analysis_minimal() {
+        let analysis = EntropyAnalysis {
+            min_entropy: 0.0,
+            max_entropy: None,
+            charset: None,
+        };
+        assert_eq!(analysis.min_entropy, 0.0);
+        assert!(analysis.max_entropy.is_none());
+        assert!(analysis.charset.is_none());
+    }
+
+    #[test]
+    fn test_type_analysis_fields() {
+        let analysis = TypeAnalysis {
+            expected_types: vec!["String".to_string(), "int".to_string()],
+            forbidden_types: vec!["null".to_string()],
+            nullable: Some(false),
+        };
+        assert_eq!(analysis.expected_types.len(), 2);
+        assert_eq!(analysis.forbidden_types, vec!["null"]);
+        assert_eq!(analysis.nullable, Some(false));
+    }
+
+    #[test]
+    fn test_complexity_analysis_fields() {
+        let analysis = ComplexityAnalysis {
+            max_cyclomatic: Some(10),
+            max_nesting_depth: Some(3),
+            max_lines: Some(100),
+        };
+        assert_eq!(analysis.max_cyclomatic, Some(10));
+        assert_eq!(analysis.max_nesting_depth, Some(3));
+        assert_eq!(analysis.max_lines, Some(100));
+    }
+
+    #[test]
+    fn test_metavariable_analysis_all_fields() {
+        let analysis = MetavariableAnalysis {
+            entropy: Some(EntropyAnalysis {
+                min_entropy: 4.0,
+                max_entropy: None,
+                charset: None,
+            }),
+            type_analysis: Some(TypeAnalysis {
+                expected_types: vec!["String".to_string()],
+                forbidden_types: vec![],
+                nullable: None,
+            }),
+            complexity: Some(ComplexityAnalysis {
+                max_cyclomatic: Some(5),
+                max_nesting_depth: None,
+                max_lines: None,
+            }),
+        };
+        assert!(analysis.entropy.is_some());
+        assert!(analysis.type_analysis.is_some());
+        assert!(analysis.complexity.is_some());
+    }
+
+    #[test]
+    fn test_condition_metavariable_regex() {
+        let cond = Condition::MetavariableRegex(MetavariableRegex::new("$X".to_string(), ".*".to_string()));
+        assert!(matches!(cond, Condition::MetavariableRegex(_)));
+    }
+
+    #[test]
+    fn test_condition_metavariable_comparison() {
+        let cond = Condition::MetavariableComparison(MetavariableComparison::new(
+            "$X".to_string(),
+            ComparisonOperator::Equals,
+            "val".to_string(),
+        ));
+        assert!(matches!(cond, Condition::MetavariableComparison(_)));
+    }
+
+    #[test]
+    fn test_condition_metavariable_name() {
+        let cond = Condition::MetavariableName(MetavariableName::new("$X".to_string(), "foo_.*".to_string()));
+        assert!(matches!(cond, Condition::MetavariableName(_)));
+    }
+
+    #[test]
+    fn test_condition_metavariable_analysis() {
+        let analysis = MetavariableAnalysis {
+            entropy: None,
+            type_analysis: None,
+            complexity: None,
+        };
+        let cond = Condition::MetavariableAnalysis(MetavariableAnalysisCondition::new("$X".to_string(), analysis));
+        assert!(matches!(cond, Condition::MetavariableAnalysis(_)));
+    }
+
+    #[test]
+    fn test_condition_metavariable_type() {
+        let cond = Condition::MetavariableType(MetavariableType::new("$X".to_string(), "String".to_string()));
+        assert!(matches!(cond, Condition::MetavariableType(_)));
+    }
+
+    #[test]
+    fn test_condition_node_type() {
+        let cond = Condition::NodeType("identifier".to_string());
+        assert!(matches!(cond, Condition::NodeType(_)));
+    }
+
+    #[test]
+    fn test_condition_node_attribute() {
+        let cond = Condition::NodeAttribute("key".to_string(), "value".to_string());
+        assert!(matches!(cond, Condition::NodeAttribute(_, _)));
+    }
+
+    #[test]
+    fn test_condition_custom() {
+        let cond = Condition::Custom("custom".to_string());
+        assert!(matches!(cond, Condition::Custom(_)));
+    }
+
+    #[test]
+    fn test_metavariable_regex_new() {
+        let mvr = MetavariableRegex::new("$X".to_string(), "^foo$".to_string());
+        assert_eq!(mvr.metavariable, "$X");
+        assert_eq!(mvr.regex, "^foo$");
+    }
+
+    #[test]
+    fn test_metavariable_comparison_new() {
+        let mvc = MetavariableComparison::new("$X".to_string(), ComparisonOperator::Contains, "foo".to_string());
+        assert_eq!(mvc.metavariable, "$X");
+        assert!(matches!(mvc.operator, ComparisonOperator::Contains));
+        assert_eq!(mvc.value, "foo");
+    }
+
+    #[test]
+    fn test_metavariable_name_new() {
+        let mvn = MetavariableName::new("$X".to_string(), "name_.*".to_string());
+        assert_eq!(mvn.metavariable, "$X");
+        assert_eq!(mvn.name_pattern, "name_.*");
+    }
+
+    #[test]
+    fn test_metavariable_type_new() {
+        let mvt = MetavariableType::new("$X".to_string(), "int".to_string());
+        assert_eq!(mvt.metavariable, "$X");
+        assert_eq!(mvt.var_type, "int");
+    }
+
+    #[test]
+    fn test_metavariable_analysis_condition_new() {
+        let analysis = MetavariableAnalysis {
+            entropy: Some(EntropyAnalysis {
+                min_entropy: 3.0,
+                max_entropy: None,
+                charset: None,
+            }),
+            type_analysis: None,
+            complexity: None,
+        };
+        let cond = MetavariableAnalysisCondition::new("$X".to_string(), analysis);
+        assert_eq!(cond.metavariable, "$X");
+        assert!(cond.analysis.entropy.is_some());
+    }
+
+    #[test]
+    fn test_comparison_operator_all_variants() {
+        let ops: Vec<ComparisonOperator> = vec![
+            ComparisonOperator::Equals,
+            ComparisonOperator::NotEquals,
+            ComparisonOperator::Contains,
+            ComparisonOperator::StartsWith,
+            ComparisonOperator::EndsWith,
+            ComparisonOperator::Matches,
+            ComparisonOperator::GreaterThan,
+            ComparisonOperator::LessThan,
+            ComparisonOperator::PythonExpression("x > 0".to_string()),
+        ];
+        assert_eq!(ops.len(), 9);
+        assert!(matches!(ops[0], ComparisonOperator::Equals));
+        assert!(matches!(ops[8], ComparisonOperator::PythonExpression(_)));
+    }
+
+    #[test]
+    fn test_enhanced_metavariable_comparison() {
+        let enhanced = EnhancedMetavariableComparison {
+            metavariable: "$X".to_string(),
+            comparison: "int($X) > 100".to_string(),
+            functions: vec![ComparisonFunction::Int],
+            variables: vec!["$X".to_string()],
+        };
+        assert_eq!(enhanced.metavariable, "$X");
+        assert_eq!(enhanced.comparison, "int($X) > 100");
+        assert_eq!(enhanced.functions.len(), 1);
+        assert_eq!(enhanced.variables.len(), 1);
+    }
+
+    #[test]
+    fn test_comparison_function_variants() {
+        let funcs = vec![
+            ComparisonFunction::Today,
+            ComparisonFunction::Strptime("%Y-%m-%d".to_string()),
+            ComparisonFunction::ReMatch(".*".to_string()),
+            ComparisonFunction::Len,
+            ComparisonFunction::Int,
+            ComparisonFunction::Float,
+            ComparisonFunction::Str,
+            ComparisonFunction::Custom("my_func".to_string()),
+        ];
+        assert_eq!(funcs.len(), 8);
+        assert!(matches!(funcs[0], ComparisonFunction::Today));
+        assert!(matches!(funcs[7], ComparisonFunction::Custom(_)));
+    }
+
+    #[test]
+    fn test_semgrep_match_result_new() {
+        use crate::AstNode;
+        struct DummyNode;
+        impl AstNode for DummyNode {
+            fn node_type(&self) -> &str { "dummy" }
+            fn child_count(&self) -> usize { 0 }
+            fn child(&self, _index: usize) -> Option<&dyn AstNode> { None }
+            fn location(&self) -> Option<(usize, usize, usize, usize)> { None }
+            fn text(&self) -> Option<&str> { None }
+            fn clone_node(&self) -> Box<dyn AstNode> { Box::new(DummyNode) }
+        }
+
+        let node: Box<dyn AstNode> = Box::new(DummyNode);
+        let bindings = HashMap::from([("$X".to_string(), MatchBinding::new("value".to_string()))]);
+        let result = SemgrepMatchResult::new(node, bindings);
+        assert_eq!(result.confidence, 1.0);
+        assert_eq!(result.bindings.len(), 1);
+    }
+
+    #[test]
+    fn test_semgrep_match_result_with_confidence() {
+        use crate::AstNode;
+        struct DummyNode;
+        impl AstNode for DummyNode {
+            fn node_type(&self) -> &str { "dummy" }
+            fn child_count(&self) -> usize { 0 }
+            fn child(&self, _index: usize) -> Option<&dyn AstNode> { None }
+            fn location(&self) -> Option<(usize, usize, usize, usize)> { None }
+            fn text(&self) -> Option<&str> { None }
+            fn clone_node(&self) -> Box<dyn AstNode> { Box::new(DummyNode) }
+        }
+
+        let node: Box<dyn AstNode> = Box::new(DummyNode);
+        let result = SemgrepMatchResult::new(node, HashMap::new()).with_confidence(0.85);
+        assert_eq!(result.confidence, 0.85);
+        assert!(result.bindings.is_empty());
+    }
+
+    #[test]
+    fn test_semgrep_match_result_debug() {
+        use crate::AstNode;
+        struct DummyNode;
+        impl AstNode for DummyNode {
+            fn node_type(&self) -> &str { "dummy" }
+            fn child_count(&self) -> usize { 0 }
+            fn child(&self, _index: usize) -> Option<&dyn AstNode> { None }
+            fn location(&self) -> Option<(usize, usize, usize, usize)> { None }
+            fn text(&self) -> Option<&str> { None }
+            fn clone_node(&self) -> Box<dyn AstNode> { Box::new(DummyNode) }
+        }
+
+        let node: Box<dyn AstNode> = Box::new(DummyNode);
+        let result = SemgrepMatchResult::new(node, HashMap::new());
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("SemgrepMatchResult"));
+        assert!(debug_str.contains("dummy"));
+    }
+
+    #[test]
+    fn test_pattern_type_serde_roundtrip() {
+        let pattern = PatternType::Simple("foo($X)".to_string());
+        let json = serde_json::to_string(&pattern).expect("serialize");
+        let deserialized: PatternType = serde_json::from_str(&json).expect("deserialize");
+        assert!(matches!(deserialized, PatternType::Simple(_)));
+    }
+
+    #[test]
+    fn test_comparison_operator_serde_roundtrip() {
+        let op = ComparisonOperator::Contains;
+        let json = serde_json::to_string(&op).expect("serialize");
+        let deserialized: ComparisonOperator = serde_json::from_str(&json).expect("deserialize");
+        assert!(matches!(deserialized, ComparisonOperator::Contains));
     }
 }

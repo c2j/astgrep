@@ -2,6 +2,7 @@
 
 use crate::Result;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
 /// Path handler for cross-platform path operations
@@ -30,7 +31,7 @@ impl PathHandler {
     }
 
     /// Normalize a path to use forward slashes (for cross-platform compatibility)
-    pub fn normalize_path(&self, path: &PathBuf) -> PathBuf {
+    pub fn normalize_path(&self, path: &Path) -> PathBuf {
         let path_str = path.to_string_lossy();
         let normalized = path_str.replace('\\', "/");
         PathBuf::from(normalized)
@@ -91,5 +92,103 @@ impl Default for AstGrepConfig {
             default_output_format: "json".to_string(),
             custom_settings: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_path_handler_new_defaults_to_cwd() {
+        let handler = PathHandler::new();
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        assert_eq!(handler.base_dir(), &cwd);
+    }
+
+    #[test]
+    fn test_path_handler_with_base_dir_sets_base() {
+        let base = PathBuf::from("/some/base/dir");
+        let handler = PathHandler::with_base_dir(base.clone());
+        assert_eq!(handler.base_dir(), &base);
+    }
+
+    #[test]
+    fn test_path_handler_normalize_backslashes() {
+        let handler = PathHandler::new();
+        let path = PathBuf::from("foo\\bar\\baz");
+        let normalized = handler.normalize_path(&path);
+        assert_eq!(normalized, PathBuf::from("foo/bar/baz"));
+    }
+
+    #[test]
+    fn test_path_handler_normalize_already_forward_slashes() {
+        let handler = PathHandler::new();
+        let path = PathBuf::from("foo/bar/baz");
+        let normalized = handler.normalize_path(&path);
+        assert_eq!(normalized, PathBuf::from("foo/bar/baz"));
+    }
+
+    #[test]
+    fn test_path_handler_normalize_empty_path() {
+        let handler = PathHandler::new();
+        let path = PathBuf::from("");
+        let normalized = handler.normalize_path(&path);
+        assert_eq!(normalized, PathBuf::from(""));
+    }
+
+    #[test]
+    fn test_path_handler_make_relative_subpath() {
+        let base = PathBuf::from("/home/user");
+        let handler = PathHandler::with_base_dir(base);
+        let path = PathBuf::from("/home/user/projects/foo");
+        let relative = handler.make_relative(&path).expect("should resolve");
+        assert_eq!(relative, PathBuf::from("projects/foo"));
+    }
+
+    #[test]
+    fn test_path_handler_make_relative_same_path() {
+        let base = PathBuf::from("/home/user");
+        let handler = PathHandler::with_base_dir(base.clone());
+        let relative = handler.make_relative(&base).expect("should resolve");
+        assert_eq!(relative, PathBuf::from("."));
+    }
+
+    #[test]
+    fn test_path_handler_join_components() {
+        let handler = PathHandler::new();
+        let joined = handler.join(&["a", "b", "c"]);
+        assert_eq!(joined, PathBuf::from("a/b/c"));
+    }
+
+    #[test]
+    fn test_path_handler_join_empty_components() {
+        let handler = PathHandler::new();
+        let joined = handler.join(&[]);
+        assert_eq!(joined, PathBuf::from(""));
+    }
+
+    #[test]
+    fn test_path_handler_join_single_component() {
+        let handler = PathHandler::new();
+        let joined = handler.join(&["standalone"]);
+        assert_eq!(joined, PathBuf::from("standalone"));
+    }
+
+    #[test]
+    fn test_path_handler_default_matches_new() {
+        let default_handler = PathHandler::default();
+        let new_handler = PathHandler::new();
+        assert_eq!(default_handler.base_dir(), new_handler.base_dir());
+    }
+
+    #[test]
+    fn test_ast_grep_config_default_values() {
+        let config = AstGrepConfig::default();
+        assert_eq!(config.default_timeout, std::time::Duration::from_secs(300));
+        assert_eq!(config.max_concurrent_operations, 4);
+        assert_eq!(config.debug_logging, false);
+        assert_eq!(config.default_output_format, "json");
+        assert!(config.custom_settings.is_empty());
     }
 }

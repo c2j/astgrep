@@ -197,7 +197,7 @@ impl SourceDetector {
     pub fn add_pattern(&mut self, node_type: String, pattern: SourcePattern) {
         self.patterns
             .entry(node_type)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(pattern);
     }
 

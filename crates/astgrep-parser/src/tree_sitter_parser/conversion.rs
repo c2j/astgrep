@@ -11,6 +11,7 @@ use tree_sitter::Node;
 /// Character position for UTF-8 support
 #[derive(Debug, Clone)]
 struct CharPosition {
+    #[allow(dead_code)]
     line: usize,
     column: usize,
 }
@@ -22,7 +23,9 @@ struct PreciseLocation {
     start_column: usize,
     end_line: usize,
     end_column: usize,
+    #[allow(dead_code)]
     start_byte: usize,
+    #[allow(dead_code)]
     end_byte: usize,
 }
 
@@ -265,10 +268,6 @@ impl TreeSitterParser {
             "word" | "command_name" => NodeType::Identifier,
             "ansi_c_quoting" | "quoted_string" => NodeType::Literal,
             "expansion" | "process_substitution" => NodeType::CallExpression,
-            "if_statement" | "while_statement" | "for_statement" | "case_statement" => {
-                NodeType::ControlFlowStatement
-            }
-            "function_definition" => NodeType::FunctionDeclaration,
             "subshell" => NodeType::BlockStatement,
             "test_command" | "test_operator" => NodeType::BinaryExpression,
             "redirected_statement" | "file_redirect" => NodeType::ExpressionStatement,

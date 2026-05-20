@@ -886,3 +886,250 @@ impl Rule {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use astgrep_core::{AstNode, Language, Severity, Confidence};
+
+    #[derive(Clone)]
+    struct MockAstNode {
+        node_type: String,
+        text: Option<String>,
+        loc: Option<(usize, usize, usize, usize)>,
+        children: Vec<MockAstNode>,
+    }
+
+    impl MockAstNode {
+        fn new(node_type: &str) -> Self {
+            Self {
+                node_type: node_type.to_string(),
+                text: None,
+                loc: None,
+                children: Vec::new(),
+            }
+        }
+
+        fn with_text(mut self, text: &str) -> Self {
+            self.text = Some(text.to_string());
+            self
+        }
+    }
+
+    impl AstNode for MockAstNode {
+        fn node_type(&self) -> &str {
+            &self.node_type
+        }
+
+        fn child_count(&self) -> usize {
+            self.children.len()
+        }
+
+        fn child(&self, index: usize) -> Option<&dyn AstNode> {
+            self.children.get(index).map(|c| c as &dyn AstNode)
+        }
+
+        fn location(&self) -> Option<(usize, usize, usize, usize)> {
+            self.loc
+        }
+
+        fn text(&self) -> Option<&str> {
+            self.text.as_deref()
+        }
+
+        fn clone_node(&self) -> Box<dyn AstNode> {
+            Box::new(self.clone())
+        }
+    }
+
+    #[test]
+    fn test_advanced_executor_new() {
+        let executor = AdvancedRuleExecutor::new();
+        let stats = executor.statistics();
+        assert_eq!(stats.rules_executed, 0);
+        assert_eq!(stats.total_findings, 0);
+    }
+
+    #[test]
+    fn test_advanced_executor_default() {
+        let executor: AdvancedRuleExecutor = Default::default();
+        let stats = executor.statistics();
+        assert_eq!(stats.rules_executed, 0);
+    }
+
+    #[test]
+    fn test_advanced_executor_reset() {
+        let mut executor = AdvancedRuleExecutor::new();
+        executor.execution_stats.record_rule_execution("test", std::time::Duration::from_millis(10), 5);
+        assert_eq!(executor.statistics().rules_executed, 1);
+        
+        executor.reset();
+        assert_eq!(executor.statistics().rules_executed, 0);
+    }
+
+    #[test]
+    fn test_comprehensive_analysis_result_empty() {
+        let result = ComprehensiveAnalysisResult::empty(std::time::Duration::from_millis(100));
+        assert!(result.findings.is_empty());
+        assert!(result.rule_results.is_empty());
+        assert!(!result.has_critical_findings());
+        let summary = result.summary();
+        assert_eq!(summary.total_findings, 0);
+    }
+
+    #[test]
+    fn test_comprehensive_analysis_result_findings_by_severity() {
+        let mut result = ComprehensiveAnalysisResult::empty(std::time::Duration::from_millis(100));
+        result.findings.push(Finding {
+            rule_id: "rule1".to_string(),
+            message: "Error".to_string(),
+            location: Location::new(std::path::PathBuf::new(), 1, 1, 1, 1),
+            severity: Severity::Error,
+            confidence: Confidence::High,
+            metadata: HashMap::new(),
+            fix_suggestion: None,
+        });
+        result.findings.push(Finding {
+            rule_id: "rule2".to_string(),
+            message: "Warning".to_string(),
+            location: Location::new(std::path::PathBuf::new(), 1, 1, 1, 1),
+            severity: Severity::Warning,
+            confidence: Confidence::Medium,
+            metadata: HashMap::new(),
+            fix_suggestion: None,
+        });
+
+        assert!(result.has_critical_findings());
+        assert_eq!(result.findings_by_severity(Severity::Error).len(), 1);
+        assert_eq!(result.findings_by_severity(Severity::Warning).len(), 1);
+        
+        let summary = result.summary();
+        assert_eq!(summary.total_findings, 2);
+        assert_eq!(summary.error_count, 1);
+        assert_eq!(summary.warning_count, 1);
+    }
+
+    #[test]
+    fn test_execution_statistics_record() {
+        let mut stats = ExecutionStatistics::new();
+        assert_eq!(stats.rules_executed, 0);
+        
+        stats.record_rule_execution("rule1", std::time::Duration::from_millis(50), 3);
+        assert_eq!(stats.rules_executed, 1);
+        assert_eq!(stats.total_findings, 3);
+        assert_eq!(stats.rule_finding_counts.get("rule1"), Some(&3));
+        
+        stats.record_rule_error("rule2", std::time::Duration::from_millis(20));
+        assert_eq!(stats.rules_executed, 2);
+        assert_eq!(stats.total_findings, 3);
+    }
+
+    #[test]
+    fn test_rule_requires_dataflow() {
+        let rule_without = Rule::new(
+            "test".to_string(),
+            "test".to_string(),
+            "test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        );
+        assert!(!rule_without.requires_dataflow());
+
+        let rule_with = Rule::new(
+            "test".to_string(),
+            "test".to_string(),
+            "test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        )
+        .with_dataflow(DataFlowSpec::from_strings(
+            vec!["source".to_string()],
+            vec!["sink".to_string()],
+        ));
+        assert!(rule_with.requires_dataflow());
+    }
+
+    #[test]
+    fn test_rule_requires_symbolic_propagation() {
+        let rule = Rule::new(
+            "test".to_string(),
+            "test".to_string(),
+            "test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        );
+        assert!(!rule.requires_symbolic_propagation());
+
+        let mut taint_rule = Rule::new(
+            "taint".to_string(),
+            "taint".to_string(),
+            "taint".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        )
+        .with_dataflow(DataFlowSpec::from_strings(
+            vec!["source".to_string()],
+            vec!["sink".to_string()],
+        ));
+        taint_rule.mode = crate::types::RuleMode::Taint;
+        assert!(taint_rule.requires_symbolic_propagation());
+    }
+
+    #[test]
+    fn test_rule_has_constant_propagation() {
+        let rule = Rule::new(
+            "test".to_string(),
+            "test".to_string(),
+            "test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        );
+        assert!(rule.has_constant_propagation());
+
+        let disabled = rule.clone().add_metadata(
+            "constant_propagation".to_string(),
+            "false".to_string(),
+        );
+        assert!(!disabled.has_constant_propagation());
+    }
+
+    #[test]
+    fn test_analysis_summary_default() {
+        let summary = AnalysisSummary::default();
+        assert_eq!(summary.total_findings, 0);
+        assert_eq!(summary.error_count, 0);
+        assert_eq!(summary.warning_count, 0);
+        assert_eq!(summary.info_count, 0);
+        assert_eq!(summary.rules_executed, 0);
+    }
+
+    #[test]
+    fn test_comprehensive_analysis_no_applicable_rules() {
+        let mut executor = AdvancedRuleExecutor::new();
+        let ast = MockAstNode::new("program").with_text("foo");
+        let java_rule = Rule::new(
+            "java-rule".to_string(),
+            "java-rule".to_string(),
+            "test".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        );
+
+        let result = executor.execute_comprehensive_analysis(
+            &[java_rule],
+            &ast,
+            Language::Python,
+            None,
+            false,
+        ).unwrap();
+
+        assert!(result.findings.is_empty());
+        assert!(result.rule_results.is_empty());
+    }
+}

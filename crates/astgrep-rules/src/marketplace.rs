@@ -356,4 +356,179 @@ mod tests {
         marketplace.remove_rule("rule1");
         assert_eq!(marketplace.rule_count(), 0);
     }
+
+    #[test]
+    fn test_marketplace_rule_mark_verified() {
+        let mut rule = MarketplaceRule::new(
+            "rule1".to_string(),
+            "Test Rule".to_string(),
+            "author".to_string(),
+        );
+        assert!(!rule.verified);
+        rule.mark_verified();
+        assert!(rule.verified);
+    }
+
+    #[test]
+    fn test_marketplace_rule_add_rating_out_of_range() {
+        let mut rule = MarketplaceRule::new(
+            "rule1".to_string(),
+            "Test Rule".to_string(),
+            "author".to_string(),
+        );
+        rule.add_rating(-1.0);
+        assert_eq!(rule.rating, 0.0);
+        assert_eq!(rule.rating_count, 0);
+        rule.add_rating(6.0);
+        assert_eq!(rule.rating, 0.0);
+        assert_eq!(rule.rating_count, 0);
+    }
+
+    #[test]
+    fn test_marketplace_search_by_tag() {
+        let mut marketplace = RuleMarketplace::new();
+        let mut rule = MarketplaceRule::new(
+            "rule1".to_string(),
+            "Test Rule".to_string(),
+            "author".to_string(),
+        );
+        rule.tags = vec!["sqli".to_string(), "injection".to_string()];
+        marketplace.add_rule(rule);
+        let results = marketplace.search_by_tag("sqli");
+        assert_eq!(results.len(), 1);
+        let empty = marketplace.search_by_tag("xss");
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn test_marketplace_get_top_rated() {
+        let mut marketplace = RuleMarketplace::new();
+        let mut rule1 = MarketplaceRule::new(
+            "rule1".to_string(),
+            "Low Rated".to_string(),
+            "author".to_string(),
+        );
+        rule1.add_rating(2.0);
+        let mut rule2 = MarketplaceRule::new(
+            "rule2".to_string(),
+            "High Rated".to_string(),
+            "author".to_string(),
+        );
+        rule2.add_rating(5.0);
+        marketplace.add_rule(rule1);
+        marketplace.add_rule(rule2);
+        let top = marketplace.get_top_rated(1);
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].id, "rule2");
+    }
+
+    #[test]
+    fn test_marketplace_get_most_downloaded() {
+        let mut marketplace = RuleMarketplace::new();
+        let mut rule1 = MarketplaceRule::new(
+            "rule1".to_string(),
+            "Few Downloads".to_string(),
+            "author".to_string(),
+        );
+        rule1.increment_downloads();
+        let mut rule2 = MarketplaceRule::new(
+            "rule2".to_string(),
+            "Many Downloads".to_string(),
+            "author".to_string(),
+        );
+        rule2.increment_downloads();
+        rule2.increment_downloads();
+        rule2.increment_downloads();
+        marketplace.add_rule(rule1);
+        marketplace.add_rule(rule2);
+        let top = marketplace.get_most_downloaded(1);
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].id, "rule2");
+    }
+
+    #[test]
+    fn test_marketplace_get_verified_rules() {
+        let mut marketplace = RuleMarketplace::new();
+        let mut rule1 = MarketplaceRule::new(
+            "rule1".to_string(),
+            "Unverified".to_string(),
+            "author".to_string(),
+        );
+        let mut rule2 = MarketplaceRule::new(
+            "rule2".to_string(),
+            "Verified".to_string(),
+            "author".to_string(),
+        );
+        rule2.mark_verified();
+        marketplace.add_rule(rule1);
+        marketplace.add_rule(rule2);
+        let verified = marketplace.get_verified_rules();
+        assert_eq!(verified.len(), 1);
+        assert_eq!(verified[0].id, "rule2");
+    }
+
+    #[test]
+    fn test_marketplace_get_all_rules() {
+        let mut marketplace = RuleMarketplace::new();
+        marketplace.add_rule(MarketplaceRule::new(
+            "rule1".to_string(),
+            "Rule 1".to_string(),
+            "author".to_string(),
+        ));
+        marketplace.add_rule(MarketplaceRule::new(
+            "rule2".to_string(),
+            "Rule 2".to_string(),
+            "author".to_string(),
+        ));
+        let all = marketplace.get_all_rules();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn test_marketplace_get_categories_and_tags() {
+        let mut marketplace = RuleMarketplace::new();
+        let mut rule = MarketplaceRule::new(
+            "rule1".to_string(),
+            "Test Rule".to_string(),
+            "author".to_string(),
+        );
+        rule.category = "security".to_string();
+        rule.tags = vec!["sqli".to_string()];
+        marketplace.add_rule(rule);
+        let cats = marketplace.get_categories();
+        assert_eq!(cats.len(), 1);
+        assert_eq!(cats[0], "security");
+        let tags = marketplace.get_tags();
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0], "sqli");
+    }
+
+    #[test]
+    fn test_marketplace_get_rule_mut() {
+        let mut marketplace = RuleMarketplace::new();
+        marketplace.add_rule(MarketplaceRule::new(
+            "rule1".to_string(),
+            "Test Rule".to_string(),
+            "author".to_string(),
+        ));
+        {
+            let rule = marketplace.get_rule_mut("rule1").unwrap();
+            rule.increment_downloads();
+        }
+        assert_eq!(marketplace.get_rule("rule1").unwrap().downloads, 1);
+        assert!(marketplace.get_rule_mut("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_marketplace_remove_nonexistent_rule() {
+        let mut marketplace = RuleMarketplace::new();
+        let result = marketplace.remove_rule("nonexistent");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_marketplace_default_trait() {
+        let marketplace = RuleMarketplace::default();
+        assert_eq!(marketplace.rule_count(), 0);
+    }
 }

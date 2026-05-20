@@ -107,10 +107,166 @@ impl LanguageParserRegistry {
         self.register_parser(Language::Sql, Box::new(sql::SqlParser::new()));
         self.register_parser(Language::Bash, Box::new(bash::BashParser::new()));
     }
+
+    #[cfg(test)]
+    fn clear_parsers(&mut self) {
+        self.parsers.clear();
+    }
 }
 
 impl Default for LanguageParserRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use astgrep_core::AstNode;
+
+    #[derive(Debug)]
+    struct MockParser {
+        lang: Language,
+    }
+
+    impl MockParser {
+        fn new(lang: Language) -> Self {
+            Self { lang }
+        }
+    }
+
+    impl LanguageParser for MockParser {
+        fn parse(&self, source: &str, _file_path: &Path) -> Result<Box<dyn AstNode>> {
+            Ok(Box::new(astgrep_ast::AstBuilder::program(vec![
+                astgrep_ast::AstBuilder::expression_statement(
+                    astgrep_ast::AstBuilder::identifier(source),
+                ),
+            ])))
+        }
+
+        fn language(&self) -> Language {
+            self.lang
+        }
+
+        fn supports_file(&self, file_path: &Path) -> bool {
+            if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
+                match self.lang {
+                    Language::Java => ext == "java",
+                    Language::JavaScript => matches!(ext, "js" | "jsx" | "ts" | "tsx"),
+                    Language::Python => matches!(ext, "py" | "pyw"),
+                    Language::Sql => matches!(ext, "sql" | "ddl" | "dml"),
+                    Language::Bash => matches!(ext, "sh" | "bash" | "zsh"),
+                    Language::Xml => ext == "xml",
+                }
+            } else {
+                false
+            }
+        }
+    }
+
+    #[test]
+    fn test_registry_new() {
+        let registry = LanguageParserRegistry::new();
+        let languages = registry.supported_languages();
+        assert!(!languages.is_empty());
+    }
+
+    #[test]
+    fn test_registry_default() {
+        let registry: LanguageParserRegistry = Default::default();
+        let languages = registry.supported_languages();
+        assert!(!languages.is_empty());
+    }
+
+    #[test]
+    fn test_register_parser() {
+        let mut registry = LanguageParserRegistry::new();
+        let parser = Box::new(MockParser::new(Language::Java));
+        registry.register_parser(Language::Java, parser);
+
+        let retrieved = registry.get_parser(Language::Java);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().language(), Language::Java);
+    }
+
+    #[test]
+    fn test_get_parser_unregistered() {
+        let mut registry = LanguageParserRegistry::new();
+        registry.clear_parsers();
+        registry.register_parser(Language::Java, Box::new(MockParser::new(Language::Java)));
+
+        assert!(registry.get_parser(Language::Python).is_none());
+        assert!(registry.get_parser(Language::Sql).is_none());
+    }
+
+    #[test]
+    fn test_supported_languages() {
+        let mut registry = LanguageParserRegistry::new();
+        registry.clear_parsers();
+        registry.register_parser(Language::Java, Box::new(MockParser::new(Language::Java)));
+        registry.register_parser(Language::Python, Box::new(MockParser::new(Language::Python)));
+
+        let languages = registry.supported_languages();
+        assert_eq!(languages.len(), 2);
+        assert!(languages.contains(&Language::Java));
+        assert!(languages.contains(&Language::Python));
+    }
+
+    #[test]
+    fn test_supports_language() {
+        let mut registry = LanguageParserRegistry::new();
+        registry.clear_parsers();
+        registry.register_parser(Language::Java, Box::new(MockParser::new(Language::Java)));
+
+        assert!(registry.supports_language(Language::Java));
+        assert!(!registry.supports_language(Language::Python));
+        assert!(!registry.supports_language(Language::Sql));
+    }
+
+    #[test]
+    fn test_detect_language() {
+        let registry = LanguageParserRegistry::new();
+
+        assert_eq!(registry.detect_language(Path::new("test.java")).unwrap(), Language::Java);
+        assert_eq!(registry.detect_language(Path::new("test.js")).unwrap(), Language::JavaScript);
+        assert_eq!(registry.detect_language(Path::new("test.py")).unwrap(), Language::Python);
+        assert_eq!(registry.detect_language(Path::new("test.sql")).unwrap(), Language::Sql);
+        assert_eq!(registry.detect_language(Path::new("test.sh")).unwrap(), Language::Bash);
+        assert_eq!(registry.detect_language(Path::new("test.ddl")).unwrap(), Language::Sql);
+        assert_eq!(registry.detect_language(Path::new("test.dml")).unwrap(), Language::Sql);
+
+        assert!(registry.detect_language(Path::new("test.unknown")).is_err());
+        assert!(registry.detect_language(Path::new("no_extension")).is_err());
+    }
+
+    #[test]
+    fn test_parse_file() {
+        let mut registry = LanguageParserRegistry::new();
+        registry.register_parser(Language::Java, Box::new(MockParser::new(Language::Java)));
+
+        let result = registry.parse_file(Path::new("test.java"), "hello");
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.node_type(), "program");
+        assert_eq!(node.child_count(), 1);
+    }
+
+    #[test]
+    fn test_parse_file_unsupported_extension() {
+        let registry = LanguageParserRegistry::new();
+
+        let result = registry.parse_file(Path::new("test.unknown"), "hello");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_file_no_parser() {
+        let mut registry = LanguageParserRegistry::new();
+        registry.clear_parsers();
+        registry.register_parser(Language::Java, Box::new(MockParser::new(Language::Java)));
+
+        let result = registry.parse_file(Path::new("test.py"), "hello");
+        assert!(result.is_err());
     }
 }

@@ -10,6 +10,12 @@ use std::path::Path;
 /// Java AST adapter
 pub struct JavaAdapter;
 
+impl Default for JavaAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JavaAdapter {
     /// Create a new Java adapter
     pub fn new() -> Self {
@@ -212,7 +218,7 @@ impl JavaAdapter {
                     .trim_end_matches(';')
                     .trim_end_matches('=');
                 if let Some(eq_pos) = field_name.find('=') {
-                    field_name = &field_name[..eq_pos].trim();
+                    field_name = field_name[..eq_pos].trim();
                 }
             }
         }

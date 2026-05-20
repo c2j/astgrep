@@ -147,7 +147,7 @@ fn parse_single_rule(
             langs
                 .iter()
                 .filter_map(|l| l.as_str())
-                .filter_map(|l| Language::from_str(l))
+                .filter_map(|l| Language::parse_name(l))
                 .collect()
         })
         .unwrap_or_else(|| vec![target_language]);

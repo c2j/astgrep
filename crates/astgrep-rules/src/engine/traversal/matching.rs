@@ -110,3 +110,65 @@ fn calculate_line_col(source: &str, offset: usize) -> (usize, usize) {
 
     (line, col)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use astgrep_core::Language;
+
+    #[test]
+    fn test_find_pattern_matches_basic() {
+        let source = "hello world\nhello universe";
+        let findings = find_pattern_matches("hello", source, Language::Java).unwrap();
+        assert_eq!(findings.len(), 2);
+        assert_eq!(findings[0].location.start_line, 1);
+        assert_eq!(findings[1].location.start_line, 2);
+    }
+
+    #[test]
+    fn test_find_pattern_matches_no_match() {
+        let source = "foo bar baz";
+        let findings = find_pattern_matches("qux", source, Language::Python).unwrap();
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn test_find_pattern_matches_multiline() {
+        let source = "line1\nline2\nline3";
+        let findings = find_pattern_matches("line2", source, Language::JavaScript).unwrap();
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].location.start_line, 2);
+        assert_eq!(findings[0].location.start_column, 1);
+    }
+
+    #[test]
+    fn test_find_pattern_spans_in_source_basic() {
+        let source = "abc def abc";
+        let spans = find_pattern_spans_in_source("abc", source, Language::Java, false);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0], (0, 3));
+        assert_eq!(spans[1], (8, 11));
+    }
+
+    #[test]
+    fn test_find_pattern_spans_sql_boundary() {
+        let source = "SELECT * FROM users; SELECT * FROM orders";
+        let spans = find_pattern_spans_in_source("SELECT", source, Language::Sql, true);
+        assert_eq!(spans.len(), 2);
+    }
+
+    #[test]
+    fn test_find_pattern_spans_no_match() {
+        let source = "foo bar";
+        let spans = find_pattern_spans_in_source("baz", source, Language::Bash, false);
+        assert!(spans.is_empty());
+    }
+
+    #[test]
+    fn test_calculate_line_col() {
+        let source = "line1\nline2\nline3";
+        assert_eq!(calculate_line_col(source, 0), (1, 1));
+        assert_eq!(calculate_line_col(source, 6), (2, 1));
+        assert_eq!(calculate_line_col(source, 12), (3, 1));
+    }
+}
