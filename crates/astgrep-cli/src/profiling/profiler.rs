@@ -179,12 +179,16 @@ impl PerformanceProfiler {
             .ok_or_else(|| anyhow::anyhow!("Profiling was not started"))?
             .elapsed();
 
-        let mut metrics = self.metrics.lock().unwrap();
-        metrics.end_time = Some(Utc::now());
-        metrics.total_duration = Some(duration);
+        {
+            let mut metrics = self.metrics.lock().unwrap();
+            metrics.end_time = Some(Utc::now());
+            metrics.total_duration = Some(duration);
+        }
 
-        // Calculate final averages and totals
-        if let (Some(avg_memory), Some(avg_cpu)) = self.calculate_averages().await {
+        // Calculate final averages outside the lock
+        let averages = self.calculate_averages().await;
+        if let (Some(avg_memory), Some(avg_cpu)) = averages {
+            let mut metrics = self.metrics.lock().unwrap();
             metrics.peak_memory_usage_mb = avg_memory;
             metrics.average_cpu_usage_percent = avg_cpu;
         }
@@ -193,10 +197,11 @@ impl PerformanceProfiler {
 
         // Write profiling data to file if configured
         if let Some(output_file) = &self.config.output_file {
+            let metrics = self.metrics.lock().unwrap().clone();
             self.write_profile_report(&metrics, output_file).await?;
         }
 
-        Ok(metrics.clone())
+        Ok(self.metrics.lock().unwrap().clone())
     }
 
     /// Record the start of an operation
@@ -288,13 +293,15 @@ impl PerformanceProfiler {
 
         let elapsed = self.start_time.unwrap_or_else(|| Instant::now()).elapsed();
         let memory_usage = self.get_current_memory_usage();
+        let ops = self.metrics.lock().unwrap().operations_completed;
+        let bytes = self.metrics.lock().unwrap().bytes_transferred;
 
         let checkpoint = Checkpoint {
             name: name.to_string(),
             timestamp: Utc::now(),
             elapsed_time: elapsed,
-            operations_completed: self.metrics.lock().unwrap().operations_completed,
-            bytes_transferred: self.metrics.lock().unwrap().bytes_transferred,
+            operations_completed: ops,
+            bytes_transferred: bytes,
             memory_usage_mb: memory_usage,
             custom_metrics,
         };
@@ -530,8 +537,8 @@ mod tests {
         assert_eq!(config.sample_interval_ms, 100);
     }
 
-    #[tokio::test]
-    async fn test_profiler_lifecycle() {
+    #[test]
+    fn test_profiler_lifecycle() {
         let config = ProfilingConfig {
             enabled: true,
             output_file: None,
@@ -543,10 +550,10 @@ mod tests {
 
         let mut profiler = PerformanceProfiler::new(config);
         profiler.start().unwrap();
-
         profiler.record_checkpoint("test_checkpoint", HashMap::new());
 
-        let metrics = profiler.stop().await.unwrap();
+        let rt = tokio::runtime::Runtime::new().expect("runtime creation");
+        let metrics = rt.block_on(profiler.stop()).expect("stop");
         assert!(metrics.end_time.is_some());
         assert!(metrics.total_duration.is_some());
         assert_eq!(metrics.checkpoints.len(), 1);
