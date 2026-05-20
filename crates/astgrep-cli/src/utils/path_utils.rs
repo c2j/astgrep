@@ -492,10 +492,13 @@ mod tests {
     #[test]
     fn test_uri_conversion() {
         let handler = PathHandler::new();
+        let temp_dir = tempdir().unwrap();
+        let test_file = temp_dir.path().join("file.txt");
+        std::fs::write(&test_file, "test").unwrap();
 
         #[cfg(windows)]
         {
-            let path = Path::new("C:\\test\\file.txt");
+            let path = test_file.as_path();
             let uri = handler.path_to_uri(path).unwrap();
             assert!(uri.starts_with("file:"));
 
@@ -505,7 +508,7 @@ mod tests {
 
         #[cfg(unix)]
         {
-            let path = Path::new("/test/file.txt");
+            let path = test_file.as_path();
             let uri = handler.path_to_uri(path).unwrap();
             assert!(uri.starts_with("file://"));
 
