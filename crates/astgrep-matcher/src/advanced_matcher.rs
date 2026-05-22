@@ -809,9 +809,19 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
 
-            // Direct match
             if text.contains(literal) {
                 return Ok(true);
+            }
+
+            // For single-token patterns, use word-boundary matching to prevent
+            // "return" from matching "returns" etc.
+            if !literal.contains(' ') && !literal.contains('.') && literal.len() > 1 {
+                let re_str = format!(r"(?:(?<=\W)|^){}(?:(?=\W)|$)", regex::escape(literal));
+                if let Ok(re) = Regex::new(&re_str) {
+                    if re.is_match(text) {
+                        return Ok(true);
+                    }
+                }
             }
 
             // Constant propagation: if node is an identifier, check if it has a constant value
@@ -874,6 +884,210 @@ impl AdvancedSemgrepMatcher {
         Ok(node.node_type() == expected_type)
     }
 
+    fn match_sequence_ast(
+        &mut self,
+        patterns: &[ParsedPattern],
+        node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
+        if depth > 50 {
+            return Ok(false);
+        }
+
+        // Collect non-empty children
+        let children: Vec<&dyn AstNode> = (0..node.child_count())
+            .filter_map(|i| node.child(i))
+            .filter(|c| {
+                if let Some(t) = c.text() {
+                    !t.trim().is_empty()
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        if children.is_empty() && !patterns.is_empty() {
+            return Ok(false);
+        }
+
+        self.try_match_ast_at_offset(patterns, &children, 0, node, depth)
+    }
+
+    fn try_match_ast_at_offset(
+        &mut self,
+        patterns: &[ParsedPattern],
+        children: &[&dyn AstNode],
+        child_offset: usize,
+        parent_node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
+        if patterns.is_empty() {
+            return Ok(true);
+        }
+
+        let pattern = &patterns[0];
+        let remaining = &patterns[1..];
+
+        match pattern {
+            ParsedPattern::Wildcard => {
+                for skip in 0..=(children.len().saturating_sub(child_offset)) {
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.try_match_ast_at_offset(remaining, children, child_offset + skip, parent_node, depth)? {
+                        return Ok(true);
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::EllipsisMetavariable(metavar) => {
+                for skip in 0..=(children.len().saturating_sub(child_offset)) {
+                    if child_offset + skip > children.len() {
+                        break;
+                    }
+                    let combined: String = children[child_offset..child_offset + skip]
+                        .iter()
+                        .filter_map(|c| c.text())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let snapshot = self.metavar_manager.snapshot();
+                    let bind_node: &dyn AstNode = if child_offset < children.len() {
+                        children[child_offset]
+                    } else if !children.is_empty() {
+                        children[children.len() - 1]
+                    } else {
+                        parent_node
+                    };
+                    if self.metavar_manager.bind(metavar.to_string(), combined, bind_node)? {
+                        if self.try_match_ast_at_offset(remaining, children, child_offset + skip, parent_node, depth)? {
+                            return Ok(true);
+                        }
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::Literal(literal) => {
+                if child_offset >= children.len() {
+                    return Ok(false);
+                }
+                let child = children[child_offset];
+                if self.match_literal_exact(literal, child)? {
+                    return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::Metavariable(metavar) => {
+                if child_offset >= children.len() {
+                    return Ok(false);
+                }
+                let child = children[child_offset];
+                if let Some(text) = child.text() {
+                    if text.trim().is_empty() {
+                        return Ok(false);
+                    }
+                    let bind_key = if metavar == "_" {
+                        format!("__anon_{}", child.node_type().len())
+                    } else {
+                        metavar.to_string()
+                    };
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.metavar_manager.bind(bind_key, text.to_string(), child)? {
+                        if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                            return Ok(true);
+                        }
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::Alternative(alts) => {
+                if child_offset >= children.len() {
+                    return Ok(false);
+                }
+                let child = children[child_offset];
+                for alt in alts {
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.match_parsed_pattern(alt, child, depth + 1)? {
+                        if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                            return Ok(true);
+                        }
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::NodeType(nt) => {
+                if child_offset >= children.len() {
+                    return Ok(false);
+                }
+                let child = children[child_offset];
+                if child.node_type() == nt {
+                    return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::Sequence(inner) => {
+                if child_offset >= children.len() {
+                    return Ok(false);
+                }
+                let child = children[child_offset];
+                let snapshot = self.metavar_manager.snapshot();
+                if self.match_sequence_ast(inner, child, depth + 1)? {
+                    if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                        return Ok(true);
+                    }
+                }
+                self.metavar_manager.restore(snapshot);
+                Ok(false)
+            }
+
+            ParsedPattern::DeepExpr(inner) => {
+                if child_offset >= children.len() {
+                    return Ok(false);
+                }
+                let child = children[child_offset];
+                let snapshot = self.metavar_manager.snapshot();
+                if self.match_deep_expr(inner, child, depth + 1)? {
+                    if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                        return Ok(true);
+                    }
+                }
+                self.metavar_manager.restore(snapshot);
+                Ok(false)
+            }
+        }
+    }
+
+    fn match_literal_exact(&self, literal: &str, node: &dyn AstNode) -> Result<bool> {
+        if let Some(text) = node.text() {
+            if text == literal {
+                return Ok(true);
+            }
+            if text.trim() == literal.trim() {
+                return Ok(true);
+            }
+            let is_punctuation = literal.chars().all(|c| "!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c));
+            if is_punctuation && text.trim() == literal {
+                return Ok(true);
+            }
+            if !literal.contains(' ') && !literal.contains('.') {
+                let re_str = format!(r"(?:(?<=\W)|^){}(?:(?=\W)|$)", regex::escape(literal));
+                if let Ok(re) = Regex::new(&re_str) {
+                    if re.is_match(text) {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
     /// Match sequence of patterns against a node's children
     /// This handles patterns like "return $X;" by matching against the node's child sequence
     fn match_sequence(
@@ -882,6 +1096,14 @@ impl AdvancedSemgrepMatcher {
         node: &dyn AstNode,
         depth: usize,
     ) -> Result<bool> {
+        {
+            let snapshot = self.metavar_manager.snapshot();
+            if self.match_sequence_ast(patterns, node, depth)? {
+                return Ok(true);
+            }
+            self.metavar_manager.restore(snapshot);
+        }
+
         // Check if this node type is appropriate for the pattern
         let pattern_text = patterns
             .iter()
