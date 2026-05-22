@@ -1038,6 +1038,9 @@ impl AdvancedSemgrepMatcher {
                 if self.match_literal_exact(literal, child)? {
                     return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
                 }
+                if self.match_literal(literal, child)? {
+                    return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                }
                 Ok(false)
             }
 
