@@ -8,20 +8,14 @@ use std::fmt;
 /// Parsed pattern representation
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedPattern {
-    /// Literal text to match
     Literal(String),
-    /// Metavariable (e.g., $VAR)
     Metavariable(String),
-    /// Ellipsis metavariable (e.g., $...ARGS)
     EllipsisMetavariable(String),
-    /// Node type constraint
     NodeType(String),
-    /// Sequence of patterns
     Sequence(Vec<ParsedPattern>),
-    /// Alternative patterns (OR)
     Alternative(Vec<ParsedPattern>),
-    /// Wildcard (matches anything)
     Wildcard,
+    DeepExpr(Box<ParsedPattern>),
 }
 
 impl fmt::Display for ParsedPattern {
@@ -52,6 +46,7 @@ impl fmt::Display for ParsedPattern {
                 write!(f, ")")
             }
             ParsedPattern::Wildcard => write!(f, "..."),
+            ParsedPattern::DeepExpr(inner) => write!(f, "<... {} ...>", inner),
         }
     }
 }
@@ -242,6 +237,26 @@ impl PatternParser {
                     tokens.push(Token::Literal(literal));
                 }
 
+                // Operators and punctuation that should be separate tokens
+                ';' | '{' | '}' | '[' | ']' | ',' | ':' | '+' | '-' | '*'
+                | '/' | '%' | '^' | '~' | '?' | '!' => {
+                    tokens.push(Token::Literal(ch.to_string()));
+                }
+
+                '<' | '>' => {
+                    tokens.push(Token::Literal(ch.to_string()));
+                }
+
+                '=' => {
+                    if chars.peek() == Some(&'=') {
+                        chars.next();
+                        current_pos += 1;
+                        tokens.push(Token::Literal("==".to_string()));
+                    } else {
+                        tokens.push(Token::Literal("=".to_string()));
+                    }
+                }
+
                 // Regular characters (treated as literal)
                 _ => {
                     let mut literal = String::new();
@@ -249,7 +264,7 @@ impl PatternParser {
 
                     // Continue collecting literal characters
                     while let Some(&next_ch) = chars.peek() {
-                        if next_ch.is_alphanumeric() || "_-+*=<>!&^%#".contains(next_ch) {
+                        if next_ch.is_alphanumeric() || "_".contains(next_ch) {
                             literal.push(chars.next().unwrap());
                             current_pos += 1;
                         } else {

@@ -160,6 +160,7 @@ impl AdvancedPatternMatcher {
             ParsedPattern::Sequence(patterns) => self.match_sequence(patterns, node, depth),
             ParsedPattern::Alternative(patterns) => self.match_alternative(patterns, node, depth),
             ParsedPattern::Wildcard => Ok(true),
+            ParsedPattern::DeepExpr(_) => Ok(true),
         }
     }
 

@@ -320,6 +320,10 @@ impl PreciseExpressionMatcher {
                 name: "$_".to_string(),
                 constraints: Vec::new(),
             }),
+            ParsedPattern::DeepExpr(_) => Ok(PatternNode::Metavariable {
+                name: "$_".to_string(),
+                constraints: Vec::new(),
+            }),
         }
     }
 
