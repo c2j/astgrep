@@ -26,6 +26,8 @@ pub struct AdvancedSemgrepMatcher {
     constant_values: HashMap<String, ConstantValue>,
     /// Full source code of the file being analyzed
     full_source: Option<String>,
+    /// Cached pattern-inside match results: pattern string → vec of (start_line, start_col, end_line, end_col, bindings)
+    inside_match_cache: HashMap<String, Vec<((usize, usize, usize, usize), HashMap<String, String>)>>,
     /// Symbolic propagator for variable alias tracking
     symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
 }
@@ -46,6 +48,7 @@ impl AdvancedSemgrepMatcher {
             max_depth: None,
             constant_values: HashMap::new(),
             full_source: None,
+            inside_match_cache: HashMap::new(),
             symbolic_propagator: None,
         }
     }
@@ -85,8 +88,8 @@ impl AdvancedSemgrepMatcher {
         root: &dyn AstNode,
     ) -> Result<Vec<SemgrepMatchResult>> {
         let mut matches = Vec::new();
-        // Store the full source code for later use in pattern-inside validation
         self.full_source = root.text().map(|s| s.to_string());
+        self.inside_match_cache.clear();
                 // Prefer the smallest (most specific) nodes: search children first and only
         // record a match for a parent if no descendant matched.
         self.find_matches_recursive(pattern, root, &mut matches, 0)?;
@@ -418,132 +421,159 @@ impl AdvancedSemgrepMatcher {
         &mut self,
         inner_pattern: &SemgrepPattern,
         node: &dyn AstNode,
-        all_patterns: &[SemgrepPattern],
+        _all_patterns: &[SemgrepPattern],
     ) -> Result<bool> {
-        // Get the main pattern (the one that's not Inside/NotInside)
-        let main_pattern = all_patterns.iter().find(|p| {
-            !matches!(
-                p.pattern_type,
-                PatternType::Inside(_) | PatternType::NotInside(_)
-            )
-        });
-
-        // Try to match the inner pattern against the current node first
-        // This handles cases where the context node is the current node
         let snapshot = self.metavar_manager.snapshot();
         if self.matches_pattern(inner_pattern, node)? {
             return Ok(true);
         }
         self.metavar_manager.restore(snapshot);
 
-        // For pattern-inside with class context containing field declarations,
-        // we need to extract field names and bind metavariables accordingly.
-        // This enables proper unification between pattern-inside and content patterns.
-        if let PatternType::Simple(pattern_str) = &inner_pattern.pattern_type {
-            // Check if this is a class pattern with field declarations like:
-            // "class $T { private int $X; ... }"
-            if pattern_str.contains("class")
-                && pattern_str.contains("private")
-                && pattern_str.contains("$")
-            {
-                // Use the full source code stored when find_matches was called
-                // This gives us access to the complete class context even when we're deep in the tree
-                if let Some(ref full_source) = self.full_source {
-                                        // Find the enclosing class context by looking for the class declaration
-                    // and extracting the field name that matches the pattern
-                    if let Some(field_bindings) =
-                        self.extract_field_bindings_from_class_context(pattern_str, full_source)
-                    {
-                        // Merge the extracted bindings into the current metavariable environment
-                        for (var_name, value) in field_bindings {
-                            // Remove the $ prefix to match the format used by match_metavariable
-                            // Pattern metavariables like $X are stored as just "X" in the manager
-                            let normalized_name = if let Some(stripped) = var_name.strip_prefix('$') {
-                                stripped.to_string()
-                            } else {
-                                var_name.clone()
-                            };
-                                                        // Only bind if not already bound, or verify consistency
-                            if let Ok(false) = self.metavar_manager.bind(
-                                normalized_name.clone(),
-                                value.clone(),
-                                node,
-                            ) {
-                                // Variable already bound with different value - check consistency
-                                let current_bindings = self.metavar_manager.get_binding_values();
-                                if let Some(existing) = current_bindings.get(&normalized_name) {
-                                    if existing != &value {
-                                                                                return Ok(false);
-                                    }
-                                }
-                            }
+        // AST-based containment check: find all nodes matching the inside pattern
+        // and check if the current node is spatially contained within any match.
+        if let Some(node_loc) = node.location() {
+            if let PatternType::Simple(inside_str) = &inner_pattern.pattern_type {
+                let inside_matches = self.get_inside_pattern_matches(inside_str)?;
+                for (match_loc, bindings) in &inside_matches {
+                    if self.location_contains(match_loc, &node_loc) {
+                        for (var_name, value) in bindings {
+                            let normalized_name = var_name.strip_prefix('$').unwrap_or(var_name).to_string();
+                            let _ = self.metavar_manager.bind(normalized_name, value.clone(), node);
                         }
                         return Ok(true);
                     }
-                } else {
-                                    }
+                }
             }
         }
 
-        // Check if we're in a method call context that references 'this'
-        if let Some(text) = node.text() {
-            if text.contains("this.") {
-                // This is a heuristic: if we see 'this.', we're likely in a class context
-                // Check if the pattern contains class-related context
-                if let Some(main) = main_pattern {
-                    if let PatternType::Simple(main_str) = &main.pattern_type {
-                        if main_str.contains("this.") {
-                            // The main pattern uses 'this', so we're likely in the right context
-                            return Ok(true);
-                        }
+        // For non-simple pattern types (Either, All, etc.), try matching against ancestors
+        // by checking if the inside pattern matches any node whose location contains this node
+        self.check_ancestor_contains(inner_pattern, node)
+    }
+
+    fn get_inside_pattern_matches(
+        &mut self,
+        pattern_str: &str,
+    ) -> Result<Vec<((usize, usize, usize, usize), HashMap<String, String>)>> {
+        if let Some(cached) = self.inside_match_cache.get(pattern_str) {
+            return Ok(cached.clone());
+        }
+
+        let mut results = Vec::new();
+        if let Some(ref full_source) = self.full_source {
+            if let Some(regions) = self.find_inside_regions(pattern_str, full_source) {
+                for (reg_start, reg_end, bindings) in &regions {
+                    if let Some(loc) = self.byte_offsets_to_location(*reg_start, *reg_end, full_source) {
+                        results.push((loc, bindings.clone()));
                     }
                 }
             }
         }
 
-        // Last resort: check if inner pattern could match by looking at node structure
-        // This is a very loose heuristic
-        let pattern_str = format!("{:?}", inner_pattern.pattern_type);
-        if pattern_str.contains("class") {
-            // If inner pattern is about classes, check if current node is in a class-like context
-            // by looking for method/field patterns
-            if let Some(text) = node.text() {
-                if text.contains("public") || text.contains("private") || text.contains("void") {
-                    return Ok(true);
-                }
-            }
-        }
+        self.inside_match_cache.insert(pattern_str.to_string(), results.clone());
+        Ok(results)
+    }
 
-        // General text-based region matching for pattern-inside
-        if let PatternType::Simple(inside_str) = &inner_pattern.pattern_type {
-            if let Some(ref full_source) = self.full_source {
-                if let Some((node_start, node_end)) =
-                    self.get_node_byte_offset_range(node, full_source)
-                {
-                                        if let Some(regions) = self.find_inside_regions(inside_str, full_source) {
-                                                for (reg_start, reg_end, bindings) in &regions {
-                                                        if node_start >= *reg_start && node_end <= *reg_end {
-                                // Apply captured metavariable bindings from pattern-inside match
-                                for (var_name, value) in bindings {
-                                    let normalized_name = if let Some(stripped) = var_name.strip_prefix('$') {
-                                        stripped.to_string()
-                                    } else {
-                                        var_name.clone()
-                                    };
-                                    let _ = self.metavar_manager.bind(
-                                        normalized_name,
-                                        value.clone(),
-                                        node,
-                                    );
-                                }
-                                                                return Ok(true);
-                            }
-                        }
-                    }
-                } else {
-                                    }
+    fn byte_offsets_to_location(
+        &self,
+        start_byte: usize,
+        end_byte: usize,
+        source: &str,
+    ) -> Option<(usize, usize, usize, usize)> {
+        let mut line = 1;
+        let mut col = 1;
+        let mut start_line = 0;
+        let mut start_col = 0;
+
+        for (i, ch) in source.char_indices() {
+            if i == start_byte {
+                start_line = line;
+                start_col = col;
+            }
+            if i == end_byte {
+                return Some((start_line, start_col, line, col));
+            }
+            if ch == '\n' {
+                line += 1;
+                col = 1;
             } else {
+                col += 1;
+            }
+        }
+        if start_line > 0 {
+            return Some((start_line, start_col, line, col));
+        }
+        None
+    }
+
+    fn location_contains(
+        &self,
+        outer: &(usize, usize, usize, usize),
+        inner: &(usize, usize, usize, usize),
+    ) -> bool {
+        let (os, oc, oe, oec) = *outer;
+        let (is, ic, ie, iec) = *inner;
+        if os < is { return true; }
+        if os > is { return false; }
+        if oc <= ic {
+            if oe > ie { return true; }
+            if oe < ie { return false; }
+            return oec >= iec;
+        }
+        false
+    }
+
+    fn check_ancestor_contains(
+        &mut self,
+        inner_pattern: &SemgrepPattern,
+        node: &dyn AstNode,
+    ) -> Result<bool> {
+        if let Some(node_loc) = node.location() {
+            let node_text = node.text().unwrap_or("").to_string();
+            if let Some(ref full_source) = self.full_source {
+                let parsed = self.parser.parse(
+                    match &inner_pattern.pattern_type {
+                        PatternType::Simple(s) => s.as_str(),
+                        _ => "",
+                    }
+                ).unwrap_or(ParsedPattern::Wildcard);
+
+                let search_text = match &inner_pattern.pattern_type {
+                    PatternType::Simple(s) => {
+                        let key_tokens: Vec<&str> = s.split(|c: char| c.is_whitespace() || "(){}[];,".contains(c))
+                            .filter(|t| !t.is_empty() && !t.starts_with('$') && *t != "...")
+                            .take(3)
+                            .collect();
+                        key_tokens
+                    },
+                    _ => vec![],
+                };
+
+                if !search_text.is_empty() {
+                    let mut byte_offset = 0;
+                    let mut current_line = 1;
+
+                    for line_text in full_source.lines() {
+                        let line_has_keywords = search_text.iter().all(|kw| line_text.contains(kw));
+                        if line_has_keywords && current_line <= node_loc.0 {
+                            if let Some(col_pos) = line_text.find(search_text[0]) {
+                                let enc_start_line = current_line;
+                                let enc_start_col = col_pos + 1;
+
+                                let snapshot = self.metavar_manager.snapshot();
+                                if enc_start_line < node_loc.0 || (enc_start_line == node_loc.0 && enc_start_col <= node_loc.1) {
+                                    self.metavar_manager.restore(snapshot);
+                                    return Ok(true);
+                                }
+                                self.metavar_manager.restore(snapshot);
                             }
+                        }
+
+                        byte_offset += line_text.len() + 1;
+                        current_line += 1;
+                    }
+                }
+            }
         }
 
         Ok(false)
@@ -816,7 +846,9 @@ impl AdvancedSemgrepMatcher {
             // For single-token patterns, use word-boundary matching to prevent
             // "return" from matching "returns" etc.
             if !literal.contains(' ') && !literal.contains('.') && literal.len() > 1 {
-                let re_str = format!(r"(?:(?<=\W)|^){}(?:(?=\W)|$)", regex::escape(literal));
+                // Use \b word boundary instead of look-around (Rust regex crate
+                // does not support look-around assertions).
+                let re_str = format!(r"\b{}\b", regex::escape(literal));
                 if let Ok(re) = Regex::new(&re_str) {
                     if re.is_match(text) {
                         return Ok(true);
@@ -1072,12 +1104,21 @@ impl AdvancedSemgrepMatcher {
             if text.trim() == literal.trim() {
                 return Ok(true);
             }
+            // Quote normalization: "bar" matches bar, 'bar' matches bar
+            let trimmed = text.trim();
+            let stripped = trimmed
+                .strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                .or_else(|| trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+                .unwrap_or(trimmed);
+            if stripped == literal.trim() {
+                return Ok(true);
+            }
             let is_punctuation = literal.chars().all(|c| "!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c));
             if is_punctuation && text.trim() == literal {
                 return Ok(true);
             }
             if !literal.contains(' ') && !literal.contains('.') {
-                let re_str = format!(r"(?:(?<=\W)|^){}(?:(?=\W)|$)", regex::escape(literal));
+                let re_str = format!(r"\b{}\b", regex::escape(literal));
                 if let Ok(re) = Regex::new(&re_str) {
                     if re.is_match(text) {
                         return Ok(true);
