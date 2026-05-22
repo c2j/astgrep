@@ -8,6 +8,7 @@ description = "Pattern matching engine for astgrep"
 astgrep-core = { path = "../astgrep-core" }
 astgrep-ast = { path = "../astgrep-ast" }
 astgrep-dataflow = { path = "../astgrep-dataflow" }
+astgrep-parser = { path = "../astgrep-parser" }
 regex.workspace = true
 anyhow.workspace = true
 serde.workspace = true

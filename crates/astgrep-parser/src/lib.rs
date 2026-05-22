@@ -12,6 +12,7 @@ pub mod python;
 pub mod registry;
 pub mod script_discovery;
 pub mod sql;
+pub mod pattern_tree;
 pub mod tree_sitter_parser;
 pub mod xml;
 
