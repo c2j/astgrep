@@ -6,6 +6,7 @@
 
 use crate::metavar::MetavarManager;
 use crate::parser::{ParsedPattern, PatternParser};
+use crate::tree_matcher::TreeMatcher;
 use astgrep_core::{
     AnalysisError, AstNode, ComparisonOperator, Condition, MatchBinding, PatternType, Result,
     SemgrepMatchResult, SemgrepPattern,
@@ -22,14 +23,12 @@ pub struct AdvancedSemgrepMatcher {
     metavar_manager: MetavarManager,
     debug_mode: bool,
     max_depth: Option<usize>,
-    /// Constant propagation values: variable name -> constant value
     constant_values: HashMap<String, ConstantValue>,
-    /// Full source code of the file being analyzed
     full_source: Option<String>,
-    /// Cached pattern-inside match results: pattern string → vec of (start_line, start_col, end_line, end_col, bindings)
     inside_match_cache: HashMap<String, Vec<((usize, usize, usize, usize), HashMap<String, String>)>>,
-    /// Symbolic propagator for variable alias tracking
     symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
+    tree_matcher: TreeMatcher,
+    language_hint: Option<astgrep_core::Language>,
 }
 
 impl Default for AdvancedSemgrepMatcher {
@@ -50,6 +49,8 @@ impl AdvancedSemgrepMatcher {
             full_source: None,
             inside_match_cache: HashMap::new(),
             symbolic_propagator: None,
+            tree_matcher: TreeMatcher::new(),
+            language_hint: None,
         }
     }
 
@@ -82,17 +83,44 @@ impl AdvancedSemgrepMatcher {
     }
 
     /// Find all matches for a pattern in the AST
+    pub fn set_language(&mut self, lang: astgrep_core::Language) {
+        self.language_hint = Some(lang);
+    }
+
     pub fn find_matches(
         &mut self,
         pattern: &SemgrepPattern,
         root: &dyn AstNode,
     ) -> Result<Vec<SemgrepMatchResult>> {
-        let mut matches = Vec::new();
         self.full_source = root.text().map(|s| s.to_string());
         self.inside_match_cache.clear();
-                // Prefer the smallest (most specific) nodes: search children first and only
-        // record a match for a parent if no descendant matched.
+
+        let mut matches = Vec::new();
         self.find_matches_recursive(pattern, root, &mut matches, 0)?;
+
+        // Augment with AST structural matching results (Phase 2 engine)
+        if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
+            if let Some(lang) = self.language_hint {
+                let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
+                if !tree_results.is_empty() {
+                    let existing: std::collections::HashSet<(usize, usize)> = matches
+                        .iter()
+                        .filter_map(|m| {
+                            let loc = m.node.location();
+                            Some((loc?.0, loc?.1))
+                        })
+                        .collect();
+                    for r in tree_results {
+                        if let Some(loc) = r.node.location() {
+                            if !existing.contains(&(loc.0, loc.1)) {
+                                matches.push(r);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(matches)
     }
 

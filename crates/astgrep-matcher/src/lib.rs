@@ -9,6 +9,7 @@ pub mod metavar;
 pub mod parser;
 pub mod precise_matcher;
 pub mod script_classifier;
+pub mod tree_matcher;
 
 pub use advanced_matcher::*;
 pub use conditions::{ComparisonOp, ConditionEvaluator, ConditionType};

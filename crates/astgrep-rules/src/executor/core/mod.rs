@@ -92,6 +92,8 @@ impl AdvancedRuleExecutor {
             None
         };
 
+        self.pattern_matcher.set_language(language);
+
         // Perform symbolic propagation analysis if needed
         let enable_symbolic_propagation = applicable_rules
             .iter()
