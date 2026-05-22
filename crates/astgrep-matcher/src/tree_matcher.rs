@@ -138,6 +138,9 @@ impl MatchCtx {
             PatternTree::Ellipsis => true,
 
             PatternTree::Metavar { name } => {
+                if name == "_" {
+                    return target.text().map_or(false, |t| !t.trim().is_empty());
+                }
                 if let Some(text) = target.text() {
                     let trimmed = text.trim();
                     if !trimmed.is_empty() {

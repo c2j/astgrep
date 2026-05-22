@@ -871,11 +871,7 @@ impl AdvancedSemgrepMatcher {
                 return Ok(true);
             }
 
-            // For single-token patterns, use word-boundary matching to prevent
-            // "return" from matching "returns" etc.
             if !literal.contains(' ') && !literal.contains('.') && literal.len() > 1 {
-                // Use \b word boundary instead of look-around (Rust regex crate
-                // does not support look-around assertions).
                 let re_str = format!(r"\b{}\b", regex::escape(literal));
                 if let Ok(re) = Regex::new(&re_str) {
                     if re.is_match(text) {
@@ -1126,13 +1122,38 @@ impl AdvancedSemgrepMatcher {
 
     fn match_literal_exact(&self, literal: &str, node: &dyn AstNode) -> Result<bool> {
         if let Some(text) = node.text() {
+            // "..." matches any non-empty string literal
+            if literal == "..." {
+                let nt = node.node_type();
+                if nt == "string" || nt == "string_literal" || nt == "literal"
+                    || nt == "template_string" || nt == "concatenated_string"
+                    || nt == "fstring" || nt == "fstring_string"
+                {
+                    let t = text.trim();
+                    if (t.starts_with('"') && t.ends_with('"') && t.len() > 2)
+                        || (t.starts_with('\'') && t.ends_with('\'') && t.len() > 2)
+                        || (t.starts_with("`") && t.ends_with("`") && t.len() > 2)
+                    {
+                        return Ok(true);
+                    }
+                }
+                // For non-string node types, check if the text looks like a quoted string
+                let t = text.trim();
+                if (t.starts_with('"') && t.ends_with('"') && t.len() > 2)
+                    || (t.starts_with('\'') && t.ends_with('\'') && t.len() > 2)
+                    || (t.starts_with("`") && t.ends_with("`") && t.len() > 2)
+                {
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
+
             if text == literal {
                 return Ok(true);
             }
             if text.trim() == literal.trim() {
                 return Ok(true);
             }
-            // Quote normalization: "bar" matches bar, 'bar' matches bar
             let trimmed = text.trim();
             let stripped = trimmed
                 .strip_prefix('"').and_then(|s| s.strip_suffix('"'))

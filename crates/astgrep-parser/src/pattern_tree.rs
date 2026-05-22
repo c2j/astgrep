@@ -332,6 +332,25 @@ impl PatternTreeParser {
             }
         }
 
+        // For string literals, check if the unquoted content is a metavar placeholder
+        // Pattern: foo("$VAR") → tree-sitter gives string node with text '"__mg_VAR__"'
+        if node.kind() == "string" || node.kind() == "string_literal" {
+            let unquoted = text
+                .strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                .or_else(|| text.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')));
+            if let Some(inner) = unquoted {
+                if let Some(kind) = meta_map.get(inner) {
+                    return match kind {
+                        PlaceholderKind::Metavar(name) => PatternTree::Metavar { name: name.clone() },
+                        PlaceholderKind::Ellipsis => PatternTree::Ellipsis,
+                        PlaceholderKind::EllipsisMetavar(name) => {
+                            PatternTree::EllipsisMetavar { name: name.clone() }
+                        }
+                    };
+                }
+            }
+        }
+
         PatternTree::Node {
             kind: node.kind().to_string(),
             children,
