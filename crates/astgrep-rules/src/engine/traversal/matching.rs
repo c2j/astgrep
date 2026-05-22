@@ -44,7 +44,7 @@ pub fn find_pattern_matches(
     Ok(findings)
 }
 
-/// Find pattern spans in source code
+/// Find pattern spans in source code using semgrep-aware regex conversion
 pub(crate) fn find_pattern_spans_in_source(
     pattern: &str,
     source: &str,
@@ -55,28 +55,30 @@ pub(crate) fn find_pattern_spans_in_source(
 
     let mut spans = Vec::new();
 
-    // Escape special regex characters but keep the pattern as literal
-    let escaped = regex::escape(pattern);
+    let regex_str = semgrep_pattern_to_regex(pattern);
+    let is_multiline = pattern.contains('\n');
 
-    // Try to compile as regex
-    match Regex::new(&escaped) {
+    let final_regex = if is_multiline {
+        format!("(?s){}", regex_str)
+    } else {
+        regex_str
+    };
+
+    match Regex::new(&final_regex) {
         Ok(re) => {
             if sql_stmt_boundary {
-                // For SQL, split by statements and match within each
                 for stmt in source.split(';') {
                     for mat in re.find_iter(stmt) {
                         spans.push((mat.start(), mat.end()));
                     }
                 }
             } else {
-                // Normal matching
                 for mat in re.find_iter(source) {
                     spans.push((mat.start(), mat.end()));
                 }
             }
         }
         Err(_) => {
-            // If regex fails, do simple string search
             let mut start = 0;
             while let Some(pos) = source[start..].find(pattern) {
                 let match_start = start + pos;
@@ -88,6 +90,103 @@ pub(crate) fn find_pattern_spans_in_source(
     }
 
     spans
+}
+
+/// Convert a semgrep pattern to a regex string
+/// Handles: ... (wildcard), $VAR (metavar), $...ARGS (named ellipsis), <... ...> (deep match)
+fn semgrep_pattern_to_regex(pattern: &str) -> String {
+    let mut result = String::with_capacity(pattern.len() * 2);
+    let chars: Vec<char> = pattern.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        // Handle <... ...> deep expression matching
+        if i + 4 < len && chars[i] == '<' && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '.' {
+            result.push_str(".*?");
+            i += 4;
+            if i < len && chars[i] == ' ' {
+                i += 1;
+            }
+            continue;
+        }
+        if i + 3 < len && chars[i] == '.' && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '>' {
+            result.push_str("");
+            i += 4;
+            continue;
+        }
+
+        // Handle $...NAME (named ellipsis metavariable)
+        if chars[i] == '$' && i + 3 < len && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '.' {
+            i += 4;
+            let mut name = String::new();
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                name.push(chars[i]);
+                i += 1;
+            }
+            let _ = name;
+            result.push_str("[\\s\\S]*?");
+            continue;
+        }
+
+        // Handle $VAR (metavariable)
+        if chars[i] == '$' && i + 1 < len && (chars[i + 1].is_alphabetic() || chars[i + 1] == '_') {
+            i += 1;
+            let mut name = String::new();
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                name.push(chars[i]);
+                i += 1;
+            }
+            let _ = name;
+            result.push_str("(?:[a-zA-Z_]\\w*(?:\\.[a-zA-Z_]\\w*)*|\\d+(?:\\.\\d+)?|\"[^\"]*\"|'[^']*')");
+            continue;
+        }
+
+        // Handle ${$VAR} (bash variable substitution in metavar context)
+        if chars[i] == '$' && i + 1 < len && chars[i + 1] == '{' {
+            i += 2;
+            let mut inner = String::new();
+            while i < len && chars[i] != '}' {
+                inner.push(chars[i]);
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            let inner_regex = semgrep_pattern_to_regex(&inner);
+            result.push_str(&format!("\\$\\{{{}\\}}", inner_regex.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")));
+            continue;
+        }
+
+        // Handle ... (ellipsis wildcard)
+        if i + 2 < len && chars[i] == '.' && chars[i + 1] == '.' && chars[i + 2] == '.' {
+            result.push_str("[\\s\\S]*?");
+            i += 3;
+            continue;
+        }
+
+        // Handle newlines in pattern → match any whitespace/blank lines
+        if chars[i] == '\n' {
+            result.push_str("\\s*");
+            i += 1;
+            continue;
+        }
+
+        // Escape and push literal character
+        let c = chars[i];
+        match c {
+            '\\' | '.' | '^' | '$' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}' => {
+                result.push('\\');
+                result.push(c);
+            }
+            _ => {
+                result.push(c);
+            }
+        }
+        i += 1;
+    }
+
+    result
 }
 
 /// Calculate line and column from byte offset

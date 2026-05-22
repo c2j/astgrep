@@ -121,6 +121,7 @@ impl RuleExecutionEngine {
     ) -> Result<Vec<Finding>> {
         use std::collections::HashSet;
         let mut findings = Vec::new();
+        let pattern_str = pattern_str.trim();
 
         // If pattern has conditions or requires symbolic propagation, use AdvancedRuleExecutor
         let requires_advanced =
@@ -144,6 +145,11 @@ impl RuleExecutionEngine {
             (has_literal || has_paren_literal) && rule.has_constant_propagation();
 
         if requires_advanced || needs_constant_prop {
+            return self.execute_advanced_pattern(pattern, rule, context, _ast);
+        }
+
+        let has_semgrep_syntax = pattern_str.contains("...") || pattern_str.contains('$');
+        if has_semgrep_syntax {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
