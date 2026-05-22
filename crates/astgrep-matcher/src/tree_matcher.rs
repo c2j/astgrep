@@ -225,7 +225,9 @@ impl MatchCtx {
 
         // Phase 2: Text-less pattern — must match structurally via children.
         // The pattern's kind must be compatible with the target's node type.
-        let target_kind = target.node_type();
+        let target_kind = target
+            .get_attribute("ts_kind")
+            .unwrap_or(target.node_type());
         let kind_match = pattern_kind == target_kind
             || pattern_kind == "_"
             || (pattern_kind.contains('_') && target_kind.contains('_')
