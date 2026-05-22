@@ -950,10 +950,16 @@ impl AdvancedSemgrepMatcher {
             return Ok(false);
         }
 
-        // Collect non-empty children
+        // Collect non-empty children, filtering out comments
         let children: Vec<&dyn AstNode> = (0..node.child_count())
             .filter_map(|i| node.child(i))
             .filter(|c| {
+                let nt = c.node_type();
+                if nt == "comment" || nt.ends_with("_comment") || nt == "line_comment"
+                    || nt == "block_comment"
+                {
+                    return false;
+                }
                 if let Some(t) = c.text() {
                     !t.trim().is_empty()
                 } else {
