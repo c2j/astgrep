@@ -262,15 +262,10 @@ impl AdvancedRuleExecutor {
         };
         let has_ellipsis = pattern_str.contains("...");
 
-        // If no matches found and we have either:
-        // 1. Type constraints with symbolic propagation, or
-        // 2. Pattern contains ellipsis and symbolic propagation is enabled
-        // try to find matches using symbolic propagation
+        // If no matches found and symbolic propagation is enabled, try expanding variables
         let matches = if matches.is_empty()
             && self.symbolic_propagator.is_some()
-            && (!type_constraints.is_empty() || has_ellipsis)
         {
-            eprintln!("DEBUG: No direct matches found, attempting symbolic propagation matching");
             self.find_matches_via_symbolic_propagation(&semgrep_pattern, ast, &type_constraints)?
         } else {
             matches
@@ -405,7 +400,15 @@ impl AdvancedRuleExecutor {
         match_result: &SemgrepMatchResult,
         file_path: Option<&Path>,
     ) -> Result<Finding> {
-        let location = match_result
+        let default_location = || Location {
+            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+            start_line: 1,
+            start_column: 1,
+            end_line: 1,
+            end_column: 1,
+        };
+
+        let node_location = match_result
             .node
             .location()
             .map(|(start_line, start_col, end_line, end_col)| Location {
@@ -415,13 +418,33 @@ impl AdvancedRuleExecutor {
                 end_line,
                 end_column: end_col,
             })
-            .unwrap_or_else(|| Location {
-                file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
-                start_line: 1,
-                start_column: 1,
-                end_line: 1,
-                end_column: 1,
-            });
+            .unwrap_or_else(default_location);
+
+        // If focus-metavariable is set, relocate the finding to the metavar's position
+        let location = if let Some(ref focus_vars) = pattern.focus {
+            if let Some(first_focus) = focus_vars.first() {
+                let var_name = first_focus.strip_prefix('$').unwrap_or(first_focus);
+                if let Some(binding) = match_result.bindings.get(var_name) {
+                    if let Some((sl, sc, el, ec)) = binding.location {
+                        Location {
+                            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                            start_line: sl,
+                            start_column: sc,
+                            end_line: el,
+                            end_column: ec,
+                        }
+                    } else {
+                        node_location
+                    }
+                } else {
+                    node_location
+                }
+            } else {
+                node_location
+            }
+        } else {
+            node_location
+        };
 
         let mut message = rule.description.clone();
 
