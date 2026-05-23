@@ -18,6 +18,7 @@ use std::path::Path;
 mod conditions;
 mod symbolic;
 mod taint;
+mod taint_env;
 mod utils;
 
 pub struct AdvancedRuleExecutor {
