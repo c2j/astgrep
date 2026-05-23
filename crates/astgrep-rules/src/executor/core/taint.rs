@@ -16,7 +16,13 @@ impl AdvancedRuleExecutor {
         file_path: Option<&Path>,
     ) -> Result<Vec<Finding>> {
         let mut findings = Vec::new();
-        let source_text = ast.text().unwrap_or_default();
+        // Read actual file content when file_path is available (preserves original line numbering).
+        // Falls back to ast.text() which may strip leading empty lines, causing line offset issues.
+        let source_text = if let Some(path) = file_path {
+            std::fs::read_to_string(path).unwrap_or_else(|_| ast.text().unwrap_or_default().to_string())
+        } else {
+            ast.text().unwrap_or_default().to_string()
+        };
 
         // Debug: Print dataflow spec details
         eprintln!(
@@ -165,6 +171,7 @@ impl AdvancedRuleExecutor {
                     assume_safe_booleans,
                     assume_safe_numbers,
                     assume_safe_indexes,
+                    only_propagate_through_assignments,
                 )
             };
 
@@ -447,17 +454,27 @@ impl AdvancedRuleExecutor {
                 // If still no var_name and the match looks like a string literal,
                 // try to find the variable that is assigned this string literal
                 if var_name.is_none() {
-                    if let Some(text) = m.node.text() {
-                        let text = text.trim();
-                        // Check if this is a string literal pattern match (starts and ends with ")
-                        if text.starts_with('"') && text.ends_with('"') && text.len() > 2 {
-                            // This is a string literal match, find the variable it's assigned to
+                    // Check if the original pattern is a string literal pattern (e.g. '"password"')
+                    // Tree-sitter may return string content without quotes (e.g. "password")
+                    let is_string_pattern = normalized_pattern.starts_with('"')
+                        && normalized_pattern.ends_with('"');
+                    if is_string_pattern {
+                        if let Some(text) = m.node.text() {
+                            let text = text.trim().trim_matches('"');
                             if let Some((start_line, _, _, _)) = m.node.location() {
+                                // Try the reported line; if it doesn't have '=', try the previous line
                                 var_name = self.find_variable_for_string_literal(
                                     source_text,
                                     start_line,
                                     text,
                                 );
+                                if var_name.is_none() && start_line > 1 {
+                                    var_name = self.find_variable_for_string_literal(
+                                        source_text,
+                                        start_line - 1,
+                                        text,
+                                    );
+                                }
                             }
                         }
                     }
@@ -778,6 +795,7 @@ impl AdvancedRuleExecutor {
         _taint_assume_safe_booleans: bool,
         _taint_assume_safe_numbers: bool,
         _taint_assume_safe_indexes: bool,
+        taint_only_propagate_through_assignments: bool,
     ) -> Vec<(TaintMatch, TaintMatch)> {
         use super::taint_env::{
             contains_var_reference, extract_target_var, find_assignment_eq, is_safe_value,
@@ -844,10 +862,17 @@ impl AdvancedRuleExecutor {
                 for (source_idx, source_match) in source_entries {
                     if let Some(ref var) = source_match.var_name {
                         let normalized_var = var.strip_prefix("this.").unwrap_or(var);
-                        env.taint(normalized_var, line_num, *source_idx);
+                        // Strip array index: x[i] → x for array-level taint tracking
+                        let base_var = normalized_var.split('[').next().unwrap_or(normalized_var).trim();
+                        env.taint(base_var, line_num, *source_idx);
+                        let display_var = if base_var != normalized_var {
+                            format!("{} (base: {})", normalized_var, base_var)
+                        } else {
+                            normalized_var.to_string()
+                        };
                         eprintln!(
                             "[DEBUG-TAINT-ENV] Line {}: tainted var '{}' from source {}",
-                            line_num, normalized_var, source_idx
+                            line_num, display_var, source_idx
                         );
                     }
                 }
@@ -907,6 +932,14 @@ impl AdvancedRuleExecutor {
                                 "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (numeric call, safe_numbers)",
                                 line_num, tvar, target_var
                             );
+                        } else if taint_only_propagate_through_assignments
+                            && value.trim() != tvar
+                        {
+                            // Only propagate through direct assignments (x = y), not expressions (x = y+1)
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (not pure assignment)",
+                                line_num, tvar, target_var
+                            );
                         } else if _taint_assume_safe_indexes
                             && is_tainted_as_array_index(value, &tvar)
                         {
@@ -916,7 +949,9 @@ impl AdvancedRuleExecutor {
                                 line_num, tvar, target_var
                             );
                         } else {
-                            env.propagate(&target_var, &tvar);
+                            // Strip brackets from propagation target: x[i] → x (array-level tracking)
+                            let prop_target = target_var.split('[').next().unwrap_or(&target_var).trim().to_string();
+                            env.propagate(&prop_target, &tvar);
                             eprintln!(
                                 "[DEBUG-TAINT-ENV] Line {}: propagated '{}' -> '{}'",
                                 line_num, tvar, target_var
@@ -927,12 +962,27 @@ impl AdvancedRuleExecutor {
                     }
                 }
 
-                if !propagated && env.is_tainted(&target_var) && is_safe_value(value) {
-                    env.untaint(&target_var);
-                    eprintln!(
-                        "[DEBUG-TAINT-ENV] Line {}: untainted '{}' (reassigned safe value)",
-                        line_num, target_var
-                    );
+                if !propagated {
+                    // Direct target check: untaint if safe value reassigned
+                    if env.is_tainted(&target_var) && is_safe_value(value) {
+                        env.untaint(&target_var);
+                        eprintln!(
+                            "[DEBUG-TAINT-ENV] Line {}: untainted '{}' (reassigned safe value)",
+                            line_num, target_var
+                        );
+                    }
+                    // Array element assignment: x[i] = non_source → untaint array x
+                    // Skip if a source was matched at this line (source match already seeds taint)
+                    if target_var.contains('[') && !source_map.contains_key(&line_num) {
+                        let target_base = target_var.split('[').next().unwrap_or(&target_var).trim().to_string();
+                        if env.is_tainted(&target_base) {
+                            env.untaint(&target_base);
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] Line {}: untainted array '{}' (element assigned non-tainted value)",
+                                line_num, target_base
+                            );
+                        }
+                    }
                 }
             }
 
