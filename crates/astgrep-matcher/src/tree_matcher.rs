@@ -240,6 +240,10 @@ impl MatchCtx {
         let target_children: Vec<&dyn AstNode> = (0..target.child_count())
             .filter_map(|i| target.child(i))
             .filter(|c| {
+                let kind = c.get_attribute("ts_kind").unwrap_or(c.node_type());
+                if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
+                    return false;
+                }
                 if let Some(t) = c.text() {
                     let t = t.trim();
                     !t.is_empty()

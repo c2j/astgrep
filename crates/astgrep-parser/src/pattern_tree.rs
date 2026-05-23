@@ -174,7 +174,6 @@ impl PatternTreeParser {
         let root = tree.root_node();
         let source = &preprocessed;
 
-        // Find the first meaningful node (skip root/program wrappers)
         let meaningful = self.find_meaningful_node(&root, source);
         let node = meaningful.as_ref().unwrap_or(&root);
 
