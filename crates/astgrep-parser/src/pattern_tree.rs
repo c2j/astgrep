@@ -167,9 +167,10 @@ impl PatternTreeParser {
     }
 
     /// Parse a semgrep pattern into a `PatternTree`.
-    pub fn parse(&mut self, pattern: &str, language: Language) -> Result<PatternTree> {
-        let (preprocessed, meta_map) = preprocess_pattern(pattern);
-        let tree = self.parse_with_tree_sitter(&preprocessed, language)?;
+     pub fn parse(&mut self, pattern: &str, language: Language) -> Result<PatternTree> {
+         let trimmed = pattern.trim();
+         let (preprocessed, meta_map) = preprocess_pattern(trimmed);
+         let tree = self.parse_with_tree_sitter(&preprocessed, language)?;
 
         let root = tree.root_node();
         let source = &preprocessed;
@@ -283,13 +284,18 @@ impl PatternTreeParser {
     }
 
     /// Convert a tree-sitter CST node into a `PatternTree`.
-    fn convert_node(
-        &self,
-        node: &Node,
-        source: &str,
-        meta_map: &HashMap<String, PlaceholderKind>,
-    ) -> PatternTree {
-        let text = node.utf8_text(source.as_bytes()).unwrap_or("");
+     fn convert_node(
+         &self,
+         node: &Node,
+         source: &str,
+         meta_map: &HashMap<String, PlaceholderKind>,
+     ) -> PatternTree {
+         let range = node.byte_range();
+         let text = if range.start <= source.len() && range.end <= source.len() {
+             std::str::from_utf8(&source.as_bytes()[range]).unwrap_or("")
+         } else {
+             ""
+         };
 
         // Check if this entire node text is a metavar placeholder
         if let Some(kind) = meta_map.get(text) {
