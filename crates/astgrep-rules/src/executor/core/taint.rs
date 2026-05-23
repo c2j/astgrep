@@ -3,6 +3,7 @@
 //! This module contains taint analysis methods for tracking data flow from sources to sinks
 
 use super::*;
+use super::taint_env::is_tainted_as_array_index;
 
 impl AdvancedRuleExecutor {
     /// Execute taint analysis for taint mode rules
@@ -73,6 +74,19 @@ impl AdvancedRuleExecutor {
             dataflow_spec.taint_assume_safe_numbers.unwrap_or(false)
         };
 
+        let assume_safe_indexes =
+            if let Some(val) = rule.metadata.get("taint_assume_safe_indexes") {
+                if let serde_yaml::Value::String(ref s) = val {
+                    s == "true"
+                } else if let serde_yaml::Value::Bool(ref b) = val {
+                    *b
+                } else {
+                    false
+                }
+            } else {
+                dataflow_spec.taint_assume_safe_indexes.unwrap_or(false)
+            };
+
         let only_propagate_through_assignments = if let Some(val) = rule
             .metadata
             .get("taint_only_propagate_through_assignments")
@@ -90,6 +104,54 @@ impl AdvancedRuleExecutor {
                 .unwrap_or(false)
         };
 
+        // Helper: extract sink argument from a sink call like "sink(x)" -> "x"
+        let extract_sink_arg = |sink_text: &str| -> Option<String> {
+            let text = sink_text.trim();
+            if let Some(paren) = text.find('(') {
+                let after = &text[paren + 1..];
+                if let Some(close) = after.rfind(')') {
+                    let arg = after[..close].trim();
+                    if !arg.is_empty() && !arg.contains('"') && !arg.contains('\'') {
+                        return Some(arg.to_string());
+                    }
+                }
+            }
+            None
+        };
+
+        // Helper: check if a flow goes through an array index assignment
+        let flow_goes_through_array_index = |source: &TaintMatch, sink: &TaintMatch| -> bool {
+            if let Some(ref source_var) = source.var_name {
+                if let Some(sink_text) = sink.node.text() {
+                    if let Some(sink_var) = extract_sink_arg(&sink_text) {
+                        let lines: Vec<&str> = source_text.lines().collect();
+                        if let Some((sl, _, _, _)) = sink.node.location() {
+                            if sl > 0 && sl <= lines.len() {
+                                for l in (0..sl - 1).rev() {
+                                    let line = lines[l].trim();
+                                    if line.starts_with(&format!("{} =", sink_var))
+                                        || line.starts_with(&format!("{}=", sink_var))
+                                    {
+                                        let rhs = line
+                                            .splitn(2, '=')
+                                            .nth(1)
+                                            .unwrap_or("")
+                                            .trim()
+                                            .trim_end_matches(';');
+                                        if is_tainted_as_array_index(rhs, source_var) {
+                                            return true;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        };
+
         let taint_flows = {
             // Env-based forward dataflow detection (skip if rule uses labels — not supported)
             let env_flows = if dataflow_spec.uses_labels {
@@ -102,6 +164,7 @@ impl AdvancedRuleExecutor {
                     dataflow_spec,
                     assume_safe_booleans,
                     assume_safe_numbers,
+                    assume_safe_indexes,
                 )
             };
 
@@ -167,6 +230,22 @@ impl AdvancedRuleExecutor {
                 "[DEBUG] Merged taint flows: {} (heuristic) + {} (env new) = {} total",
                 merged.len() - added_from_env, added_from_env, merged.len()
             );
+
+            // Filter flows that go through array index access when assume_safe_indexes is set
+            if assume_safe_indexes {
+                let before = merged.len();
+                merged.retain(|(source, sink)| {
+                    !flow_goes_through_array_index(source, sink)
+                });
+                let removed = before - merged.len();
+                if removed > 0 {
+                    eprintln!(
+                        "[DEBUG] Filtered {} flows through array index (assume_safe_indexes)",
+                        removed
+                    );
+                }
+            }
+
             merged
         };
 
@@ -698,9 +777,11 @@ impl AdvancedRuleExecutor {
         dataflow_spec: &crate::types::DataFlowSpec,
         _taint_assume_safe_booleans: bool,
         _taint_assume_safe_numbers: bool,
+        _taint_assume_safe_indexes: bool,
     ) -> Vec<(TaintMatch, TaintMatch)> {
         use super::taint_env::{
-            contains_var_reference, extract_target_var, find_assignment_eq, is_safe_value, TaintEnv,
+            contains_var_reference, extract_target_var, find_assignment_eq, is_safe_value,
+            is_tainted_as_array_index, TaintEnv,
         };
 
         let mut flows = Vec::new();
@@ -826,6 +907,14 @@ impl AdvancedRuleExecutor {
                                 "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (numeric call, safe_numbers)",
                                 line_num, tvar, target_var
                             );
+                        } else if _taint_assume_safe_indexes
+                            && is_tainted_as_array_index(value, &tvar)
+                        {
+                            // Array index access doesn't propagate taint when safe_indexes enabled
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (array index, safe_indexes)",
+                                line_num, tvar, target_var
+                            );
                         } else {
                             env.propagate(&target_var, &tvar);
                             eprintln!(
@@ -878,34 +967,62 @@ impl AdvancedRuleExecutor {
                     };
 
                     if sink_tainted {
-                        // Method scope isolation
-                        let scope_ok = match (&sink_match.method_name, sources.first()) {
-                            (Some(sink_method), Some(first_source)) => {
-                                match &first_source.method_name {
-                                    Some(src_method) => src_method == sink_method,
-                                    None => true,
-                                }
-                            }
-                            _ => true,
-                        };
-                        if !scope_ok {
-                            continue;
-                        }
-
                         if let Some(src_idx) = env.get_source_idx(&source_var_name) {
                             if src_idx < sources.len() {
+                                // Method scope isolation: compare sink method with CORRECT source
+                                let scope_ok = match (
+                                    &sink_match.method_name,
+                                    sources.get(src_idx),
+                                ) {
+                                    (Some(sink_method), Some(source)) => {
+                                        match &source.method_name {
+                                            Some(src_method) => {
+                                                src_method == sink_method
+                                            }
+                                            None => true,
+                                        }
+                                    }
+                                    _ => true,
+                                };
+                                if !scope_ok {
+                                    continue;
+                                }
                                 eprintln!(
                                     "[DEBUG-TAINT-ENV] FLOW FOUND: source {} -> sink at line {}",
                                     src_idx, line_num
                                 );
-                                flows.push((sources[src_idx].clone(), (*sink_match).clone()));
+                                flows.push((
+                                    sources[src_idx].clone(),
+                                    (*sink_match).clone(),
+                                ));
                             }
                         } else if let Some(first_source) = sources.first() {
+                            // Fallback: scope check with first source
+                            let scope_ok = match (
+                                &sink_match.method_name,
+                                sources.first(),
+                            ) {
+                                (Some(sink_method), Some(source)) => {
+                                    match &source.method_name {
+                                        Some(src_method) => {
+                                            src_method == sink_method
+                                        }
+                                        None => true,
+                                    }
+                                }
+                                _ => true,
+                            };
+                            if !scope_ok {
+                                continue;
+                            }
                             eprintln!(
                                 "[DEBUG-TAINT-ENV] FLOW FOUND (fallback): first source -> sink at line {}",
                                 line_num
                             );
-                            flows.push((first_source.clone(), (*sink_match).clone()));
+                            flows.push((
+                                first_source.clone(),
+                                (*sink_match).clone(),
+                            ));
                         }
                     }
                 }
