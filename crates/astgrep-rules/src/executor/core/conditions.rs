@@ -193,18 +193,28 @@ impl AdvancedRuleExecutor {
                 );
                 if let Some(bound_value) = match_result.bindings.get(metavar_key) {
                     let mut combined_bindings = match_result.bindings.clone();
-                    for pattern_str in &metavar_pattern.patterns {
-                        if pattern_str.starts_with("__NOT__:") {
-                            let neg_pattern = &pattern_str[8..];
-                            let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
-                            eprintln!(
-                                "DEBUG MetavariablePattern NOT: neg_pattern='{}', value='{}', matches={}",
-                                neg_pattern, bound_value, matches
-                            );
-                            if matches {
-                                return Ok(false);
-                            }
-                        } else {
+                     for pattern_str in &metavar_pattern.patterns {
+                         if pattern_str.starts_with("__NOT__:") {
+                             let neg_pattern = &pattern_str[8..];
+                             let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
+                             if matches {
+                                 return Ok(false);
+                             }
+                         } else if pattern_str.starts_with("__NOT_REGEX__:") {
+                             let regex_str = &pattern_str[14..];
+                             if let Ok(re) = regex::Regex::new(regex_str) {
+                                 if re.is_match(bound_value.as_ref()) {
+                                     return Ok(false);
+                                 }
+                             }
+                         } else if pattern_str.starts_with("__REGEX__:") {
+                             let regex_str = &pattern_str[10..];
+                             if let Ok(re) = regex::Regex::new(regex_str) {
+                                 if !re.is_match(bound_value.as_ref()) {
+                                     return Ok(false);
+                                 }
+                             }
+                         } else {
                             let (matches, new_bindings) =
                                 self.pattern_text_matches_with_bindings(pattern_str, bound_value);
                             eprintln!(

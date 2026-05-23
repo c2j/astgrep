@@ -1007,6 +1007,22 @@ impl RuleParser {
                         nested_conditions.push(Condition::MetavariableRegex(metavar_regex));
                         continue;
                     }
+                    if let Some(pattern_not_regex) =
+                        obj.get(&Value::String("pattern-not-regex".to_string()))
+                    {
+                        if let Some(regex_str) = pattern_not_regex.as_str() {
+                            patterns.push(format!("__NOT_REGEX__:{}", regex_str));
+                            continue;
+                        }
+                    }
+                    if let Some(pattern_regex) =
+                        obj.get(&Value::String("pattern-regex".to_string()))
+                    {
+                        if let Some(regex_str) = pattern_regex.as_str() {
+                            patterns.push(format!("__REGEX__:{}", regex_str));
+                            continue;
+                        }
+                    }
                 }
                 let pattern_str = pv.as_str().ok_or_else(|| {
                     AnalysisError::parse_error(format!(
