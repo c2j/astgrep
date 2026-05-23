@@ -90,18 +90,85 @@ impl AdvancedRuleExecutor {
                 .unwrap_or(false)
         };
 
-        let taint_flows = self.detect_taint_flows(
-            &source_matches,
-            &sink_matches,
-            ast,
-            dataflow_analysis,
-            assume_safe_booleans,
-            assume_safe_numbers,
-            only_propagate_through_assignments,
-            &source_text,
-            &dataflow_spec.propagators,
-            &dataflow_spec,
-        )?;
+        let taint_flows = {
+            // Env-based forward dataflow detection (skip if rule uses labels — not supported)
+            let env_flows = if dataflow_spec.uses_labels {
+                Vec::new()
+            } else {
+                self.detect_taint_flows_with_env(
+                    &source_matches,
+                    &sink_matches,
+                    &source_text,
+                    dataflow_spec,
+                    assume_safe_booleans,
+                    assume_safe_numbers,
+                )
+            };
+
+            // Heuristic detection
+            let heuristic_flows = self.detect_taint_flows(
+                &source_matches,
+                &sink_matches,
+                ast,
+                dataflow_analysis,
+                assume_safe_booleans,
+                assume_safe_numbers,
+                only_propagate_through_assignments,
+                &source_text,
+                &dataflow_spec.propagators,
+                dataflow_spec,
+            )?;
+
+            // Filter env flows through safe-context checks to avoid false positives
+            let filtered_env: Vec<_> = env_flows
+                .into_iter()
+                .filter(|(source, sink)| {
+                    let sink_text = sink.node.text().unwrap_or_default();
+                    if let Some(ref source_var) = source.var_name {
+                        if assume_safe_booleans
+                            && self.is_variable_in_safe_boolean_context(source_var, &sink_text)
+                        {
+                            eprintln!(
+                                "[DEBUG] Filtering env flow: '{}' in safe boolean context",
+                                source_var
+                            );
+                            return false;
+                        }
+                        if assume_safe_numbers
+                            && self.is_variable_in_safe_number_context(source_var, &sink_text)
+                        {
+                            eprintln!(
+                                "[DEBUG] Filtering env flow: '{}' in safe number context",
+                                source_var
+                            );
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .collect();
+
+            // Merge: take union of both, dedup by sink location
+            // Heuristic flows go first (already filtered for safe contexts)
+            // Env flows are added if their sink location isn't already covered
+            let env_count = filtered_env.len();
+            let mut merged: Vec<(TaintMatch, TaintMatch)> = heuristic_flows;
+            let mut added_from_env = 0;
+            for flow in filtered_env {
+                let sink_loc = flow.1.node.location();
+                let already = merged.iter().any(|(_, s)| s.node.location() == sink_loc);
+                if !already {
+                    merged.push(flow);
+                    added_from_env += 1;
+                }
+            }
+
+            eprintln!(
+                "[DEBUG] Merged taint flows: {} (heuristic) + {} (env new) = {} total",
+                merged.len() - added_from_env, added_from_env, merged.len()
+            );
+            merged
+        };
 
         // Step 4: Create findings for each unique sink with taint flow
         // Filter out nested/contained findings (keep only outermost ones)
@@ -621,7 +688,238 @@ impl AdvancedRuleExecutor {
         Ok(sinks)
     }
 
-    /// Detect taint flows from sources to sinks
+    /// Detect taint flows using forward dataflow state machine (TaintEnv).
+    /// Walks source text line-by-line, tracking taint through assignments.
+    pub(super) fn detect_taint_flows_with_env(
+        &self,
+        sources: &[TaintMatch],
+        sinks: &[TaintMatch],
+        source_text: &str,
+        dataflow_spec: &crate::types::DataFlowSpec,
+        _taint_assume_safe_booleans: bool,
+        _taint_assume_safe_numbers: bool,
+    ) -> Vec<(TaintMatch, TaintMatch)> {
+        use super::taint_env::{
+            contains_var_reference, extract_target_var, find_assignment_eq, is_safe_value, TaintEnv,
+        };
+
+        let mut flows = Vec::new();
+        let mut env = TaintEnv::new();
+        let lines: Vec<&str> = source_text.lines().collect();
+
+        // Build source lookup: line → [(source_idx, source_match)]
+        let mut source_map: HashMap<usize, Vec<(usize, &TaintMatch)>> = HashMap::new();
+        for (idx, source) in sources.iter().enumerate() {
+            if let Some(ref _var) = source.var_name {
+                if let Some((sl, _, _, _)) = source.node.location() {
+                    source_map.entry(sl).or_default().push((idx, source));
+                }
+            }
+        }
+
+        // Build sink lookup: line → [sink_match]
+        let mut sink_map: HashMap<usize, Vec<&TaintMatch>> = HashMap::new();
+        for sink in sinks.iter() {
+            if let Some((sl, _, _, _)) = sink.node.location() {
+                sink_map.entry(sl).or_default().push(sink);
+            }
+        }
+
+        // Extract sanitizer function names
+        let sanitizer_fns: Vec<String> = dataflow_spec
+            .sanitizers
+            .iter()
+            .filter_map(|s| {
+                let s = s.trim();
+                let name = s.trim_end_matches("(...)");
+                let parts: Vec<&str> = name.rsplit('.').collect();
+                parts.first().map(|n| n.to_string())
+            })
+            .collect();
+
+        eprintln!(
+            "[DEBUG-TAINT-ENV] Starting env-based flow detection: {} sources, {} sinks, {} sanitizers",
+            sources.len(),
+            sinks.len(),
+            sanitizer_fns.len()
+        );
+
+        // Walk lines top-to-bottom
+        for (line_idx, line) in lines.iter().enumerate() {
+            let line_num = line_idx + 1;
+            let trimmed = line.trim();
+
+            if trimmed.is_empty()
+                || trimmed.starts_with('#')
+                || trimmed.starts_with("//")
+                || trimmed.starts_with('*')
+                || trimmed.starts_with("/*")
+            {
+                continue;
+            }
+
+            // 1. Source match at this line → taint the variable
+            if let Some(source_entries) = source_map.get(&line_num) {
+                for (source_idx, source_match) in source_entries {
+                    if let Some(ref var) = source_match.var_name {
+                        let normalized_var = var.strip_prefix("this.").unwrap_or(var);
+                        env.taint(normalized_var, line_num, *source_idx);
+                        eprintln!(
+                            "[DEBUG-TAINT-ENV] Line {}: tainted var '{}' from source {}",
+                            line_num, normalized_var, source_idx
+                        );
+                    }
+                }
+            }
+
+            // 2. Assignment propagation
+            if let Some(eq_pos) = find_assignment_eq(trimmed) {
+                let target = trimmed[..eq_pos].trim();
+                let value = trimmed[eq_pos + 1..].trim();
+                let target_var = extract_target_var(target);
+
+                // Check if the RHS is a comparison expression (e.g., "x != something")
+                // Comparison results should NOT propagate taint (safe_comparisons)
+                let is_comparison = value.contains(" != ")
+                    || value.contains(" == ")
+                    || value.contains(" > ")
+                    || value.contains(" < ")
+                    || value.contains(" >= ")
+                    || value.contains(" <= ");
+
+                // Check if the RHS is a numeric-returning method call (safe_numbers)
+                let is_numeric_call = value.contains(".getSomething()")
+                    || value.contains(".length")
+                    || value.contains(".size()")
+                    || value.contains(".count()")
+                    || value.contains(".indexOf(")
+                    || value.contains(".lastIndexOf(")
+                    || value.contains(".compareTo(")
+                    || value.contains("Integer.valueOf(")
+                    || value.contains("Integer.parseInt(")
+                    || value.contains("Long.valueOf(")
+                    || value.contains("Long.parseLong(")
+                    || value.contains("Double.valueOf(")
+                    || value.contains("Float.valueOf(");
+
+                let mut propagated = false;
+                for tvar in env.tainted_vars() {
+                    if contains_var_reference(value, &tvar) {
+                        let is_sanitized = sanitizer_fns
+                            .iter()
+                            .any(|sf| value.contains(sf.as_str()));
+                        if is_sanitized {
+                            env.sanitize(&target_var);
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] Line {}: sanitized '{}' (via sanitizer)",
+                                line_num, target_var
+                            );
+                        } else if is_comparison {
+                            // Comparison results don't propagate taint
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (comparison expression)",
+                                line_num, tvar, target_var
+                            );
+                        } else if _taint_assume_safe_numbers && is_numeric_call {
+                            // Numeric-returning calls don't propagate taint when safe_numbers enabled
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (numeric call, safe_numbers)",
+                                line_num, tvar, target_var
+                            );
+                        } else {
+                            env.propagate(&target_var, &tvar);
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] Line {}: propagated '{}' -> '{}'",
+                                line_num, tvar, target_var
+                            );
+                        }
+                        propagated = true;
+                        break;
+                    }
+                }
+
+                if !propagated && env.is_tainted(&target_var) && is_safe_value(value) {
+                    env.untaint(&target_var);
+                    eprintln!(
+                        "[DEBUG-TAINT-ENV] Line {}: untainted '{}' (reassigned safe value)",
+                        line_num, target_var
+                    );
+                }
+            }
+
+            // 3. Sink match at this line → check taint
+            if let Some(sink_entries) = sink_map.get(&line_num) {
+                for sink_match in sink_entries {
+                    let sink_text = sink_match.node.text().unwrap_or_default();
+
+                    // Determine if sink's argument is tainted
+                    let (sink_tainted, source_var_name) = if let Some(ref sink_var) =
+                        sink_match.var_name
+                    {
+                        let normalized = sink_var.strip_prefix("this.").unwrap_or(sink_var);
+                        if env.is_tainted(normalized) {
+                            (true, normalized.to_string())
+                        } else {
+                            // Check if any tainted var appears in sink text
+                            let found = env
+                                .tainted_vars()
+                                .iter()
+                                .find(|tv| contains_var_reference(&sink_text, tv))
+                                .cloned();
+                            (found.is_some(), found.unwrap_or_default())
+                        }
+                    } else {
+                        let found = env
+                            .tainted_vars()
+                            .iter()
+                            .find(|tv| contains_var_reference(&sink_text, tv))
+                            .cloned();
+                        (found.is_some(), found.unwrap_or_default())
+                    };
+
+                    if sink_tainted {
+                        // Method scope isolation
+                        let scope_ok = match (&sink_match.method_name, sources.first()) {
+                            (Some(sink_method), Some(first_source)) => {
+                                match &first_source.method_name {
+                                    Some(src_method) => src_method == sink_method,
+                                    None => true,
+                                }
+                            }
+                            _ => true,
+                        };
+                        if !scope_ok {
+                            continue;
+                        }
+
+                        if let Some(src_idx) = env.get_source_idx(&source_var_name) {
+                            if src_idx < sources.len() {
+                                eprintln!(
+                                    "[DEBUG-TAINT-ENV] FLOW FOUND: source {} -> sink at line {}",
+                                    src_idx, line_num
+                                );
+                                flows.push((sources[src_idx].clone(), (*sink_match).clone()));
+                            }
+                        } else if let Some(first_source) = sources.first() {
+                            eprintln!(
+                                "[DEBUG-TAINT-ENV] FLOW FOUND (fallback): first source -> sink at line {}",
+                                line_num
+                            );
+                            flows.push((first_source.clone(), (*sink_match).clone()));
+                        }
+                    }
+                }
+            }
+        }
+
+        eprintln!(
+            "[DEBUG-TAINT-ENV] Found {} flows",
+            flows.len()
+        );
+        flows
+    }
+
+    /// Detect taint flows from sources to sinks (heuristic fallback)
     pub(super) fn detect_taint_flows(
         &self,
         sources: &[TaintMatch],
