@@ -174,6 +174,20 @@ impl MetavarManager {
             .collect()
     }
 
+    pub fn get_binding_matches(&self) -> HashMap<String, astgrep_core::MatchBinding> {
+        self.bindings
+            .iter()
+            .map(|(name, binding)| {
+                let mb = if let Some(loc) = binding.location {
+                    astgrep_core::MatchBinding::with_location(binding.value.clone(), loc)
+                } else {
+                    astgrep_core::MatchBinding::new(binding.value.clone())
+                };
+                (name.clone(), mb)
+            })
+            .collect()
+    }
+
     /// Clear all bindings
     pub fn clear_bindings(&mut self) {
         self.bindings.clear();

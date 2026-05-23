@@ -38,6 +38,42 @@ impl Default for AdvancedSemgrepMatcher {
 }
 
 impl AdvancedSemgrepMatcher {
+    fn extract_source_range(source: &str, sl: usize, sc: usize, el: usize, ec: usize) -> Option<String> {
+        let lines: Vec<&str> = source.lines().collect();
+        if sl == 0 || el == 0 || sl > lines.len() || el > lines.len() {
+            return None;
+        }
+        // Locations are 1-based, convert to 0-based
+        let start_idx = sl - 1;
+        let end_idx = el - 1;
+        let start_col = sc.saturating_sub(1);
+        let end_col = ec.saturating_sub(1);
+        if start_idx == end_idx {
+            let line = lines.get(start_idx)?;
+            let end = end_col.min(line.len());
+            let start = start_col.min(end);
+            Some(line[start..end].to_string())
+        } else {
+            let mut result = String::new();
+            if let Some(first) = lines.get(start_idx) {
+                let start = start_col.min(first.len());
+                result.push_str(&first[start..]);
+                result.push('\n');
+            }
+            for i in (start_idx + 1)..end_idx {
+                if let Some(line) = lines.get(i) {
+                    result.push_str(line);
+                    result.push('\n');
+                }
+            }
+            if let Some(last) = lines.get(end_idx) {
+                let end = end_col.min(last.len());
+                result.push_str(&last[..end]);
+            }
+            Some(result)
+        }
+    }
+
     /// Create a new advanced semgrep matcher
     pub fn new() -> Self {
         Self {
@@ -155,11 +191,19 @@ impl AdvancedSemgrepMatcher {
         if !subtree_has_match {
             let snapshot = self.metavar_manager.snapshot();
                         if self.matches_pattern(pattern, node)? {
-                let bindings = self.metavar_manager.get_binding_values();
-                                let match_bindings: HashMap<String, MatchBinding> = bindings
-                    .into_iter()
-                    .map(|(k, v)| (k, MatchBinding::new(v)))
-                    .collect();
+                let mut match_bindings = self.metavar_manager.get_binding_matches();
+                // Fill in empty binding values using full_source + location
+                if let Some(ref source) = self.full_source {
+                    for (_, binding) in match_bindings.iter_mut() {
+                        if binding.value.is_empty() {
+                            if let Some((sl, sc, el, ec)) = binding.location {
+                                if let Some(text) = Self::extract_source_range(source, sl, sc, el, ec) {
+                                    binding.value = text;
+                                }
+                            }
+                        }
+                    }
+                }
                 matches.push(SemgrepMatchResult::new(node.clone_node(), match_bindings));
                 self.metavar_manager.restore(snapshot);
                 return Ok(true);
@@ -382,12 +426,20 @@ impl AdvancedSemgrepMatcher {
                 )
             });
 
+        // When there are no content patterns, treat Inside patterns as content patterns.
+        // Semgrep semantics: patterns: [pattern-inside: X] with no pattern: key
+        // means "match X directly" (Inside acts as both filter and content).
+        let (effective_context, effective_content) = if content_patterns.is_empty() && !context_patterns.is_empty() {
+            (Vec::new(), context_patterns)
+        } else {
+            (context_patterns, content_patterns)
+        };
+
         
         let snapshot = self.metavar_manager.snapshot();
 
         // Step 1: Check ALL context patterns (pattern-inside) to establish bindings
-        // ALL context patterns must match (intersection semantics)
-        for pattern in &context_patterns {
+        for pattern in &effective_context {
             
             let context_matches = match &pattern.pattern_type {
                 PatternType::Inside(inner) => self.matches_inside_context(inner, node, patterns)?,
@@ -406,8 +458,7 @@ impl AdvancedSemgrepMatcher {
                     }
 
         // Step 2: Match content patterns with established bindings
-        // Content patterns must match using the bindings from context patterns
-        for pattern in &content_patterns {
+        for pattern in &effective_content {
                         if !self.matches_pattern(pattern, node)? {
                                 self.metavar_manager.restore(snapshot);
                 return Ok(false);
