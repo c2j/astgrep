@@ -42,6 +42,7 @@ impl AdvancedRuleExecutor {
                 let key = metavar_regex
                     .metavariable
                     .trim_start_matches('$')
+                    .trim_start_matches('.')
                     .to_string();
                 if let Some(metavar_value) = match_result.bindings.get(&key) {
                     let regex_str = &metavar_regex.regex;
@@ -64,6 +65,7 @@ impl AdvancedRuleExecutor {
                 let key = metavar_comp
                     .metavariable
                     .trim_start_matches('$')
+                    .trim_start_matches('.')
                     .to_string();
                 eprintln!(
                     "DEBUG evaluate_condition: MetavariableComparison for '{}', bindings: {:?}",
@@ -129,7 +131,7 @@ impl AdvancedRuleExecutor {
                 Ok(match_result.node.text().unwrap_or("").contains(attr_value))
             }
             Condition::MetavariableName(metavar_name) => {
-                let key = metavar_name.metavariable.trim_start_matches('$');
+                let key = metavar_name.metavariable.trim_start_matches('$').trim_start_matches('.');
                 if let Some(metavar_value) = match_result.bindings.get(key) {
                     self.evaluate_name_constraint(
                         metavar_value,
@@ -182,7 +184,9 @@ impl AdvancedRuleExecutor {
                 self.evaluate_custom_condition(custom_condition, match_result)
             }
             Condition::MetavariablePattern(metavar_pattern) => {
-                let metavar_key = metavar_pattern.metavariable.trim_start_matches('$');
+                let metavar_key = metavar_pattern.metavariable
+                    .trim_start_matches('$')
+                    .trim_start_matches('.');
                 eprintln!(
                     "DEBUG MetavariablePattern: key='{}', patterns={:?}, bindings={:?}",
                     metavar_key, metavar_pattern.patterns, match_result.bindings
@@ -205,7 +209,7 @@ impl AdvancedRuleExecutor {
                                 self.pattern_text_matches_with_bindings(pattern_str, bound_value);
                             eprintln!(
                                 "DEBUG MetavariablePattern: pattern='{}', value='{}', matches={}, new_bindings={:?}",
-                                pattern_str, bound_value, matches, new_bindings
+                                pattern_str, bound_value.as_ref(), matches, new_bindings
                             );
                             if !matches {
                                 return Ok(false);

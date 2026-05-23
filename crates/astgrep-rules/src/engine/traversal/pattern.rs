@@ -48,6 +48,15 @@ impl RuleExecutionEngine {
             return self.execute_either_pattern(pattern, subs, rule, context, _ast);
         }
 
+        // 5) Inside/NotInside/Not/NotRegex: delegate to advanced executor
+        if matches!(
+            &pattern.pattern_type,
+            PatternType::Inside(_) | PatternType::NotInside(_)
+                | PatternType::Not(_) | PatternType::NotRegex(_)
+        ) {
+            return self.execute_advanced_pattern(pattern, rule, context, _ast);
+        }
+
         // Fallback: no simple/regex pattern string available, use node-based matching
         self.execute_fallback_matching(pattern, _ast, rule, context)
     }
