@@ -116,20 +116,22 @@ impl MetavarManager {
     }
 
     /// Add a constraint for a metavariable
-    pub fn add_constraint(&mut self, metavar_name: String, constraint: MetavarConstraint) {
-        self.constraints
-            .entry(metavar_name)
-            .or_default()
-            .push(constraint);
-    }
+     pub fn add_constraint(&mut self, metavar_name: String, constraint: MetavarConstraint) {
+         let key = metavar_name.trim_start_matches('$').to_string();
+         self.constraints
+             .entry(key)
+             .or_default()
+             .push(constraint);
+     }
 
     /// Bind a metavariable to a value
-    pub fn bind(&mut self, name: String, value: String, node: &dyn AstNode) -> Result<bool> {
-        let node_type = node.node_type().to_string();
-        let location = node.location();
-
-        // Check if this metavariable is already bound
-        if let Some(existing_binding) = self.bindings.get(&name) {
+     pub fn bind(&mut self, name: String, value: String, node: &dyn AstNode) -> Result<bool> {
+         let name = name.trim_start_matches('$').to_string();
+         let node_type = node.node_type().to_string();
+         let location = node.location();
+ 
+         // Check if this metavariable is already bound
+         if let Some(existing_binding) = self.bindings.get(&name) {
             // Check if the new binding is consistent with the existing one
             return Ok(existing_binding.value == value);
         }
@@ -157,9 +159,10 @@ impl MetavarManager {
     }
 
     /// Get a metavariable binding
-    pub fn get_binding(&self, name: &str) -> Option<&MetavarBinding> {
-        self.bindings.get(name)
-    }
+     pub fn get_binding(&self, name: &str) -> Option<&MetavarBinding> {
+         let key = name.trim_start_matches('$');
+         self.bindings.get(key)
+     }
 
     /// Get all bindings
     pub fn get_all_bindings(&self) -> &HashMap<String, MetavarBinding> {
@@ -194,14 +197,16 @@ impl MetavarManager {
     }
 
     /// Check if a metavariable is bound
-    pub fn is_bound(&self, name: &str) -> bool {
-        self.bindings.contains_key(name)
-    }
+     pub fn is_bound(&self, name: &str) -> bool {
+         let key = name.trim_start_matches('$');
+         self.bindings.contains_key(key)
+     }
 
     /// Unbind a metavariable
-    pub fn unbind(&mut self, name: &str) -> Option<MetavarBinding> {
-        self.bindings.remove(name)
-    }
+     pub fn unbind(&mut self, name: &str) -> Option<MetavarBinding> {
+         let key = name.trim_start_matches('$');
+         self.bindings.remove(key)
+     }
 
     /// Get the number of bound metavariables
     pub fn binding_count(&self) -> usize {
