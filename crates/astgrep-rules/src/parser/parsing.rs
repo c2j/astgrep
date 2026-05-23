@@ -130,6 +130,13 @@ impl RuleParser {
                             dataflow.taint_only_propagate_through_assignments = Some(b);
                         }
                     }
+                    if let Some(val) = options_obj.get(&Value::String(
+                        "taint_assume_safe_indexes".to_string(),
+                    )) {
+                        if let Some(b) = val.as_bool() {
+                            dataflow.taint_assume_safe_indexes = Some(b);
+                        }
+                    }
                 }
 
                 (Vec::new(), Some(dataflow))
@@ -303,6 +310,27 @@ impl RuleParser {
             };
             options.insert(
                 "taint_only_propagate_through_assignments".to_string(),
+                str_val,
+            );
+        }
+
+        // Parse taint_assume_safe_indexes option
+        if let Some(val) = options_obj.get(&Value::String(
+            "taint_assume_safe_indexes".to_string(),
+        )) {
+            let str_val = if let Some(b) = val.as_bool() {
+                b.to_string()
+            } else if let Some(s) = val.as_str() {
+                match s.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" | "yes" => "true".to_string(),
+                    "off" | "false" | "0" | "no" => "false".to_string(),
+                    _ => s.to_string(),
+                }
+            } else {
+                return Ok(Some(options));
+            };
+            options.insert(
+                "taint_assume_safe_indexes".to_string(),
                 str_val,
             );
         }
@@ -1368,6 +1396,14 @@ impl RuleParser {
         ) {
             if let Some(b) = taint_only_propagate_through_assignments_value.as_bool() {
                 dataflow.taint_only_propagate_through_assignments = Some(b);
+            }
+        }
+
+        if let Some(taint_assume_safe_indexes_value) =
+            dataflow_obj.get(&Value::String("taint_assume_safe_indexes".to_string()))
+        {
+            if let Some(b) = taint_assume_safe_indexes_value.as_bool() {
+                dataflow.taint_assume_safe_indexes = Some(b);
             }
         }
 

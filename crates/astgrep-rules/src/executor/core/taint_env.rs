@@ -215,6 +215,34 @@ pub fn is_safe_value(value: &str) -> bool {
     false
 }
 
+/// Check if a tainted variable appears as an array index in an expression.
+/// When `assume_safe_indexes` is enabled, taint should NOT propagate
+/// through array index access (e.g., `x = a[i]` where `i` is tainted).
+pub fn is_tainted_as_array_index(expr: &str, var: &str) -> bool {
+    if var.is_empty() || expr.len() < 3 {
+        return false;
+    }
+    // Look for the variable name followed by ']' (end of index)
+    // or preceded by '[' (start of index)
+    // Patterns: [var], [var +, [var -, [var *, etc.
+    let bracket_patterns = [
+        format!("[{}]", var),
+        format!("[{} ", var),
+        format!("[{}=", var),
+        format!("[{}*", var),
+        format!("[{}/", var),
+        format!("[{}+", var),
+        format!("[{}-", var),
+        format!("[{}%", var),
+    ];
+    for pattern in &bracket_patterns {
+        if expr.contains(pattern.as_str()) {
+            return true;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

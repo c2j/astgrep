@@ -487,6 +487,7 @@ pub struct DataFlowSpec {
     pub max_depth: Option<usize>,
     pub taint_assume_safe_booleans: Option<bool>,
     pub taint_assume_safe_numbers: Option<bool>,
+    pub taint_assume_safe_indexes: Option<bool>,
     pub taint_only_propagate_through_assignments: Option<bool>,
     /// Whether any source uses `label` or any sink uses `requires` (label-based taint)
     pub uses_labels: bool,
@@ -563,6 +564,7 @@ impl DataFlowSpec {
             max_depth: None,
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
+            taint_assume_safe_indexes: None,
             taint_only_propagate_through_assignments: None,
             uses_labels: false,
         }
@@ -595,6 +597,7 @@ impl DataFlowSpec {
             max_depth: None,
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
+            taint_assume_safe_indexes: None,
             taint_only_propagate_through_assignments: None,
             uses_labels: false,
         }
