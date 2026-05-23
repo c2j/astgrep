@@ -100,6 +100,10 @@ impl RuleParser {
                 let mut dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
                 dataflow.propagators = propagators;
 
+                // Detect label/requires usage by checking raw YAML for these keys
+                let has_labels = self.check_dataflow_uses_labels(rule_obj);
+                dataflow.uses_labels = has_labels;
+
                 // Parse taint options from the options field
                 if let Some(options_obj) = rule_obj
                     .get(&Value::String("options".to_string()))
@@ -1734,6 +1738,25 @@ impl RuleParser {
     }
 
     /// Extract pattern string from taint definition (source, sink, or sanitizer)
+    fn check_dataflow_uses_labels(&self, rule_obj: &serde_yaml::Mapping) -> bool {
+        let label_key = Value::String("label".to_string());
+        let requires_key = Value::String("requires".to_string());
+
+        for array_key in &["pattern-sources", "pattern-sinks"] {
+            let key = Value::String(array_key.to_string());
+            if let Some(Value::Sequence(arr)) = rule_obj.get(&key) {
+                for item in arr {
+                    if let Some(mapping) = item.as_mapping() {
+                        if mapping.contains_key(&label_key) || mapping.contains_key(&requires_key) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     fn extract_pattern_from_taint_def(&self, value: &Value) -> Option<String> {
         // If it's a simple string, return it
         if let Some(s) = value.as_str() {

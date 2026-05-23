@@ -488,6 +488,8 @@ pub struct DataFlowSpec {
     pub taint_assume_safe_booleans: Option<bool>,
     pub taint_assume_safe_numbers: Option<bool>,
     pub taint_only_propagate_through_assignments: Option<bool>,
+    /// Whether any source uses `label` or any sink uses `requires` (label-based taint)
+    pub uses_labels: bool,
 }
 
 /// Propagator pattern for custom taint propagation rules
@@ -562,6 +564,7 @@ impl DataFlowSpec {
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
             taint_only_propagate_through_assignments: None,
+            uses_labels: false,
         }
     }
 
@@ -593,6 +596,7 @@ impl DataFlowSpec {
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
             taint_only_propagate_through_assignments: None,
+            uses_labels: false,
         }
     }
 
