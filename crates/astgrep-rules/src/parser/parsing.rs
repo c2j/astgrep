@@ -137,6 +137,13 @@ impl RuleParser {
                             dataflow.taint_assume_safe_indexes = Some(b);
                         }
                     }
+                    if let Some(val) = options_obj.get(&Value::String(
+                        "taint_assume_safe_functions".to_string(),
+                    )) {
+                        if let Some(b) = val.as_bool() {
+                            dataflow.taint_assume_safe_functions = Some(b);
+                        }
+                    }
                 }
 
                 (Vec::new(), Some(dataflow))
@@ -1644,6 +1651,7 @@ impl RuleParser {
                         pattern: Pattern::simple(pattern_str),
                         focus_metavariables: Vec::new(),
                         is_fallback: true,
+                        exact: None,
                     });
                 } else {
                     return Err(AnalysisError::parse_error(format!(
@@ -2021,6 +2029,7 @@ impl RuleParser {
                 pattern: Pattern::simple(s.to_string()),
                 focus_metavariables: Vec::new(),
                 is_fallback: false,
+                exact: None,
             });
         }
 
@@ -2047,6 +2056,7 @@ impl RuleParser {
                             },
                             focus_metavariables: Vec::new(),
                             is_fallback: false,
+                            exact: None,
                         });
                     }
                 }
@@ -2154,10 +2164,16 @@ impl RuleParser {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
+            // Check if exact flag is set (optional; default = true = exact match)
+            let exact = mapping
+                .get(&Value::String("exact".to_string()))
+                .and_then(|v| v.as_bool());
+
             return Ok(SinkPattern {
                 pattern,
                 focus_metavariables,
                 is_fallback,
+                exact,
             });
         }
 

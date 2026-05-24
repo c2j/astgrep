@@ -488,6 +488,7 @@ pub struct DataFlowSpec {
     pub taint_assume_safe_booleans: Option<bool>,
     pub taint_assume_safe_numbers: Option<bool>,
     pub taint_assume_safe_indexes: Option<bool>,
+    pub taint_assume_safe_functions: Option<bool>,
     pub taint_only_propagate_through_assignments: Option<bool>,
     /// Whether any source uses `label` or any sink uses `requires` (label-based taint)
     pub uses_labels: bool,
@@ -533,6 +534,10 @@ pub struct SinkPattern {
     pub pattern: Pattern,
     pub focus_metavariables: Vec<String>,
     pub is_fallback: bool,
+    /// If false, sink matches any source overlap (not just direct argument).
+    /// Default (true) means only direct argument match.
+    #[serde(default)]
+    pub exact: Option<bool>,
 }
 
 impl SinkPattern {
@@ -565,6 +570,7 @@ impl DataFlowSpec {
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
             taint_assume_safe_indexes: None,
+            taint_assume_safe_functions: None,
             taint_only_propagate_through_assignments: None,
             uses_labels: false,
         }
@@ -586,6 +592,7 @@ impl DataFlowSpec {
                 pattern: Pattern::simple(s),
                 focus_metavariables: Vec::new(),
                 is_fallback: true,
+                exact: None,
             })
             .collect();
         Self {
@@ -598,6 +605,7 @@ impl DataFlowSpec {
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
             taint_assume_safe_indexes: None,
+            taint_assume_safe_functions: None,
             taint_only_propagate_through_assignments: None,
             uses_labels: false,
         }

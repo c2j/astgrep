@@ -93,6 +93,19 @@ impl AdvancedRuleExecutor {
                 dataflow_spec.taint_assume_safe_indexes.unwrap_or(false)
             };
 
+        let assume_safe_functions =
+            if let Some(val) = rule.metadata.get("taint_assume_safe_functions") {
+                if let serde_yaml::Value::String(ref s) = val {
+                    s == "true"
+                } else if let serde_yaml::Value::Bool(ref b) = val {
+                    *b
+                } else {
+                    false
+                }
+            } else {
+                dataflow_spec.taint_assume_safe_functions.unwrap_or(false)
+            };
+
         let only_propagate_through_assignments = if let Some(val) = rule
             .metadata
             .get("taint_only_propagate_through_assignments")
@@ -163,6 +176,8 @@ impl AdvancedRuleExecutor {
             let env_flows = if dataflow_spec.uses_labels {
                 Vec::new()
             } else {
+                // Check if any sink pattern has exact: false
+                let has_non_exact_sinks = dataflow_spec.sinks.iter().any(|s| s.exact == Some(false));
                 self.detect_taint_flows_with_env(
                     &source_matches,
                     &sink_matches,
@@ -171,7 +186,9 @@ impl AdvancedRuleExecutor {
                     assume_safe_booleans,
                     assume_safe_numbers,
                     assume_safe_indexes,
+                    assume_safe_functions,
                     only_propagate_through_assignments,
+                    has_non_exact_sinks,
                 )
             };
 
@@ -795,7 +812,9 @@ impl AdvancedRuleExecutor {
         _taint_assume_safe_booleans: bool,
         _taint_assume_safe_numbers: bool,
         _taint_assume_safe_indexes: bool,
+        _taint_assume_safe_functions: bool,
         taint_only_propagate_through_assignments: bool,
+        has_non_exact_sinks: bool,
     ) -> Vec<(TaintMatch, TaintMatch)> {
         use super::taint_env::{
             contains_var_reference, extract_target_var, find_assignment_eq, is_safe_value,
@@ -808,10 +827,13 @@ impl AdvancedRuleExecutor {
 
         // Build source lookup: line → [(source_idx, source_match)]
         let mut source_map: HashMap<usize, Vec<(usize, &TaintMatch)>> = HashMap::new();
+        let mut sourceless_map: HashMap<usize, Vec<(usize, &TaintMatch)>> = HashMap::new();
         for (idx, source) in sources.iter().enumerate() {
-            if let Some(ref _var) = source.var_name {
-                if let Some((sl, _, _, _)) = source.node.location() {
+            if let Some((sl, _, _, _)) = source.node.location() {
+                if source.var_name.is_some() {
                     source_map.entry(sl).or_default().push((idx, source));
+                } else {
+                    sourceless_map.entry(sl).or_default().push((idx, source));
                 }
             }
         }
@@ -878,7 +900,58 @@ impl AdvancedRuleExecutor {
                 }
             }
 
-            // 2. Assignment propagation
+            for prop in &dataflow_spec.propagators {
+                let prop_text = match &prop.pattern.pattern_type {
+                    crate::types::PatternType::Simple(s) => s.as_str(),
+                    _ => continue,
+                };
+                if prop_text.contains('$') {
+                    let mut var_order: Vec<String> = Vec::new();
+                    let mut remaining = prop_text;
+                    let mut regex_pat = String::new();
+                    while let Some(dollar_pos) = remaining.find('$') {
+                        regex_pat.push_str(&regex::escape(&remaining[..dollar_pos]));
+                        remaining = &remaining[dollar_pos + 1..];
+                        let var_end = remaining
+                            .find(|c: char| !c.is_alphanumeric() && c != '_')
+                            .unwrap_or(remaining.len());
+                        if var_end > 0 {
+                            var_order.push(remaining[..var_end].to_string());
+                            regex_pat.push_str(r"(\w+)");
+                            remaining = &remaining[var_end..];
+                        }
+                    }
+                    regex_pat.push_str(&regex::escape(remaining));
+                    if let Ok(re) = regex::Regex::new(&format!("^{}$", regex_pat)) {
+                        if let Some(captures) = re.captures(trimmed) {
+                            let captured: Vec<String> = (1..=var_order.len())
+                                .filter_map(|i| captures.get(i).map(|m| m.as_str().to_string()))
+                                .collect();
+                            let from_val = if prop.from.starts_with('$') {
+                                let name = &prop.from[1..];
+                                var_order.iter().position(|v| v == name)
+                                    .and_then(|idx| captured.get(idx).cloned())
+                            } else { None };
+                            let to_val = if prop.to.starts_with('$') {
+                                let name = &prop.to[1..];
+                                var_order.iter().position(|v| v == name)
+                                    .and_then(|idx| captured.get(idx).cloned())
+                            } else { None };
+                            if let (Some(ref from), Some(ref to)) = (from_val, to_val) {
+                                if env.is_tainted(from) {
+                                    env.taint(to, line_num, 0);
+                                    eprintln!(
+                                        "[DEBUG-TAINT-ENV] Line {}: propagator '{}' -> '{}' tainted '{}'",
+                                        line_num, from, to, to
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Assignment propagation
             if let Some(eq_pos) = find_assignment_eq(trimmed) {
                 let target = trimmed[..eq_pos].trim();
                 let value = trimmed[eq_pos + 1..].trim();
@@ -1073,6 +1146,52 @@ impl AdvancedRuleExecutor {
                                 first_source.clone(),
                                 (*sink_match).clone(),
                             ));
+                        }
+                    } else {
+                        // Check for sourceless source on same line as sink
+                        if let Some(sourceless_entries) = sourceless_map.get(&line_num) {
+                            let sink_text = sink_match.node.text().unwrap_or_default();
+                            // Extract sink argument (text between outermost parens)
+                            let sink_arg = sink_text.find('(')
+                                .and_then(|open| {
+                                    sink_text.rfind(')').map(|close| {
+                                        sink_text[open+1..close].trim()
+                                    })
+                                });
+                            for (src_idx, source_match) in sourceless_entries {
+                                let source_text = source_match.node.text().unwrap_or_default();
+                                let matched = if has_non_exact_sinks {
+                                    // Non-exact: source text appears anywhere in sink
+                                    sink_text.contains(source_text.trim())
+                                } else {
+                                    // Exact/best-fit: source text is the direct sink argument
+                                    sink_arg == Some(source_text.trim())
+                                };
+                                if matched {
+                                    // Method scope isolation
+                                    let scope_ok = match (
+                                        &sink_match.method_name,
+                                        source_match.method_name.as_ref(),
+                                    ) {
+                                        (Some(sink_method), Some(src_method)) => {
+                                            sink_method == src_method
+                                        }
+                                        _ => true,
+                                    };
+                                    if !scope_ok {
+                                        continue;
+                                    }
+                                    eprintln!(
+                                        "[DEBUG-TAINT-ENV] FLOW FOUND (sourceless): source {} -> sink at line {}",
+                                        src_idx, line_num
+                                    );
+                                    flows.push((
+                                        sources[*src_idx].clone(),
+                                        (*sink_match).clone(),
+                                    ));
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
