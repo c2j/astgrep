@@ -44,6 +44,50 @@ pub fn find_pattern_matches(
     Ok(findings)
 }
 
+/// Detect whether a pattern looks like an already-valid regex rather than plain text.
+///
+/// Patterns containing regex-specific constructs (shorthand classes like `\s`, `\d`,
+/// character classes `[...]`, anchors `^`/`$`, non-capturing groups, lookaheads)
+/// are treated as raw regex and will NOT be escaped.
+fn looks_like_raw_regex(pattern: &str) -> bool {
+    let chars: Vec<char> = pattern.chars().collect();
+    let len = chars.len();
+
+    // Check for regex shorthand classes: \s, \d, \w, \b, \S, \D, \W, \B, \A, \z, \n, \t, \r, etc.
+    for i in 0..len.saturating_sub(1) {
+        if chars[i] == '\\' && chars[i + 1].is_ascii_alphabetic() {
+            return true;
+        }
+    }
+
+    // Check for character classes with regex-typical content: ranges like [a-z], [0-9], or shorthand [\\d]
+    if let Some(open) = pattern.find('[') {
+        if let Some(close) = pattern[open..].find(']') {
+            let inner = &pattern[open + 1..open + close];
+            if inner.contains('-') || inner.contains("\\d") || inner.contains("\\w") || inner.contains("\\s") {
+                return true;
+            }
+        }
+    }
+
+    // Check for anchors at typical positions
+    if pattern.starts_with('^') || pattern.ends_with('$') {
+        return true;
+    }
+
+    // Check for non-capturing groups / lookahead / lookbehind
+    if pattern.contains("(?:")
+        || pattern.contains("(?=")
+        || pattern.contains("(?!")
+        || pattern.contains("(?<=")
+        || pattern.contains("(?<!")
+    {
+        return true;
+    }
+
+    false
+}
+
 /// Find pattern spans in source code using semgrep-aware regex conversion
 pub(crate) fn find_pattern_spans_in_source(
     pattern: &str,
@@ -55,7 +99,12 @@ pub(crate) fn find_pattern_spans_in_source(
 
     let mut spans = Vec::new();
 
-    let regex_str = semgrep_pattern_to_regex(pattern);
+    let regex_str = if looks_like_raw_regex(pattern) {
+        // Pattern is already a regex — pass through without escaping
+        pattern.to_string()
+    } else {
+        semgrep_pattern_to_regex(pattern)
+    };
     let is_multiline = pattern.contains('\n');
 
     let final_regex = if is_multiline {
@@ -269,5 +318,60 @@ mod tests {
         assert_eq!(calculate_line_col(source, 0), (1, 1));
         assert_eq!(calculate_line_col(source, 6), (2, 1));
         assert_eq!(calculate_line_col(source, 12), (3, 1));
+    }
+
+    #[test]
+    fn test_raw_regex_shorthand_class() {
+        let source = "foo bar\tbaz";
+        let spans = find_pattern_spans_in_source("\\s+", source, Language::Java, false);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(&source[spans[0].0..spans[0].1], " ");
+        assert_eq!(&source[spans[1].0..spans[1].1], "\t");
+    }
+
+    #[test]
+    fn test_raw_regex_character_class() {
+        let source = "abc123def";
+        let spans = find_pattern_spans_in_source("[0-9]+", source, Language::Java, false);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(&source[spans[0].0..spans[0].1], "123");
+    }
+
+    #[test]
+    fn test_raw_regex_anchor() {
+        let source = "hello world hello";
+        let spans = find_pattern_spans_in_source("^hello", source, Language::Java, false);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0], (0, 5));
+    }
+
+    #[test]
+    fn test_plain_text_escaping_still_works() {
+        let source = "arr[0] = arr[1]";
+        let spans = find_pattern_spans_in_source("arr[0]", source, Language::Java, false);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0], (0, 6));
+    }
+
+    #[test]
+    fn test_raw_regex_alternation() {
+        let source = "foo bar baz";
+        let spans = find_pattern_spans_in_source("(?:foo|baz)", source, Language::Java, false);
+        assert_eq!(spans.len(), 2);
+    }
+
+    #[test]
+    fn test_looks_like_raw_regex() {
+        assert!(looks_like_raw_regex("\\s+"));
+        assert!(looks_like_raw_regex("\\d{1,3}"));
+        assert!(looks_like_raw_regex("[a-z]+"));
+        assert!(looks_like_raw_regex("^hello"));
+        assert!(looks_like_raw_regex("world$"));
+        assert!(looks_like_raw_regex("(?:foo|bar)"));
+        assert!(looks_like_raw_regex("(?=error)"));
+        assert!(looks_like_raw_regex("(?!warning)"));
+        assert!(!looks_like_raw_regex("hello"));
+        assert!(!looks_like_raw_regex("arr[0]"));
+        assert!(!looks_like_raw_regex("foo.bar"));
     }
 }

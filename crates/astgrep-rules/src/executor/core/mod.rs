@@ -704,11 +704,40 @@ impl AdvancedRuleExecutor {
     }
 
     /// Preprocess typed metavariables in pattern
+    ///
+    /// Parses `(type $VAR)` syntax and extracts type constraints.
+    /// E.g. `(int $X).method()` → cleaned pattern `$X.method()` with constraint `[("X", "int")]`
     pub(super) fn preprocess_typed_metavariables(
         &self,
         pattern: &Pattern,
     ) -> (Pattern, Vec<(String, String)>) {
-        (pattern.clone(), Vec::new())
+        let pattern_str = match &pattern.pattern_type {
+            PatternType::Simple(s) => s.as_str(),
+            _ => return (pattern.clone(), Vec::new()),
+        };
+
+        let mut type_constraints: Vec<(String, String)> = Vec::new();
+        let mut cleaned = pattern_str.to_string();
+
+        // Match `(type_identifier $VAR)` — e.g. `(int $X)`, `(String $Y)`, `(float $Z)`
+        // The type identifier is one or more word chars, the var is $ followed by word chars
+        let re = regex::Regex::new(r"\((\w+)\s+\$(\w+)\)").expect("typed metavar regex should compile");
+        for cap in re.captures_iter(pattern_str) {
+            let type_name = cap.get(1).expect("type capture group").as_str().to_string();
+            let var_name = cap.get(2).expect("var capture group").as_str().to_string();
+            type_constraints.push((var_name, type_name));
+        }
+
+        cleaned = re.replace_all(&cleaned, "$$$2").to_string();
+
+        let processed_pattern = Pattern {
+            pattern_type: PatternType::Simple(cleaned),
+            metavariable_pattern: pattern.metavariable_pattern.clone(),
+            conditions: pattern.conditions.clone(),
+            focus: pattern.focus.clone(),
+        };
+
+        (processed_pattern, type_constraints)
     }
 
     /// Check variable type against expected type

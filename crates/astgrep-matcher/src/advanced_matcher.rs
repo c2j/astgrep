@@ -1023,7 +1023,156 @@ impl AdvancedSemgrepMatcher {
             return Ok(false);
         }
 
-        self.try_match_ast_at_offset(patterns, &children, 0, node, depth)
+        if self.try_match_ast_at_offset(patterns, &children, 0, node, depth)? {
+            return Ok(true);
+        }
+
+        self.try_coalesced_literal_match(patterns, &children, node, depth)
+    }
+
+    /// Coalesce consecutive Literal patterns into combined strings and match
+    /// each combined literal against one child node. This handles the mismatch
+    /// between fine-grained pattern tokens (e.g. `foo`, `(`, `)`, `;`) and
+    /// coarse-grained AST children (e.g. `expression_statement`).
+    fn try_coalesced_literal_match(
+        &mut self,
+        patterns: &[ParsedPattern],
+        children: &[&dyn AstNode],
+        _parent_node: &dyn AstNode,
+        depth: usize,
+    ) -> Result<bool> {
+        if depth > 50 || children.is_empty() {
+            return Ok(false);
+        }
+
+        let groups = Self::group_consecutive_literals(patterns);
+        if groups.len() > children.len() {
+            return Ok(false);
+        }
+
+        self.try_coalesced_at_offset(&groups, children, 0, depth)
+    }
+
+    fn group_consecutive_literals(patterns: &[ParsedPattern]) -> Vec<ParsedPattern> {
+        let mut groups: Vec<ParsedPattern> = Vec::new();
+        let mut buf = String::new();
+
+        let flush = |buf: &mut String, groups: &mut Vec<ParsedPattern>| {
+            if !buf.is_empty() {
+                groups.push(ParsedPattern::Literal(buf.clone()));
+                buf.clear();
+            }
+        };
+
+        for p in patterns {
+            match p {
+                ParsedPattern::Literal(s) => {
+                    if !buf.is_empty()
+                        && !s.starts_with(|c: char| "({[;,.})]".contains(c))
+                        && !buf.ends_with(|c: char| "({[".contains(c))
+                    {
+                        buf.push(' ');
+                    }
+                    buf.push_str(s);
+                }
+                other => {
+                    flush(&mut buf, &mut groups);
+                    groups.push(other.clone());
+                }
+            }
+        }
+        flush(&mut buf, &mut groups);
+        groups
+    }
+
+    fn try_coalesced_at_offset(
+        &mut self,
+        groups: &[ParsedPattern],
+        children: &[&dyn AstNode],
+        child_offset: usize,
+        depth: usize,
+    ) -> Result<bool> {
+        if groups.is_empty() {
+            return Ok(true);
+        }
+        if child_offset >= children.len() {
+            return Ok(false);
+        }
+        if depth > 50 {
+            return Ok(false);
+        }
+
+        let group = &groups[0];
+        let remaining = &groups[1..];
+
+        match group {
+            ParsedPattern::Literal(combined) => {
+                let child = children[child_offset];
+                if self.match_literal(combined, child)? {
+                    return self.try_coalesced_at_offset(remaining, children, child_offset + 1, depth + 1);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::Metavariable(metavar) => {
+                let child = children[child_offset];
+                if let Some(text) = child.text() {
+                    if !text.trim().is_empty() {
+                        let bind_key = if metavar == "_" {
+                            format!("__anon_{}", child.node_type().len())
+                        } else {
+                            metavar.to_string()
+                        };
+                        let snapshot = self.metavar_manager.snapshot();
+                        if self.metavar_manager.bind(bind_key, text.to_string(), child)? {
+                            if self.try_coalesced_at_offset(remaining, children, child_offset + 1, depth + 1)? {
+                                return Ok(true);
+                            }
+                        }
+                        self.metavar_manager.restore(snapshot);
+                    }
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::EllipsisMetavariable(metavar) => {
+                for skip in 0..=(children.len().saturating_sub(child_offset)) {
+                    let combined: String = children[child_offset..child_offset + skip]
+                        .iter()
+                        .filter_map(|c| c.text())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let bind_node: &dyn AstNode = if child_offset < children.len() {
+                        children[child_offset]
+                    } else if !children.is_empty() {
+                        children[children.len() - 1]
+                    } else {
+                        continue;
+                    };
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.metavar_manager.bind(metavar.to_string(), combined, bind_node)? {
+                        if self.try_coalesced_at_offset(remaining, children, child_offset + skip, depth + 1)? {
+                            return Ok(true);
+                        }
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+                Ok(false)
+            }
+
+            ParsedPattern::Wildcard => {
+                for skip in 0..=(children.len().saturating_sub(child_offset)) {
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.try_coalesced_at_offset(remaining, children, child_offset + skip, depth + 1)? {
+                        return Ok(true);
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+                Ok(false)
+            }
+
+            _ => Ok(false),
+        }
     }
 
     fn try_match_ast_at_offset(
@@ -1034,6 +1183,10 @@ impl AdvancedSemgrepMatcher {
         parent_node: &dyn AstNode,
         depth: usize,
     ) -> Result<bool> {
+        if depth > 50 {
+            return Ok(false);
+        }
+
         if patterns.is_empty() {
             return Ok(true);
         }
@@ -1149,17 +1302,50 @@ impl AdvancedSemgrepMatcher {
             }
 
             ParsedPattern::Sequence(inner) => {
-                if child_offset >= children.len() {
-                    return Ok(false);
-                }
-                let child = children[child_offset];
-                let snapshot = self.metavar_manager.snapshot();
-                if self.match_sequence_ast(inner, child, depth + 1)? {
-                    if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                // Strategy 1: Flat matching — unwrap the inner sequence and match its
+                // elements directly against the remaining children. This handles
+                // multi-statement patterns where a nested Sequence represents
+                // consecutive statements in a block (e.g. `foo(); bar();` parsed as
+                // Sequence([Literal("foo"),...,Literal("bar"),...]) and matched
+                // against block children [expr_stmt(foo), expr_stmt(bar)]).
+                if !inner.is_empty() {
+                    let combined: Vec<ParsedPattern> = inner
+                        .iter()
+                        .chain(remaining.iter())
+                        .cloned()
+                        .collect();
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.try_match_ast_at_offset(
+                        &combined,
+                        children,
+                        child_offset,
+                        parent_node,
+                        depth + 1,
+                    )? {
                         return Ok(true);
                     }
+                    self.metavar_manager.restore(snapshot);
                 }
-                self.metavar_manager.restore(snapshot);
+
+                // Strategy 2: Deep matching — match inner sequence against a single
+                // child node's children. This handles sub-expression patterns where
+                // the Sequence represents something inside a single AST node.
+                if child_offset < children.len() {
+                    let child = children[child_offset];
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.match_sequence_ast(inner, child, depth + 1)? {
+                        if self.try_match_ast_at_offset(
+                            remaining,
+                            children,
+                            child_offset + 1,
+                            parent_node,
+                            depth,
+                        )? {
+                            return Ok(true);
+                        }
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
                 Ok(false)
             }
 
