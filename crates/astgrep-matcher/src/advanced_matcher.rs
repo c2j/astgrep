@@ -887,6 +887,9 @@ impl AdvancedSemgrepMatcher {
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
+            ParsedPattern::TypedMetavar { name, expected_type } => {
+                self.match_typed_metavar(name, expected_type, node)
+            }
             ParsedPattern::EllipsisMetavariable(metavar) => {
                 self.match_ellipsis_metavariable(metavar, node)
             }
@@ -989,6 +992,95 @@ impl AdvancedSemgrepMatcher {
     /// Match node type
     fn match_node_type(&self, expected_type: &str, node: &dyn AstNode) -> Result<bool> {
         Ok(node.node_type() == expected_type)
+    }
+
+    /// Match typed metavariable: (type $VAR)
+    fn match_typed_metavar(
+        &mut self,
+        name: &str,
+        expected_type: &str,
+        node: &dyn AstNode,
+    ) -> Result<bool> {
+        let nt = node.node_type();
+        let matches_type = Self::node_matches_type(nt, expected_type);
+        if matches_type {
+            if let Some(text) = node.text() {
+                self.metavar_manager
+                    .bind(name.to_string(), text.to_string(), node)
+            } else {
+                self.metavar_manager
+                    .bind(name.to_string(), String::new(), node)
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Check if a tree-sitter node type matches an expected type name
+    fn node_matches_type(node_type: &str, expected_type: &str) -> bool {
+        match expected_type.to_lowercase().as_str() {
+            "int" | "integer" => matches!(
+                node_type,
+                "decimal_integer_literal"
+                    | "hex_integer_literal"
+                    | "octal_integer_literal"
+                    | "binary_integer_literal"
+                    | "integer_literal"
+            ),
+            "boolean" | "bool" => matches!(
+                node_type,
+                "true" | "false" | "boolean_literal"
+                    | "boolean_type"
+            ),
+            "string" => matches!(
+                node_type,
+                "string_literal" | "string" | "template_string"
+                    | "concatenated_string" | "fstring" | "fstring_string"
+            ),
+            "float" | "double" => matches!(
+                node_type,
+                "decimal_floating_point_literal"
+                    | "floating_point_literal"
+                    | "float_literal"
+            ),
+            "char" | "character" => matches!(node_type, "character_literal"),
+            "short" | "byte" => node_type.contains("integer"),
+            "long" => {
+                node_type.contains("integer")
+            }
+            _ => {
+                node_type.to_lowercase().contains(&expected_type.to_lowercase())
+                    || node_type == expected_type
+            }
+        }
+    }
+
+    /// Check if a text token value matches an expected type (for text-based matching)
+    fn text_matches_type(text_value: &str, expected_type: &str) -> bool {
+        match expected_type.to_lowercase().as_str() {
+            "int" | "integer" | "short" | "byte" | "long" => {
+                text_value.parse::<i64>().is_ok()
+                    || text_value.starts_with("0x")
+                    || text_value.starts_with("0b")
+            }
+            "boolean" | "bool" => {
+                text_value == "true" || text_value == "false"
+            }
+            "float" | "double" => {
+                text_value.parse::<f64>().is_ok()
+            }
+            "char" | "character" => {
+                text_value.len() >= 3
+                    && text_value.starts_with('\'')
+                    && text_value.ends_with('\'')
+            }
+            "string" | "String" => {
+                (text_value.starts_with('"') && text_value.ends_with('"'))
+                    || (text_value.starts_with('\'') && text_value.ends_with('\''))
+                    || (text_value.starts_with('`') && text_value.ends_with('`'))
+            }
+            _ => true, // For class types, we can't easily check at text level
+        }
     }
 
     fn match_sequence_ast(
@@ -1270,6 +1362,21 @@ impl AdvancedSemgrepMatcher {
                     }
                     self.metavar_manager.restore(snapshot);
                 }
+                Ok(false)
+            }
+
+            ParsedPattern::TypedMetavar { name, expected_type } => {
+                if child_offset >= children.len() {
+                    return Ok(false);
+                }
+                let child = children[child_offset];
+                let snapshot = self.metavar_manager.snapshot();
+                if self.match_typed_metavar(name, expected_type, child)? {
+                    if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                        return Ok(true);
+                    }
+                }
+                self.metavar_manager.restore(snapshot);
                 Ok(false)
             }
 
@@ -1896,6 +2003,28 @@ impl AdvancedSemgrepMatcher {
                     } else {
                                                 text_idx += 1;
                     }
+                }
+                ParsedPattern::TypedMetavar { name, expected_type } => {
+                    if text_idx >= text_tokens.len() {
+                        return Ok(false);
+                    }
+                    if is_function_pattern && matched_opening_brace {
+                        return Ok(true);
+                    }
+                    let value = &text_tokens[text_idx];
+                    // Check type constraint against the text token value
+                    if !Self::text_matches_type(value, expected_type) {
+                        return Ok(false);
+                    }
+                    let bind_key = if name == "_" {
+                        format!("__anon_{}", pattern_idx)
+                    } else {
+                        name.clone()
+                    };
+                    if !self.metavar_manager.bind(bind_key, value.clone(), node)? {
+                        return Ok(false);
+                    }
+                    text_idx += 1;
                 }
                 ParsedPattern::Metavariable(metavar) => {
                     // Check if this metavariable is in an argument position

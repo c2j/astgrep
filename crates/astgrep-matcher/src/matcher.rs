@@ -153,6 +153,7 @@ impl AdvancedPatternMatcher {
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
+            ParsedPattern::TypedMetavar { name, .. } => self.match_metavariable(name, node),
             ParsedPattern::EllipsisMetavariable(metavar) => {
                 self.match_ellipsis_metavariable(metavar, node)
             }

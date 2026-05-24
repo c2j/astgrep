@@ -10,6 +10,8 @@ use std::fmt;
 pub enum ParsedPattern {
     Literal(String),
     Metavariable(String),
+    /// Typed metavariable: (type $VAR) e.g. (int $X), (String $S)
+    TypedMetavar { name: String, expected_type: String },
     EllipsisMetavariable(String),
     NodeType(String),
     Sequence(Vec<ParsedPattern>),
@@ -23,6 +25,9 @@ impl fmt::Display for ParsedPattern {
         match self {
             ParsedPattern::Literal(s) => write!(f, "\"{}\"", s),
             ParsedPattern::Metavariable(s) => write!(f, "${}", s),
+            ParsedPattern::TypedMetavar { name, expected_type } => {
+                write!(f, "({} ${})", expected_type, name)
+            }
             ParsedPattern::EllipsisMetavariable(s) => write!(f, "$...{}", s),
             ParsedPattern::NodeType(s) => write!(f, "@{}", s),
             ParsedPattern::Sequence(patterns) => {
@@ -444,6 +449,31 @@ impl PatternParser {
                     let (pattern, new_pos) = self.parse_primary(tokens, pos)?;
                     patterns.push(pattern);
                     pos = new_pos;
+                }
+            }
+        }
+
+        // Detect typed metavar pattern: (type_name $VAR)
+        if patterns.len() == 2 {
+            if let (ParsedPattern::Literal(type_name), ParsedPattern::Metavariable(var_name)) =
+                (&patterns[0], &patterns[1])
+            {
+                // Only treat as typed metavar if type_name looks like a type identifier
+                // (starts with uppercase or is a known primitive type)
+                let is_type = type_name.chars().next().map_or(false, |c| c.is_uppercase())
+                    || matches!(
+                        type_name.as_str(),
+                        "int" | "boolean" | "bool" | "float" | "double" | "char"
+                            | "byte" | "short" | "long" | "string" | "String" | "void"
+                    );
+                if is_type {
+                    return Ok((
+                        ParsedPattern::TypedMetavar {
+                            name: var_name.clone(),
+                            expected_type: type_name.clone(),
+                        },
+                        pos,
+                    ));
                 }
             }
         }
