@@ -921,6 +921,22 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
 
+            if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
+                let regex_str = &literal[3..literal.len() - 1];
+                if let Ok(re) = Regex::new(regex_str) {
+                    let content = if (text.starts_with('"') && text.ends_with('"'))
+                        || (text.starts_with('\'') && text.ends_with('\''))
+                        || (text.starts_with('`') && text.ends_with('`'))
+                    {
+                        &text[1..text.len() - 1]
+                    } else {
+                        text
+                    };
+                    return Ok(re.is_match(content));
+                }
+                return Ok(false);
+            }
+
             if text.contains(literal) {
                 return Ok(true);
             }
@@ -1501,6 +1517,22 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
 
+            if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
+                let regex_str = &literal[3..literal.len() - 1];
+                if let Ok(re) = Regex::new(regex_str) {
+                    let content = if (text.starts_with('"') && text.ends_with('"'))
+                        || (text.starts_with('\'') && text.ends_with('\''))
+                        || (text.starts_with('`') && text.ends_with('`'))
+                    {
+                        &text[1..text.len() - 1]
+                    } else {
+                        text
+                    };
+                    return Ok(re.is_match(content));
+                }
+                return Ok(false);
+            }
+
             if text == literal {
                 return Ok(true);
             }
@@ -1854,6 +1886,26 @@ impl AdvancedSemgrepMatcher {
                     if *literal == "{" {
                         matched_opening_brace = true;
                                             }
+                    // =~/regex/ syntax: match string content against regex
+                    if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
+                        let regex_str = &literal[3..literal.len() - 1]; // strip =~/ and trailing /
+                        if let Ok(re) = Regex::new(regex_str) {
+                            let token = &text_tokens[text_idx];
+                            let content = if (token.starts_with('"') && token.ends_with('"'))
+                                || (token.starts_with('\'') && token.ends_with('\''))
+                                || (token.starts_with('`') && token.ends_with('`'))
+                            {
+                                &token[1..token.len() - 1]
+                            } else {
+                                token.as_str()
+                            };
+                            if re.is_match(content) {
+                                text_idx += 1;
+                                continue;
+                            }
+                        }
+                        return Ok(false);
+                    }
                     // Special case: "..." in pattern should match any string literal token
                     // Handle both "..." (quoted ellipsis in pattern like $X.println("...")) and ... (bare ellipsis)
                     if *literal == "..." || *literal == "\"...\"" {
