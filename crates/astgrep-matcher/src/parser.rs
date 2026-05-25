@@ -365,6 +365,18 @@ impl PatternParser {
                         pos = new_pos;
                     }
                 }
+                Token::Literal(s) if s == "<" => {
+                    // Check for deep expression: <... pattern ...>
+                    if pos + 1 < tokens.len() && matches!(&tokens[pos + 1], Token::Wildcard) {
+                        let (nested_pattern, new_pos) =
+                            self.parse_deep_expr(tokens, pos)?;
+                        patterns.push(nested_pattern);
+                        pos = new_pos;
+                    } else {
+                        patterns.push(ParsedPattern::Literal("<".to_string()));
+                        pos += 1;
+                    }
+                }
                 _ => {
                     let (pattern, new_pos) = self.parse_primary(tokens, pos)?;
                     patterns.push(pattern);
@@ -490,6 +502,68 @@ impl PatternParser {
         } else {
             Ok((ParsedPattern::Sequence(patterns), pos))
         }
+    }
+
+    /// Parse a deep expression: <... pattern ...>
+    fn parse_deep_expr(
+        &self,
+        tokens: &[Token],
+        start: usize,
+    ) -> Result<(ParsedPattern, usize)> {
+        // Expect <... at start
+        if start + 1 >= tokens.len() {
+            return Err(AnalysisError::pattern_match_error("Expected <..."));
+        }
+        if !matches!(&tokens[start], Token::Literal(s) if s == "<")
+            || !matches!(&tokens[start + 1], Token::Wildcard)
+        {
+            return Err(AnalysisError::pattern_match_error("Expected <... for deep expression"));
+        }
+
+        let mut pos = start + 2; // skip < and ...
+        let mut inner_tokens = Vec::new();
+        let mut depth = 1u32;
+
+        while pos < tokens.len() {
+            // Check for nested deep expression: <... opens another level
+            if pos + 1 < tokens.len()
+                && matches!(&tokens[pos], Token::Literal(s) if s == "<")
+                && matches!(&tokens[pos + 1], Token::Wildcard)
+            {
+                depth += 1;
+                inner_tokens.push(tokens[pos].clone());
+                inner_tokens.push(tokens[pos + 1].clone());
+                pos += 2;
+                continue;
+            }
+            // Check for closing ...>
+            if pos + 1 < tokens.len()
+                && matches!(&tokens[pos], Token::Wildcard)
+                && matches!(&tokens[pos + 1], Token::Literal(s) if s == ">")
+            {
+                depth -= 1;
+                if depth == 0 {
+                    pos += 2; // consume ... and >
+                    break;
+                }
+                inner_tokens.push(tokens[pos].clone());
+                inner_tokens.push(tokens[pos + 1].clone());
+                pos += 2;
+                continue;
+            }
+            inner_tokens.push(tokens[pos].clone());
+            pos += 1;
+        }
+
+        if depth != 0 {
+            return Err(AnalysisError::pattern_match_error(
+                "Unclosed deep expression",
+            ));
+        }
+
+        // Parse inner tokens as a pattern
+        let (inner_pattern, _) = self.parse_alternative(&inner_tokens, 0)?;
+        Ok((ParsedPattern::DeepExpr(Box::new(inner_pattern)), pos))
     }
 
     /// Parse primary patterns (highest precedence)
