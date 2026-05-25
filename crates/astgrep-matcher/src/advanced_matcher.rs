@@ -2193,9 +2193,24 @@ impl AdvancedSemgrepMatcher {
                                     match pattern {
                                         ParsedPattern::Literal(lit) => {
                                             if text_tokens[text_idx] != *lit {
-                                                return Ok(false);
+                                                // Forward-match: skip to find the literal
+                                                let mut fwd = text_idx + 1;
+                                                let max_fwd = (text_idx + 5).min(text_tokens.len());
+                                                let mut found = false;
+                                                while fwd < max_fwd {
+                                                    if text_tokens[fwd] == *lit {
+                                                        text_idx = fwd + 1;
+                                                        found = true;
+                                                        break;
+                                                    }
+                                                    fwd += 1;
+                                                }
+                                                if !found {
+                                                    return Ok(false);
+                                                }
+                                            } else {
+                                                text_idx += 1;
                                             }
-                                            text_idx += 1;
                                         }
                                         ParsedPattern::Metavariable(metav) => {
                                             let value = &text_tokens[text_idx];
