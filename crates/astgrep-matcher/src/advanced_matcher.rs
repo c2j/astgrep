@@ -1995,10 +1995,24 @@ impl AdvancedSemgrepMatcher {
                                                                         return Ok(false);
                                 }
                             } else {
-                                                                return Ok(false);
+                                return Ok(false);
                             }
                         } else {
-                                                        return Ok(false);
+                            // Forward-match: skip non-matching tokens
+                            let mut fwd = text_idx + 1;
+                            let max_fwd = (text_idx + 5).min(text_tokens.len());
+                            let mut found = false;
+                            while fwd < max_fwd {
+                                if text_tokens[fwd] == literal.as_str() {
+                                    text_idx = fwd + 1;
+                                    found = true;
+                                    break;
+                                }
+                                fwd += 1;
+                            }
+                            if !found {
+                                return Ok(false);
+                            }
                         }
                     } else {
                                                 text_idx += 1;
