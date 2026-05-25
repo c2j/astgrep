@@ -2466,6 +2466,20 @@ impl AdvancedSemgrepMatcher {
                         tokens.push(current.clone());
                         current.clear();
                     }
+                    if let Some(&n1) = chars.peek() {
+                        if n1 == '.' {
+                            chars.next();
+                            if let Some(&n2) = chars.peek() {
+                                if n2 == '.' {
+                                    chars.next();
+                                    tokens.push("...".to_string());
+                                    continue;
+                                }
+                            }
+                            tokens.push("..".to_string());
+                            continue;
+                        }
+                    }
                     tokens.push(ch.to_string());
                 }
                 '=' => {
