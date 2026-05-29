@@ -274,14 +274,14 @@ impl RuleExecutionEngine {
     }
 
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
-    fn execute_advanced_pattern(
-        &self,
-        pattern: &Pattern,
-        rule: &Rule,
-        context: &RuleContext,
-        _ast: &dyn AstNode,
-    ) -> Result<Vec<Finding>> {
-        use crate::executor::AdvancedRuleExecutor;
+     fn execute_advanced_pattern(
+         &self,
+         pattern: &Pattern,
+         rule: &Rule,
+         context: &RuleContext,
+         _ast: &dyn AstNode,
+     ) -> Result<Vec<Finding>> {
+         use crate::executor::AdvancedRuleExecutor;
         let mut advanced_executor = AdvancedRuleExecutor::new();
 
         // Create a rule with just this pattern

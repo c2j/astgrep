@@ -123,16 +123,16 @@ impl AdvancedSemgrepMatcher {
         self.language_hint = Some(lang);
     }
 
-    pub fn find_matches(
-        &mut self,
-        pattern: &SemgrepPattern,
-        root: &dyn AstNode,
-    ) -> Result<Vec<SemgrepMatchResult>> {
-        self.full_source = root.text().map(|s| s.to_string());
-        self.inside_match_cache.clear();
+     pub fn find_matches(
+         &mut self,
+         pattern: &SemgrepPattern,
+         root: &dyn AstNode,
+     ) -> Result<Vec<SemgrepMatchResult>> {
+         self.full_source = root.text().map(|s| s.to_string());
+         self.inside_match_cache.clear();
 
-        let mut matches = Vec::new();
-        self.find_matches_recursive(pattern, root, &mut matches, 0)?;
+         let mut matches = Vec::new();
+         let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
 
         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
             if let Some(lang) = self.language_hint {
