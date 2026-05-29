@@ -1019,7 +1019,7 @@ impl AdvancedRuleExecutor {
 
         // Match `(type_identifier $VAR)` — e.g. `(int $X)`, `(String $Y)`, `(float $Z)`
         // The type identifier is one or more word chars, the var is $ followed by word chars
-        let re = regex::Regex::new(r"\((\w+)\s+\$(\w+)\)").expect("typed metavar regex should compile");
+        let re = regex::Regex::new(r"\(([\w.]+)\s+\$(\w+)\)").expect("typed metavar regex should compile");
         for cap in re.captures_iter(pattern_str) {
             let type_name = cap.get(1).expect("type capture group").as_str().to_string();
             let var_name = cap.get(2).expect("var capture group").as_str().to_string();
@@ -1230,19 +1230,15 @@ impl AdvancedRuleExecutor {
         import_map: &std::collections::HashMap<String, String>,
         match_line: Option<usize>,
     ) -> bool {
-        let var_pattern = format!(r"(\w+)\s+{}\s*[=;]", regex::escape(var_value));
+        let var_pattern = format!(r"(?:final\s+)?(\w+(?:\.\w+)*)\s+{}\s*[=;]", regex::escape(var_value));
         if let Ok(re) = regex::Regex::new(&var_pattern) {
             let mut closest_match: Option<(usize, bool)> = None;
             for cap in re.captures_iter(full_source) {
                 if let Some(type_match) = cap.get(1) {
-                    let simple_type = type_match.as_str();
+                    let decl_type = type_match.as_str();
                     let decl_start = cap.get(0).unwrap().start();
                     let decl_line = full_source[..decl_start].lines().count() + 1;
-                    let matches = simple_type == expected_type
-                        || import_map.get(simple_type).map_or(false, |r| {
-                            r == expected_type
-                                || expected_type.ends_with(&format!(".{}", simple_type))
-                        });
+                    let matches = Self::types_equivalent(decl_type, expected_type, import_map);
                     if let Some(ml) = match_line {
                         if decl_line < ml {
                             let dist = ml - decl_line;
@@ -1257,6 +1253,41 @@ impl AdvancedRuleExecutor {
             }
             if let Some((_, matches)) = closest_match {
                 return matches;
+            }
+        }
+        false
+    }
+
+    fn types_equivalent(decl_type: &str, expected_type: &str, import_map: &std::collections::HashMap<String, String>) -> bool {
+        if decl_type == expected_type {
+            return true;
+        }
+        let simple_decl = decl_type.rsplit('.').next().unwrap_or(decl_type);
+        let simple_expected = expected_type.rsplit('.').next().unwrap_or(expected_type);
+        if simple_decl == simple_expected {
+            return true;
+        }
+        if import_map.get(simple_decl).map_or(false, |r| {
+            r == expected_type || expected_type.ends_with(&format!(".{}", simple_decl))
+        }) {
+            return true;
+        }
+        let boxing_groups: &[&[&str]] = &[
+            &["int", "Integer", "java.lang.Integer"],
+            &["boolean", "Boolean", "java.lang.Boolean"],
+            &["long", "Long", "java.lang.Long"],
+            &["double", "Double", "java.lang.Double"],
+            &["float", "Float", "java.lang.Float"],
+            &["short", "Short", "java.lang.Short"],
+            &["byte", "Byte", "java.lang.Byte"],
+            &["char", "Character", "java.lang.Character"],
+            &["String", "java.lang.String"],
+        ];
+        for group in boxing_groups {
+            let decl_in_group = group.iter().any(|&t| t == decl_type || t == simple_decl);
+            let expected_in_group = group.iter().any(|&t| t == expected_type || t == simple_expected);
+            if decl_in_group && expected_in_group {
+                return true;
             }
         }
         false
