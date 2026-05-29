@@ -1218,16 +1218,11 @@ impl MatchCtx {
             || is_unordered_set_kind(pattern_kind);
         if needs_unordered && pattern_children.len() <= target_children.len()
         {
-            let has_ellipsis = pattern_children
-                .iter()
-                .any(|p| matches!(p, PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }));
-            if has_ellipsis || pattern_children.len() < target_children.len() {
-                let snap = self.snapshot();
-                if self.match_unordered_children(pattern_children, &target_children) {
-                    return true;
-                }
-                self.restore(snap);
+            let snap = self.snapshot();
+            if self.match_unordered_children(pattern_children, &target_children) {
+                return true;
             }
+            self.restore(snap);
         }
 
         // Catch clause optional binding: catch($ERR) {} should match catch {}
