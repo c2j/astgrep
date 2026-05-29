@@ -81,11 +81,17 @@ impl PatternTree {
 
 const TRIVIAL_NODE_TYPES: &[&str] = &[
     "(", ")", "{", "}", "[", "]", ";", ",", ".", ":", "::",
-    // tree-sitter punctuation node types
     "open_paren", "close_paren", "open_brace", "close_brace",
     "open_bracket", "close_bracket",
-    // formatting
     "comment", "line_comment", "block_comment",
+];
+
+const BINARY_OPERATORS: &[&str] = &[
+    "+", "-", "*", "/", "%", "**",
+    "&", "|", "^", "~", "<<", ">>",
+    "&&", "||",
+    "==", "!=", "<", ">", "<=", ">=",
+    "===", "!==",
 ];
 
 fn is_trivial_node(node: &Node) -> bool {
@@ -95,7 +101,10 @@ fn is_trivial_node(node: &Node) -> bool {
     }
     TRIVIAL_NODE_TYPES.contains(&kind)
         || node.is_extra()
-        || (node.child_count() == 0 && kind.len() == 1 && !kind.chars().next().map_or(false, |c| c.is_alphanumeric()))
+        || (node.child_count() == 0
+            && kind.len() <= 2
+            && !kind.chars().next().map_or(false, |c| c.is_alphanumeric())
+            && !BINARY_OPERATORS.contains(&kind))
 }
 
 // ---------------------------------------------------------------------------
@@ -171,35 +180,33 @@ impl PatternTreeParser {
          let trimmed = pattern.trim();
          let (preprocessed, meta_map) = preprocess_pattern(trimmed);
          let tree = self.parse_with_tree_sitter(&preprocessed, language)?;
+ 
+         let root = tree.root_node();
+         let source = &preprocessed;
+ 
+         let meaningful = self.find_meaningful_node(&root, source);
+         let node = meaningful.as_ref().unwrap_or(&root);
 
-        let root = tree.root_node();
-        let source = &preprocessed;
-
-        let meaningful = self.find_meaningful_node(&root, source);
-        let node = meaningful.as_ref().unwrap_or(&root);
-
-        Ok(self.convert_node(node, source, &meta_map))
-    }
-
-    /// Parse preprocessed source with tree-sitter. Tries direct parse first;
-    /// if the result is an error node, wraps in a language-specific context and retries.
-    fn parse_with_tree_sitter(&mut self, source: &str, language: Language) -> Result<Tree> {
-        let parser = self.parsers.get_mut(&language)
-            .ok_or_else(|| astgrep_core::AnalysisError::parse_error(
-                &format!("No tree-sitter parser for {:?}", language)
-            ))?;
-
-        if let Some(tree) = parser.parse(source, None) {
-            let root = tree.root_node();
-            if !root.has_error() || Self::has_meaningful_content(&root) {
-                return Ok(tree);
-            }
-        }
-
-        let wrapped = Self::wrap_in_context_static(source, language);
-        if let Some(tree) = parser.parse(&wrapped, None) {
-            return Ok(tree);
-        }
+         Ok(self.convert_node(node, source, &meta_map))
+     }
+ 
+     fn parse_with_tree_sitter(&mut self, source: &str, language: Language) -> Result<Tree> {
+         let parser = self.parsers.get_mut(&language)
+             .ok_or_else(|| astgrep_core::AnalysisError::parse_error(
+                 &format!("No tree-sitter parser for {:?}", language)
+             ))?;
+ 
+         if let Some(tree) = parser.parse(source, None) {
+             let root = tree.root_node();
+             if !root.has_error() || Self::has_meaningful_content(&root) {
+                 return Ok(tree);
+             }
+         }
+ 
+         let wrapped = Self::wrap_in_context_static(source, language);
+         if let Some(tree) = parser.parse(&wrapped, None) {
+             return Ok(tree);
+         }
 
         Err(astgrep_core::AnalysisError::parse_error(
             &format!("Failed to parse pattern with tree-sitter: {:?}", source)
@@ -213,9 +220,23 @@ impl PatternTreeParser {
 
     fn wrap_in_context_static(pattern: &str, language: Language) -> String {
         match language {
-            Language::Java => format!("class __Wrap__ {{ void m() {{ {} }} }}", pattern),
+            Language::Java => {
+                // Annotations need to be before a declaration, not inside a method body
+                if pattern.trim_start().starts_with('@') {
+                    format!("class __Wrap__ {{ {} void __m__() {{}} }}", pattern)
+                } else {
+                    format!("class __Wrap__ {{ void m() {{ {} }} }}", pattern)
+                }
+            }
             Language::JavaScript => format!("function __wrap__() {{ {} }}", pattern),
-            Language::Python => format!("def __wrap__():\n    {}", pattern),
+            Language::Python => {
+                // Decorators need to be before a function definition
+                if pattern.trim_start().starts_with('@') {
+                    format!("{}\ndef __wrap__(): pass", pattern)
+                } else {
+                    format!("def __wrap__():\n    {}", pattern)
+                }
+            }
             Language::Bash => pattern.to_string(),
             _ => pattern.to_string(),
         }
@@ -223,7 +244,6 @@ impl PatternTreeParser {
 
     /// Find the first meaningful (non-wrapper) AST node.
     fn find_meaningful_node<'a>(&self, root: &Node<'a>, source: &str) -> Option<Node<'a>> {
-        // Skip program/root nodes to get to the actual pattern content
         let mut current = *root;
         loop {
             let kind = current.kind();
@@ -247,9 +267,21 @@ impl PatternTreeParser {
             // For wrapped contexts, find the deepest statement
             if matches!(kind,
                 "class_declaration" | "class_body" | "method_declaration" |
-                "block" | "function_declaration" | "function_definition" |
+                "block" |
                 "statement_block" | "body" | "compound_statement"
             ) {
+                // Check for annotation/decorator/modifier nodes first — don't dive past them
+                for i in 0..current.child_count() {
+                    if let Some(child) = current.child(i) {
+                        let ck = child.kind();
+                        if matches!(ck,
+                            "annotation" | "marker_annotation" | "modifier" |
+                            "decorator" | "decorator_list" | "modifiers"
+                        ) {
+                            return Some(child);
+                        }
+                    }
+                }
                 // Dive into the body to find the actual statement
                 for i in 0..current.child_count() {
                     if let Some(child) = current.child(i) {

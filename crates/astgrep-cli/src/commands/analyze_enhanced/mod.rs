@@ -177,10 +177,6 @@ fn analyze_with_rule_engine(
     language: Language,
     config: &EnhancedAnalysisConfig,
 ) -> Result<(Vec<Finding>, usize)> {
-    eprintln!(
-        "[DEBUG] entered analyze_with_rule_engine for {}",
-        file_path.display()
-    );
     use astgrep_parser::LanguageParserRegistry;
     use astgrep_rules::{RuleContext, RuleEngine};
     use std::path::Path;
@@ -276,10 +272,6 @@ fn analyze_with_rule_engine(
             Language::Sql => "Sql",
             _ => "Other",
         };
-        eprintln!(
-            "[DEBUG-PREPROC] language for preprocessing check = {}",
-            lang_name
-        );
         tracing::info!("enhanced: language for preprocessing check = {}", lang_name);
     }
     if matches!(language, Language::Java | Language::Xml) {
