@@ -438,14 +438,31 @@ enum PlaceholderKind {
 /// with valid identifiers that tree-sitter can parse.
 ///
 /// Returns the preprocessed string and a map from placeholder → kind.
-fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind>) {
-    let mut result = String::with_capacity(pattern.len() * 2);
-    let mut meta_map = HashMap::new();
-    let chars: Vec<char> = pattern.chars().collect();
-    let mut i = 0;
+ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind>) {
+     let mut result = String::with_capacity(pattern.len() * 2);
+     let mut meta_map = HashMap::new();
+     let chars: Vec<char> = pattern.chars().collect();
+     let mut i = 0;
+     let mut in_string = false;
+     let mut string_delim = ' ';
 
-    while i < chars.len() {
-        if chars[i] == '$' {
+     while i < chars.len() {
+         if in_string {
+             result.push(chars[i]);
+             if chars[i] == string_delim {
+                 in_string = false;
+             }
+             i += 1;
+             continue;
+         }
+         if chars[i] == '"' || chars[i] == '\'' {
+             in_string = true;
+             string_delim = chars[i];
+             result.push(chars[i]);
+             i += 1;
+             continue;
+         }
+         if chars[i] == '$' {
             // Check for ellipsis metavar: $...NAME
             if i + 3 < chars.len() && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '.' {
                 // Collect the name after $...

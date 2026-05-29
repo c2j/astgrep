@@ -1017,9 +1017,8 @@ impl AdvancedRuleExecutor {
         let mut type_constraints: Vec<(String, String)> = Vec::new();
         let mut cleaned = pattern_str.to_string();
 
-        // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)`
-        // Handles: (int $X), (String $Y), (List<$T> $X), (javax.servlet.Request $R)
-        let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?)\s+\$(\w+)\)")
+        // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)` or `(Type[] $VAR)`
+        let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
             .expect("typed metavar regex should compile");
         for cap in re.captures_iter(pattern_str) {
             let type_name = cap.get(1).expect("type capture group").as_str().to_string();
@@ -1240,10 +1239,10 @@ impl AdvancedRuleExecutor {
         import_map: &std::collections::HashMap<String, String>,
         match_line: Option<usize>,
     ) -> bool {
-        let base_expected = expected_type.split('<').next().unwrap_or(expected_type);
-        let var_pattern = format!(
-            r"(?:final\s+)?(\w+(?:\.\w+)*(?:<[^>]*>)?)\s+{}\s*[=;),:]", 
-            regex::escape(var_value)
+         let base_expected = expected_type.split('<').next().unwrap_or(expected_type).trim_end_matches("[]");
+         let var_pattern = format!(
+             r"(?:final\s+)?(\w+(?:\.\w+)*(?:<[^>]*>)?(?:\[\])?)\s+{}\s*[=;),:]", 
+             regex::escape(var_value)
         );
         let var_init_pattern = format!(r"var\s+{}\s*=\s*new\s+(\w+(?:\.\w+)*)", regex::escape(var_value));
         if let Ok(re) = regex::Regex::new(&var_pattern) {

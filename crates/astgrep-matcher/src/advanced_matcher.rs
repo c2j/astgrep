@@ -131,26 +131,20 @@ impl AdvancedSemgrepMatcher {
          self.full_source = root.text().map(|s| s.to_string());
          self.inside_match_cache.clear();
 
-         let mut matches = Vec::new();
-         let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
+          let mut matches = Vec::new();
+          let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
 
-         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
-             if let Some(lang) = self.language_hint {
-                 let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
-                 if !tree_results.is_empty() {
-                     // Prefer tree matcher results — they have correct AST-level
-                     // bindings (e.g. $X = "this.strlist" not just "this").
-                     use std::collections::HashSet;
-                     let tree_lines: HashSet<usize> = tree_results.iter()
-                         .filter_map(|tr| tr.node.location().map(|(sl, _, _, _)| sl))
-                         .collect();
-                     matches.retain(|m| {
-                         m.node.location().map_or(true, |(sl, _, _, _)| !tree_lines.contains(&sl))
-                     });
-                     matches.extend(tree_results);
-                 }
-             }
-         }
+          if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
+              if let Some(lang) = self.language_hint {
+                  let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
+                  if !tree_results.is_empty() {
+                      // Prefer tree matcher results — they have correct AST-level
+                      // bindings (e.g. $X = "this.strlist" not just "this").
+                      // Also more precise: old engine over-matches due to text-based comparison.
+                      matches = tree_results;
+                  }
+              }
+          }
 
         Ok(matches)
     }
