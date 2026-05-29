@@ -1230,7 +1230,8 @@ impl AdvancedRuleExecutor {
         import_map: &std::collections::HashMap<String, String>,
         match_line: Option<usize>,
     ) -> bool {
-        let var_pattern = format!(r"(?:final\s+)?(\w+(?:\.\w+)*)\s+{}\s*[=;]", regex::escape(var_value));
+        let var_pattern = format!(r"(?:final\s+)?(\w+(?:\.\w+)*)\s+{}\s*[=;),:]", regex::escape(var_value));
+        let var_init_pattern = format!(r"var\s+{}\s*=\s*new\s+(\w+(?:\.\w+)*)", regex::escape(var_value));
         if let Ok(re) = regex::Regex::new(&var_pattern) {
             let mut closest_match: Option<(usize, bool)> = None;
             for cap in re.captures_iter(full_source) {
@@ -1238,7 +1239,12 @@ impl AdvancedRuleExecutor {
                     let decl_type = type_match.as_str();
                     let decl_start = cap.get(0).unwrap().start();
                     let decl_line = full_source[..decl_start].lines().count() + 1;
-                    let matches = Self::types_equivalent(decl_type, expected_type, import_map);
+                    let actual_type = if decl_type == "var" {
+                        if let Ok(var_re) = regex::Regex::new(&var_init_pattern) {
+                            var_re.captures(full_source).and_then(|c| c.get(1)).map(|m| m.as_str()).unwrap_or("var")
+                        } else { "var" }
+                    } else { decl_type };
+                    let matches = Self::types_equivalent(actual_type, expected_type, import_map);
                     if let Some(ml) = match_line {
                         if decl_line < ml {
                             let dist = ml - decl_line;
