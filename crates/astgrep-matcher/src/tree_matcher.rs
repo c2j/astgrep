@@ -68,6 +68,10 @@ fn is_associative_operator(op: &str) -> bool {
     matches!(op.trim(), "and" | "&&" | "or" | "||" | "+" | "*" | "&" | "|")
 }
 
+fn is_commutative_operator(op: &str) -> bool {
+    matches!(op.trim(), "+" | "*" | "&" | "|")
+}
+
 // ---------------------------------------------------------------------------
 // Chain helpers (Phase B)
 // ---------------------------------------------------------------------------
@@ -111,7 +115,7 @@ fn pattern_contains_ellipsis(tree: &PatternTree) -> bool {
         PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. } => true,
         PatternTree::Node { children, .. } => children.iter().any(pattern_contains_ellipsis),
         PatternTree::DeepExpr(inner) => pattern_contains_ellipsis(inner),
-        PatternTree::Metavar { .. } => false,
+        PatternTree::Metavar { .. } | PatternTree::TypedMetavar { .. } => false,
     }
 }
 
@@ -203,6 +207,7 @@ fn flatten_pattern_chain(kind: &str, children: &[PatternTree]) -> Vec<PatternTre
             PatternTree::Ellipsis
             | PatternTree::EllipsisMetavar { .. }
             | PatternTree::Metavar { .. }
+            | PatternTree::TypedMetavar { .. }
             | PatternTree::DeepExpr(_) => {
                 result.push(child.clone());
             }
@@ -360,7 +365,7 @@ fn try_flatten_pattern_binary(
             PatternTree::Node { text: None, .. } => {
                 flatten_pattern_operand(c, &op, &mut operands);
             }
-            PatternTree::Metavar { .. } | PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. } | PatternTree::DeepExpr(_) => {
+            PatternTree::Metavar { .. } | PatternTree::TypedMetavar { .. } | PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. } | PatternTree::DeepExpr(_) => {
                 operands.push(c.clone());
             }
         }
@@ -388,6 +393,7 @@ fn flatten_pattern_operand(pattern: &PatternTree, expected_op: &str, operands: &
             operands.push(pattern.clone());
         }
         PatternTree::Metavar { .. }
+        | PatternTree::TypedMetavar { .. }
         | PatternTree::Ellipsis
         | PatternTree::EllipsisMetavar { .. }
         | PatternTree::DeepExpr(_) => {
@@ -512,6 +518,113 @@ fn is_optional_collection(tree: &PatternTree) -> bool {
     }
 }
 
+fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> bool {
+    let kind = target.get_attribute("ts_kind").unwrap_or(target.node_type());
+    let text = target.text().map(|t| t.trim().to_string()).unwrap_or_default();
+
+    match type_name {
+        "int" | "integer" | "Integer" => {
+            if kind == "number" || kind == "number_literal" || kind == "integer" || kind == "integer_literal" {
+                return text.parse::<i64>().is_ok() || text.parse::<u64>().is_ok();
+            }
+            // Java boxing: Integer type identifier matches boxed/unboxed
+            if type_name == "Integer" && (kind == "type_identifier" || kind == "identifier") {
+                return text == "Integer" || text == "int";
+            }
+            if type_name == "int" && (kind == "type_identifier" || kind == "identifier") {
+                return text == "int" || text == "Integer" || text == "java.lang.Integer";
+            }
+            false
+        }
+        "float" | "double" | "Float" | "Double" => {
+            if kind == "float" || kind == "float_literal" || kind == "number" || kind == "number_literal" {
+                return text.contains('.');
+            }
+            false
+        }
+        "number" => {
+            if kind == "number" || kind == "number_literal" || kind == "integer" || kind == "integer_literal"
+                || kind == "float" || kind == "float_literal"
+            {
+                return true;
+            }
+            text.parse::<f64>().is_ok()
+        }
+        "str" | "string" | "String" => {
+            if kind == "string" || kind == "string_literal" {
+                return true;
+            }
+            // Java boxing: String type identifier
+            if type_name == "String" && (kind == "type_identifier" || kind == "identifier") {
+                return text == "String" || text == "java.lang.String";
+            }
+            false
+        }
+        "bool" | "boolean" | "Boolean" => {
+            if kind == "true" || kind == "false" || text == "true" || text == "false" {
+                return true;
+            }
+            // Java boxing: Boolean type identifier
+            if (type_name == "Boolean" || type_name == "boolean") && (kind == "type_identifier" || kind == "identifier") {
+                return text == "Boolean" || text == "boolean";
+            }
+            false
+        }
+        _ => {
+            // Class/type matching: (TypeName $X) should match expressions whose
+            // declared type is TypeName (e.g., variable declarations, new expressions)
+            if kind == "type_identifier" || kind == "identifier" || kind == "scoped_type_identifier"
+                || kind == "generic_type" || kind == "user_defined_type"
+            {
+                let matches_type = text == type_name
+                    || text.ends_with(&format!(".{}", type_name));
+                return matches_type;
+            }
+            // For new expressions: new TypeName(...) matches
+            if kind == "object_creation_expression" || kind == "new_expression" {
+                let children = filter_node_children(target);
+                for child in &children {
+                    let ck = child.get_attribute("ts_kind").unwrap_or(child.node_type());
+                    if ck == "type_identifier" || ck == "identifier" {
+                        if let Some(ct) = child.text() {
+                            let ct = ct.trim();
+                            if ct == type_name || ct.ends_with(&format!(".{}", type_name)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            // For variable declarations with type annotation
+            if kind == "variable_declarator" || kind == "local_variable_declaration"
+                || kind == "declaration" || kind == "variable_declaration"
+            {
+                let children = filter_node_children(target);
+                for child in &children {
+                    let ck = child.get_attribute("ts_kind").unwrap_or(child.node_type());
+                    if ck == "type_identifier" || ck == "identifier" {
+                        if let Some(ct) = child.text() {
+                            let ct = ct.trim();
+                            if ct == type_name || ct.ends_with(&format!(".{}", type_name)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            // Ternary/conditional with typed branches
+            if kind == "ternary_expression" || kind == "conditional_expression" {
+                return true;
+            }
+            // Field access: this.field matches when field has the right type
+            if kind == "field_access" || kind == "member_expression" {
+                return true;
+            }
+            false
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // TreeMatcher
 // ---------------------------------------------------------------------------
@@ -543,8 +656,7 @@ impl TreeMatcher {
         let tree = match self.parser.lock() {
             Ok(mut p) => match p.parse(pattern_str, language) {
                 Ok(t) => t,
-                Err(e) => {
-                    let _ = e;
+                Err(_) => {
                     return Vec::new();
                 }
             },
@@ -773,6 +885,19 @@ impl MatchCtx {
                 false
             }
 
+            PatternTree::TypedMetavar { name, type_name } => {
+                if !matches_type_constraint(type_name, target) {
+                    return false;
+                }
+                if let Some(text) = target.text() {
+                    let trimmed = text.trim();
+                    if !trimmed.is_empty() {
+                        return self.try_bind(name, trimmed);
+                    }
+                }
+                false
+            }
+
             PatternTree::DeepExpr(inner) => {
                 // Try direct match first
                 let snap = self.snapshot();
@@ -868,6 +993,12 @@ impl MatchCtx {
             || (pattern_kind.contains('_') && target_kind.contains('_')
                 && pattern_kind.split('_').any(|p| target_kind.contains(p)))
             || (is_chain_kind(pattern_kind) && is_chain_kind(target_kind));
+
+        if !kind_match && pattern_kind == "parenthesized_expression" && pattern_children.len() == 1 {
+            if matches!(pattern_children[0], PatternTree::TypedMetavar { .. }) {
+                return self.match_tree(&pattern_children[0], target);
+            }
+        }
 
         if !kind_match && !pattern_children.is_empty() {
             if pattern_kind == "assignment_expression"
@@ -1315,9 +1446,6 @@ impl MatchCtx {
         operator: &str,
     ) -> bool {
         if patterns.is_empty() {
-            // Bitwise operators (|, &, +, *) use AC matching: pattern is a
-            // submultiset of the target, so extra target operands are fine.
-            // Logical operators (and, or, &&, ||) require exact operand count.
             let ac_operators = ["|", "&", "+", "*"];
             if ac_operators.contains(&operator) {
                 return true;
@@ -1370,25 +1498,53 @@ impl MatchCtx {
                 false
             }
 
-            _ => {
-                // Concrete pattern: try matching any target operand (associative = unordered)
-                if targets.is_empty() {
-                    return false;
-                }
-                for i in 0..targets.len() {
+            PatternTree::TypedMetavar { name, .. } => {
+                // Typed metavar consumes exactly 1 operand (type check done in match_tree)
+                for consume in 1..=targets.len() {
+                    let combined = join_operand_texts(&targets[..consume], operator);
                     let snap = self.snapshot();
-                    if self.match_tree(first, targets[i]) {
-                        let remaining: Vec<&dyn AstNode> = targets.iter().enumerate()
-                            .filter(|(j, _)| *j != i)
-                            .map(|(_, t)| *t)
-                            .collect();
-                        if self.match_associative_operands(rest, &remaining, operator) {
+                    if self.try_bind(name, &combined) {
+                        if self.match_associative_operands(rest, &targets[consume..], operator) {
                             return true;
                         }
                     }
                     self.restore(snap);
                 }
                 false
+            }
+
+            _ => {
+                // Concrete pattern
+                if targets.is_empty() {
+                    return false;
+                }
+                if is_commutative_operator(operator) {
+                    // Commutative: try matching any target operand (unordered)
+                    for i in 0..targets.len() {
+                        let snap = self.snapshot();
+                        if self.match_tree(first, targets[i]) {
+                            let remaining: Vec<&dyn AstNode> = targets.iter().enumerate()
+                                .filter(|(j, _)| *j != i)
+                                .map(|(_, t)| *t)
+                                .collect();
+                            if self.match_associative_operands(rest, &remaining, operator) {
+                                return true;
+                            }
+                        }
+                        self.restore(snap);
+                    }
+                    false
+                } else {
+                    // Associative but not commutative: match in order
+                    let snap = self.snapshot();
+                    if self.match_tree(first, targets[0]) {
+                        if self.match_associative_operands(rest, &targets[1..], operator) {
+                            return true;
+                        }
+                    }
+                    self.restore(snap);
+                    false
+                }
             }
         }
     }

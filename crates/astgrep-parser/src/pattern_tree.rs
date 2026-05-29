@@ -49,6 +49,14 @@ pub enum PatternTree {
     /// Deep expression match — the inner pattern can match at any depth
     /// inside an expression. Semgrep syntax: `<... PAT ...>`  or  `deep(PAT)`
     DeepExpr(Box<PatternTree>),
+
+    /// Typed metavariable with a type constraint.
+    /// Semgrep syntax: `$NAME: TYPE` (e.g., `$X: int`, `$X: str`, `$X: bool`)
+    /// Only matches when the target node's type is compatible.
+    TypedMetavar {
+        name: String,
+        type_name: String,
+    },
 }
 
 impl PatternTree {
@@ -57,7 +65,8 @@ impl PatternTree {
         match self {
             PatternTree::Metavar { .. }
             | PatternTree::Ellipsis
-            | PatternTree::EllipsisMetavar { .. } => true,
+            | PatternTree::EllipsisMetavar { .. }
+            | PatternTree::TypedMetavar { .. } => true,
             PatternTree::DeepExpr(inner) => inner.has_wildcards(),
             PatternTree::Node { children, .. } => children.iter().any(|c| c.has_wildcards()),
         }
@@ -71,6 +80,7 @@ impl PatternTree {
             PatternTree::Ellipsis => "...",
             PatternTree::EllipsisMetavar { name } => name,
             PatternTree::DeepExpr(_) => "deep_expr",
+            PatternTree::TypedMetavar { name, .. } => name,
         }
     }
 }
@@ -337,6 +347,9 @@ impl PatternTreeParser {
                 PlaceholderKind::EllipsisMetavar(name) => {
                     PatternTree::EllipsisMetavar { name: name.clone() }
                 }
+                PlaceholderKind::TypedMetavar { name, type_name } => {
+                    PatternTree::TypedMetavar { name: name.clone(), type_name: type_name.clone() }
+                }
             };
         }
 
@@ -365,6 +378,9 @@ impl PatternTreeParser {
                     PlaceholderKind::EllipsisMetavar(name) => {
                         PatternTree::EllipsisMetavar { name: name.clone() }
                     }
+                    PlaceholderKind::TypedMetavar { name, type_name } => {
+                        PatternTree::TypedMetavar { name: name.clone(), type_name: type_name.clone() }
+                    }
                 };
             }
         }
@@ -382,6 +398,9 @@ impl PatternTreeParser {
                         PlaceholderKind::Ellipsis => PatternTree::Ellipsis,
                         PlaceholderKind::EllipsisMetavar(name) => {
                             PatternTree::EllipsisMetavar { name: name.clone() }
+                        }
+                        PlaceholderKind::TypedMetavar { name, type_name } => {
+                            PatternTree::TypedMetavar { name: name.clone(), type_name: type_name.clone() }
                         }
                     };
                 }
@@ -412,6 +431,7 @@ enum PlaceholderKind {
     Metavar(String),
     Ellipsis,
     EllipsisMetavar(String),
+    TypedMetavar { name: String, type_name: String },
 }
 
 /// Preprocess a semgrep pattern by replacing metavariables and ellipsis
@@ -452,6 +472,27 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                 j += 1;
             }
             if !name.is_empty() {
+                // Check for typed metavar: $NAME: TYPE
+                if j < chars.len() && chars[j] == ':' {
+                    let mut k = j + 1;
+                    // skip whitespace after colon
+                    while k < chars.len() && chars[k] == ' ' { k += 1; }
+                    let type_start = k;
+                    while k < chars.len() && (chars[k].is_alphanumeric() || chars[k] == '_' || chars[k] == '.') {
+                        k += 1;
+                    }
+                    if k > type_start {
+                        let type_name: String = chars[type_start..k].iter().collect();
+                        let placeholder = format!("{}{}{}_t_{}{}", MG_PREFIX, name, MG_SUFFIX, type_name, MG_SUFFIX);
+                        meta_map.insert(placeholder.clone(), PlaceholderKind::TypedMetavar {
+                            name: name.clone(),
+                            type_name,
+                        });
+                        result.push_str(&placeholder);
+                        i = k;
+                        continue;
+                    }
+                }
                 let placeholder = format!("{}{}{}", MG_PREFIX, name, MG_SUFFIX);
                 meta_map.insert(placeholder.clone(), PlaceholderKind::Metavar(name));
                 result.push_str(&placeholder);
@@ -636,7 +677,35 @@ mod tests {
             PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. } => true,
             PatternTree::Node { children, .. } => children.iter().any(contains_ellipsis),
             PatternTree::DeepExpr(inner) => contains_ellipsis(inner),
-            PatternTree::Metavar { .. } => false,
+            PatternTree::Metavar { .. } | PatternTree::TypedMetavar { .. } => false,
         }
+    }
+
+    #[test]
+    fn test_preprocess_typed_metavar() {
+        let (result, map) = preprocess_pattern("func(($VAL: boolean))");
+        assert!(result.contains("__mg_VAL___t_boolean__"));
+        assert_eq!(map.len(), 1);
+        assert!(matches!(
+            map.get("__mg_VAL___t_boolean__"),
+            Some(PlaceholderKind::TypedMetavar { name, type_name }) if name == "VAL" && type_name == "boolean"
+        ));
+    }
+
+    #[test]
+    fn test_preprocess_typed_metavar_number() {
+        let (result, map) = preprocess_pattern("func(($VAL: number))");
+        assert!(result.contains("__mg_VAL___t_number__"));
+        assert!(matches!(
+            map.get("__mg_VAL___t_number__"),
+            Some(PlaceholderKind::TypedMetavar { name, type_name }) if name == "VAL" && type_name == "number"
+        ));
+    }
+
+    #[test]
+    fn test_parse_typed_metavar_javascript() {
+        let mut parser = PatternTreeParser::new().unwrap();
+        let tree = parser.parse("func(($VAL: boolean))", Language::JavaScript).unwrap();
+        assert!(tree.has_wildcards());
     }
 }
