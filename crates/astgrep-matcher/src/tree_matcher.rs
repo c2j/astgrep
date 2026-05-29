@@ -433,10 +433,40 @@ fn declaration_keywords_equivalent(pat: &str, tgt: &str) -> bool {
     false
 }
 
+fn numeric_literals_equivalent(pat: &str, tgt: &str) -> bool {
+    fn parse_numeric(s: &str) -> Option<f64> {
+        let s = s.trim().replace('_', "");
+        if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+            u64::from_str_radix(hex, 16).ok().map(|v| v as f64)
+        } else if let Some(bin) = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")) {
+            u64::from_str_radix(bin, 2).ok().map(|v| v as f64)
+        } else if let Some(oct) = s.strip_prefix("0o").or_else(|| s.strip_prefix("0O")) {
+            u64::from_str_radix(oct, 8).ok().map(|v| v as f64)
+        } else if s.starts_with("0") && s.len() > 1 && s.chars().nth(1).map_or(false, |c| c.is_ascii_digit()) {
+            u64::from_str_radix(&s, 8).ok().map(|v| v as f64)
+        } else {
+            s.parse::<f64>().ok()
+        }
+    }
+    match (parse_numeric(pat), parse_numeric(tgt)) {
+        (Some(p), Some(t)) => (p - t).abs() < f64::EPSILON * p.abs().max(t.abs()).max(1.0),
+        _ => false,
+    }
+}
+
 fn is_object_like_kind(kind: &str) -> bool {
     matches!(
         kind,
         "object" | "object_pattern" | "object_literal" | "dictionary"
+    )
+}
+
+fn is_unordered_set_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "type_list" | "super_interfaces" | "extends_interfaces"
+            | "interface_type_list" | "exception_list" | "throws"
+            | "superclass" | "type_bound" | "implements" | "extends"
     )
 }
 
@@ -496,6 +526,18 @@ fn unwrap_single_child_wrapper(pattern: &PatternTree) -> Option<&PatternTree> {
 /// Check if a pattern child is an "optional collection" — a parameter/argument
 /// list node containing only ellipsis. These can match zero target children
 /// (e.g., `class A(...)` should match `class A:` which has no argument_list).
+fn is_simple_metavar(tree: &PatternTree) -> bool {
+    match tree {
+        PatternTree::Metavar { .. } => true,
+        PatternTree::Node { kind, text, children } => {
+            if !children.is_empty() { return false; }
+            let t = text.as_deref().unwrap_or("").trim();
+            t.starts_with("$") && !t.contains('.') && kind == "identifier"
+        }
+        _ => false,
+    }
+}
+
 fn is_optional_collection(tree: &PatternTree) -> bool {
     match tree {
         PatternTree::Node { kind, children, .. } => {
@@ -950,6 +992,11 @@ impl MatchCtx {
                     return true;
                 }
 
+                // Phase D: numeric literal equivalence (0x1 ≡ 1 ≡ 1.0)
+                if numeric_literals_equivalent(pt, tt) {
+                    return true;
+                }
+
                 // Phase D: declaration keyword equivalence
                 if declaration_keywords_equivalent(pt, tt) {
                     return true;
@@ -971,6 +1018,11 @@ impl MatchCtx {
                     .or_else(|| pt.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
                     .unwrap_or(pt);
                 if stripped_pt == stripped_tt {
+                    return true;
+                }
+
+                let ws_norm = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+                if ws_norm(stripped_pt) == ws_norm(stripped_tt) {
                     return true;
                 }
 
@@ -1158,11 +1210,13 @@ impl MatchCtx {
             }
         }
 
-        // Phase D: Unordered object matching.
-        // When matching object-like nodes, allow pattern children to match
-        // target children in any order (as long as each pattern child matches
-        // at least one target child).
-        if is_object_like_kind(&target_kind_str) && pattern_children.len() <= target_children.len()
+        // Phase D: Unordered object/set matching.
+        // When matching object-like or set-like nodes, allow pattern children
+        // to match target children in any order.
+        let needs_unordered = is_object_like_kind(&target_kind_str)
+            || is_unordered_set_kind(&target_kind_str)
+            || is_unordered_set_kind(pattern_kind);
+        if needs_unordered && pattern_children.len() <= target_children.len()
         {
             let has_ellipsis = pattern_children
                 .iter()
@@ -1170,6 +1224,31 @@ impl MatchCtx {
             if has_ellipsis || pattern_children.len() < target_children.len() {
                 let snap = self.snapshot();
                 if self.match_unordered_children(pattern_children, &target_children) {
+                    return true;
+                }
+                self.restore(snap);
+            }
+        }
+
+        // Catch clause optional binding: catch($ERR) {} should match catch {}
+        if pattern_children.len() > target_children.len()
+            && (pattern_kind.contains("catch"))
+        {
+            let filtered: Vec<PatternTree> = pattern_children
+                .iter()
+                .filter(|p| !is_simple_metavar(p))
+                .cloned()
+                .collect();
+            if filtered.len() <= target_children.len() {
+                let snap = self.snapshot();
+                let result = if filtered.iter().any(|p| {
+                    matches!(p, PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. })
+                }) {
+                    self.match_children_with_ellipsis(&filtered, &target_children)
+                } else {
+                    self.match_children_exact_ref(&filtered.iter().collect::<Vec<_>>(), &target_children)
+                };
+                if result {
                     return true;
                 }
                 self.restore(snap);

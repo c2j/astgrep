@@ -158,6 +158,32 @@ impl RuleExecutionEngine {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
+        // Also use advanced (tree) matcher for code-like patterns that need structural matching
+        let looks_like_code = pattern_str.contains("{")
+            || pattern_str.contains("class ")
+            || pattern_str.contains("function ")
+            || pattern_str.contains("def ")
+            || pattern_str.contains("if ")
+            || pattern_str.contains("for ")
+            || pattern_str.contains("while ")
+            || pattern_str.contains("try ")
+            || pattern_str.contains("catch ")
+            || pattern_str.contains("import ")
+            || pattern_str.contains("from ")
+            || pattern_str.contains("implements ")
+            || pattern_str.contains("extends ")
+            || pattern_str.contains("interface ")
+            || pattern_str.contains("record ")
+            || pattern_str.contains("@interface ")
+            || pattern_str.contains("public ")
+            || pattern_str.contains("private ")
+            || pattern_str.contains("protected ")
+            || pattern_str.contains("return ")
+            || pattern_str.contains("throw ");
+        if looks_like_code {
+            return self.execute_advanced_pattern(pattern, rule, context, _ast);
+        }
+
         // For patterns containing binary operators, augment text matching with AST matching
         // to handle associative reordering (e.g. A & B should also match B & A)
         let has_binary_op = [

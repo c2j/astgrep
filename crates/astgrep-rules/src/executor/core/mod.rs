@@ -213,15 +213,15 @@ impl AdvancedRuleExecutor {
     }
 
     /// Execute pattern-based analysis
-    fn execute_pattern_analysis(
-        &mut self,
-        rule: &Rule,
-        pattern: &Pattern,
-        ast: &dyn AstNode,
-        dataflow_analysis: Option<&DataFlowAnalysis>,
-        file_path: Option<&Path>,
-    ) -> Result<Vec<Finding>> {
-        let mut findings = Vec::new();
+     fn execute_pattern_analysis(
+         &mut self,
+         rule: &Rule,
+         pattern: &Pattern,
+         ast: &dyn AstNode,
+         dataflow_analysis: Option<&DataFlowAnalysis>,
+         file_path: Option<&Path>,
+     ) -> Result<Vec<Finding>> {
+         let mut findings = Vec::new();
 
         // Handle Either patterns by recursively processing each alternative
         // so each inner pattern's conditions are checked
