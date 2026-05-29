@@ -179,7 +179,16 @@ impl RuleExecutionEngine {
             || pattern_str.contains("private ")
             || pattern_str.contains("protected ")
             || pattern_str.contains("return ")
-            || pattern_str.contains("throw ");
+            || pattern_str.contains("throw ")
+            // Multi-statement patterns (semicolons on multiple lines)
+            || (pattern_str.contains(';') && pattern_str.contains('\n'))
+            // Variable/object declarations
+            || pattern_str.starts_with("var ")
+            || pattern_str.starts_with("let ")
+            || pattern_str.starts_with("const ")
+            || pattern_str.contains("new ")
+            // Annotations
+            || pattern_str.contains("@");
         if looks_like_code {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }

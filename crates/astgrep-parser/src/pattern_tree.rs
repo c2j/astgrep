@@ -228,16 +228,25 @@ impl PatternTreeParser {
         Self::wrap_in_context_static(pattern, language)
     }
 
-    fn wrap_in_context_static(pattern: &str, language: Language) -> String {
-        match language {
-            Language::Java => {
-                // Annotations need to be before a declaration, not inside a method body
-                if pattern.trim_start().starts_with('@') {
-                    format!("class __Wrap__ {{ {} void __m__() {{}} }}", pattern)
-                } else {
-                    format!("class __Wrap__ {{ void m() {{ {} }} }}", pattern)
-                }
-            }
+     fn wrap_in_context_static(pattern: &str, language: Language) -> String {
+         match language {
+             Language::Java => {
+                 let trimmed = pattern.trim_start();
+                 // Annotations need to be before a declaration, not inside a method body
+                 if trimmed.starts_with('@') {
+                     format!("class __Wrap__ {{ {} void __m__() {{}} }}", pattern)
+                 } else if trimmed.starts_with("interface")
+                     || trimmed.starts_with("class")
+                     || trimmed.starts_with("enum")
+                     || trimmed.starts_with("record")
+                     || trimmed.starts_with("@interface")
+                 {
+                     // Top-level declarations must be at class body level, not inside a method
+                     format!("class __Wrap__ {{ {} }}", pattern)
+                 } else {
+                     format!("class __Wrap__ {{ void m() {{ {} }} }}", pattern)
+                 }
+             }
             Language::JavaScript => format!("function __wrap__() {{ {} }}", pattern),
             Language::Python => {
                 // Decorators need to be before a function definition

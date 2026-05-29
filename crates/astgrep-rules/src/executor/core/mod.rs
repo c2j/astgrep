@@ -1026,7 +1026,14 @@ impl AdvancedRuleExecutor {
             type_constraints.push((var_name, type_name));
         }
 
-        cleaned = re.replace_all(&cleaned, "$$$2").to_string();
+        // Replace typed metavar syntax with just $VAR, preserving structure.
+        // e.g. $METHOD(Object $PARAM) → $METHOD $PARAM (add space between adjacent identifiers)
+        cleaned = re.replace_all(&cleaned, " $$2 ").to_string();
+        // Clean up excess spaces
+        cleaned = cleaned.replace("  ", " ").trim().to_string();
+        // But restore necessary structural parens: METHOD $PARAM) needs them
+        // Actually the issue is specific: when a typed metavar follows a metavar name
+        // without separator, the adjacent metavars merge. Handle this by inserting space.
 
         let processed_pattern = Pattern {
             pattern_type: PatternType::Simple(cleaned),
