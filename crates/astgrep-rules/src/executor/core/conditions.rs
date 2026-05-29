@@ -192,58 +192,121 @@ impl AdvancedRuleExecutor {
                     metavar_key, metavar_pattern.patterns, match_result.bindings
                 );
                 if let Some(bound_value) = match_result.bindings.get(metavar_key) {
-                    let mut combined_bindings = match_result.bindings.clone();
-                     for pattern_str in &metavar_pattern.patterns {
-                         if pattern_str.starts_with("__NOT__:") {
-                             let neg_pattern = &pattern_str[8..];
-                             let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
-                             if matches {
-                                 return Ok(false);
-                             }
-                         } else if pattern_str.starts_with("__NOT_REGEX__:") {
-                             let regex_str = &pattern_str[14..];
-                             if let Ok(re) = regex::Regex::new(regex_str) {
-                                 if re.is_match(bound_value.as_ref()) {
-                                     return Ok(false);
-                                 }
-                             }
-                         } else if pattern_str.starts_with("__REGEX__:") {
-                             let regex_str = &pattern_str[10..];
-                             if let Ok(re) = regex::Regex::new(regex_str) {
-                                 if !re.is_match(bound_value.as_ref()) {
-                                     return Ok(false);
-                                 }
-                             }
-                         } else {
-                            let (matches, new_bindings) =
-                                self.pattern_text_matches_with_bindings(pattern_str, bound_value);
-                            eprintln!(
-                                "DEBUG MetavariablePattern: pattern='{}', value='{}', matches={}, new_bindings={:?}",
-                                pattern_str, bound_value.as_ref(), matches, new_bindings
-                            );
-                            if !matches {
-                                return Ok(false);
+                    if metavar_pattern.is_either {
+                        let mut any_matched = false;
+                        let mut best_bindings: HashMap<String, MatchBinding> = HashMap::new();
+                        for pattern_str in &metavar_pattern.patterns {
+                            if pattern_str.starts_with("__NOT__:") || pattern_str.starts_with("__NOT_REGEX__:") || pattern_str.starts_with("__REGEX__:") {
+                                let negated = pattern_str.starts_with("__NOT__");
+                                let neg_regex = pattern_str.starts_with("__NOT_REGEX__");
+                                if negated {
+                                    let neg_pattern = &pattern_str[8..];
+                                    let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
+                                    if !matches {
+                                        any_matched = true;
+                                    }
+                                } else if neg_regex {
+                                    let regex_str = &pattern_str[14..];
+                                    if let Ok(re) = regex::Regex::new(regex_str) {
+                                        if !re.is_match(bound_value.as_ref()) {
+                                            any_matched = true;
+                                        }
+                                    }
+                                } else {
+                                    let regex_str = &pattern_str[10..];
+                                    if let Ok(re) = regex::Regex::new(regex_str) {
+                                        if re.is_match(bound_value.as_ref()) {
+                                            any_matched = true;
+                                        }
+                                    }
+                                }
+                            } else {
+                                let (matches, new_bindings) =
+                                    self.pattern_text_matches_with_bindings(pattern_str, bound_value);
+                                eprintln!(
+                                    "DEBUG MetavariablePattern[either]: pattern='{}', value='{}', matches={}",
+                                    pattern_str, bound_value.as_ref(), matches
+                                );
+                                if matches {
+                                    any_matched = true;
+                                    best_bindings.extend(
+                                        new_bindings
+                                            .into_iter()
+                                            .map(|(k, v)| (k, MatchBinding::new(v))),
+                                    );
+                                    break;
+                                }
                             }
-                            combined_bindings.extend(
-                                new_bindings
-                                    .into_iter()
-                                    .map(|(k, v)| (k, MatchBinding::new(v))),
-                            );
                         }
-                    }
-
-                    for nested in &metavar_pattern.nested_conditions {
-                        if !self.evaluate_condition_with_bindings(
-                            nested,
-                            &combined_bindings,
-                            match_result,
-                            full_source,
-                        )? {
-                            eprintln!("DEBUG MetavariablePattern: nested condition FAILED");
+                        if !any_matched {
                             return Ok(false);
                         }
+                        for nested in &metavar_pattern.nested_conditions {
+                            if !self.evaluate_condition_with_bindings(
+                                nested,
+                                &best_bindings,
+                                match_result,
+                                full_source,
+                            )? {
+                                eprintln!("DEBUG MetavariablePattern: nested condition FAILED");
+                                return Ok(false);
+                            }
+                        }
+                        Ok(true)
+                    } else {
+                        let mut combined_bindings = match_result.bindings.clone();
+                         for pattern_str in &metavar_pattern.patterns {
+                             if pattern_str.starts_with("__NOT__:") {
+                                 let neg_pattern = &pattern_str[8..];
+                                 let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
+                                 if matches {
+                                     return Ok(false);
+                                 }
+                             } else if pattern_str.starts_with("__NOT_REGEX__:") {
+                                 let regex_str = &pattern_str[14..];
+                                 if let Ok(re) = regex::Regex::new(regex_str) {
+                                     if re.is_match(bound_value.as_ref()) {
+                                         return Ok(false);
+                                     }
+                                 }
+                             } else if pattern_str.starts_with("__REGEX__:") {
+                                 let regex_str = &pattern_str[10..];
+                                 if let Ok(re) = regex::Regex::new(regex_str) {
+                                     if !re.is_match(bound_value.as_ref()) {
+                                         return Ok(false);
+                                     }
+                                 }
+                             } else {
+                                let (matches, new_bindings) =
+                                    self.pattern_text_matches_with_bindings(pattern_str, bound_value);
+                                eprintln!(
+                                    "DEBUG MetavariablePattern: pattern='{}', value='{}', matches={}, new_bindings={:?}",
+                                    pattern_str, bound_value.as_ref(), matches, new_bindings
+                                );
+                                if !matches {
+                                    return Ok(false);
+                                }
+                                combined_bindings.extend(
+                                    new_bindings
+                                        .into_iter()
+                                        .map(|(k, v)| (k, MatchBinding::new(v))),
+                                );
+                            }
+                        }
+
+                        for nested in &metavar_pattern.nested_conditions {
+                            if !self.evaluate_condition_with_bindings(
+                                nested,
+                                &combined_bindings,
+                                match_result,
+                                full_source,
+                            )? {
+                                eprintln!("DEBUG MetavariablePattern: nested condition FAILED");
+                                return Ok(false);
+                            }
+                        }
+                        Ok(true)
                     }
-                    Ok(true)
                 } else {
                     Ok(false)
                 }
