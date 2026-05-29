@@ -172,12 +172,10 @@ impl AdvancedRuleExecutor {
         };
 
         let taint_flows = {
-            // Env-based forward dataflow detection (skip if rule uses labels — not supported)
+            let has_non_exact_sinks = dataflow_spec.sinks.iter().any(|s| s.exact == Some(false));
             let env_flows = if dataflow_spec.uses_labels {
                 Vec::new()
             } else {
-                // Check if any sink pattern has exact: false
-                let has_non_exact_sinks = dataflow_spec.sinks.iter().any(|s| s.exact == Some(false));
                 self.detect_taint_flows_with_env(
                     &source_matches,
                     &sink_matches,
@@ -609,12 +607,14 @@ impl AdvancedRuleExecutor {
                     .iter()
                     .map(|(k, v)| (k.clone(), v.value.clone()))
                     .collect();
-                sources.push(TaintMatch {
-                    node: m.node,
-                    bindings: str_bindings,
-                    var_name,
-                    method_name,
-                });
+                 sources.push(TaintMatch {
+                     node: m.node,
+                     bindings: str_bindings,
+                     binding_locations: HashMap::new(),
+                     var_name,
+                     method_name,
+                     focus_metavariables: Vec::new(),
+                 });
             }
         }
 
@@ -793,8 +793,10 @@ impl AdvancedRuleExecutor {
             sinks.push(TaintMatch {
                 node: m.node,
                 bindings: str_bindings,
+                binding_locations: HashMap::new(),
                 var_name,
                 method_name,
+                focus_metavariables: Vec::new(),
             });
         }
 
@@ -865,7 +867,25 @@ impl AdvancedRuleExecutor {
             sanitizer_fns.len()
         );
 
+        fn is_control_flow_exit(trimmed: &str) -> bool {
+            let lowered = trimmed.to_lowercase();
+            let exit_keywords = ["return ", "return;", "return(",
+                                 "raise ", "raise(", "raise;",
+                                 "throw ", "throw(", "throw;",
+                                 "break;", "break ",
+                                 "continue;", "continue "];
+            for kw in &exit_keywords {
+                if lowered.starts_with(kw) {
+                    return true;
+                }
+            }
+            lowered == "return" || lowered == "raise" || lowered == "throw"
+                || lowered == "break" || lowered == "continue"
+        }
+
         // Walk lines top-to-bottom
+        let mut after_exit = false;
+        let mut exit_indent: usize = 0;
         for (line_idx, line) in lines.iter().enumerate() {
             let line_num = line_idx + 1;
             let trimmed = line.trim();
@@ -876,6 +896,25 @@ impl AdvancedRuleExecutor {
                 || trimmed.starts_with('*')
                 || trimmed.starts_with("/*")
             {
+                continue;
+            }
+
+            // Reset unreachable when we leave the block containing the exit.
+            // Works for brace-based (}) and indentation-based (Python) languages.
+            if after_exit {
+                let current_indent = line.len() - line.trim_start().len();
+                if trimmed.starts_with('}') || current_indent < exit_indent {
+                    after_exit = false;
+                }
+            }
+
+            if after_exit {
+                continue;
+            }
+
+            if is_control_flow_exit(trimmed) {
+                after_exit = true;
+                exit_indent = line.len() - line.trim_start().len();
                 continue;
             }
 

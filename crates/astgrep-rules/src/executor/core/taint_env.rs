@@ -25,6 +25,12 @@ pub struct TaintState {
 pub struct TaintEnv {
     /// Variable name -> TaintState
     state: HashMap<String, TaintState>,
+    /// Variable name -> set of labels associated with its taint
+    labels: HashMap<String, HashSet<String>>,
+    /// Variable name -> set of tainted field paths (e.g., {"a", "a.b.c"})
+    field_taints: HashMap<String, HashSet<String>>,
+    /// Variable name -> set of explicitly clean field paths (sanitized fields)
+    clean_fields: HashMap<String, HashSet<String>>,
 }
 
 impl TaintEnv {
@@ -32,6 +38,9 @@ impl TaintEnv {
     pub fn new() -> Self {
         Self {
             state: HashMap::new(),
+            labels: HashMap::new(),
+            field_taints: HashMap::new(),
+            clean_fields: HashMap::new(),
         }
     }
 
@@ -45,6 +54,22 @@ impl TaintEnv {
         entry.tainted = true;
         entry.source_lines.insert(source_line);
         entry.source_idx = Some(source_idx);
+    }
+
+    /// Mark a variable as tainted and associate a label with it
+    pub fn taint_with_label(&mut self, var: &str, source_line: usize, source_idx: usize, label: Option<&str>) {
+        self.taint(var, source_line, source_idx);
+        if let Some(lbl) = label {
+            self.labels
+                .entry(var.to_string())
+                .or_default()
+                .insert(lbl.to_string());
+        }
+    }
+
+    /// Get all labels associated with a tainted variable
+    pub fn get_labels(&self, var: &str) -> HashSet<String> {
+        self.labels.get(var).cloned().unwrap_or_default()
     }
 
     /// Check if a variable is currently tainted
@@ -62,6 +87,12 @@ impl TaintEnv {
         if let Some(source_state) = self.state.get(source).cloned() {
             if source_state.tainted {
                 self.state.insert(target.to_string(), source_state);
+                if let Some(source_labels) = self.labels.get(source).cloned() {
+                    self.labels
+                        .entry(target.to_string())
+                        .or_default()
+                        .extend(source_labels);
+                }
             }
         }
     }
@@ -71,6 +102,7 @@ impl TaintEnv {
         if let Some(state) = self.state.get_mut(var) {
             state.tainted = false;
         }
+        self.labels.remove(var);
     }
 
     /// Untaint a variable (reassignment to known-safe value)
@@ -80,6 +112,7 @@ impl TaintEnv {
             state.source_lines.clear();
             state.source_idx = None;
         }
+        self.labels.remove(var);
     }
 
     /// Get all currently tainted variable names
@@ -95,6 +128,9 @@ impl TaintEnv {
     #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.state.clear();
+        self.labels.clear();
+        self.field_taints.clear();
+        self.clean_fields.clear();
     }
 
     /// Fork environment for branch analysis (returns a clone)
@@ -125,6 +161,105 @@ impl TaintEnv {
                 }
             }
         }
+        for (var, other_labels) in &other.labels {
+            let entry = self.labels.entry(var.clone()).or_default();
+            for label in other_labels {
+                entry.insert(label.clone());
+            }
+        }
+        for (var, other_fields) in &other.field_taints {
+            let entry = self.field_taints.entry(var.clone()).or_default();
+            for field in other_fields {
+                entry.insert(field.clone());
+            }
+        }
+    }
+
+    pub fn taint_field(&mut self, var: &str, field: &str, source_line: usize, source_idx: usize) {
+        self.field_taints
+            .entry(var.to_string())
+            .or_default()
+            .insert(field.to_string());
+        if !self.is_tainted(var) {
+            self.taint(var, source_line, source_idx);
+        }
+    }
+
+    pub fn is_field_tainted(&self, var: &str, field: &str) -> bool {
+        if let Some(fields) = self.field_taints.get(var) {
+            for tainted_field in fields {
+                if field.starts_with(tainted_field) {
+                    let rest = &field[tainted_field.len()..];
+                    if rest.is_empty() || rest.starts_with('.') || rest.starts_with('[') {
+                        return true;
+                    }
+                }
+                if tainted_field.starts_with(field) {
+                    let rest = &tainted_field[field.len()..];
+                    if rest.is_empty() || rest.starts_with('.') || rest.starts_with('[') {
+                        return true;
+                    }
+                }
+            }
+        }
+        if self.is_clean_field(var, field) {
+            return false;
+        }
+        if self.is_tainted(var) && !self.has_field_taints(var) {
+            return true;
+        }
+        false
+    }
+
+    fn is_clean_field(&self, var: &str, field: &str) -> bool {
+        if let Some(clean) = self.clean_fields.get(var) {
+            for cf in clean {
+                if field == *cf {
+                    return true;
+                }
+                if field.starts_with(cf) {
+                    let rest = &field[cf.len()..];
+                    if rest.starts_with('.') || rest.starts_with('[') {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    pub fn has_field_taints(&self, var: &str) -> bool {
+        self.field_taints.get(var).map_or(false, |f| !f.is_empty())
+    }
+
+    pub fn add_label(&mut self, var: &str, label: String) {
+        self.labels.entry(var.to_string()).or_default().insert(label);
+    }
+
+    pub fn add_global_label(&mut self, label: String) {
+        self.labels.entry("__global__".to_string()).or_default().insert(label);
+    }
+
+    pub fn get_all_labels(&self) -> HashSet<String> {
+        let mut all = HashSet::new();
+        for labels in self.labels.values() {
+            all.extend(labels.clone());
+        }
+        all
+    }
+
+    pub fn get_field_taints(&self, var: &str) -> HashSet<String> {
+        self.field_taints.get(var).cloned().unwrap_or_default()
+    }
+
+    pub fn sanitize_field(&mut self, var: &str, field: &str) {
+        if let Some(fields) = self.field_taints.get_mut(var) {
+            fields.retain(|f| !f.starts_with(field) && !field.starts_with(f));
+        }
+        self.clean_fields
+            .entry(var.to_string())
+            .or_default()
+            .insert(field.to_string());
     }
 }
 
@@ -243,6 +378,72 @@ pub fn is_tainted_as_array_index(expr: &str, var: &str) -> bool {
     false
 }
 
+/// Evaluate a `requires` expression against a set of labels.
+///
+/// Supports:
+/// - Single label: `"TAINTED"` → true if TAINTED present
+/// - Conjunction: `"P and Q"` → true if both present
+/// - Negation: `"TAINTED and not CLEANED"` → true if TAINTED present AND CLEANED absent
+/// - Built-in: `"__SOURCE__"` → true if any taint present
+pub fn evaluate_requires(expr: &str, labels: &HashSet<String>, has_taint: bool) -> bool {
+    let expr = expr.trim();
+    if expr.is_empty() {
+        return true;
+    }
+    let parts: Vec<&str> = expr.split(" and ").collect();
+    for part in parts {
+        let part = part.trim();
+        if part.starts_with("not ") {
+            let negated_label = part[4..].trim();
+            if labels.contains(negated_label) {
+                return false;
+            }
+        } else if part == "__SOURCE__" {
+            if !has_taint {
+                return false;
+            }
+        } else {
+            if !labels.contains(part) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Extract (base_var, optional_field_path) from a target expression.
+/// "x" → ("x", None)
+/// "x.a" → ("x", Some("a"))
+/// "x.a.b" → ("x", Some("a.b"))
+/// "x[i]" → ("x", Some("["))
+/// "x.a[i]" → ("x", Some("a["))
+/// "this.x.a" → ("x", Some("a"))
+pub fn extract_field_path(target: &str) -> (String, Option<String>) {
+    let target = target.trim();
+    let normalized = target.strip_prefix("this.").unwrap_or(target);
+    let parts: Vec<&str> = normalized.split_whitespace().collect();
+    let base = parts.last().unwrap_or(&normalized);
+    if let Some(dot_pos) = base.find('.') {
+        let var = base[..dot_pos].to_string();
+        let field_raw = &base[dot_pos + 1..];
+        let mut normalized_parts: Vec<&str> = Vec::new();
+        for segment in field_raw.split('.') {
+            let before_bracket = segment.split('[').next().unwrap_or(segment);
+            if !before_bracket.is_empty() {
+                normalized_parts.push(before_bracket);
+            }
+        }
+        let field = normalized_parts.join(".");
+        (var, Some(field))
+    } else if base.contains('[') {
+        let bracket_pos = base.find('[').unwrap();
+        let var = base[..bracket_pos].to_string();
+        (var, None)
+    } else {
+        (base.to_string(), None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,5 +550,58 @@ mod tests {
         assert!(is_safe_value("''"));
         assert!(!is_safe_value("\"hello\""));
         assert!(!is_safe_value("getUserInput()"));
+    }
+
+    #[test]
+    fn test_extract_field_path() {
+        assert_eq!(extract_field_path("x"), ("x".to_string(), None));
+        assert_eq!(extract_field_path("x.a"), ("x".to_string(), Some("a".to_string())));
+        assert_eq!(extract_field_path("x.a.b"), ("x".to_string(), Some("a.b".to_string())));
+        assert_eq!(extract_field_path("x.c[i]"), ("x".to_string(), Some("c".to_string())));
+        assert_eq!(extract_field_path("x.c[i].d"), ("x".to_string(), Some("c.d".to_string())));
+        assert_eq!(extract_field_path("this.x.a"), ("x".to_string(), Some("a".to_string())));
+    }
+
+    #[test]
+    fn test_field_sensitive_taint() {
+        let mut env = TaintEnv::new();
+        env.taint("x", 1, 0);
+
+        assert!(env.is_field_tainted("x", "a"));
+        assert!(env.is_field_tainted("x", "b"));
+        assert!(env.is_field_tainted("x", "a.b"));
+
+        env.sanitize_field("x", "a");
+        assert!(!env.is_field_tainted("x", "a"));
+        assert!(!env.is_field_tainted("x", "a.b"));
+        assert!(env.is_field_tainted("x", "b"));
+    }
+
+    #[test]
+    fn test_field_taint_propagation() {
+        let mut env = TaintEnv::new();
+        env.taint_field("x", "a", 1, 0);
+
+        assert!(env.is_tainted("x"));
+        assert!(env.is_field_tainted("x", "a"));
+        assert!(env.is_field_tainted("x", "a.b"));
+        assert!(!env.is_field_tainted("x", "b"));
+    }
+
+    #[test]
+    fn test_clean_fields_vs_whole_var_taint() {
+        let mut env = TaintEnv::new();
+        env.taint("x", 1, 0);
+        env.sanitize_field("x", "a");
+
+        assert!(env.is_tainted("x"));
+        assert!(!env.is_field_tainted("x", "a"));
+        assert!(env.is_field_tainted("x", "b"));
+    }
+
+    #[test]
+    fn test_extract_field_path_bracket_normalization() {
+        assert_eq!(extract_field_path("x.data[idx]"), ("x".to_string(), Some("data".to_string())));
+        assert_eq!(extract_field_path("x.data[0].name"), ("x".to_string(), Some("data.name".to_string())));
     }
 }
