@@ -333,6 +333,9 @@ pub struct MetavariablePattern {
     pub analysis: Option<MetavariableAnalysis>, // metavariable-analysis support
     /// Nested conditions from nested metavariable-pattern within patterns array
     pub nested_conditions: Vec<Condition>,
+    /// When true, patterns use OR semantics (pattern-either); when false, AND semantics
+    #[serde(default)]
+    pub is_either: bool,
 }
 
 impl MetavariablePattern {
@@ -346,6 +349,7 @@ impl MetavariablePattern {
             name_constraint: None,
             analysis: None,
             nested_conditions: Vec::new(),
+            is_either: false,
         }
     }
 
@@ -509,6 +513,12 @@ pub struct SourcePattern {
     pub pattern: Pattern,
     pub focus_metavariables: Vec<String>,
     pub is_fallback: bool,
+    /// Label applied when this source matches (semgrep label-based taint)
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Required labels that must already be present for this source's label to apply
+    #[serde(default)]
+    pub requires: Option<String>,
 }
 
 impl SourcePattern {
@@ -538,6 +548,9 @@ pub struct SinkPattern {
     /// Default (true) means only direct argument match.
     #[serde(default)]
     pub exact: Option<bool>,
+    /// Label expression required for this sink to trigger (semgrep label-based taint)
+    #[serde(default)]
+    pub requires: Option<String>,
 }
 
 impl SinkPattern {
@@ -584,6 +597,8 @@ impl DataFlowSpec {
                 pattern: Pattern::simple(s),
                 focus_metavariables: Vec::new(),
                 is_fallback: true,
+                label: None,
+                requires: None,
             })
             .collect();
         let sinks = sinks
@@ -593,6 +608,7 @@ impl DataFlowSpec {
                 focus_metavariables: Vec::new(),
                 is_fallback: true,
                 exact: None,
+                requires: None,
             })
             .collect();
         Self {

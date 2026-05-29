@@ -1004,6 +1004,7 @@ impl RuleParser {
 
         let mut patterns = Vec::new();
         let mut nested_conditions: Vec<Condition> = Vec::new();
+        let mut is_either = false;
 
         if let Some(patterns_value) = metavar_obj.get(&Value::String("patterns".to_string())) {
             let patterns_array = patterns_value.as_sequence().ok_or_else(|| {
@@ -1098,6 +1099,7 @@ impl RuleParser {
                     }
                 }
             }
+            is_either = true;
         } else {
             return Err(AnalysisError::parse_error(format!(
                 "Rule {} pattern {} metavariable_pattern must have 'patterns', 'pattern', or 'pattern-either' field",
@@ -1107,6 +1109,7 @@ impl RuleParser {
 
         let mut metavar_pattern = MetavariablePattern::with_patterns(metavariable, patterns);
         metavar_pattern.nested_conditions = nested_conditions;
+        metavar_pattern.is_either = is_either;
 
         if let Some(regex) = self.get_optional_string_field(metavar_obj, "regex") {
             metavar_pattern.regex = Some(regex);
@@ -1610,6 +1613,8 @@ impl RuleParser {
                         pattern: Pattern::simple(pattern_str),
                         focus_metavariables: Vec::new(),
                         is_fallback: true,
+                        label: None,
+                        requires: None,
                     });
                 } else {
                     return Err(AnalysisError::parse_error(format!(
@@ -1652,6 +1657,7 @@ impl RuleParser {
                         focus_metavariables: Vec::new(),
                         is_fallback: true,
                         exact: None,
+                        requires: None,
                     });
                 } else {
                     return Err(AnalysisError::parse_error(format!(
@@ -1926,6 +1932,8 @@ impl RuleParser {
                 pattern: Pattern::simple(s.to_string()),
                 focus_metavariables: Vec::new(),
                 is_fallback: false,
+                label: None,
+                requires: None,
             });
         }
 
@@ -2009,10 +2017,23 @@ impl RuleParser {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
+            // Extract label and requires fields for label-based taint tracking
+            let label = mapping
+                .get(&Value::String("label".to_string()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let requires = mapping
+                .get(&Value::String("requires".to_string()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
             return Ok(SourcePattern {
                 pattern: Pattern::simple(pattern_str),
                 focus_metavariables,
                 is_fallback,
+                label,
+                requires,
             });
         }
 
@@ -2030,6 +2051,7 @@ impl RuleParser {
                 focus_metavariables: Vec::new(),
                 is_fallback: false,
                 exact: None,
+                requires: None,
             });
         }
 
@@ -2057,6 +2079,7 @@ impl RuleParser {
                             focus_metavariables: Vec::new(),
                             is_fallback: false,
                             exact: None,
+                            requires: None,
                         });
                     }
                 }
@@ -2169,11 +2192,17 @@ impl RuleParser {
                 .get(&Value::String("exact".to_string()))
                 .and_then(|v| v.as_bool());
 
+            let requires = mapping
+                .get(&Value::String("requires".to_string()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
             return Ok(SinkPattern {
                 pattern,
                 focus_metavariables,
                 is_fallback,
                 exact,
+                requires,
             });
         }
 

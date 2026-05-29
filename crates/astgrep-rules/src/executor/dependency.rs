@@ -282,12 +282,56 @@ impl VariableDependencyGraph {
     pub fn is_assigned_string_literal(&self, var: &str) -> bool {
         if let Some(expr) = self.assignments.get(var) {
             let expr = expr.trim();
-            // Check if the expression is a non-empty string literal
-            // Pattern: "..." where ... is not empty
             if expr.starts_with('"') && expr.ends_with('"') && expr.len() > 2 {
-                // Make sure it's not just an empty string ""
                 let content = &expr[1..expr.len() - 1];
                 if !content.is_empty() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn is_assigned_specific_string(&self, var: &str, target: &str) -> bool {
+        if target.is_empty() {
+            return false;
+        }
+        if let Some(expr) = self.assignments.get(var) {
+            let expr = expr.trim();
+            if expr.starts_with('"') && expr.ends_with('"') && expr.len() > 2 {
+                let content = &expr[1..expr.len() - 1];
+                return content == target;
+            }
+            if expr == target {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn has_specific_string_in_dependency_chain(&self, var: &str, target: &str) -> bool {
+        if target.is_empty() {
+            return false;
+        }
+        let mut visited = std::collections::HashSet::new();
+        self.check_specific_string_dependency_recursive(var, target, &mut visited)
+    }
+
+    fn check_specific_string_dependency_recursive(
+        &self,
+        var: &str,
+        target: &str,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> bool {
+        if !visited.insert(var.to_string()) {
+            return false;
+        }
+        if self.is_assigned_specific_string(var, target) {
+            return true;
+        }
+        if let Some(deps) = self.dependencies.get(var) {
+            for dep in deps {
+                if self.check_specific_string_dependency_recursive(dep, target, visited) {
                     return true;
                 }
             }
