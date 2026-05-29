@@ -158,9 +158,7 @@ pub(crate) fn find_pattern_spans_in_source(
     spans
 }
 
-/// Convert a semgrep pattern to a regex string
-/// Handles: ... (wildcard), $VAR (metavar), $...ARGS (named ellipsis), <... ...> (deep match)
-fn semgrep_pattern_to_regex(pattern: &str) -> String {
+pub(crate) fn semgrep_pattern_to_regex(pattern: &str) -> String {
     let mut result = String::with_capacity(pattern.len() * 2);
     let chars: Vec<char> = pattern.chars().collect();
     let len = chars.len();

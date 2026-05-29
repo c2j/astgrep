@@ -129,7 +129,6 @@ impl RuleExecutionEngine {
         _ast: &dyn AstNode,
     ) -> Result<Vec<Finding>> {
         use std::collections::HashSet;
-        let mut findings = Vec::new();
         let pattern_str = pattern_str.trim();
 
         // If pattern has conditions or requires symbolic propagation, use AdvancedRuleExecutor
@@ -153,15 +152,23 @@ impl RuleExecutionEngine {
         let needs_constant_prop =
             (has_literal || has_paren_literal) && rule.has_constant_propagation();
 
-        if requires_advanced || needs_constant_prop {
-            return self.execute_advanced_pattern(pattern, rule, context, _ast);
-        }
-
         let has_semgrep_syntax = pattern_str.contains("...") || pattern_str.contains('$');
-        if has_semgrep_syntax {
+
+        if requires_advanced || needs_constant_prop || has_semgrep_syntax {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
+        // For patterns containing binary operators, augment text matching with AST matching
+        // to handle associative reordering (e.g. A & B should also match B & A)
+        let has_binary_op = [
+            " + ", " - ", " * ", " / ", " % ", " ** ",
+            " & ", " | ", " ^ ", " && ", " || ",
+            " and ", " or ", " xor ",
+            " == ", " != ", " < ", " > ", " <= ", " >= ",
+            " << ", " >> ",
+        ].iter().any(|op| pattern_str.contains(op));
+
+        let mut text_findings = Vec::new();
         let seg_by_stmt = if matches!(context.language, Language::Sql) {
             self.effective_sql_stmt_boundary(rule, context)
         } else {
@@ -174,7 +181,6 @@ impl RuleExecutionEngine {
             seg_by_stmt,
         );
 
-        // Optional: deduplicate identical spans
         let mut seen: HashSet<(usize, usize)> = HashSet::new();
 
         for (start_byte, end_byte) in spans {
@@ -214,10 +220,31 @@ impl RuleExecutionEngine {
             } else {
                 finding
             };
-            findings.push(finding);
+            text_findings.push(finding);
         }
 
-        Ok(findings)
+        if !has_binary_op {
+            return Ok(text_findings);
+        }
+
+        // Merge AST findings with text findings (AST handles reordering)
+        let ast_findings = self.execute_advanced_pattern(pattern, rule, context, _ast)?;
+        let text_locs: HashSet<(usize, usize, usize, usize)> = text_findings
+            .iter()
+            .map(|f| {
+                let l = &f.location;
+                (l.start_line, l.start_column, l.end_line, l.end_column)
+            })
+            .collect();
+        for af in ast_findings {
+            let l = &af.location;
+            let key = (l.start_line, l.start_column, l.end_line, l.end_column);
+            if !text_locs.contains(&key) {
+                text_findings.push(af);
+            }
+        }
+
+        Ok(text_findings)
     }
 
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
@@ -307,12 +334,24 @@ impl RuleExecutionEngine {
                 PatternType::Simple(s) => {
                     self.execute_simple_subpattern(s, rule, context, &mut findings, &mut seen)?;
                 }
-                PatternType::All(_) => {
-                    // For complex patterns, use AdvancedRuleExecutor
+                PatternType::All(_)
+                | PatternType::Either(_)
+                | PatternType::Inside(_)
+                | PatternType::NotInside(_)
+                | PatternType::Not(_)
+                | PatternType::NotRegex(_)
+                | PatternType::Any(_) => {
                     let sub_findings = self.execute_advanced_pattern(sub, rule, context, _ast)?;
-                    findings.extend(sub_findings);
+                    for f in sub_findings {
+                        let key = (
+                            f.location.start_line * 10000 + f.location.start_column,
+                            f.location.end_line * 10000 + f.location.end_column,
+                        );
+                        if seen.insert(key) {
+                            findings.push(f);
+                        }
+                    }
                 }
-                _ => {}
             }
         }
 

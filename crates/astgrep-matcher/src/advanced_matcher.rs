@@ -134,22 +134,18 @@ impl AdvancedSemgrepMatcher {
         let mut matches = Vec::new();
         self.find_matches_recursive(pattern, root, &mut matches, 0)?;
 
-        // Augment with AST structural matching results (Phase 2 engine)
         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
             if let Some(lang) = self.language_hint {
                 let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
                 if !tree_results.is_empty() {
-                    let existing: std::collections::HashSet<(usize, usize)> = matches
-                        .iter()
-                        .filter_map(|m| {
-                            let loc = m.node.location();
-                            Some((loc?.0, loc?.1))
-                        })
+                    use std::collections::HashSet;
+                    let old_lines: HashSet<usize> = matches.iter()
+                        .filter_map(|m| m.node.location().map(|(sl, _, _, _)| sl))
                         .collect();
-                    for r in tree_results {
-                        if let Some(loc) = r.node.location() {
-                            if !existing.contains(&(loc.0, loc.1)) {
-                                matches.push(r);
+                    for tr in tree_results {
+                        if let Some(loc) = tr.node.location() {
+                            if !old_lines.contains(&loc.0) {
+                                matches.push(tr);
                             }
                         }
                     }
@@ -1018,7 +1014,10 @@ impl AdvancedSemgrepMatcher {
         node: &dyn AstNode,
     ) -> Result<bool> {
         let nt = node.node_type();
-        let matches_type = Self::node_matches_type(nt, expected_type);
+        let ts_kind = node.get_attribute("ts_kind").unwrap_or(nt);
+        let matches_type = Self::node_matches_type(nt, expected_type)
+            || (ts_kind != nt && Self::node_matches_type(ts_kind, expected_type))
+            || Self::text_matches_type_node(node, expected_type);
         if matches_type {
             if let Some(text) = node.text() {
                 self.metavar_manager
@@ -1034,6 +1033,15 @@ impl AdvancedSemgrepMatcher {
 
     /// Check if a tree-sitter node type matches an expected type name
     fn node_matches_type(node_type: &str, expected_type: &str) -> bool {
+        let generic_types = [
+            "Literal", "Identifier", "BinaryExpression", "UnaryExpression",
+            "CallExpression", "MemberExpression", "AssignmentExpression",
+            "ConditionalExpression", "ArrayExpression", "ObjectExpression",
+            "LambdaExpression", "ExpressionStatement", "BlockStatement",
+        ];
+        if generic_types.contains(&node_type) {
+            return false;
+        }
         match expected_type.to_lowercase().as_str() {
             "int" | "integer" => matches!(
                 node_type,
@@ -1042,6 +1050,9 @@ impl AdvancedSemgrepMatcher {
                     | "octal_integer_literal"
                     | "binary_integer_literal"
                     | "integer_literal"
+                    | "number"
+                    | "number_literal"
+                    | "integer"
             ),
             "boolean" | "bool" => matches!(
                 node_type,
@@ -1068,6 +1079,36 @@ impl AdvancedSemgrepMatcher {
                 node_type.to_lowercase().contains(&expected_type.to_lowercase())
                     || node_type == expected_type
             }
+        }
+    }
+
+    fn text_matches_type_node(node: &dyn AstNode, expected_type: &str) -> bool {
+        let text = match node.text() {
+            Some(t) => t.trim(),
+            None => return false,
+        };
+        match expected_type.to_lowercase().as_str() {
+            "int" | "integer" | "short" | "byte" | "long" => {
+                let ts_kind = node.get_attribute("ts_kind").unwrap_or("");
+                if ts_kind.contains("string") || ts_kind.contains("String") {
+                    return false;
+                }
+                text.parse::<i64>().is_ok()
+                    || text.starts_with("0x")
+                    || text.starts_with("0b")
+            }
+            "boolean" | "bool" => {
+                text == "true" || text == "false"
+            }
+            "float" | "double" => {
+                text.parse::<f64>().is_ok()
+            }
+            "string" | "String" => {
+                (text.starts_with('"') && text.ends_with('"'))
+                    || (text.starts_with('\'') && text.ends_with('\''))
+                    || (text.starts_with('`') && text.ends_with('`'))
+            }
+            _ => false,
         }
     }
 
@@ -1128,12 +1169,8 @@ impl AdvancedSemgrepMatcher {
             .collect();
 
         if children.is_empty() && !patterns.is_empty() {
-            return Ok(false);
-        }
-
-        if self.try_match_ast_at_offset(patterns, &children, 0, node, depth)? {
-            return Ok(true);
-        }
+                return Ok(false);
+            }
 
         self.try_coalesced_literal_match(patterns, &children, node, depth)
     }
@@ -1520,9 +1557,10 @@ impl AdvancedSemgrepMatcher {
             if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
                 let regex_str = &literal[3..literal.len() - 1];
                 if let Ok(re) = Regex::new(regex_str) {
-                    let content = if (text.starts_with('"') && text.ends_with('"'))
-                        || (text.starts_with('\'') && text.ends_with('\''))
-                        || (text.starts_with('`') && text.ends_with('`'))
+                    let content = if text.len() >= 2
+                        && ((text.starts_with('"') && text.ends_with('"'))
+                            || (text.starts_with('\'') && text.ends_with('\''))
+                            || (text.starts_with('`') && text.ends_with('`')))
                     {
                         &text[1..text.len() - 1]
                     } else {
@@ -1891,9 +1929,10 @@ impl AdvancedSemgrepMatcher {
                         let regex_str = &literal[3..literal.len() - 1]; // strip =~/ and trailing /
                         if let Ok(re) = Regex::new(regex_str) {
                             let token = &text_tokens[text_idx];
-                            let content = if (token.starts_with('"') && token.ends_with('"'))
-                                || (token.starts_with('\'') && token.ends_with('\''))
-                                || (token.starts_with('`') && token.ends_with('`'))
+                            let content = if token.len() >= 2
+                                && ((token.starts_with('"') && token.ends_with('"'))
+                                    || (token.starts_with('\'') && token.ends_with('\''))
+                                    || (token.starts_with('`') && token.ends_with('`')))
                             {
                                 &token[1..token.len() - 1]
                             } else {

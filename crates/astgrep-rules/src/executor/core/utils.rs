@@ -52,8 +52,10 @@ impl AdvancedRuleExecutor {
                             results.push(TaintMatch {
                                 node: param_node,
                                 bindings,
+                                binding_locations: HashMap::new(),
                                 var_name: Some(param_name),
                                 method_name,
+                                focus_metavariables: Vec::new(),
                             });
                         }
                     }
@@ -249,8 +251,15 @@ impl AdvancedRuleExecutor {
                         // Extract the variable name (last word before '=')
                         let parts: Vec<&str> = before_eq.split_whitespace().collect();
                         if let Some(last_part) = parts.last() {
-                            let var_name = last_part.trim().to_string();
-                            // Clean up any trailing characters like semicolons or spaces
+                            let mut var_name = last_part.trim().to_string();
+                            if parts.len() >= 3 {
+                                if let Some(colon_pos) = var_name.find(':') {
+                                    var_name = var_name[..colon_pos].trim().to_string();
+                                } else if parts[parts.len() - 2].ends_with(':') {
+                                    var_name = parts[parts.len() - 2]
+                                        .trim_end_matches(':').to_string();
+                                }
+                            }
                             let var_name = var_name.trim_end_matches(';').trim().to_string();
                             if !var_name.is_empty()
                                 && !var_name.contains("(")
