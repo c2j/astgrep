@@ -134,24 +134,23 @@ impl AdvancedSemgrepMatcher {
          let mut matches = Vec::new();
          let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
 
-        if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
-            if let Some(lang) = self.language_hint {
-                let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
-                if !tree_results.is_empty() {
-                    use std::collections::HashSet;
-                    let old_lines: HashSet<usize> = matches.iter()
-                        .filter_map(|m| m.node.location().map(|(sl, _, _, _)| sl))
-                        .collect();
-                    for tr in tree_results {
-                        if let Some(loc) = tr.node.location() {
-                            if !old_lines.contains(&loc.0) {
-                                matches.push(tr);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
+             if let Some(lang) = self.language_hint {
+                 let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
+                 if !tree_results.is_empty() {
+                     // Prefer tree matcher results — they have correct AST-level
+                     // bindings (e.g. $X = "this.strlist" not just "this").
+                     use std::collections::HashSet;
+                     let tree_lines: HashSet<usize> = tree_results.iter()
+                         .filter_map(|tr| tr.node.location().map(|(sl, _, _, _)| sl))
+                         .collect();
+                     matches.retain(|m| {
+                         m.node.location().map_or(true, |(sl, _, _, _)| !tree_lines.contains(&sl))
+                     });
+                     matches.extend(tree_results);
+                 }
+             }
+         }
 
         Ok(matches)
     }

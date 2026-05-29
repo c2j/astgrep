@@ -1017,9 +1017,10 @@ impl AdvancedRuleExecutor {
         let mut type_constraints: Vec<(String, String)> = Vec::new();
         let mut cleaned = pattern_str.to_string();
 
-        // Match `(type_identifier $VAR)` — e.g. `(int $X)`, `(String $Y)`, `(float $Z)`
-        // The type identifier is one or more word chars, the var is $ followed by word chars
-        let re = regex::Regex::new(r"\(([\w.]+)\s+\$(\w+)\)").expect("typed metavar regex should compile");
+        // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)`
+        // Handles: (int $X), (String $Y), (List<$T> $X), (javax.servlet.Request $R)
+        let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?)\s+\$(\w+)\)")
+            .expect("typed metavar regex should compile");
         for cap in re.captures_iter(pattern_str) {
             let type_name = cap.get(1).expect("type capture group").as_str().to_string();
             let var_name = cap.get(2).expect("var capture group").as_str().to_string();
@@ -1045,6 +1046,14 @@ impl AdvancedRuleExecutor {
         full_source: &str,
         match_line: Option<usize>,
     ) -> bool {
+        // If the bound value IS the expected type name (e.g., $MD = "MessageDigest" when
+        // type constraint is "MessageDigest"), it matches. This handles static method calls
+        // like MessageDigest.getInstance() where the metavar binds to the class name itself.
+        let base_type = expected_type.split('<').next().unwrap_or(expected_type);
+        if var_value == base_type || var_value.ends_with(&format!(".{}", base_type)) {
+            return true;
+        }
+
         if Self::value_is_known_type(var_value, expected_type, full_source) {
             return true;
         }
@@ -1058,7 +1067,8 @@ impl AdvancedRuleExecutor {
         }
 
         let import_map = self.build_import_map(full_source);
-        if Self::declaration_matches_type(var_value, expected_type, full_source, &import_map, match_line) {
+        let lookup_value = var_value.strip_prefix("this.").unwrap_or(var_value);
+        if Self::declaration_matches_type(lookup_value, expected_type, full_source, &import_map, match_line) {
             return true;
         }
 
@@ -1230,7 +1240,11 @@ impl AdvancedRuleExecutor {
         import_map: &std::collections::HashMap<String, String>,
         match_line: Option<usize>,
     ) -> bool {
-        let var_pattern = format!(r"(?:final\s+)?(\w+(?:\.\w+)*)\s+{}\s*[=;),:]", regex::escape(var_value));
+        let base_expected = expected_type.split('<').next().unwrap_or(expected_type);
+        let var_pattern = format!(
+            r"(?:final\s+)?(\w+(?:\.\w+)*(?:<[^>]*>)?)\s+{}\s*[=;),:]", 
+            regex::escape(var_value)
+        );
         let var_init_pattern = format!(r"var\s+{}\s*=\s*new\s+(\w+(?:\.\w+)*)", regex::escape(var_value));
         if let Ok(re) = regex::Regex::new(&var_pattern) {
             let mut closest_match: Option<(usize, bool)> = None;
@@ -1244,7 +1258,7 @@ impl AdvancedRuleExecutor {
                             var_re.captures(full_source).and_then(|c| c.get(1)).map(|m| m.as_str()).unwrap_or("var")
                         } else { "var" }
                     } else { decl_type };
-                    let matches = Self::types_equivalent(actual_type, expected_type, import_map);
+                    let matches = Self::types_equivalent(actual_type, base_expected, import_map);
                     if let Some(ml) = match_line {
                         if decl_line < ml {
                             let dist = ml - decl_line;
@@ -1265,11 +1279,13 @@ impl AdvancedRuleExecutor {
     }
 
     fn types_equivalent(decl_type: &str, expected_type: &str, import_map: &std::collections::HashMap<String, String>) -> bool {
-        if decl_type == expected_type {
+        let decl_base = decl_type.split('<').next().unwrap_or(decl_type);
+        let exp_base = expected_type.split('<').next().unwrap_or(expected_type);
+        if decl_base == exp_base {
             return true;
         }
-        let simple_decl = decl_type.rsplit('.').next().unwrap_or(decl_type);
-        let simple_expected = expected_type.rsplit('.').next().unwrap_or(expected_type);
+        let simple_decl = decl_base.rsplit('.').next().unwrap_or(decl_base);
+        let simple_expected = exp_base.rsplit('.').next().unwrap_or(exp_base);
         if simple_decl == simple_expected {
             return true;
         }

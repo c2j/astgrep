@@ -695,15 +695,15 @@ impl TreeMatcher {
         language: Language,
         root: &dyn AstNode,
     ) -> Vec<SemgrepMatchResult> {
-        let tree = match self.parser.lock() {
-            Ok(mut p) => match p.parse(pattern_str, language) {
-                Ok(t) => t,
-                Err(_) => {
-                    return Vec::new();
-                }
-            },
-            Err(_) => return Vec::new(),
-        };
+         let tree = match self.parser.lock() {
+             Ok(mut p) => match p.parse(pattern_str, language) {
+                 Ok(t) => t,
+                 Err(_) => {
+                     return Vec::new();
+                 }
+             },
+             Err(_) => return Vec::new(),
+         };
 
         let mut results = Vec::new();
         let mut ctx = MatchCtx::new();
