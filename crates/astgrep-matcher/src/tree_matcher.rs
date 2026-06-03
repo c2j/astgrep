@@ -47,6 +47,11 @@ const CHAIN_SKIP_KINDS: &[&str] = &[
     "type_argument_list",
 ];
 
+/// Node kinds that represent dot-separated qualified names (e.g. `a.b.C`).
+/// Used by import resolution to detect when a pattern has a fully-qualified
+/// name and the target uses a short name imported from elsewhere.
+
+
 // ---------------------------------------------------------------------------
 // Binary-chain constants (Phase C)
 // ---------------------------------------------------------------------------
@@ -62,6 +67,23 @@ fn is_binary_expression_kind(kind: &str) -> bool {
             | "logical_expression"
     )
 }
+
+// ---------------------------------------------------------------------------
+// Qualified-name constants (Import resolution)
+// ---------------------------------------------------------------------------
+
+/// Node kinds that represent qualified/dotted names across languages.
+/// Used for import resolution — matching short names (e.g. `Cipher`) to
+/// fully-qualified names (e.g. `javax.crypto.Cipher`).
+const QUALIFIED_NAME_KINDS: &[&str] = &[
+    "scoped_identifier",
+    "scoped_type_identifier",
+    "attribute",
+    "member_expression",
+    "nested_identifier",
+    "dotted_name",
+    "field_access",
+];
 
 /// Operators that are associative (can be re-grouped arbitrarily).
 fn is_associative_operator(op: &str) -> bool {
@@ -707,6 +729,7 @@ impl TreeMatcher {
 
         let mut results = Vec::new();
         let mut ctx = MatchCtx::new();
+        ctx.build_import_map(root);
         ctx.find_recursive(&tree, root, &mut results, None);
 
         deduplicate_matches(&mut results);
@@ -729,6 +752,11 @@ struct MatchCtx {
     bindings: HashMap<String, String>,
     /// Collected constants for constant propagation (Phase D)
     constants: HashMap<String, String>,
+    control_flow_depth: usize,
+    /// Import map: short_name → fully_qualified_name (e.g. "Cipher" → "javax.crypto.Cipher")
+    import_map: Option<HashMap<String, String>>,
+    /// Wildcard import prefixes (e.g. "A.B" from `import A.B.*`)
+    wildcard_imports: Vec<String>,
 }
 
 impl MatchCtx {
@@ -736,7 +764,32 @@ impl MatchCtx {
         Self {
             bindings: HashMap::new(),
             constants: HashMap::new(),
+            control_flow_depth: 0,
+            import_map: None,
+            wildcard_imports: Vec::new(),
         }
+    }
+
+    fn is_control_flow_kind(kind: &str) -> bool {
+        matches!(
+            kind,
+            "if_statement"
+                | "if_expression"
+                | "conditional"
+                | "while_statement"
+                | "do_statement"
+                | "for_statement"
+                | "for_in_statement"
+                | "for_of_statement"
+                | "switch_statement"
+                | "try_statement"
+                | "try_expression"
+                | "catch_clause"
+                | "catch"
+                | "case"
+                | "ternary_expression"
+                | "match_expression"
+        )
     }
 
     fn snapshot(&self) -> (HashMap<String, String>, HashMap<String, String>) {
@@ -758,6 +811,159 @@ impl MatchCtx {
         true
     }
 
+    /// Build an import map from the root AST node by scanning for import declarations.
+    fn build_import_map(&mut self, root: &dyn AstNode) {
+        let mut map = HashMap::new();
+        let mut wildcards = Vec::new();
+        Self::collect_imports(root, &mut map, &mut wildcards, root);
+        self.import_map = Some(map);
+        self.wildcard_imports = wildcards;
+    }
+
+    /// Recursively collect imports from AST nodes.
+    fn collect_imports(node: &dyn AstNode, map: &mut HashMap<String, String>, wildcards: &mut Vec<String>, root: &dyn AstNode) {
+        let kind = node.get_attribute("ts_kind").unwrap_or(node.node_type());
+        match kind {
+            "import_declaration" => {
+                Self::extract_java_import(node, map, wildcards);
+            }
+            "import_statement" => {
+                Self::extract_python_import(node, map);
+            }
+            "import_from_statement" => {
+                Self::extract_python_from_import(node, map);
+            }
+            _ => {}
+        }
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                Self::collect_imports(child, map, wildcards, root);
+            }
+        }
+    }
+
+    /// Extract Java import: import javax.crypto.Cipher; -> "Cipher" -> "javax.crypto.Cipher"
+    /// Also handles wildcard: import A.B.*; -> adds "A.B" to wildcards
+    fn extract_java_import(node: &dyn AstNode, map: &mut HashMap<String, String>, wildcards: &mut Vec<String>) {
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                let ck = child.get_attribute("ts_kind").unwrap_or(child.node_type());
+                if ck == "scoped_identifier" || ck == "identifier" {
+                    if let Some(text) = child.text() {
+                        let text = text.trim().to_string();
+                        // Wildcard import: import A.B.*;
+                        if text.ends_with(".*") {
+                            let prefix = text[..text.len() - 2].to_string();
+                            if !prefix.is_empty() {
+                                wildcards.push(prefix);
+                            }
+                            continue;
+                        }
+                        // Named import: import javax.crypto.Cipher;
+                        if let Some(last_dot) = text.rfind('.') {
+                            let short = text[last_dot + 1..].to_string();
+                            map.entry(short).or_insert(text);
+                        } else {
+                            map.entry(text.clone()).or_insert(text);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Extract Python import: import foo.bar -> "bar" -> "foo.bar"
+    fn extract_python_import(node: &dyn AstNode, map: &mut HashMap<String, String>) {
+        let dotted_name = Self::find_child_by_kind(node, "dotted_name");
+        if let Some(dn) = dotted_name {
+            if let Some(text) = dn.text() {
+                let text = text.trim().to_string();
+                if let Some(last_dot) = text.rfind('.') {
+                    let short = text[last_dot + 1..].to_string();
+                    map.entry(short).or_insert(text);
+                } else {
+                    map.entry(text.clone()).or_insert(text);
+                }
+            }
+        }
+        let alias = Self::find_child_by_kind(node, "alias");
+        if let Some(a) = alias {
+            if let Some(text) = a.text() {
+                map.entry(text.trim().to_string()).or_insert_with(|| {
+                    dotted_name.and_then(|dn| dn.text()).map(|t| t.trim().to_string()).unwrap_or_default()
+                });
+            }
+        }
+    }
+
+    /// Extract Python from-import: from foo.bar import baz -> "baz" -> "foo.bar.baz"
+    fn extract_python_from_import(node: &dyn AstNode, map: &mut HashMap<String, String>) {
+        let module_name = Self::find_child_by_kind(node, "dotted_name")
+            .and_then(|n| n.text())
+            .map(|t| t.trim().to_string());
+        let mut found_module = false;
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                let ck = child.get_attribute("ts_kind").unwrap_or(child.node_type());
+                if ck == "dotted_name" {
+                    if !found_module {
+                        found_module = true;
+                        continue;
+                    }
+                    if let Some(text) = child.text() {
+                        let name = text.trim().to_string();
+                        if let Some(ref module) = module_name {
+                            let qualified = format!("{}.{}", module, name);
+                            map.entry(name).or_insert(qualified);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Find a child node by its tree-sitter kind.
+    fn find_child_by_kind<'a>(node: &'a dyn AstNode, kind: &str) -> Option<&'a dyn AstNode> {
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                let ck = child.get_attribute("ts_kind").unwrap_or(child.node_type());
+                if ck == kind {
+                    return Some(child);
+                }
+            }
+        }
+        None
+    }
+
+    /// Resolve a short name to a fully qualified name using the import map.
+    fn resolve_import(&self, short_name: &str) -> Option<&String> {
+        self.import_map.as_ref().and_then(|map| map.get(short_name))
+    }
+
+    /// Reconstruct a qualified name from the children of a qualified-name pattern.
+    /// Walks nested qualified-name children to produce something like "javax.crypto.Cipher".
+    fn qualified_name_from_children(children: &[PatternTree]) -> Option<String> {
+        let mut parts = Vec::new();
+        for child in children {
+            match child {
+                PatternTree::Node { kind, text: Some(t), .. }
+                    if kind == "identifier" || kind == "property_identifier" || kind == "type_identifier" =>
+                {
+                    parts.push(t.clone());
+                }
+                PatternTree::Node { kind, children: c2, .. }
+                    if QUALIFIED_NAME_KINDS.contains(&kind.as_str()) =>
+                {
+                    if let Some(nested) = Self::qualified_name_from_children(c2) {
+                        parts.push(nested);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if parts.is_empty() { None } else { Some(parts.join(".")) }
+    }
+
     // -----------------------------------------------------------------------
     // Recursive search (extended for Phase D: constant collection)
     // -----------------------------------------------------------------------
@@ -774,7 +980,13 @@ impl MatchCtx {
         // Phase D: collect constants from this node before matching
         self.collect_constants(node);
 
+        // Track control flow nesting depth to prevent constant propagation
+        // from assignments inside conditional branches to outside.
         let node_kind = node.get_attribute("ts_kind").unwrap_or(node.node_type());
+        let was_control_flow = Self::is_control_flow_kind(&node_kind);
+        if was_control_flow {
+            self.control_flow_depth += 1;
+        }
         let is_binary = is_binary_expression_kind(node_kind);
         let mut child_skip_op: Option<String> = None;
 
@@ -823,6 +1035,11 @@ impl MatchCtx {
                 self.find_recursive(pattern, child, results, child_skip_op.as_deref());
             }
         }
+
+        // Restore control flow depth after exiting control flow node
+        if was_control_flow {
+            self.control_flow_depth -= 1;
+        }
     }
 
     /// Collect constant values from variable declarations for propagation.
@@ -841,21 +1058,89 @@ impl MatchCtx {
                 }
             }
         }
+        // Collect from assignment expressions (Python/JS: x = "value")
+        // Skip collecting NEW constants from assignments inside control flow
+        // structures (if/while/for/try/switch) since constants assigned
+        // conditionally should not propagate outside branches.
+        // However, still handle self-referencing assignments (x = x + 1)
+        // even inside control flow.
+        if kind == "assignment_expression" || kind == "assignment" {
+            // When inside control flow (depth > 0), only process assignments
+            // if they are self-referencing (x = x + 1) which removes the constant,
+            // but do NOT collect new constants from inside branches.
+            if self.control_flow_depth > 0 {
+                // Still handle self-reference: remove existing constant
+                let children = filter_node_children(node);
+                if children.len() >= 2 {
+                    if let Some(name) = children[0].text() {
+                        let name = name.trim().to_string();
+                        if let Some(value) = children[1].text() {
+                            let value = value.trim().to_string();
+                            if self.constants.contains_key(&name) && value.contains(&name) {
+                                self.constants.remove(&name);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let children = filter_node_children(node);
+                if children.len() >= 2 {
+                    if let Some(name) = children[0].text() {
+                        let name = name.trim().to_string();
+                        if let Some(value) = children[1].text() {
+                            let value = value.trim().to_string();
+                            // If the variable appears on BOTH sides (self-reference, e.g. s = s + ...),
+                            // it's a modification - remove the constant.
+                            if self.constants.contains_key(&name) && value.contains(&name) {
+                                self.constants.remove(&name);
+                            } else if (value.starts_with('"') && value.ends_with('"'))
+                                || (value.starts_with('\'') && value.ends_with('\''))
+                            {
+                                self.constants.entry(name).or_insert(value);
+                            } else if let Ok(_) = value.parse::<i64>() {
+                                self.constants.entry(name).or_insert(value);
+                            } else if value == "true" || value == "false" || value == "null" {
+                                self.constants.entry(name).or_insert(value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Handle augmented assignments (s += value)
+        // Outside control flow: always removes the constant (in-place modification)
+        // Inside control flow: only remove if the variable was already a constant
+        if kind == "augmented_assignment" || kind == "augmented_assignment_expression" {
+            let children = filter_node_children(node);
+            if children.len() >= 2 {
+                if let Some(name) = children[0].text() {
+                    let name = name.trim().to_string();
+                    if self.control_flow_depth == 0 || self.constants.contains_key(&name) {
+                        self.constants.remove(&name);
+                    }
+                }
+            }
+        }
     }
 
     /// Extract `const x = "value"` pairs for constant propagation.
     fn extract_const_from_decl(&mut self, node: &dyn AstNode) {
         let children = filter_node_children(node);
-        if children.len() >= 3 {
-            // identifier = value
+        if children.len() >= 2 {
             if let Some(name) = children[0].text() {
                 let name = name.trim().to_string();
-                if let Some(value) = children[2].text() {
+                if let Some(value) = children[1].text() {
                     let value = value.trim().to_string();
-                    // Only propagate string literals
+                    // Propagate string literals
                     if (value.starts_with('"') && value.ends_with('"'))
                         || (value.starts_with('\'') && value.ends_with('\''))
                     {
+                        self.constants.entry(name).or_insert(value);
+                    // Propagate integer literals
+                    } else if let Ok(_) = value.parse::<i64>() {
+                        self.constants.entry(name).or_insert(value);
+                    // Propagate boolean literals
+                    } else if value == "true" || value == "false" || value == "null" {
                         self.constants.entry(name).or_insert(value);
                     }
                 }
@@ -885,6 +1170,10 @@ impl MatchCtx {
                         .and_then(|s| s.strip_suffix('\''))
                 })
                 .unwrap_or(constant_value);
+            // String wildcard: "..." matches any non-empty string constant
+            if pv == "..." && !cv.is_empty() {
+                return true;
+            }
             return pv == cv;
         }
         false
@@ -1049,6 +1338,53 @@ impl MatchCtx {
         if !kind_match && pattern_kind == "parenthesized_expression" && pattern_children.len() == 1 {
             if matches!(pattern_children[0], PatternTree::TypedMetavar { .. }) {
                 return self.match_tree(&pattern_children[0], target);
+            }
+        }
+
+        // Phase D: import resolution — when pattern has a qualified name
+        // (e.g., `javax.crypto.Cipher` or `java.util.ArrayList`) and target
+        // has a short name (e.g., `Cipher` or `ArrayList`), check if the
+        // short name resolves via imports.  This runs BEFORE child matching
+        // because the qualified-name pattern has children (parts of the name)
+        // that would fail against the simple-name target's empty children.
+        if QUALIFIED_NAME_KINDS.contains(&pattern_kind)
+            && (matches!(target_kind, "identifier" | "type_identifier" | "property_identifier")
+                || QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()))
+        {
+            if let Some(pattern_qn) = Self::qualified_name_from_children(pattern_children) {
+                // Case 1: Simple target identifier — check named import + wildcard
+                if matches!(target_kind, "identifier" | "type_identifier" | "property_identifier")
+                {
+                    if let Some(target_text) = target.text() {
+                        let target_text = target_text.trim();
+                        // Named import: target_text → imported full name
+                        if let Some(imported) = self.resolve_import(target_text) {
+                            if imported == &pattern_qn {
+                                return true;
+                            }
+                        }
+                        // Wildcard import: check if any wildcard prefix + "." + target == pattern_qn
+                        for wc in &self.wildcard_imports {
+                            let full = format!("{}.{}", wc, target_text);
+                            if full == pattern_qn {
+                                return true;
+                            }
+                        }
+                    }
+                // Case 2: Target is also a qualified name — wildcard prefix stripping
+                } else if QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()) {
+                    if let Some(target_text) = target.text() {
+                        let target_qn = target_text.trim();
+                        for wc in &self.wildcard_imports {
+                            let prefix = format!("{}.", wc);
+                            if let Some(remaining) = pattern_qn.strip_prefix(&prefix) {
+                                if remaining == target_qn {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

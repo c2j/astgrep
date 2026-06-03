@@ -913,9 +913,10 @@ impl AdvancedSemgrepMatcher {
             if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
                 let regex_str = &literal[3..literal.len() - 1];
                 if let Ok(re) = Regex::new(regex_str) {
-                    let content = if (text.starts_with('"') && text.ends_with('"'))
+                    let content = if text.len() >= 2
+                        && ((text.starts_with('"') && text.ends_with('"'))
                         || (text.starts_with('\'') && text.ends_with('\''))
-                        || (text.starts_with('`') && text.ends_with('`'))
+                        || (text.starts_with('`') && text.ends_with('`')))
                     {
                         &text[1..text.len() - 1]
                     } else {
