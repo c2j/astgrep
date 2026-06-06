@@ -247,22 +247,6 @@ impl RuleParser {
             } else {
                 return Ok(Some(options));
             };
-            options.insert("symbolic_propagation".to_string(), str_val);
-        }
-
-        // Parse constant_propagation option
-        if let Some(val) = options_obj.get(&Value::String("constant_propagation".to_string())) {
-            let str_val = if let Some(b) = val.as_bool() {
-                b.to_string()
-            } else if let Some(s) = val.as_str() {
-                match s.to_ascii_lowercase().as_str() {
-                    "on" | "true" | "1" | "yes" => "true".to_string(),
-                    "off" | "false" | "0" | "no" => "false".to_string(),
-                    _ => s.to_string(),
-                }
-            } else {
-                return Ok(Some(options));
-            };
             options.insert("constant_propagation".to_string(), str_val);
         }
 

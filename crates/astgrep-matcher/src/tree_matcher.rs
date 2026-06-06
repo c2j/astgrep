@@ -251,6 +251,9 @@ fn filter_node_children(node: &dyn AstNode) -> Vec<&dyn AstNode> {
             if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
                 return false;
             }
+            if kind == "type_annotation" || kind == "optional_type" {
+                return false;
+            }
             if let Some(t) = c.text() {
                 let t = t.trim();
                 !t.is_empty()

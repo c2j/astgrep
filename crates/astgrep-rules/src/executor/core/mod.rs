@@ -644,25 +644,7 @@ impl AdvancedRuleExecutor {
     ) -> Result<Vec<Finding>> {
         let mut result = findings.to_vec();
 
-        for condition in conditions {
-            match condition {
-                Condition::MetavariableRegex(mvr) => {
-                    if let Ok(re) = regex::Regex::new(&mvr.regex) {
-                        result.retain(|f| {
-                            re.is_match(&f.message)
-                        });
-                    }
-                }
-                Condition::MetavariableComparison(_) |
-                Condition::MetavariableName(_) |
-                Condition::MetavariableAnalysis(_) |
-                Condition::MetavariableType(_) |
-                Condition::MetavariablePattern(_) |
-                Condition::NodeType(_) |
-                Condition::NodeAttribute(_, _) |
-                Condition::Custom(_) => {}
-            }
-        }
+        let _ = conditions;
 
         Ok(result)
     }

@@ -435,11 +435,17 @@ impl AdvancedRuleExecutor {
                     let focus_key = focus_var.trim_start_matches('$');
                     if let Some(value) = m.bindings.get(focus_key) {
                         if !value.is_empty() {
-                            var_name = Some(value.value.clone());
+                            let raw_val = value.value.clone();
+                            let cleaned = if raw_val.starts_with('(') && raw_val.ends_with(')') {
+                                raw_val[1..raw_val.len()-1].trim().to_string()
+                            } else {
+                                raw_val.clone()
+                            };
                             eprintln!(
-                                "[DEBUG] Extracted var_name from focus-metavariable '{}': {}",
-                                focus_var, value
+                                "[DEBUG] Extracted var_name from focus-metavariable '{}': raw='{}' cleaned='{}'",
+                                focus_var, raw_val, cleaned
                             );
+                            var_name = Some(cleaned);
                         }
                     }
                 }
@@ -746,7 +752,13 @@ impl AdvancedRuleExecutor {
                 for focus_var in focus_metavariables {
                     let focus_var_no_dollar = focus_var.trim_start_matches('$');
                     if let Some(value) = m.bindings.get(focus_var_no_dollar) {
-                        var_name = Some(value.value.clone());
+                        let raw_val = value.value.clone();
+                        let cleaned = if raw_val.starts_with('(') && raw_val.ends_with(')') {
+                            raw_val[1..raw_val.len()-1].trim().to_string()
+                        } else {
+                            raw_val.clone()
+                        };
+                        var_name = Some(cleaned);
                         break;
                     }
                 }
