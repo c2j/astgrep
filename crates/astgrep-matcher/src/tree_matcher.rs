@@ -1828,6 +1828,11 @@ impl MatchCtx {
 
             _ => {
                 if targets.is_empty() {
+                    // Optional collections (e.g., argument_list([Ellipsis])) can
+                    // match zero target children — skip and continue with rest.
+                    if is_optional_collection(first) {
+                        return self.match_children_with_ellipsis(rest, targets);
+                    }
                     return false;
                 }
                 let snap = self.snapshot();
