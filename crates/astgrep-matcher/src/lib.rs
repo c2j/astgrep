@@ -9,6 +9,7 @@ pub mod metavar;
 pub mod parser;
 pub mod precise_matcher;
 pub mod script_classifier;
+pub mod tree_matcher;
 
 pub use advanced_matcher::*;
 pub use conditions::{ComparisonOp, ConditionEvaluator, ConditionType};
@@ -87,6 +88,7 @@ impl PatternMatcher {
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
+            ParsedPattern::TypedMetavar { name, .. } => self.match_metavariable(name, node),
             ParsedPattern::EllipsisMetavariable(metavar) => {
                 self.match_ellipsis_metavariable(metavar, node)
             }
@@ -94,6 +96,7 @@ impl PatternMatcher {
             ParsedPattern::Sequence(patterns) => self.match_sequence(patterns, node, depth),
             ParsedPattern::Alternative(patterns) => self.match_alternative(patterns, node, depth),
             ParsedPattern::Wildcard => Ok(true),
+            ParsedPattern::DeepExpr(_) => Ok(true),
         }
     }
 

@@ -171,16 +171,25 @@ pub fn extract_constant_from_expression(
 ) -> Option<ConstantValue> {
     match node.node_type() {
         "literal" | "decimal_integer_literal" | "integer_literal" => {
-            // Integer literal
-            node.text()
-                .and_then(|t| t.parse::<i64>().ok())
-                .map(ConstantValue::Integer)
+            if let Some(text) = node.text() {
+                let trimmed = text.trim();
+                if trimmed.starts_with('"') || trimmed.starts_with('\'') {
+                    Some(ConstantValue::String(trimmed.trim_matches(|c| c == '"' || c == '\'').to_string()))
+                } else if let Ok(i) = trimmed.parse::<i64>() {
+                    Some(ConstantValue::Integer(i))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         }
         "string_literal" | "literal_string" => {
-            // String literal
-            node.text()
-                .map(|t| t.trim_matches('"').to_string())
-                .map(ConstantValue::String)
+            if let Some(text) = node.text() {
+                Some(ConstantValue::String(text.trim_matches(|c| c == '"' || c == '\'').to_string()))
+            } else {
+                None
+            }
         }
         "true" | "false" => {
             // Boolean literal

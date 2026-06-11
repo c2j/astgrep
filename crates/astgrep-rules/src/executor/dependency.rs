@@ -282,12 +282,56 @@ impl VariableDependencyGraph {
     pub fn is_assigned_string_literal(&self, var: &str) -> bool {
         if let Some(expr) = self.assignments.get(var) {
             let expr = expr.trim();
-            // Check if the expression is a non-empty string literal
-            // Pattern: "..." where ... is not empty
             if expr.starts_with('"') && expr.ends_with('"') && expr.len() > 2 {
-                // Make sure it's not just an empty string ""
                 let content = &expr[1..expr.len() - 1];
                 if !content.is_empty() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn is_assigned_specific_string(&self, var: &str, target: &str) -> bool {
+        if target.is_empty() {
+            return false;
+        }
+        if let Some(expr) = self.assignments.get(var) {
+            let expr = expr.trim();
+            if expr.starts_with('"') && expr.ends_with('"') && expr.len() > 2 {
+                let content = &expr[1..expr.len() - 1];
+                return content == target;
+            }
+            if expr == target {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn has_specific_string_in_dependency_chain(&self, var: &str, target: &str) -> bool {
+        if target.is_empty() {
+            return false;
+        }
+        let mut visited = std::collections::HashSet::new();
+        self.check_specific_string_dependency_recursive(var, target, &mut visited)
+    }
+
+    fn check_specific_string_dependency_recursive(
+        &self,
+        var: &str,
+        target: &str,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> bool {
+        if !visited.insert(var.to_string()) {
+            return false;
+        }
+        if self.is_assigned_specific_string(var, target) {
+            return true;
+        }
+        if let Some(deps) = self.dependencies.get(var) {
+            for dep in deps {
+                if self.check_specific_string_dependency_recursive(dep, target, visited) {
                     return true;
                 }
             }
@@ -564,7 +608,7 @@ impl VariableDependencyGraph {
                 }
             } else if line.contains(pattern_text) {
                 // For other patterns, use simple substring matching
-                eprintln!("[DEBUG] Propagator pattern matched: {}", pattern_text);
+                eprintln!("[DEBUG] Propagator pattern matched (substring): {}", pattern_text);
 
                 // Extract from and to metavariables
                 let from_var = self.extract_metavariable(&propagator.from, line, pattern_text);
@@ -573,6 +617,42 @@ impl VariableDependencyGraph {
                 if let (Some(from), Some(to)) = (from_var, to_var) {
                     eprintln!("[DEBUG] Propagator: {} -> {}", from, to);
                     propagations.push((from, to));
+                }
+            } else if pattern_text.contains('$') {
+                eprintln!("[DEBUG] Trying regex matching for propagator pattern: '{}' on line: '{}'", pattern_text, line);
+                let mut var_order: Vec<String> = Vec::new();
+                let mut remaining = pattern_text;
+                let mut regex_pat = String::new();
+                while let Some(dollar_pos) = remaining.find('$') {
+                    regex_pat.push_str(&regex::escape(&remaining[..dollar_pos]));
+                    remaining = &remaining[dollar_pos + 1..];
+                    let var_end = remaining
+                        .find(|c: char| !c.is_alphanumeric() && c != '_')
+                        .unwrap_or(remaining.len());
+                    if var_end > 0 {
+                        var_order.push(remaining[..var_end].to_string());
+                        regex_pat.push_str(r"(\w+)");
+                        remaining = &remaining[var_end..];
+                    }
+                }
+                regex_pat.push_str(&regex::escape(remaining));
+                if let Ok(re) = regex::Regex::new(&format!("^{}$", regex_pat)) {
+                    if let Some(captures) = re.captures(line.trim()) {
+                        eprintln!("[DEBUG] Regex matched propagator pattern");
+                        let captured_values: Vec<String> = (1..=var_order.len())
+                            .filter_map(|i| captures.get(i).map(|m| m.as_str().to_string()))
+                            .collect();
+
+                        let from_var = Self::extract_metavar_value(&var_order, &captured_values, &propagator.from);
+                        let to_var = Self::extract_metavar_value(&var_order, &captured_values, &propagator.to);
+
+                        if let (Some(from), Some(to)) = (from_var, to_var) {
+                            eprintln!("[DEBUG] Propagator (regex): {} -> {}", from, to);
+                            propagations.push((from, to));
+                        }
+                    } else {
+                        eprintln!("[DEBUG] Regex did not match line: '{}'", line);
+                    }
                 }
             }
         }
@@ -637,6 +717,14 @@ impl VariableDependencyGraph {
         }
 
         None
+    }
+
+    fn extract_metavar_value(var_order: &[String], captured: &[String], metavar: &str) -> Option<String> {
+        if !metavar.starts_with('$') {
+            return Some(metavar.to_string());
+        }
+        let name = &metavar[1..];
+        var_order.iter().position(|v| v == name).and_then(|idx| captured.get(idx).cloned())
     }
 
     /// Process getter calls that are used as method arguments (not in assignments)

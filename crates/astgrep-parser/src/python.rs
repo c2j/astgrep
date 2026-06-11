@@ -328,6 +328,15 @@ impl PythonParser {
 
 impl LanguageParser for PythonParser {
     fn parse(&self, source: &str, file_path: &Path) -> Result<Box<dyn AstNode>> {
+        if let Ok(mut ts_parser) = crate::tree_sitter_parser::TreeSitterParser::new() {
+            if let Ok(Some(tree)) = ts_parser.parse(source, Language::Python) {
+                if let Ok(universal_node) = ts_parser.tree_to_universal_ast(&tree, source) {
+                    return Ok(Box::new(universal_node));
+                }
+            }
+        }
+
+
         let context = AdapterContext::new(
             file_path.to_string_lossy().to_string(),
             source.to_string(),

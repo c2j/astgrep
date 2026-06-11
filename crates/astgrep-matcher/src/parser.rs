@@ -8,20 +8,16 @@ use std::fmt;
 /// Parsed pattern representation
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParsedPattern {
-    /// Literal text to match
     Literal(String),
-    /// Metavariable (e.g., $VAR)
     Metavariable(String),
-    /// Ellipsis metavariable (e.g., $...ARGS)
+    /// Typed metavariable: (type $VAR) e.g. (int $X), (String $S)
+    TypedMetavar { name: String, expected_type: String },
     EllipsisMetavariable(String),
-    /// Node type constraint
     NodeType(String),
-    /// Sequence of patterns
     Sequence(Vec<ParsedPattern>),
-    /// Alternative patterns (OR)
     Alternative(Vec<ParsedPattern>),
-    /// Wildcard (matches anything)
     Wildcard,
+    DeepExpr(Box<ParsedPattern>),
 }
 
 impl fmt::Display for ParsedPattern {
@@ -29,6 +25,9 @@ impl fmt::Display for ParsedPattern {
         match self {
             ParsedPattern::Literal(s) => write!(f, "\"{}\"", s),
             ParsedPattern::Metavariable(s) => write!(f, "${}", s),
+            ParsedPattern::TypedMetavar { name, expected_type } => {
+                write!(f, "({} ${})", expected_type, name)
+            }
             ParsedPattern::EllipsisMetavariable(s) => write!(f, "$...{}", s),
             ParsedPattern::NodeType(s) => write!(f, "@{}", s),
             ParsedPattern::Sequence(patterns) => {
@@ -52,6 +51,7 @@ impl fmt::Display for ParsedPattern {
                 write!(f, ")")
             }
             ParsedPattern::Wildcard => write!(f, "..."),
+            ParsedPattern::DeepExpr(inner) => write!(f, "<... {} ...>", inner),
         }
     }
 }
@@ -159,8 +159,24 @@ impl PatternParser {
                     }
                 }
 
-                // Node type constraint
                 '@' => {
+                    if chars.peek() == Some(&'$') {
+                        tokens.push(Token::Literal("@".to_string()));
+                        continue;
+                    }
+                    if chars.peek().map_or(false, |c| c.is_ascii_uppercase()) {
+                        let mut name = String::from("@");
+                        while let Some(&next_ch) = chars.peek() {
+                            if next_ch.is_alphanumeric() || next_ch == '_' {
+                                name.push(chars.next().unwrap());
+                                current_pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        tokens.push(Token::Literal(name));
+                        continue;
+                    }
                     let mut name = String::new();
                     while let Some(&next_ch) = chars.peek() {
                         if next_ch.is_alphanumeric() || next_ch == '_' {
@@ -242,6 +258,26 @@ impl PatternParser {
                     tokens.push(Token::Literal(literal));
                 }
 
+                // Operators and punctuation that should be separate tokens
+                ';' | '{' | '}' | '[' | ']' | ',' | ':' | '+' | '-' | '*'
+                | '/' | '%' | '^' | '~' | '?' | '!' => {
+                    tokens.push(Token::Literal(ch.to_string()));
+                }
+
+                '<' | '>' => {
+                    tokens.push(Token::Literal(ch.to_string()));
+                }
+
+                '=' => {
+                    if chars.peek() == Some(&'=') {
+                        chars.next();
+                        current_pos += 1;
+                        tokens.push(Token::Literal("==".to_string()));
+                    } else {
+                        tokens.push(Token::Literal("=".to_string()));
+                    }
+                }
+
                 // Regular characters (treated as literal)
                 _ => {
                     let mut literal = String::new();
@@ -249,7 +285,7 @@ impl PatternParser {
 
                     // Continue collecting literal characters
                     while let Some(&next_ch) = chars.peek() {
-                        if next_ch.is_alphanumeric() || "_-+*=<>!&^%#".contains(next_ch) {
+                        if next_ch.is_alphanumeric() || "_".contains(next_ch) {
                             literal.push(chars.next().unwrap());
                             current_pos += 1;
                         } else {
@@ -338,6 +374,18 @@ impl PatternParser {
                             self.parse_parenthesized_group(tokens, pos)?;
                         patterns.push(nested_pattern);
                         pos = new_pos;
+                    }
+                }
+                Token::Literal(s) if s == "<" => {
+                    // Check for deep expression: <... pattern ...>
+                    if pos + 1 < tokens.len() && matches!(&tokens[pos + 1], Token::Wildcard) {
+                        let (nested_pattern, new_pos) =
+                            self.parse_deep_expr(tokens, pos)?;
+                        patterns.push(nested_pattern);
+                        pos = new_pos;
+                    } else {
+                        patterns.push(ParsedPattern::Literal("<".to_string()));
+                        pos += 1;
                     }
                 }
                 _ => {
@@ -433,6 +481,31 @@ impl PatternParser {
             }
         }
 
+        // Detect typed metavar pattern: (type_name $VAR)
+        if patterns.len() == 2 {
+            if let (ParsedPattern::Literal(type_name), ParsedPattern::Metavariable(var_name)) =
+                (&patterns[0], &patterns[1])
+            {
+                // Only treat as typed metavar if type_name looks like a type identifier
+                // (starts with uppercase or is a known primitive type)
+                let is_type = type_name.chars().next().map_or(false, |c| c.is_uppercase())
+                    || matches!(
+                        type_name.as_str(),
+                        "int" | "boolean" | "bool" | "float" | "double" | "char"
+                            | "byte" | "short" | "long" | "string" | "String" | "void"
+                    );
+                if is_type {
+                    return Ok((
+                        ParsedPattern::TypedMetavar {
+                            name: var_name.clone(),
+                            expected_type: type_name.clone(),
+                        },
+                        pos,
+                    ));
+                }
+            }
+        }
+
         if patterns.is_empty() {
             Ok((ParsedPattern::Sequence(vec![]), pos))
         } else if patterns.len() == 1 {
@@ -440,6 +513,68 @@ impl PatternParser {
         } else {
             Ok((ParsedPattern::Sequence(patterns), pos))
         }
+    }
+
+    /// Parse a deep expression: <... pattern ...>
+    fn parse_deep_expr(
+        &self,
+        tokens: &[Token],
+        start: usize,
+    ) -> Result<(ParsedPattern, usize)> {
+        // Expect <... at start
+        if start + 1 >= tokens.len() {
+            return Err(AnalysisError::pattern_match_error("Expected <..."));
+        }
+        if !matches!(&tokens[start], Token::Literal(s) if s == "<")
+            || !matches!(&tokens[start + 1], Token::Wildcard)
+        {
+            return Err(AnalysisError::pattern_match_error("Expected <... for deep expression"));
+        }
+
+        let mut pos = start + 2; // skip < and ...
+        let mut inner_tokens = Vec::new();
+        let mut depth = 1u32;
+
+        while pos < tokens.len() {
+            // Check for nested deep expression: <... opens another level
+            if pos + 1 < tokens.len()
+                && matches!(&tokens[pos], Token::Literal(s) if s == "<")
+                && matches!(&tokens[pos + 1], Token::Wildcard)
+            {
+                depth += 1;
+                inner_tokens.push(tokens[pos].clone());
+                inner_tokens.push(tokens[pos + 1].clone());
+                pos += 2;
+                continue;
+            }
+            // Check for closing ...>
+            if pos + 1 < tokens.len()
+                && matches!(&tokens[pos], Token::Wildcard)
+                && matches!(&tokens[pos + 1], Token::Literal(s) if s == ">")
+            {
+                depth -= 1;
+                if depth == 0 {
+                    pos += 2; // consume ... and >
+                    break;
+                }
+                inner_tokens.push(tokens[pos].clone());
+                inner_tokens.push(tokens[pos + 1].clone());
+                pos += 2;
+                continue;
+            }
+            inner_tokens.push(tokens[pos].clone());
+            pos += 1;
+        }
+
+        if depth != 0 {
+            return Err(AnalysisError::pattern_match_error(
+                "Unclosed deep expression",
+            ));
+        }
+
+        // Parse inner tokens as a pattern
+        let (inner_pattern, _) = self.parse_alternative(&inner_tokens, 0)?;
+        Ok((ParsedPattern::DeepExpr(Box::new(inner_pattern)), pos))
     }
 
     /// Parse primary patterns (highest precedence)

@@ -285,6 +285,10 @@ impl PreciseExpressionMatcher {
                 name: name.clone(),
                 constraints: Vec::new(),
             }),
+            ParsedPattern::TypedMetavar { name, .. } => Ok(PatternNode::Metavariable {
+                name: name.clone(),
+                constraints: Vec::new(),
+            }),
             ParsedPattern::EllipsisMetavariable(name) => Ok(PatternNode::Ellipsis {
                 name: Some(name.clone()),
                 min_matches: 0,
@@ -317,6 +321,10 @@ impl PreciseExpressionMatcher {
                 })
             }
             ParsedPattern::Wildcard => Ok(PatternNode::Metavariable {
+                name: "$_".to_string(),
+                constraints: Vec::new(),
+            }),
+            ParsedPattern::DeepExpr(_) => Ok(PatternNode::Metavariable {
                 name: "$_".to_string(),
                 constraints: Vec::new(),
             }),

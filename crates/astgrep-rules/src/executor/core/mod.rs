@@ -18,16 +18,16 @@ use std::path::Path;
 mod conditions;
 mod symbolic;
 mod taint;
+mod taint_env;
 mod utils;
 
 pub struct AdvancedRuleExecutor {
     pattern_matcher: AdvancedSemgrepMatcher,
     dataflow_analyzer: DataFlowAnalyzer,
     execution_stats: ExecutionStatistics,
-    /// Constant propagator for variable value tracking
     constant_propagator: Option<astgrep_dataflow::ConstantPropagator>,
-    /// Symbolic propagator for alias tracking
     symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
+    current_language: Option<astgrep_core::Language>,
 }
 
 impl AdvancedRuleExecutor {
@@ -39,6 +39,7 @@ impl AdvancedRuleExecutor {
             execution_stats: ExecutionStatistics::new(),
             constant_propagator: None,
             symbolic_propagator: None,
+            current_language: None,
         }
     }
 
@@ -52,6 +53,8 @@ impl AdvancedRuleExecutor {
         enable_constant_propagation: bool,
     ) -> Result<ComprehensiveAnalysisResult> {
         let start_time = std::time::Instant::now();
+
+        self.current_language = Some(language);
 
         // Filter applicable rules
         let applicable_rules: Vec<&Rule> = rules
@@ -72,14 +75,6 @@ impl AdvancedRuleExecutor {
                     if !values.is_empty() {
                         tracing::info!("Constant propagation found {} constants", values.len());
                     }
-                    // Set constant values in the pattern matcher
-                    eprintln!(
-                        "DEBUG: Setting {} constant values in pattern matcher",
-                        values.len()
-                    );
-                    for (k, v) in &values {
-                        eprintln!("DEBUG: Constant {} = {:?}", k, v);
-                    }
                     self.pattern_matcher.set_constant_values(values);
                     Some(propagator)
                 }
@@ -92,6 +87,8 @@ impl AdvancedRuleExecutor {
             None
         };
 
+        self.pattern_matcher.set_language(language);
+
         // Perform symbolic propagation analysis if needed
         let enable_symbolic_propagation = applicable_rules
             .iter()
@@ -101,14 +98,12 @@ impl AdvancedRuleExecutor {
             let mut propagator = SymbolicPropagator::new().with_deep_propagation(true);
             match propagator.analyze(ast) {
                 Ok(()) => {
-                    eprintln!("DEBUG: Symbolic propagation analysis completed");
-                    // Set the symbolic propagator in the pattern matcher
                     self.pattern_matcher
                         .set_symbolic_propagator(propagator.clone());
                     self.symbolic_propagator = Some(propagator);
                 }
                 Err(e) => {
-                    eprintln!("DEBUG: Symbolic propagation analysis failed: {}", e);
+                    tracing::warn!("Symbolic propagation analysis failed: {}", e);
                     self.symbolic_propagator = None;
                 }
             }
@@ -218,15 +213,15 @@ impl AdvancedRuleExecutor {
     }
 
     /// Execute pattern-based analysis
-    fn execute_pattern_analysis(
-        &mut self,
-        rule: &Rule,
-        pattern: &Pattern,
-        ast: &dyn AstNode,
-        dataflow_analysis: Option<&DataFlowAnalysis>,
-        file_path: Option<&Path>,
-    ) -> Result<Vec<Finding>> {
-        let mut findings = Vec::new();
+     fn execute_pattern_analysis(
+         &mut self,
+         rule: &Rule,
+         pattern: &Pattern,
+         ast: &dyn AstNode,
+         dataflow_analysis: Option<&DataFlowAnalysis>,
+         file_path: Option<&Path>,
+     ) -> Result<Vec<Finding>> {
+         let mut findings = Vec::new();
 
         // Handle Either patterns by recursively processing each alternative
         // so each inner pattern's conditions are checked
@@ -244,13 +239,30 @@ impl AdvancedRuleExecutor {
             return Ok(findings);
         }
 
+        // Handle All patterns that contain Inside/NotInside constraints.
+        // We must separate spatial constraints (Inside/NotInside) from content
+        // patterns, execute each independently, and then filter candidates by
+        // containment.
+        if let PatternType::All(sub_patterns) = &pattern.pattern_type {
+            let result = self.execute_all_with_inside_constraints(
+                rule, pattern, sub_patterns, ast, dataflow_analysis, file_path,
+            )?;
+            if let Some(findings) = result {
+                return Ok(findings);
+            }
+            // If no Inside/NotInside found, fall through to normal path below.
+        }
+
         // Preprocess pattern to handle typed metavariable syntax like "($TYPE $VAR).method()"
         let (processed_pattern, type_constraints) = self.preprocess_typed_metavariables(pattern);
 
         // Convert astgrep_rules::Pattern to astgrep_core::SemgrepPattern
         let semgrep_pattern = self.convert_pattern_to_semgrep_pattern(&processed_pattern)?;
 
-        // Find pattern matches using the advanced matcher
+        if let Some(lang) = self.current_language {
+            self.pattern_matcher.set_language(lang);
+        }
+
         let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
 
         // Check if pattern contains ellipsis (indicating potential cross-statement matches)
@@ -260,15 +272,10 @@ impl AdvancedRuleExecutor {
         };
         let has_ellipsis = pattern_str.contains("...");
 
-        // If no matches found and we have either:
-        // 1. Type constraints with symbolic propagation, or
-        // 2. Pattern contains ellipsis and symbolic propagation is enabled
-        // try to find matches using symbolic propagation
+        // If no matches found and symbolic propagation is enabled, try expanding variables
         let matches = if matches.is_empty()
             && self.symbolic_propagator.is_some()
-            && (!type_constraints.is_empty() || has_ellipsis)
         {
-            eprintln!("DEBUG: No direct matches found, attempting symbolic propagation matching");
             self.find_matches_via_symbolic_propagation(&semgrep_pattern, ast, &type_constraints)?
         } else {
             matches
@@ -327,13 +334,7 @@ impl AdvancedRuleExecutor {
             filtered.push(m);
         }
 
-        // Get full source code from the root AST node
         let full_source = ast.text().unwrap_or("").to_string();
-
-        eprintln!(
-            "DEBUG execute_pattern_analysis: {} matches after dedup",
-            filtered.len()
-        );
 
         for match_result in filtered {
             // Check pattern conditions with full source code
@@ -347,12 +348,12 @@ impl AdvancedRuleExecutor {
 
             // Check additional type constraints from typed metavariable preprocessing
             let mut final_conditions_passed = conditions_passed;
+            let match_line = match_result.node.location().map(|(sl, _, _, _)| sl);
             if conditions_passed {
                 for (var_name, expected_type) in &type_constraints {
-                    // Check if the variable's type matches the expected type
                     if let Some(var_value) = match_result.bindings.get(var_name) {
                         let type_check_passed =
-                            self.check_variable_type(var_value, expected_type, &full_source);
+                            self.check_variable_type(var_value, expected_type, &full_source, match_line);
                         if !type_check_passed {
                             final_conditions_passed = false;
                             break;
@@ -369,6 +370,283 @@ impl AdvancedRuleExecutor {
         }
 
         Ok(findings)
+    }
+
+    /// Handle `PatternType::All` that contains `Inside` / `NotInside` constraints.
+    ///
+    /// Returns `Some(findings)` if Inside/NotInside sub-patterns were present and processed,
+    /// or `None` if no spatial constraints were found (caller should fall through to normal path).
+    fn execute_all_with_inside_constraints(
+        &mut self,
+        rule: &Rule,
+        parent_pattern: &Pattern,
+        sub_patterns: &[Pattern],
+        ast: &dyn AstNode,
+        dataflow_analysis: Option<&DataFlowAnalysis>,
+        file_path: Option<&Path>,
+    ) -> Result<Option<Vec<Finding>>> {
+        let mut inside_patterns: Vec<&Pattern> = Vec::new();
+        let mut not_inside_patterns: Vec<&Pattern> = Vec::new();
+        let mut content_patterns: Vec<&Pattern> = Vec::new();
+        let mut negative_patterns: Vec<&Pattern> = Vec::new();
+
+        for sub in sub_patterns {
+            match &sub.pattern_type {
+                PatternType::Inside(_) => inside_patterns.push(sub),
+                PatternType::NotInside(_) => not_inside_patterns.push(sub),
+                PatternType::Not(_) | PatternType::NotRegex(_) => negative_patterns.push(sub),
+                _ => content_patterns.push(sub),
+            }
+        }
+
+        if inside_patterns.is_empty() && not_inside_patterns.is_empty() {
+            return Ok(None);
+        }
+
+        let full_source = ast.text().unwrap_or("").to_string();
+
+        let mut inside_region_groups: Vec<Vec<(usize, usize, usize, usize)>> = Vec::new();
+        for inside_pat in &inside_patterns {
+            if let PatternType::Inside(inner) = &inside_pat.pattern_type {
+                let regions = self.find_pattern_regions(inner, ast, &full_source)?;
+                inside_region_groups.push(regions);
+            }
+        }
+
+        let mut not_inside_regions: Vec<(usize, usize, usize, usize)> = Vec::new();
+        for ni_pat in &not_inside_patterns {
+            if let PatternType::NotInside(inner) = &ni_pat.pattern_type {
+                let regions = self.find_pattern_regions(inner, ast, &full_source)?;
+                not_inside_regions.extend(regions);
+            }
+        }
+
+        let mut candidates: Vec<Finding> = Vec::new();
+        if content_patterns.is_empty() {
+            let all_regions: Vec<(usize, usize, usize, usize)> = inside_region_groups.iter().flatten().copied().collect();
+            for region in &all_regions {
+                let location = Location {
+                    file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                    start_line: region.0,
+                    start_column: region.1,
+                    end_line: region.2,
+                    end_column: region.3,
+                };
+                let finding = Finding::new(
+                    rule.id.clone(),
+                    rule.description.clone(),
+                    rule.severity,
+                    rule.confidence,
+                    location,
+                );
+                candidates.push(finding);
+            }
+        } else {
+            for content_pat in &content_patterns {
+                let content_findings = self.execute_pattern_analysis(
+                    rule, content_pat, ast, dataflow_analysis, file_path,
+                )?;
+                candidates.extend(content_findings);
+
+                if candidates.is_empty() {
+                    let text_findings = self.find_content_via_text_matching(
+                        content_pat, rule, &full_source, file_path,
+                    )?;
+                    candidates.extend(text_findings);
+                }
+            }
+        }
+
+        let mut findings = Vec::new();
+        for candidate in candidates {
+            let cand_loc = (
+                candidate.location.start_line,
+                candidate.location.start_column,
+                candidate.location.end_line,
+                candidate.location.end_column,
+            );
+
+            let inside_ok = if inside_region_groups.is_empty() {
+                inside_patterns.is_empty()
+            } else {
+                inside_region_groups.iter().all(|regions| {
+                    regions.iter().any(|region| span_contains(region, &cand_loc))
+                })
+            };
+
+            let not_inside_ok = if not_inside_regions.is_empty() {
+                true
+            } else {
+                !not_inside_regions.iter().any(|region| span_contains(region, &cand_loc))
+            };
+
+            if inside_ok && not_inside_ok {
+                findings.push(candidate);
+            }
+        }
+
+        for neg_pat in &negative_patterns {
+            let neg_findings = match &neg_pat.pattern_type {
+                PatternType::Not(inner) => {
+                    self.execute_pattern_analysis(rule, inner, ast, dataflow_analysis, file_path)?
+                }
+                PatternType::NotRegex(regex_str) => {
+                    let pat = Pattern::regex(regex_str.clone());
+                    self.execute_pattern_analysis(rule, &pat, ast, dataflow_analysis, file_path)?
+                }
+                _ => Vec::new(),
+            };
+            let neg_spans: Vec<(usize, usize, usize, usize)> = neg_findings
+                .iter()
+                .map(|f| (f.location.start_line, f.location.start_column, f.location.end_line, f.location.end_column))
+                .collect();
+            findings.retain(|f| {
+                let loc = (f.location.start_line, f.location.start_column, f.location.end_line, f.location.end_column);
+                !neg_spans.iter().any(|ns| spans_overlap(ns, &loc))
+            });
+        }
+
+        if !parent_pattern.conditions.is_empty() {
+            let filtered = self.apply_conditions_to_findings(
+                &parent_pattern.conditions, &findings, dataflow_analysis, &full_source,
+            )?;
+            findings = filtered;
+        }
+
+        Ok(Some(findings))
+    }
+
+    fn find_pattern_regions(
+        &mut self,
+        pattern: &Pattern,
+        ast: &dyn AstNode,
+        full_source: &str,
+    ) -> Result<Vec<(usize, usize, usize, usize)>> {
+        let (processed, _type_constraints) = self.preprocess_typed_metavariables(pattern);
+        let semgrep_pattern = self.convert_pattern_to_semgrep_pattern(&processed)?;
+        let matches = self.pattern_matcher.find_matches(&semgrep_pattern, ast)?;
+
+        let mut regions = Vec::new();
+        for m in &matches {
+            if let Some(loc) = m.node.location() {
+                regions.push(loc);
+            }
+        }
+
+        if regions.is_empty() {
+            regions = self.find_regions_via_text_matching(&processed, full_source)?;
+        }
+
+        Ok(regions)
+    }
+
+    fn find_regions_via_text_matching(
+        &self,
+        pattern: &Pattern,
+        source: &str,
+    ) -> Result<Vec<(usize, usize, usize, usize)>> {
+        let pattern_str = match &pattern.pattern_type {
+            PatternType::Simple(s) => s.trim(),
+            _ => return Ok(Vec::new()),
+        };
+
+        let regex_str = crate::engine::traversal::matching::semgrep_pattern_to_regex(pattern_str);
+        let is_multiline = pattern_str.contains('\n');
+        let final_regex = if is_multiline {
+            format!("(?s){}", regex_str)
+        } else {
+            regex_str
+        };
+
+        let mut regions = Vec::new();
+        if let Ok(re) = regex::Regex::new(&final_regex) {
+            for cap in re.captures_iter(source) {
+                if let Some(full_match) = cap.get(0) {
+                    let region = byte_span_to_location(source, full_match.start(), full_match.end());
+                    regions.push(region);
+                }
+            }
+        }
+
+        Ok(regions)
+    }
+
+    fn find_content_via_text_matching(
+        &self,
+        pattern: &Pattern,
+        rule: &Rule,
+        source: &str,
+        file_path: Option<&Path>,
+    ) -> Result<Vec<Finding>> {
+        let pattern_str = match &pattern.pattern_type {
+            PatternType::Simple(s) => s.trim(),
+            _ => return Ok(Vec::new()),
+        };
+
+        let regex_str = crate::engine::traversal::matching::semgrep_pattern_to_regex(pattern_str);
+        let is_multiline = pattern_str.contains('\n');
+        let final_regex = if is_multiline {
+            format!("(?s){}", regex_str)
+        } else {
+            regex_str
+        };
+
+        let mut findings = Vec::new();
+
+        if let Ok(re) = regex::Regex::new(&final_regex) {
+            for cap in re.captures_iter(source) {
+                if let Some(full_match) = cap.get(0) {
+                    let (sl, sc, el, ec) = byte_span_to_location(
+                        source, full_match.start(), full_match.end(),
+                    );
+                    let matched_text = full_match.as_str();
+                    let location = Location {
+                        file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                        start_line: sl,
+                        start_column: sc,
+                        end_line: el,
+                        end_column: ec,
+                    };
+                    let mut message = rule.description.clone();
+                    let mut metadata = HashMap::new();
+                    metadata.insert("pattern".to_string(), Value::String(pattern_str.to_string()));
+                    if let Some(category) = rule.get_metadata_string("category") {
+                        metadata.insert("category".to_string(), Value::String(category));
+                    }
+
+                    let finding = Finding::new(
+                        rule.id.clone(),
+                        if message.is_empty() { format!("Match: {}", matched_text) } else { message },
+                        rule.severity,
+                        rule.confidence,
+                        location,
+                    ).with_metadata("pattern".to_string(), pattern_str.to_string());
+
+                    let finding = if let Some(ref fix) = rule.fix {
+                        finding.with_fix(fix.clone())
+                    } else {
+                        finding
+                    };
+                    findings.push(finding);
+                }
+            }
+        }
+
+        Ok(findings)
+    }
+
+    fn apply_conditions_to_findings(
+        &self,
+        conditions: &[Condition],
+        findings: &[Finding],
+        _dataflow_analysis: Option<&DataFlowAnalysis>,
+        _source: &str,
+    ) -> Result<Vec<Finding>> {
+        let mut result = findings.to_vec();
+
+        let _ = conditions;
+
+        Ok(result)
     }
 
     /// Execute data flow analysis
@@ -403,7 +681,15 @@ impl AdvancedRuleExecutor {
         match_result: &SemgrepMatchResult,
         file_path: Option<&Path>,
     ) -> Result<Finding> {
-        let location = match_result
+        let default_location = || Location {
+            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+            start_line: 1,
+            start_column: 1,
+            end_line: 1,
+            end_column: 1,
+        };
+
+        let node_location = match_result
             .node
             .location()
             .map(|(start_line, start_col, end_line, end_col)| Location {
@@ -413,13 +699,33 @@ impl AdvancedRuleExecutor {
                 end_line,
                 end_column: end_col,
             })
-            .unwrap_or_else(|| Location {
-                file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
-                start_line: 1,
-                start_column: 1,
-                end_line: 1,
-                end_column: 1,
-            });
+            .unwrap_or_else(default_location);
+
+        // If focus-metavariable is set, relocate the finding to the metavar's position
+        let location = if let Some(ref focus_vars) = pattern.focus {
+            if let Some(first_focus) = focus_vars.first() {
+                let var_name = first_focus.strip_prefix('$').unwrap_or(first_focus);
+                if let Some(binding) = match_result.bindings.get(var_name) {
+                    if let Some((sl, sc, el, ec)) = binding.location {
+                        Location {
+                            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                            start_line: sl,
+                            start_column: sc,
+                            end_line: el,
+                            end_column: ec,
+                        }
+                    } else {
+                        node_location
+                    }
+                } else {
+                    node_location
+                }
+            } else {
+                node_location
+            }
+        } else {
+            node_location
+        };
 
         let mut message = rule.description.clone();
 
@@ -678,38 +984,80 @@ impl AdvancedRuleExecutor {
     }
 
     /// Preprocess typed metavariables in pattern
+    ///
+    /// Parses `(type $VAR)` syntax and extracts type constraints.
+    /// E.g. `(int $X).method()` → cleaned pattern `$X.method()` with constraint `[("X", "int")]`
     pub(super) fn preprocess_typed_metavariables(
         &self,
         pattern: &Pattern,
     ) -> (Pattern, Vec<(String, String)>) {
-        (pattern.clone(), Vec::new())
+        let pattern_str = match &pattern.pattern_type {
+            PatternType::Simple(s) => s.as_str(),
+            _ => return (pattern.clone(), Vec::new()),
+        };
+
+        let mut type_constraints: Vec<(String, String)> = Vec::new();
+        let mut cleaned = pattern_str.to_string();
+
+        // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)` or `(Type[] $VAR)`
+        let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
+            .expect("typed metavar regex should compile");
+        for cap in re.captures_iter(pattern_str) {
+            let type_name = cap.get(1).expect("type capture group").as_str().to_string();
+            let var_name = cap.get(2).expect("var capture group").as_str().to_string();
+            type_constraints.push((var_name, type_name));
+        }
+
+        // Replace typed metavar syntax with just $VAR, preserving structure.
+        // e.g. $METHOD(Object $PARAM) → $METHOD $PARAM (add space between adjacent identifiers)
+        cleaned = re.replace_all(&cleaned, " $$2 ").to_string();
+        // Clean up excess spaces
+        cleaned = cleaned.replace("  ", " ").trim().to_string();
+        // But restore necessary structural parens: METHOD $PARAM) needs them
+        // Actually the issue is specific: when a typed metavar follows a metavar name
+        // without separator, the adjacent metavars merge. Handle this by inserting space.
+
+        let processed_pattern = Pattern {
+            pattern_type: PatternType::Simple(cleaned),
+            metavariable_pattern: pattern.metavariable_pattern.clone(),
+            conditions: pattern.conditions.clone(),
+            focus: pattern.focus.clone(),
+        };
+
+        (processed_pattern, type_constraints)
     }
 
-    /// Check variable type against expected type
     pub(super) fn check_variable_type(
         &self,
         var_value: &str,
         expected_type: &str,
         full_source: &str,
+        match_line: Option<usize>,
     ) -> bool {
-        let import_map = self.build_import_map(full_source);
+        // If the bound value IS the expected type name (e.g., $MD = "MessageDigest" when
+        // type constraint is "MessageDigest"), it matches. This handles static method calls
+        // like MessageDigest.getInstance() where the metavar binds to the class name itself.
+        let base_type = expected_type.split('<').next().unwrap_or(expected_type);
+        if var_value == base_type || var_value.ends_with(&format!(".{}", base_type)) {
+            return true;
+        }
 
-        let var_pattern = format!(r"(\w+)\s+{}\s*[=;]", regex::escape(var_value));
-        if let Ok(regex) = regex::Regex::new(&var_pattern) {
-            if let Some(captures) = regex.captures(full_source) {
-                if let Some(type_match) = captures.get(1) {
-                    let simple_type = type_match.as_str();
-                    if let Some(resolved) = self.resolve_type_with_imports(simple_type, &import_map)
-                    {
-                        if resolved == expected_type || simple_type == expected_type {
-                            return true;
-                        }
-                        if expected_type.ends_with(&format!(".{}", simple_type)) {
-                            return true;
-                        }
-                    }
+        if Self::value_is_known_type(var_value, expected_type, full_source) {
+            return true;
+        }
+
+        if let Some(line) = match_line {
+            if let Some(source_line) = full_source.lines().nth(line - 1) {
+                if Self::line_expression_matches_type(source_line, var_value, expected_type, full_source) {
+                    return true;
                 }
             }
+        }
+
+        let import_map = self.build_import_map(full_source);
+        let lookup_value = var_value.strip_prefix("this.").unwrap_or(var_value);
+        if Self::declaration_matches_type(lookup_value, expected_type, full_source, &import_map, match_line) {
+            return true;
         }
 
         if let Some(ref propagator) = self.symbolic_propagator {
@@ -723,7 +1071,236 @@ impl AdvancedRuleExecutor {
             }
         }
 
-        true
+        false
+    }
+
+    fn line_expression_matches_type(line: &str, var_value: &str, expected_type: &str, full_source: &str) -> bool {
+        if let Some(idx) = line.find(".println(").or_else(|| line.find(".print(")) {
+            let after = &line[idx + 9..];
+            if let Some(end) = Self::find_closing_paren(after) {
+                let arg = &after[..end];
+                if arg != var_value && arg.contains(var_value) {
+                    if Self::value_is_known_type(arg, expected_type, full_source) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn find_closing_paren(s: &str) -> Option<usize> {
+        let mut depth = 1;
+        let mut in_string = false;
+        let mut quote_char = ' ';
+        for (i, c) in s.char_indices() {
+            if in_string {
+                if c == quote_char { in_string = false; }
+                continue;
+            }
+            match c {
+                '"' | '\'' => { in_string = true; quote_char = c; }
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 { return Some(i); }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    fn value_is_known_type(value: &str, expected_type: &str, full_source: &str) -> bool {
+        match expected_type.to_lowercase().as_str() {
+            "boolean" | "bool" => Self::is_boolean_value(value, full_source),
+            "int" | "integer" | "short" | "byte" | "long" => {
+                Self::is_int_value(value)
+            }
+            "float" | "double" => {
+                !value.starts_with('"') && !value.starts_with('\'')
+                    && value.parse::<f64>().is_ok()
+            }
+            "string" | "String" => {
+                (value.starts_with('"') && value.ends_with('"') && value.len() >= 2)
+                    || (value.starts_with('\'') && value.ends_with('\'') && value.len() >= 2)
+            }
+            "char" | "character" => {
+                value.starts_with('\'') && value.ends_with('\'') && value.len() == 3
+            }
+            _ => false,
+        }
+    }
+
+    fn is_boolean_value(value: &str, full_source: &str) -> bool {
+        if value == "true" || value == "false" {
+            return true;
+        }
+        if value.contains("==") || value.contains("!=")
+            || value.contains(">=") || value.contains("<=")
+            || (value.contains('>') && !value.contains(">>"))
+            || (value.contains('<') && !value.contains("<<"))
+        {
+            return true;
+        }
+        if value.contains("&&") || value.contains("||") {
+            return true;
+        }
+        if value.starts_with('!') || value.contains("!(") {
+            return true;
+        }
+        if value.contains(".equals(") || value.contains(".isEmpty()")
+            || value.contains(".matches(") || value.contains(".contains(")
+            || value.contains(".startsWith(") || value.contains(".endsWith(")
+            || value.contains(".isDirectory(") || value.contains(".isFile(")
+            || value.contains(".hasNext(") || value.contains(".hasMoreElements(")
+        {
+            return true;
+        }
+        for op in &["^", "|", "&"] {
+            if value.contains(op) {
+                let parts: Vec<&str> = value.split(op).collect();
+                let has_boolean_token = parts.iter().any(|p| {
+                    let t = p.trim();
+                    t == "true" || t == "false"
+                        || Self::declared_as_boolean(t, full_source)
+                });
+                if has_boolean_token {
+                    return true;
+                }
+            }
+        }
+        if value.contains(".") && value.contains("(") {
+            if let Some(base) = value.split('.').next() {
+                let generic_bool_re = regex::Regex::new(&format!(
+                    r"<[^>\n]*(?:Boolean|boolean)[^>\n]*>\s+{}\b", regex::escape(base)
+                )).ok();
+                if let Some(re) = generic_bool_re {
+                    if re.is_match(full_source) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn declared_as_boolean(name: &str, source: &str) -> bool {
+        if name.is_empty() || name.starts_with('"') || name.parse::<f64>().is_ok() {
+            return false;
+        }
+        let re_str = format!(r"\bboolean\s+{}\b", regex::escape(name));
+        regex::Regex::new(&re_str)
+            .map(|re| re.is_match(source))
+            .unwrap_or(false)
+    }
+
+    fn is_int_value(value: &str) -> bool {
+        if value.starts_with('"') || value.starts_with('\'') {
+            return false;
+        }
+        if value.parse::<i64>().is_ok() {
+            return true;
+        }
+        if value.starts_with("0x") || value.starts_with("0X")
+            || value.starts_with("0b") || value.starts_with("0B")
+        {
+            return true;
+        }
+        let arithmetic_ops = ["+", "-", "*", "/", "%"];
+        if arithmetic_ops.iter().any(|op| value.contains(op)) {
+            let has_string = value.contains("\"") || value.contains("'");
+            return !has_string;
+        }
+        if value.contains(".size()") || value.contains(".length()")
+            || value.contains(".hashCode()") || value.contains(".compareTo(")
+            || value.contains(".indexOf(") || value.contains(".lastIndexOf(")
+        {
+            return true;
+        }
+        false
+    }
+
+    fn declaration_matches_type(
+        var_value: &str,
+        expected_type: &str,
+        full_source: &str,
+        import_map: &std::collections::HashMap<String, String>,
+        match_line: Option<usize>,
+    ) -> bool {
+         let base_expected = expected_type.split('<').next().unwrap_or(expected_type).trim_end_matches("[]");
+         let var_pattern = format!(
+             r"(?:final\s+)?(\w+(?:\.\w+)*(?:<[^>]*>)?(?:\[\])?)\s+{}\s*[=;),:]", 
+             regex::escape(var_value)
+        );
+        let var_init_pattern = format!(r"var\s+{}\s*=\s*new\s+(\w+(?:\.\w+)*)", regex::escape(var_value));
+        if let Ok(re) = regex::Regex::new(&var_pattern) {
+            let mut closest_match: Option<(usize, bool)> = None;
+            for cap in re.captures_iter(full_source) {
+                if let Some(type_match) = cap.get(1) {
+                    let decl_type = type_match.as_str();
+                    let decl_start = cap.get(0).unwrap().start();
+                    let decl_line = full_source[..decl_start].lines().count() + 1;
+                    let actual_type = if decl_type == "var" {
+                        if let Ok(var_re) = regex::Regex::new(&var_init_pattern) {
+                            var_re.captures(full_source).and_then(|c| c.get(1)).map(|m| m.as_str()).unwrap_or("var")
+                        } else { "var" }
+                    } else { decl_type };
+                    let matches = Self::types_equivalent(actual_type, base_expected, import_map);
+                    if let Some(ml) = match_line {
+                        if decl_line < ml {
+                            let dist = ml - decl_line;
+                            if closest_match.map_or(true, |(d, _)| dist < d) {
+                                closest_match = Some((dist, matches));
+                            }
+                        }
+                    } else if matches {
+                        return true;
+                    }
+                }
+            }
+            if let Some((_, matches)) = closest_match {
+                return matches;
+            }
+        }
+        false
+    }
+
+    fn types_equivalent(decl_type: &str, expected_type: &str, import_map: &std::collections::HashMap<String, String>) -> bool {
+        let decl_base = decl_type.split('<').next().unwrap_or(decl_type);
+        let exp_base = expected_type.split('<').next().unwrap_or(expected_type);
+        if decl_base == exp_base {
+            return true;
+        }
+        let simple_decl = decl_base.rsplit('.').next().unwrap_or(decl_base);
+        let simple_expected = exp_base.rsplit('.').next().unwrap_or(exp_base);
+        if simple_decl == simple_expected {
+            return true;
+        }
+        if import_map.get(simple_decl).map_or(false, |r| {
+            r == expected_type || expected_type.ends_with(&format!(".{}", simple_decl))
+        }) {
+            return true;
+        }
+        let boxing_groups: &[&[&str]] = &[
+            &["int", "Integer", "java.lang.Integer"],
+            &["boolean", "Boolean", "java.lang.Boolean"],
+            &["long", "Long", "java.lang.Long"],
+            &["double", "Double", "java.lang.Double"],
+            &["float", "Float", "java.lang.Float"],
+            &["short", "Short", "java.lang.Short"],
+            &["byte", "Byte", "java.lang.Byte"],
+            &["char", "Character", "java.lang.Character"],
+            &["String", "java.lang.String"],
+        ];
+        for group in boxing_groups {
+            let decl_in_group = group.iter().any(|&t| t == decl_type || t == simple_decl);
+            let expected_in_group = group.iter().any(|&t| t == expected_type || t == simple_expected);
+            if decl_in_group && expected_in_group {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -851,6 +1428,68 @@ pub struct AnalysisSummary {
     pub info_count: usize,
     pub rules_executed: usize,
     pub execution_time: std::time::Duration,
+}
+
+fn span_contains(
+    outer: &(usize, usize, usize, usize),
+    inner: &(usize, usize, usize, usize),
+) -> bool {
+    let (os, oc, oe, oec) = *outer;
+    let (is, ic, ie, iec) = *inner;
+    if os < is { return true; }
+    if os > is { return false; }
+    if oc <= ic {
+        if oe > ie { return true; }
+        if oe < ie { return false; }
+        return oec >= iec;
+    }
+    false
+}
+
+fn spans_overlap(
+    a: &(usize, usize, usize, usize),
+    b: &(usize, usize, usize, usize),
+) -> bool {
+    let (a_sl, a_sc, a_el, a_ec) = *a;
+    let (b_sl, b_sc, b_el, b_ec) = *b;
+    if a_el < b_sl || b_el < a_sl {
+        return false;
+    }
+    if a_sl == b_el && a_sc >= b_ec {
+        return false;
+    }
+    if b_sl == a_el && b_sc >= a_ec {
+        return false;
+    }
+    true
+}
+
+fn byte_span_to_location(source: &str, start_byte: usize, end_byte: usize) -> (usize, usize, usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    let mut start_line = 0;
+    let mut start_col = 0;
+
+    for (i, ch) in source.char_indices() {
+        if i == start_byte {
+            start_line = line;
+            start_col = col;
+        }
+        if i == end_byte {
+            return (start_line, start_col, line, col);
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    if start_line > 0 {
+        (start_line, start_col, line, col)
+    } else {
+        (1, 1, 1, 1)
+    }
 }
 
 // Add trait to Rule for checking if dataflow is required

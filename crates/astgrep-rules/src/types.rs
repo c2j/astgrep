@@ -333,6 +333,9 @@ pub struct MetavariablePattern {
     pub analysis: Option<MetavariableAnalysis>, // metavariable-analysis support
     /// Nested conditions from nested metavariable-pattern within patterns array
     pub nested_conditions: Vec<Condition>,
+    /// When true, patterns use OR semantics (pattern-either); when false, AND semantics
+    #[serde(default)]
+    pub is_either: bool,
 }
 
 impl MetavariablePattern {
@@ -346,6 +349,7 @@ impl MetavariablePattern {
             name_constraint: None,
             analysis: None,
             nested_conditions: Vec::new(),
+            is_either: false,
         }
     }
 
@@ -487,7 +491,11 @@ pub struct DataFlowSpec {
     pub max_depth: Option<usize>,
     pub taint_assume_safe_booleans: Option<bool>,
     pub taint_assume_safe_numbers: Option<bool>,
+    pub taint_assume_safe_indexes: Option<bool>,
+    pub taint_assume_safe_functions: Option<bool>,
     pub taint_only_propagate_through_assignments: Option<bool>,
+    /// Whether any source uses `label` or any sink uses `requires` (label-based taint)
+    pub uses_labels: bool,
 }
 
 /// Propagator pattern for custom taint propagation rules
@@ -505,6 +513,12 @@ pub struct SourcePattern {
     pub pattern: Pattern,
     pub focus_metavariables: Vec<String>,
     pub is_fallback: bool,
+    /// Label applied when this source matches (semgrep label-based taint)
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Required labels that must already be present for this source's label to apply
+    #[serde(default)]
+    pub requires: Option<String>,
 }
 
 impl SourcePattern {
@@ -530,6 +544,13 @@ pub struct SinkPattern {
     pub pattern: Pattern,
     pub focus_metavariables: Vec<String>,
     pub is_fallback: bool,
+    /// If false, sink matches any source overlap (not just direct argument).
+    /// Default (true) means only direct argument match.
+    #[serde(default)]
+    pub exact: Option<bool>,
+    /// Label expression required for this sink to trigger (semgrep label-based taint)
+    #[serde(default)]
+    pub requires: Option<String>,
 }
 
 impl SinkPattern {
@@ -561,7 +582,10 @@ impl DataFlowSpec {
             max_depth: None,
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
+            taint_assume_safe_indexes: None,
+            taint_assume_safe_functions: None,
             taint_only_propagate_through_assignments: None,
+            uses_labels: false,
         }
     }
 
@@ -573,6 +597,8 @@ impl DataFlowSpec {
                 pattern: Pattern::simple(s),
                 focus_metavariables: Vec::new(),
                 is_fallback: true,
+                label: None,
+                requires: None,
             })
             .collect();
         let sinks = sinks
@@ -581,6 +607,8 @@ impl DataFlowSpec {
                 pattern: Pattern::simple(s),
                 focus_metavariables: Vec::new(),
                 is_fallback: true,
+                exact: None,
+                requires: None,
             })
             .collect();
         Self {
@@ -592,7 +620,10 @@ impl DataFlowSpec {
             max_depth: None,
             taint_assume_safe_booleans: None,
             taint_assume_safe_numbers: None,
+            taint_assume_safe_indexes: None,
+            taint_assume_safe_functions: None,
             taint_only_propagate_through_assignments: None,
+            uses_labels: false,
         }
     }
 

@@ -12,14 +12,14 @@ impl AdvancedRuleExecutor {
         dataflow_analysis: Option<&DataFlowAnalysis>,
         full_source: &str,
     ) -> Result<bool> {
-        eprintln!(
+        tracing::debug!(
             "DEBUG check_pattern_conditions: {} conditions to check, bindings={:?}",
             pattern.conditions.len(),
             match_result.bindings
         );
         for condition in &pattern.conditions {
             if !self.evaluate_condition(condition, match_result, dataflow_analysis, full_source)? {
-                eprintln!(
+                tracing::debug!(
                     "DEBUG check_pattern_conditions: condition {:?} FAILED",
                     condition
                 );
@@ -42,6 +42,7 @@ impl AdvancedRuleExecutor {
                 let key = metavar_regex
                     .metavariable
                     .trim_start_matches('$')
+                    .trim_start_matches('.')
                     .to_string();
                 if let Some(metavar_value) = match_result.bindings.get(&key) {
                     let regex_str = &metavar_regex.regex;
@@ -64,14 +65,15 @@ impl AdvancedRuleExecutor {
                 let key = metavar_comp
                     .metavariable
                     .trim_start_matches('$')
+                    .trim_start_matches('.')
                     .to_string();
-                eprintln!(
+                tracing::debug!(
                     "DEBUG evaluate_condition: MetavariableComparison for '{}', bindings: {:?}",
                     key,
                     match_result.bindings.keys().collect::<Vec<_>>()
                 );
                 if let Some(metavar_value) = match_result.bindings.get(&key) {
-                    eprintln!(
+                    tracing::debug!(
                         "DEBUG: Found value '{}' for metavariable '{}'",
                         metavar_value, key
                     );
@@ -116,7 +118,7 @@ impl AdvancedRuleExecutor {
                         &metavar_comp.value,
                     )
                 } else {
-                    eprintln!("DEBUG: Metavariable '{}' not found in bindings", key);
+                    tracing::debug!("DEBUG: Metavariable '{}' not found in bindings", key);
                     Ok(false)
                 }
             }
@@ -129,7 +131,7 @@ impl AdvancedRuleExecutor {
                 Ok(match_result.node.text().unwrap_or("").contains(attr_value))
             }
             Condition::MetavariableName(metavar_name) => {
-                let key = metavar_name.metavariable.trim_start_matches('$');
+                let key = metavar_name.metavariable.trim_start_matches('$').trim_start_matches('.');
                 if let Some(metavar_value) = match_result.bindings.get(key) {
                     self.evaluate_name_constraint(
                         metavar_value,
@@ -141,9 +143,9 @@ impl AdvancedRuleExecutor {
                 }
             }
             Condition::MetavariableAnalysis(metavar_analysis) => {
-                // Evaluate metavariable analysis constraint
+                let key = metavar_analysis.metavariable.trim_start_matches('$');
                 if let Some(metavar_value) =
-                    match_result.bindings.get(&metavar_analysis.metavariable)
+                    match_result.bindings.get(key)
                 {
                     self.evaluate_analysis_constraint(metavar_value, &metavar_analysis.analysis)
                 } else {
@@ -151,8 +153,8 @@ impl AdvancedRuleExecutor {
                 }
             }
             Condition::MetavariableType(metavar_type) => {
-                // Check if metavariable exists and matches the expected type
-                if let Some(metavar_value) = match_result.bindings.get(&metavar_type.metavariable) {
+                let key = metavar_type.metavariable.trim_start_matches('$');
+                if let Some(metavar_value) = match_result.bindings.get(key) {
                     // Extract the actual value from the metavariable binding
                     let var_value = metavar_value.trim();
 
@@ -182,54 +184,129 @@ impl AdvancedRuleExecutor {
                 self.evaluate_custom_condition(custom_condition, match_result)
             }
             Condition::MetavariablePattern(metavar_pattern) => {
-                let metavar_key = metavar_pattern.metavariable.trim_start_matches('$');
-                eprintln!(
+                let metavar_key = metavar_pattern.metavariable
+                    .trim_start_matches('$')
+                    .trim_start_matches('.');
+                tracing::debug!(
                     "DEBUG MetavariablePattern: key='{}', patterns={:?}, bindings={:?}",
                     metavar_key, metavar_pattern.patterns, match_result.bindings
                 );
                 if let Some(bound_value) = match_result.bindings.get(metavar_key) {
-                    let mut combined_bindings = match_result.bindings.clone();
-                    for pattern_str in &metavar_pattern.patterns {
-                        if pattern_str.starts_with("__NOT__:") {
-                            let neg_pattern = &pattern_str[8..];
-                            let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
-                            eprintln!(
-                                "DEBUG MetavariablePattern NOT: neg_pattern='{}', value='{}', matches={}",
-                                neg_pattern, bound_value, matches
-                            );
-                            if matches {
-                                return Ok(false);
+                    if metavar_pattern.is_either {
+                        let mut any_matched = false;
+                        let mut best_bindings: HashMap<String, MatchBinding> = HashMap::new();
+                        for pattern_str in &metavar_pattern.patterns {
+                            if pattern_str.starts_with("__NOT__:") || pattern_str.starts_with("__NOT_REGEX__:") || pattern_str.starts_with("__REGEX__:") {
+                                let negated = pattern_str.starts_with("__NOT__");
+                                let neg_regex = pattern_str.starts_with("__NOT_REGEX__");
+                                if negated {
+                                    let neg_pattern = &pattern_str[8..];
+                                    let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
+                                    if !matches {
+                                        any_matched = true;
+                                    }
+                                } else if neg_regex {
+                                    let regex_str = &pattern_str[14..];
+                                    if let Ok(re) = regex::Regex::new(regex_str) {
+                                        if !re.is_match(bound_value.as_ref()) {
+                                            any_matched = true;
+                                        }
+                                    }
+                                } else {
+                                    let regex_str = &pattern_str[10..];
+                                    if let Ok(re) = regex::Regex::new(regex_str) {
+                                        if re.is_match(bound_value.as_ref()) {
+                                            any_matched = true;
+                                        }
+                                    }
+                                }
+                            } else {
+                                let (matches, new_bindings) =
+                                    self.pattern_text_matches_with_bindings(pattern_str, bound_value);
+                                tracing::debug!(
+                                    "DEBUG MetavariablePattern[either]: pattern='{}', value='{}', matches={}",
+                                    pattern_str, bound_value.as_ref(), matches
+                                );
+                                if matches {
+                                    any_matched = true;
+                                    best_bindings.extend(
+                                        new_bindings
+                                            .into_iter()
+                                            .map(|(k, v)| (k, MatchBinding::new(v))),
+                                    );
+                                    break;
+                                }
                             }
-                        } else {
-                            let (matches, new_bindings) =
-                                self.pattern_text_matches_with_bindings(pattern_str, bound_value);
-                            eprintln!(
-                                "DEBUG MetavariablePattern: pattern='{}', value='{}', matches={}, new_bindings={:?}",
-                                pattern_str, bound_value, matches, new_bindings
-                            );
-                            if !matches {
-                                return Ok(false);
-                            }
-                            combined_bindings.extend(
-                                new_bindings
-                                    .into_iter()
-                                    .map(|(k, v)| (k, MatchBinding::new(v))),
-                            );
                         }
-                    }
-
-                    for nested in &metavar_pattern.nested_conditions {
-                        if !self.evaluate_condition_with_bindings(
-                            nested,
-                            &combined_bindings,
-                            match_result,
-                            full_source,
-                        )? {
-                            eprintln!("DEBUG MetavariablePattern: nested condition FAILED");
+                        if !any_matched {
                             return Ok(false);
                         }
+                        for nested in &metavar_pattern.nested_conditions {
+                            if !self.evaluate_condition_with_bindings(
+                                nested,
+                                &best_bindings,
+                                match_result,
+                                full_source,
+                            )? {
+                                tracing::debug!("DEBUG MetavariablePattern: nested condition FAILED");
+                                return Ok(false);
+                            }
+                        }
+                        Ok(true)
+                    } else {
+                        let mut combined_bindings = match_result.bindings.clone();
+                         for pattern_str in &metavar_pattern.patterns {
+                             if pattern_str.starts_with("__NOT__:") {
+                                 let neg_pattern = &pattern_str[8..];
+                                 let matches = self.pattern_text_matches_value(neg_pattern, bound_value);
+                                 if matches {
+                                     return Ok(false);
+                                 }
+                             } else if pattern_str.starts_with("__NOT_REGEX__:") {
+                                 let regex_str = &pattern_str[14..];
+                                 if let Ok(re) = regex::Regex::new(regex_str) {
+                                     if re.is_match(bound_value.as_ref()) {
+                                         return Ok(false);
+                                     }
+                                 }
+                             } else if pattern_str.starts_with("__REGEX__:") {
+                                 let regex_str = &pattern_str[10..];
+                                 if let Ok(re) = regex::Regex::new(regex_str) {
+                                     if !re.is_match(bound_value.as_ref()) {
+                                         return Ok(false);
+                                     }
+                                 }
+                             } else {
+                                let (matches, new_bindings) =
+                                    self.pattern_text_matches_with_bindings(pattern_str, bound_value);
+                                tracing::debug!(
+                                    "DEBUG MetavariablePattern: pattern='{}', value='{}', matches={}, new_bindings={:?}",
+                                    pattern_str, bound_value.as_ref(), matches, new_bindings
+                                );
+                                if !matches {
+                                    return Ok(false);
+                                }
+                                combined_bindings.extend(
+                                    new_bindings
+                                        .into_iter()
+                                        .map(|(k, v)| (k, MatchBinding::new(v))),
+                                );
+                            }
+                        }
+
+                        for nested in &metavar_pattern.nested_conditions {
+                            if !self.evaluate_condition_with_bindings(
+                                nested,
+                                &combined_bindings,
+                                match_result,
+                                full_source,
+                            )? {
+                                tracing::debug!("DEBUG MetavariablePattern: nested condition FAILED");
+                                return Ok(false);
+                            }
+                        }
+                        Ok(true)
                     }
-                    Ok(true)
                 } else {
                     Ok(false)
                 }
@@ -320,7 +397,7 @@ impl AdvancedRuleExecutor {
                     let simple_name = &import_path[last_dot + 1..];
                     let fully_qualified = import_path.to_string();
 
-                    eprintln!(
+                    tracing::debug!(
                         "DEBUG: Found import: {} -> {}",
                         simple_name, fully_qualified
                     );
@@ -343,7 +420,7 @@ impl AdvancedRuleExecutor {
     ) -> Option<String> {
         // First check if this simple type is in the import map
         if let Some(fully_qualified) = import_map.get(simple_type) {
-            eprintln!(
+            tracing::debug!(
                 "DEBUG: Resolved type '{}' to '{}'",
                 simple_type, fully_qualified
             );
@@ -442,7 +519,7 @@ impl AdvancedRuleExecutor {
         let import_map = self.build_import_map(full_source);
         let resolved_value = self.resolve_name_to_fqn(value, &import_map);
 
-        eprintln!(
+        tracing::debug!(
             "DEBUG evaluate_name_constraint: value='{}', resolved='{}', pattern='{}'",
             value, resolved_value, name_pattern
         );
@@ -646,7 +723,7 @@ impl AdvancedRuleExecutor {
         // This is a simplified implementation
         // In a full implementation, this would use a Python interpreter
 
-        eprintln!(
+        tracing::debug!(
             "DEBUG evaluate_python_expression: value='{}', expr='{}'",
             value, expr
         );
@@ -679,7 +756,7 @@ impl AdvancedRuleExecutor {
                         let var_part = bit_parts[0].trim();
                         let mask_part = bit_parts[1].trim();
 
-                        eprintln!(
+                        tracing::debug!(
                             "DEBUG: var_part='{}', mask_part='{}', expected='{}'",
                             var_part, mask_part, expected_result
                         );
@@ -693,37 +770,37 @@ impl AdvancedRuleExecutor {
                                     // Parse the actual value
                                     if let Ok(val) = value.parse::<i64>() {
                                         let result = val & mask;
-                                        eprintln!(
+                                        tracing::debug!(
                                             "DEBUG: val={}, mask={}, result={}, expected={}",
                                             val, mask, result, expected
                                         );
                                         return Ok(result == expected);
                                     } else {
-                                        eprintln!(
+                                        tracing::debug!(
                                             "DEBUG: Failed to parse value '{}' as i64",
                                             value
                                         );
                                     }
                                 } else {
-                                    eprintln!(
+                                    tracing::debug!(
                                         "DEBUG: Failed to parse expected '{}' as i64",
                                         expected_result
                                     );
                                 }
                             } else {
-                                eprintln!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
+                                tracing::debug!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
                             }
                         } else {
-                            eprintln!("DEBUG: var_part '{}' doesn't start with $", var_part);
+                            tracing::debug!("DEBUG: var_part '{}' doesn't start with $", var_part);
                         }
                     } else {
-                        eprintln!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
+                        tracing::debug!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
                     }
                 } else {
-                    eprintln!("DEBUG: left_side '{}' doesn't contain &", left_side);
+                    tracing::debug!("DEBUG: left_side '{}' doesn't contain &", left_side);
                 }
             } else {
-                eprintln!("DEBUG: parts.len() = {}, expected 2", parts.len());
+                tracing::debug!("DEBUG: parts.len() = {}, expected 2", parts.len());
             }
         }
 
@@ -744,7 +821,7 @@ impl AdvancedRuleExecutor {
                         let var_part = bit_parts[0].trim();
                         let mask_part = bit_parts[1].trim();
 
-                        eprintln!(
+                        tracing::debug!(
                             "DEBUG bitor: var_part='{}', mask_part='{}', expected='{}'",
                             var_part, mask_part, expected_result
                         );
@@ -758,37 +835,37 @@ impl AdvancedRuleExecutor {
                                     // Parse the actual value
                                     if let Ok(val) = value.parse::<i64>() {
                                         let result = val | mask;
-                                        eprintln!(
+                                        tracing::debug!(
                                             "DEBUG bitor: val={}, mask={}, result={}, expected={}",
                                             val, mask, result, expected
                                         );
                                         return Ok(result == expected);
                                     } else {
-                                        eprintln!(
+                                        tracing::debug!(
                                             "DEBUG: Failed to parse value '{}' as i64",
                                             value
                                         );
                                     }
                                 } else {
-                                    eprintln!(
+                                    tracing::debug!(
                                         "DEBUG: Failed to parse expected '{}' as i64",
                                         expected_result
                                     );
                                 }
                             } else {
-                                eprintln!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
+                                tracing::debug!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
                             }
                         } else {
-                            eprintln!("DEBUG: var_part '{}' doesn't start with $", var_part);
+                            tracing::debug!("DEBUG: var_part '{}' doesn't start with $", var_part);
                         }
                     } else {
-                        eprintln!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
+                        tracing::debug!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
                     }
                 } else {
-                    eprintln!("DEBUG: left_side '{}' doesn't contain |", left_side);
+                    tracing::debug!("DEBUG: left_side '{}' doesn't contain |", left_side);
                 }
             } else {
-                eprintln!("DEBUG: parts.len() = {}, expected 2", parts.len());
+                tracing::debug!("DEBUG: parts.len() = {}, expected 2", parts.len());
             }
         }
 
@@ -809,7 +886,7 @@ impl AdvancedRuleExecutor {
                         let var_part = bit_parts[0].trim();
                         let mask_part = bit_parts[1].trim();
 
-                        eprintln!(
+                        tracing::debug!(
                             "DEBUG bitxor: var_part='{}', mask_part='{}', expected='{}'",
                             var_part, mask_part, expected_result
                         );
@@ -823,37 +900,37 @@ impl AdvancedRuleExecutor {
                                     // Parse the actual value
                                     if let Ok(val) = value.parse::<i64>() {
                                         let result = val ^ mask;
-                                        eprintln!(
+                                        tracing::debug!(
                                             "DEBUG bitxor: val={}, mask={}, result={}, expected={}",
                                             val, mask, result, expected
                                         );
                                         return Ok(result == expected);
                                     } else {
-                                        eprintln!(
+                                        tracing::debug!(
                                             "DEBUG: Failed to parse value '{}' as i64",
                                             value
                                         );
                                     }
                                 } else {
-                                    eprintln!(
+                                    tracing::debug!(
                                         "DEBUG: Failed to parse expected '{}' as i64",
                                         expected_result
                                     );
                                 }
                             } else {
-                                eprintln!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
+                                tracing::debug!("DEBUG: Failed to parse mask '{}' as i64", mask_part);
                             }
                         } else {
-                            eprintln!("DEBUG: var_part '{}' doesn't start with $", var_part);
+                            tracing::debug!("DEBUG: var_part '{}' doesn't start with $", var_part);
                         }
                     } else {
-                        eprintln!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
+                        tracing::debug!("DEBUG: bit_parts.len() = {}, expected 2", bit_parts.len());
                     }
                 } else {
-                    eprintln!("DEBUG: left_side '{}' doesn't contain ^", left_side);
+                    tracing::debug!("DEBUG: left_side '{}' doesn't contain ^", left_side);
                 }
             } else {
-                eprintln!("DEBUG: parts.len() = {}, expected 2", parts.len());
+                tracing::debug!("DEBUG: parts.len() = {}, expected 2", parts.len());
             }
         }
 
@@ -874,7 +951,7 @@ impl AdvancedRuleExecutor {
                     left_side
                 };
 
-                eprintln!(
+                tracing::debug!(
                     "DEBUG bitnot: var_part='{}', expected='{}'",
                     var_part, expected_result
                 );
@@ -887,25 +964,25 @@ impl AdvancedRuleExecutor {
                         if let Ok(val) = value.parse::<i64>() {
                             // Python's ~ operator: ~x = -(x + 1)
                             let result = -(val + 1);
-                            eprintln!(
+                            tracing::debug!(
                                 "DEBUG bitnot: val={}, result={}, expected={}",
                                 val, result, expected
                             );
                             return Ok(result == expected);
                         } else {
-                            eprintln!("DEBUG: Failed to parse value '{}' as i64", value);
+                            tracing::debug!("DEBUG: Failed to parse value '{}' as i64", value);
                         }
                     } else {
-                        eprintln!(
+                        tracing::debug!(
                             "DEBUG: Failed to parse expected '{}' as i64",
                             expected_result
                         );
                     }
                 } else {
-                    eprintln!("DEBUG: var_part '{}' doesn't start with $", var_part);
+                    tracing::debug!("DEBUG: var_part '{}' doesn't start with $", var_part);
                 }
             } else {
-                eprintln!("DEBUG: parts.len() = {}, expected 2", parts.len());
+                tracing::debug!("DEBUG: parts.len() = {}, expected 2", parts.len());
             }
         }
 
@@ -986,7 +1063,52 @@ impl AdvancedRuleExecutor {
             }
         }
 
-        eprintln!("DEBUG: Expression '{}' not handled, returning false", expr);
+        for op in &["!=", "==", ">=", "<=", ">", "<"] {
+            if let Some(pos) = expr.find(op) {
+                let left = expr[..pos].trim();
+                let right = expr[pos + op.len()..].trim();
+                if left.is_empty() || right.is_empty() {
+                    continue;
+                }
+                let left_val = if left.starts_with('$') {
+                    let key = left.trim_start_matches('$');
+                    bindings.get(key).map(|s| s.as_str()).unwrap_or(value)
+                } else {
+                    value
+                };
+                let right_val = if right.starts_with('$') {
+                    let key = right.trim_start_matches('$');
+                    bindings.get(key).map(|s| s.as_str()).unwrap_or(right)
+                } else {
+                    right
+                };
+                if let (Ok(ln), Ok(rn)) = (left_val.parse::<f64>(), right_val.parse::<f64>()) {
+                    let result = match *op {
+                        "==" => (ln - rn).abs() < 1e-9,
+                        "!=" => (ln - rn).abs() >= 1e-9,
+                        ">" => ln > rn,
+                        "<" => ln < rn,
+                        ">=" => ln >= rn,
+                        "<=" => ln <= rn,
+                        _ => false,
+                    };
+                    return Ok(result);
+                } else {
+                    let result = match *op {
+                        "==" => left_val == right_val,
+                        "!=" => left_val != right_val,
+                        ">" => left_val > right_val,
+                        "<" => left_val < right_val,
+                        ">=" => left_val >= right_val,
+                        "<=" => left_val <= right_val,
+                        _ => false,
+                    };
+                    return Ok(result);
+                }
+            }
+        }
+
+        tracing::debug!("DEBUG: Expression '{}' not handled, returning false", expr);
         Ok(false)
     }
 

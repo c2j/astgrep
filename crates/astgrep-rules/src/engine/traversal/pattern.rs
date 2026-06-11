@@ -48,6 +48,15 @@ impl RuleExecutionEngine {
             return self.execute_either_pattern(pattern, subs, rule, context, _ast);
         }
 
+        // 5) Inside/NotInside/Not/NotRegex: delegate to advanced executor
+        if matches!(
+            &pattern.pattern_type,
+            PatternType::Inside(_) | PatternType::NotInside(_)
+                | PatternType::Not(_) | PatternType::NotRegex(_)
+        ) {
+            return self.execute_advanced_pattern(pattern, rule, context, _ast);
+        }
+
         // Fallback: no simple/regex pattern string available, use node-based matching
         self.execute_fallback_matching(pattern, _ast, rule, context)
     }
@@ -120,7 +129,7 @@ impl RuleExecutionEngine {
         _ast: &dyn AstNode,
     ) -> Result<Vec<Finding>> {
         use std::collections::HashSet;
-        let mut findings = Vec::new();
+        let pattern_str = pattern_str.trim();
 
         // If pattern has conditions or requires symbolic propagation, use AdvancedRuleExecutor
         let requires_advanced =
@@ -143,10 +152,58 @@ impl RuleExecutionEngine {
         let needs_constant_prop =
             (has_literal || has_paren_literal) && rule.has_constant_propagation();
 
-        if requires_advanced || needs_constant_prop {
+        let has_semgrep_syntax = pattern_str.contains("...") || pattern_str.contains('$');
+
+        if requires_advanced || needs_constant_prop || has_semgrep_syntax {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
+        // Also use advanced (tree) matcher for code-like patterns that need structural matching
+        let looks_like_code = pattern_str.contains("{")
+            || pattern_str.contains("class ")
+            || pattern_str.contains("function ")
+            || pattern_str.contains("def ")
+            || pattern_str.contains("if ")
+            || pattern_str.contains("for ")
+            || pattern_str.contains("while ")
+            || pattern_str.contains("try ")
+            || pattern_str.contains("catch ")
+            || pattern_str.contains("import ")
+            || pattern_str.contains("from ")
+            || pattern_str.contains("implements ")
+            || pattern_str.contains("extends ")
+            || pattern_str.contains("interface ")
+            || pattern_str.contains("record ")
+            || pattern_str.contains("@interface ")
+            || pattern_str.contains("public ")
+            || pattern_str.contains("private ")
+            || pattern_str.contains("protected ")
+            || pattern_str.contains("return ")
+            || pattern_str.contains("throw ")
+            // Multi-statement patterns (semicolons on multiple lines)
+            || (pattern_str.contains(';') && pattern_str.contains('\n'))
+            // Variable/object declarations
+            || pattern_str.starts_with("var ")
+            || pattern_str.starts_with("let ")
+            || pattern_str.starts_with("const ")
+            || pattern_str.contains("new ")
+            // Annotations
+            || pattern_str.contains("@");
+        if looks_like_code {
+            return self.execute_advanced_pattern(pattern, rule, context, _ast);
+        }
+
+        // For patterns containing binary operators, augment text matching with AST matching
+        // to handle associative reordering (e.g. A & B should also match B & A)
+        let has_binary_op = [
+            " + ", " - ", " * ", " / ", " % ", " ** ",
+            " & ", " | ", " ^ ", " && ", " || ",
+            " and ", " or ", " xor ",
+            " == ", " != ", " < ", " > ", " <= ", " >= ",
+            " << ", " >> ",
+        ].iter().any(|op| pattern_str.contains(op));
+
+        let mut text_findings = Vec::new();
         let seg_by_stmt = if matches!(context.language, Language::Sql) {
             self.effective_sql_stmt_boundary(rule, context)
         } else {
@@ -159,7 +216,6 @@ impl RuleExecutionEngine {
             seg_by_stmt,
         );
 
-        // Optional: deduplicate identical spans
         let mut seen: HashSet<(usize, usize)> = HashSet::new();
 
         for (start_byte, end_byte) in spans {
@@ -199,21 +255,48 @@ impl RuleExecutionEngine {
             } else {
                 finding
             };
-            findings.push(finding);
+            text_findings.push(finding);
         }
 
-        Ok(findings)
+        if !has_binary_op {
+            if !text_findings.is_empty() {
+                return Ok(text_findings);
+            }
+            if pattern_str.contains("...") || pattern_str.contains('$') {
+                return self.execute_advanced_pattern(pattern, rule, context, _ast);
+            }
+            return Ok(text_findings);
+        }
+
+        // Merge AST findings with text findings (AST handles reordering)
+        let ast_findings = self.execute_advanced_pattern(pattern, rule, context, _ast)?;
+        let text_locs: HashSet<(usize, usize, usize, usize)> = text_findings
+            .iter()
+            .map(|f| {
+                let l = &f.location;
+                (l.start_line, l.start_column, l.end_line, l.end_column)
+            })
+            .collect();
+        for af in ast_findings {
+            let l = &af.location;
+            let key = (l.start_line, l.start_column, l.end_line, l.end_column);
+            if !text_locs.contains(&key) {
+                text_findings.push(af);
+            }
+        }
+
+        Ok(text_findings)
     }
 
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
-    fn execute_advanced_pattern(
-        &self,
-        pattern: &Pattern,
-        rule: &Rule,
-        context: &RuleContext,
-        _ast: &dyn AstNode,
-    ) -> Result<Vec<Finding>> {
-        use crate::executor::AdvancedRuleExecutor;
+     fn execute_advanced_pattern(
+         &self,
+         pattern: &Pattern,
+         rule: &Rule,
+         context: &RuleContext,
+         _ast: &dyn AstNode,
+     ) -> Result<Vec<Finding>> {
+         use crate::executor::AdvancedRuleExecutor;
         let mut advanced_executor = AdvancedRuleExecutor::new();
 
         // Create a rule with just this pattern
@@ -292,12 +375,24 @@ impl RuleExecutionEngine {
                 PatternType::Simple(s) => {
                     self.execute_simple_subpattern(s, rule, context, &mut findings, &mut seen)?;
                 }
-                PatternType::All(_) => {
-                    // For complex patterns, use AdvancedRuleExecutor
+                PatternType::All(_)
+                | PatternType::Either(_)
+                | PatternType::Inside(_)
+                | PatternType::NotInside(_)
+                | PatternType::Not(_)
+                | PatternType::NotRegex(_)
+                | PatternType::Any(_) => {
                     let sub_findings = self.execute_advanced_pattern(sub, rule, context, _ast)?;
-                    findings.extend(sub_findings);
+                    for f in sub_findings {
+                        let key = (
+                            f.location.start_line * 10000 + f.location.start_column,
+                            f.location.end_line * 10000 + f.location.end_column,
+                        );
+                        if seen.insert(key) {
+                            findings.push(f);
+                        }
+                    }
                 }
-                _ => {}
             }
         }
 

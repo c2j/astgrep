@@ -68,8 +68,10 @@ impl RuleParser {
         let severity = self.parse_severity(rule_obj, index)?;
         let languages = self.parse_languages(rule_obj, index)?;
 
-        // Parse message (required in semgrep format)
-        let message = self.get_string_field(rule_obj, "message", index)?;
+        let message = self
+            .get_optional_string_field(rule_obj, "message")
+            .or_else(|| self.get_optional_string_field(rule_obj, "description"))
+            .unwrap_or_else(|| id.clone());
 
         // Use message as both name and description for semgrep compatibility
         let name = self
@@ -100,6 +102,10 @@ impl RuleParser {
                 let mut dataflow = DataFlowSpec::new(sources, sinks).with_sanitizers(sanitizers);
                 dataflow.propagators = propagators;
 
+                // Detect label/requires usage by checking raw YAML for these keys
+                let has_labels = self.check_dataflow_uses_labels(rule_obj);
+                dataflow.uses_labels = has_labels;
+
                 // Parse taint options from the options field
                 if let Some(options_obj) = rule_obj
                     .get(&Value::String("options".to_string()))
@@ -124,6 +130,20 @@ impl RuleParser {
                     )) {
                         if let Some(b) = val.as_bool() {
                             dataflow.taint_only_propagate_through_assignments = Some(b);
+                        }
+                    }
+                    if let Some(val) = options_obj.get(&Value::String(
+                        "taint_assume_safe_indexes".to_string(),
+                    )) {
+                        if let Some(b) = val.as_bool() {
+                            dataflow.taint_assume_safe_indexes = Some(b);
+                        }
+                    }
+                    if let Some(val) = options_obj.get(&Value::String(
+                        "taint_assume_safe_functions".to_string(),
+                    )) {
+                        if let Some(b) = val.as_bool() {
+                            dataflow.taint_assume_safe_functions = Some(b);
                         }
                     }
                 }
@@ -229,22 +249,6 @@ impl RuleParser {
             } else {
                 return Ok(Some(options));
             };
-            options.insert("symbolic_propagation".to_string(), str_val);
-        }
-
-        // Parse constant_propagation option
-        if let Some(val) = options_obj.get(&Value::String("constant_propagation".to_string())) {
-            let str_val = if let Some(b) = val.as_bool() {
-                b.to_string()
-            } else if let Some(s) = val.as_str() {
-                match s.to_ascii_lowercase().as_str() {
-                    "on" | "true" | "1" | "yes" => "true".to_string(),
-                    "off" | "false" | "0" | "no" => "false".to_string(),
-                    _ => s.to_string(),
-                }
-            } else {
-                return Ok(Some(options));
-            };
             options.insert("constant_propagation".to_string(), str_val);
         }
 
@@ -299,6 +303,27 @@ impl RuleParser {
             };
             options.insert(
                 "taint_only_propagate_through_assignments".to_string(),
+                str_val,
+            );
+        }
+
+        // Parse taint_assume_safe_indexes option
+        if let Some(val) = options_obj.get(&Value::String(
+            "taint_assume_safe_indexes".to_string(),
+        )) {
+            let str_val = if let Some(b) = val.as_bool() {
+                b.to_string()
+            } else if let Some(s) = val.as_str() {
+                match s.to_ascii_lowercase().as_str() {
+                    "on" | "true" | "1" | "yes" => "true".to_string(),
+                    "off" | "false" | "0" | "no" => "false".to_string(),
+                    _ => s.to_string(),
+                }
+            } else {
+                return Ok(Some(options));
+            };
+            options.insert(
+                "taint_assume_safe_indexes".to_string(),
                 str_val,
             );
         }
@@ -965,6 +990,7 @@ impl RuleParser {
 
         let mut patterns = Vec::new();
         let mut nested_conditions: Vec<Condition> = Vec::new();
+        let mut is_either = false;
 
         if let Some(patterns_value) = metavar_obj.get(&Value::String("patterns".to_string())) {
             let patterns_array = patterns_value.as_sequence().ok_or_else(|| {
@@ -1007,6 +1033,22 @@ impl RuleParser {
                         nested_conditions.push(Condition::MetavariableRegex(metavar_regex));
                         continue;
                     }
+                    if let Some(pattern_not_regex) =
+                        obj.get(&Value::String("pattern-not-regex".to_string()))
+                    {
+                        if let Some(regex_str) = pattern_not_regex.as_str() {
+                            patterns.push(format!("__NOT_REGEX__:{}", regex_str));
+                            continue;
+                        }
+                    }
+                    if let Some(pattern_regex) =
+                        obj.get(&Value::String("pattern-regex".to_string()))
+                    {
+                        if let Some(regex_str) = pattern_regex.as_str() {
+                            patterns.push(format!("__REGEX__:{}", regex_str));
+                            continue;
+                        }
+                    }
                 }
                 let pattern_str = pv.as_str().ok_or_else(|| {
                     AnalysisError::parse_error(format!(
@@ -1043,6 +1085,7 @@ impl RuleParser {
                     }
                 }
             }
+            is_either = true;
         } else {
             return Err(AnalysisError::parse_error(format!(
                 "Rule {} pattern {} metavariable_pattern must have 'patterns', 'pattern', or 'pattern-either' field",
@@ -1052,6 +1095,7 @@ impl RuleParser {
 
         let mut metavar_pattern = MetavariablePattern::with_patterns(metavariable, patterns);
         metavar_pattern.nested_conditions = nested_conditions;
+        metavar_pattern.is_either = is_either;
 
         if let Some(regex) = self.get_optional_string_field(metavar_obj, "regex") {
             metavar_pattern.regex = Some(regex);
@@ -1351,6 +1395,14 @@ impl RuleParser {
             }
         }
 
+        if let Some(taint_assume_safe_indexes_value) =
+            dataflow_obj.get(&Value::String("taint_assume_safe_indexes".to_string()))
+        {
+            if let Some(b) = taint_assume_safe_indexes_value.as_bool() {
+                dataflow.taint_assume_safe_indexes = Some(b);
+            }
+        }
+
         Ok(Some(dataflow))
     }
 
@@ -1547,6 +1599,8 @@ impl RuleParser {
                         pattern: Pattern::simple(pattern_str),
                         focus_metavariables: Vec::new(),
                         is_fallback: true,
+                        label: None,
+                        requires: None,
                     });
                 } else {
                     return Err(AnalysisError::parse_error(format!(
@@ -1588,7 +1642,9 @@ impl RuleParser {
                         pattern: Pattern::simple(pattern_str),
                         focus_metavariables: Vec::new(),
                         is_fallback: true,
-                    });
+                        exact: None,
+                        requires: None,
+                                        });
                 } else {
                     return Err(AnalysisError::parse_error(format!(
                         "Rule {} sink at index {} must have a 'pattern' field",
@@ -1718,6 +1774,25 @@ impl RuleParser {
     }
 
     /// Extract pattern string from taint definition (source, sink, or sanitizer)
+    fn check_dataflow_uses_labels(&self, rule_obj: &serde_yaml::Mapping) -> bool {
+        let label_key = Value::String("label".to_string());
+        let requires_key = Value::String("requires".to_string());
+
+        for array_key in &["pattern-sources", "pattern-sinks"] {
+            let key = Value::String(array_key.to_string());
+            if let Some(Value::Sequence(arr)) = rule_obj.get(&key) {
+                for item in arr {
+                    if let Some(mapping) = item.as_mapping() {
+                        if mapping.contains_key(&label_key) || mapping.contains_key(&requires_key) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     fn extract_pattern_from_taint_def(&self, value: &Value) -> Option<String> {
         // If it's a simple string, return it
         if let Some(s) = value.as_str() {
@@ -1843,6 +1918,8 @@ impl RuleParser {
                 pattern: Pattern::simple(s.to_string()),
                 focus_metavariables: Vec::new(),
                 is_fallback: false,
+                label: None,
+                requires: None,
             });
         }
 
@@ -1926,10 +2003,23 @@ impl RuleParser {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
+            // Extract label and requires fields for label-based taint tracking
+            let label = mapping
+                .get(&Value::String("label".to_string()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let requires = mapping
+                .get(&Value::String("requires".to_string()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
             return Ok(SourcePattern {
                 pattern: Pattern::simple(pattern_str),
                 focus_metavariables,
                 is_fallback,
+                label,
+                requires,
             });
         }
 
@@ -1946,7 +2036,9 @@ impl RuleParser {
                 pattern: Pattern::simple(s.to_string()),
                 focus_metavariables: Vec::new(),
                 is_fallback: false,
-            });
+                exact: None,
+                requires: None,
+                        });
         }
 
         // If it's an object, parse fields
@@ -1972,6 +2064,8 @@ impl RuleParser {
                             },
                             focus_metavariables: Vec::new(),
                             is_fallback: false,
+                            exact: None,
+                            requires: None,
                         });
                     }
                 }
@@ -2079,11 +2173,23 @@ impl RuleParser {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
+            // Check if exact flag is set (optional; default = true = exact match)
+            let exact = mapping
+                .get(&Value::String("exact".to_string()))
+                .and_then(|v| v.as_bool());
+
+            let requires = mapping
+                .get(&Value::String("requires".to_string()))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
             return Ok(SinkPattern {
                 pattern,
                 focus_metavariables,
                 is_fallback,
-            });
+                exact,
+                requires,
+                        });
         }
 
         Err(AnalysisError::parse_error(

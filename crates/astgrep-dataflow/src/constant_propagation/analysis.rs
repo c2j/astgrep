@@ -123,22 +123,24 @@ impl ConstantPropagator {
         // Post-processing: if there are multiple constructors, invalidate fields
         // that are not initialized in ALL constructors
         if self.constructor_count > 1 {
-            eprintln!(
-                "DEBUG CP: Found {} constructors, checking field initialization consistency",
-                self.constructor_count
-            );
             let mut fields_to_remove = Vec::new();
 
             for (field, count) in &self.fields_in_constructors {
                 if *count < self.constructor_count {
-                    eprintln!("DEBUG CP: Field {} initialized in only {} of {} constructors, removing from constants",
-                             field, count, self.constructor_count);
                     fields_to_remove.push(field.clone());
                 }
             }
 
             for field in fields_to_remove {
                 self.constants.remove(&field);
+            }
+        }
+
+        for def in &self.variable_definitions {
+            if !self.reassigned.contains(&def.name)
+                && !self.constants.contains_key(&def.name)
+            {
+                self.constants.insert(def.name.clone(), def.value.clone());
             }
         }
 
@@ -156,37 +158,12 @@ impl ConstantPropagator {
         node: &dyn AstNode,
         context: VisitContext,
     ) -> crate::Result<()> {
-        // Debug: print node type and child count
-        eprintln!(
-            "DEBUG CP: Visiting node type: {}, child_count: {}, context: {:?}",
-            node.node_type(),
-            node.child_count(),
-            context
-        );
-
         // Check if this is a field declaration or variable declaration with an initializer
         let is_field_or_var = node.node_type() == "field_declaration"
             || node.node_type() == "variable_declaration"
             || node.node_type() == "declaration_statement";
 
         if is_field_or_var {
-            eprintln!(
-                "DEBUG CP: Found potential field/variable declaration: {}",
-                node.node_type()
-            );
-
-            // Print children for debugging
-            for i in 0..node.child_count() {
-                if let Some(child) = node.child(i) {
-                    eprintln!(
-                        "  Child {}: {} - text: {:?}",
-                        i,
-                        child.node_type(),
-                        child.text()
-                    );
-                }
-            }
-
             // For tree-sitter AST, look for variable_declaration children
             for i in 0..node.child_count() {
                 if let Some(child) = node.child(i) {
@@ -197,24 +174,12 @@ impl ConstantPropagator {
                         let is_static = node.text().map(|t| t.contains("static")).unwrap_or(false);
 
                         if is_private {
-                            eprintln!(
-                                "DEBUG CP: Found private variable declaration (static: {})",
-                                is_static
-                            );
-
                             // Find the identifier and initializer in the variable_declaration
                             let mut var_name = None;
                             let mut init_value = None;
 
                             for j in 0..child.child_count() {
                                 if let Some(grandchild) = child.child(j) {
-                                    eprintln!(
-                                        "    Grandchild {}: {} - text: {:?}",
-                                        j,
-                                        grandchild.node_type(),
-                                        grandchild.text()
-                                    );
-
                                     if grandchild.node_type() == "identifier" {
                                         var_name = grandchild.text().map(|t| t.to_string());
                                     }
@@ -230,18 +195,12 @@ impl ConstantPropagator {
                             }
 
                             if let (Some(name), Some(value)) = (var_name, init_value) {
-                                eprintln!(
-                                    "DEBUG CP: Found constant: {} = {} (direct init)",
-                                    name, value
-                                );
                                 self.constants.insert(name, ConstantValue::Integer(value));
                             }
                         }
 
                         // Handle local variable declarations in methods
                         if context == VisitContext::Method {
-                            eprintln!("DEBUG CP: Processing local variable declaration in method");
-
                             // Find the identifier and initializer in the variable_declaration
                             let mut var_name = None;
                             let mut init_value = None;
@@ -249,13 +208,6 @@ impl ConstantPropagator {
 
                             for j in 0..child.child_count() {
                                 if let Some(grandchild) = child.child(j) {
-                                    eprintln!(
-                                        "    Grandchild {}: {} - text: {:?}",
-                                        j,
-                                        grandchild.node_type(),
-                                        grandchild.text()
-                                    );
-
                                     if grandchild.node_type() == "identifier" {
                                         var_name = grandchild.text().map(|t| t.to_string());
                                     }
@@ -271,10 +223,6 @@ impl ConstantPropagator {
                             }
 
                             if let (Some(name), Some(value)) = (var_name, init_value) {
-                                eprintln!(
-                                    "DEBUG CP: Found local constant: {} = {} at {:?}",
-                                    name, value, location
-                                );
                                 if let Some(loc) = location {
                                     self.define_local_variable(
                                         name,
@@ -303,9 +251,10 @@ impl ConstantPropagator {
                     // Also process local variable assignments
                     self.process_local_assignment(node)?;
                 }
-                _ => {
-                    eprintln!("DEBUG CP: Skipping assignment in {:?} context", context);
+                VisitContext::TopLevel => {
+                    self.process_local_assignment(node)?;
                 }
+                _ => {}
             }
         }
 
@@ -321,7 +270,6 @@ impl ConstantPropagator {
                     if child.node_type() == "identifier" {
                         if let Some(name) = child.text() {
                             self.current_class_name = Some(name.to_string());
-                            eprintln!("DEBUG CP: Found class name: {}", name);
                         }
                     }
                 }
@@ -340,10 +288,6 @@ impl ConstantPropagator {
         // Track constructor count
         if is_constructor {
             self.constructor_count += 1;
-            eprintln!(
-                "DEBUG CP: Found constructor #{} for class {:?}",
-                self.constructor_count, self.current_class_name
-            );
         }
 
         let child_context = if is_constructor {
@@ -360,7 +304,6 @@ impl ConstantPropagator {
         if is_method {
             let location = get_node_location(node).unwrap_or(SourceLocation::new(0, 0));
             self.push_scope(location);
-            eprintln!("DEBUG CP: Pushed new scope for method at {:?}", location);
         }
 
         // Recursively visit children
@@ -373,7 +316,6 @@ impl ConstantPropagator {
         // Pop scope when exiting a method
         if is_method {
             self.pop_scope();
-            eprintln!("DEBUG CP: Popped scope for method");
         }
 
         Ok(())
@@ -381,37 +323,19 @@ impl ConstantPropagator {
 
     /// Process local variable assignment in methods
     fn process_local_assignment(&mut self, node: &dyn AstNode) -> crate::Result<()> {
-        eprintln!("DEBUG CP: Processing local assignment in method");
-
-        // assignment_expression typically has 3 children: left, operator, right
         if node.child_count() < 3 {
             return Ok(());
         }
 
         let left = node.child(0);
-        let operator = node.child(1);
         let right = node.child(2);
 
-        // Check if operator is '=' (simple assignment)
-        let operator_text = operator.as_ref().and_then(|op| op.text());
-
-        let is_simple_assignment = match operator_text {
-            Some(text) => text.trim() == "=",
-            None => true,
-        };
-
-        if !is_simple_assignment {
-            return Ok(());
-        }
-
-        // Extract variable name from left side
         let var_name = if let Some(left_node) = left {
             extract_variable_name_from_assignment_target(left_node)
         } else {
             None
         };
 
-        // Extract constant value from right side
         let const_value = if let Some(right_node) = right {
             extract_constant_from_expression(right_node, &self.constants)
         } else {
@@ -420,10 +344,6 @@ impl ConstantPropagator {
 
         if let (Some(name), Some(value)) = (var_name, const_value) {
             if let Some(location) = get_node_location(node) {
-                eprintln!(
-                    "DEBUG CP: Found local assignment: {} = {:?} at {:?}",
-                    name, value, location
-                );
                 self.define_local_variable(name, value, location);
             }
         }
@@ -440,23 +360,8 @@ impl ConstantPropagator {
         node: &dyn AstNode,
         context: VisitContext,
     ) -> crate::Result<()> {
-        eprintln!("DEBUG CP: Processing assignment expression");
-
-        // Print children for debugging
-        for i in 0..node.child_count() {
-            if let Some(child) = node.child(i) {
-                eprintln!(
-                    "  Assignment child {}: {} - text: {:?}",
-                    i,
-                    child.node_type(),
-                    child.text()
-                );
-            }
-        }
-
         // assignment_expression typically has 3 children: left, operator, right
         if node.child_count() < 3 {
-            eprintln!("DEBUG CP: Assignment has fewer than 3 children, skipping");
             return Ok(());
         }
 
@@ -468,18 +373,12 @@ impl ConstantPropagator {
         // The operator may be "unknown" type in tree-sitter, so check the text
         let operator_text = operator.as_ref().and_then(|op| op.text());
 
-        eprintln!("DEBUG CP: Operator text: {:?}", operator_text);
-
         let is_simple_assignment = match operator_text {
             Some(text) => text.trim() == "=",
             None => true, // If we can't determine operator, assume it's simple assignment
         };
 
         if !is_simple_assignment {
-            eprintln!(
-                "DEBUG CP: Not a simple assignment operator: {:?}",
-                operator_text
-            );
             return Ok(());
         }
 
@@ -490,8 +389,6 @@ impl ConstantPropagator {
             None
         };
 
-        eprintln!("DEBUG CP: Extracted variable name: {:?}", var_name);
-
         // Extract constant value from right side
         let const_value = if let Some(right_node) = right {
             extract_constant_from_expression(right_node, &self.constants)
@@ -499,52 +396,25 @@ impl ConstantPropagator {
             None
         };
 
-        eprintln!("DEBUG CP: Extracted constant value: {:?}", const_value);
-
         match (&var_name, &const_value) {
             (Some(name), Some(value)) => {
-                eprintln!(
-                    "DEBUG CP: Found assignment constant: {} = {:?}",
-                    name, value
-                );
-
                 // Check if this variable was already assigned
                 if self.constants.contains_key(name) {
                     // Variable is being reassigned - mark as non-constant
-                    eprintln!(
-                        "DEBUG CP: Variable {} is reassigned, marking as non-constant",
-                        name
-                    );
                     self.mark_reassigned(name.clone());
                 } else if context == VisitContext::Constructor
                     || context == VisitContext::StaticBlock
                 {
                     // Only record as constant in constructor or static block contexts
-                    eprintln!("DEBUG CP: Recording constant: {} = {:?}", name, value);
                     self.constants.insert(name.clone(), value.clone());
 
                     // Track field initialization in constructors
                     if context == VisitContext::Constructor {
                         *self.fields_in_constructors.entry(name.clone()).or_insert(0) += 1;
-                        eprintln!(
-                            "DEBUG CP: Field {} initialized in constructor (count: {})",
-                            name,
-                            self.fields_in_constructors.get(name).unwrap_or(&0)
-                        );
                     }
-                } else {
-                    eprintln!(
-                        "DEBUG CP: Not recording constant in {:?} context: {}",
-                        context, name
-                    );
                 }
             }
-            _ => {
-                eprintln!(
-                    "DEBUG CP: Could not extract name or value: name={:?}, value={:?}",
-                    var_name, const_value
-                );
-            }
+            _ => {}
         }
 
         Ok(())
@@ -554,8 +424,6 @@ impl ConstantPropagator {
     /// If a field was initialized as a constant in the constructor,
     /// but is reassigned in a method, it is no longer a constant
     fn check_reassignment_in_method(&mut self, node: &dyn AstNode) -> crate::Result<()> {
-        eprintln!("DEBUG CP: Checking reassignment in method");
-
         // Extract variable name from left side of assignment
         if node.child_count() < 1 {
             return Ok(());
@@ -571,10 +439,6 @@ impl ConstantPropagator {
         if let Some(name) = var_name {
             // Check if this variable is currently tracked as a constant
             if self.constants.contains_key(&name) {
-                eprintln!(
-                    "DEBUG CP: Variable {} is reassigned in method, marking as non-constant",
-                    name
-                );
                 self.mark_reassigned(name);
             }
         }
