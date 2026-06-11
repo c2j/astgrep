@@ -1336,7 +1336,15 @@ impl MatchCtx {
             || pattern_kind == "_"
             || (pattern_kind.contains('_') && target_kind.contains('_')
                 && pattern_kind.split('_').any(|p| target_kind.contains(p)))
-            || (is_chain_kind(pattern_kind) && is_chain_kind(target_kind));
+            || (is_chain_kind(pattern_kind) && is_chain_kind(target_kind))
+            || (pattern_kind == "arrow_function" && matches!(target_kind, "function_expression" | "function_declaration"))
+            || (matches!(pattern_kind, "function_expression" | "function_declaration") && target_kind == "arrow_function")
+            || (pattern_kind == "identifier" && matches!(target_kind, "typed_parameter" | "optional_parameter" | "default_parameter"))
+            || (matches!(pattern_kind, "typed_parameter" | "optional_parameter" | "default_parameter") && target_kind == "identifier")
+            || (pattern_kind == "record_declaration" && matches!(target_kind, "class_declaration"))
+            || (pattern_kind == "class_declaration" && matches!(target_kind, "record_declaration"))
+            || (pattern_kind == "annotation_type_declaration" && matches!(target_kind, "interface_declaration"))
+            || (pattern_kind == "interface_declaration" && matches!(target_kind, "annotation_type_declaration"));
 
         if !kind_match && pattern_kind == "parenthesized_expression" && pattern_children.len() == 1 {
             if matches!(pattern_children[0], PatternTree::TypedMetavar { .. }) {
@@ -1469,7 +1477,9 @@ impl MatchCtx {
             .filter_map(|i| target.child(i))
             .filter(|c| {
                 let kind = c.get_attribute("ts_kind").unwrap_or(c.node_type());
-                if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
+                if kind == "comment" || kind == "line_comment" || kind == "block_comment"
+                    || kind == "type_annotation" || kind == "optional_type" || kind == "type_arguments"
+                {
                     return false;
                 }
                 if let Some(t) = c.text() {

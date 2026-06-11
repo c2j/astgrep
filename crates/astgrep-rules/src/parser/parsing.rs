@@ -68,8 +68,10 @@ impl RuleParser {
         let severity = self.parse_severity(rule_obj, index)?;
         let languages = self.parse_languages(rule_obj, index)?;
 
-        // Parse message (required in semgrep format)
-        let message = self.get_string_field(rule_obj, "message", index)?;
+        let message = self
+            .get_optional_string_field(rule_obj, "message")
+            .or_else(|| self.get_optional_string_field(rule_obj, "description"))
+            .unwrap_or_else(|| id.clone());
 
         // Use message as both name and description for semgrep compatibility
         let name = self
@@ -1642,7 +1644,7 @@ impl RuleParser {
                         is_fallback: true,
                         exact: None,
                         requires: None,
-                    });
+                                        });
                 } else {
                     return Err(AnalysisError::parse_error(format!(
                         "Rule {} sink at index {} must have a 'pattern' field",
@@ -2036,7 +2038,7 @@ impl RuleParser {
                 is_fallback: false,
                 exact: None,
                 requires: None,
-            });
+                        });
         }
 
         // If it's an object, parse fields
@@ -2187,7 +2189,7 @@ impl RuleParser {
                 is_fallback,
                 exact,
                 requires,
-            });
+                        });
         }
 
         Err(AnalysisError::parse_error(

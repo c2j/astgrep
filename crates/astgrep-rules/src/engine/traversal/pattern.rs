@@ -259,6 +259,12 @@ impl RuleExecutionEngine {
         }
 
         if !has_binary_op {
+            if !text_findings.is_empty() {
+                return Ok(text_findings);
+            }
+            if pattern_str.contains("...") || pattern_str.contains('$') {
+                return self.execute_advanced_pattern(pattern, rule, context, _ast);
+            }
             return Ok(text_findings);
         }
 

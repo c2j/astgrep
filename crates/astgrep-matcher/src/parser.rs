@@ -159,11 +159,22 @@ impl PatternParser {
                     }
                 }
 
-                // Node type constraint or decorator prefix
                 '@' => {
-                    // If followed by $, treat @ as literal (decorator syntax: @$NAME)
                     if chars.peek() == Some(&'$') {
                         tokens.push(Token::Literal("@".to_string()));
+                        continue;
+                    }
+                    if chars.peek().map_or(false, |c| c.is_ascii_uppercase()) {
+                        let mut name = String::from("@");
+                        while let Some(&next_ch) = chars.peek() {
+                            if next_ch.is_alphanumeric() || next_ch == '_' {
+                                name.push(chars.next().unwrap());
+                                current_pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        tokens.push(Token::Literal(name));
                         continue;
                     }
                     let mut name = String::new();
