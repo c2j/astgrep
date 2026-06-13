@@ -1038,7 +1038,9 @@ impl AdvancedRuleExecutor {
 
         // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)` or `(Type[] $VAR)`
         // Also match `($META.Type $VAR)` where $META is a metavar used as the type prefix
-        let re = regex::Regex::new(r"\(([\w.\$]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
+        // IMPORTANT: Type names cannot start with '$' - if the first group starts with '$',
+        // it's not a typed metavar but a regular metavar pair like `($FOO $VAR)`.
+        let re = regex::Regex::new(r"\(([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
             .expect("typed metavar regex should compile");
 
         let mut replacements: Vec<(usize, usize, String)> = Vec::new();
