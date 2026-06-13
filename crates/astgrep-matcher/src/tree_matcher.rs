@@ -17,7 +17,7 @@
 
 use astgrep_core::{AstNode, Language, MatchBinding, SemgrepMatchResult};
 use astgrep_parser::pattern_tree::{PatternTree, PatternTreeParser};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 // ---------------------------------------------------------------------------
@@ -760,6 +760,10 @@ struct MatchCtx {
     import_map: Option<HashMap<String, String>>,
     /// Wildcard import prefixes (e.g. "A.B" from `import A.B.*`)
     wildcard_imports: Vec<String>,
+    /// MUST-analysis: assignments inside control flow tracked per depth
+    /// (depth → (variable → (value, count))). When count >= 2,
+    /// both/all branches set the same value → definitely assigned.
+    must_candidates: HashMap<usize, HashMap<String, (String, u32)>>,
 }
 
 impl MatchCtx {
@@ -770,6 +774,7 @@ impl MatchCtx {
             control_flow_depth: 0,
             import_map: None,
             wildcard_imports: Vec::new(),
+            must_candidates: HashMap::new(),
         }
     }
 
@@ -998,6 +1003,20 @@ impl MatchCtx {
         if was_control_flow {
             self.control_flow_depth += 1;
         }
+
+        // Per-method constant scoping: save constants before entering a method
+        // body and restore after leaving. This prevents constants from one
+        // method leaking into another (e.g., cp_is_must_analysis).
+        let is_method_body = node_kind == "method_declaration"
+            || node_kind == "constructor_declaration"
+            || node_kind == "static_initializer"
+            || node_kind == "function_declaration"
+            || node_kind == "arrow_function";
+        let saved_constants = if is_method_body {
+            Some(self.constants.clone())
+        } else {
+            None
+        };
         let is_binary = is_binary_expression_kind(node_kind);
         let mut child_skip_op: Option<String> = None;
 
@@ -1049,7 +1068,21 @@ impl MatchCtx {
 
         // Restore control flow depth after exiting control flow node
         if was_control_flow {
+            let depth = self.control_flow_depth;
+            if let Some(candidates) = self.must_candidates.remove(&depth) {
+                for (name, value_count) in candidates.into_iter() {
+                    if value_count.1 >= 2 {
+                        self.constants.insert(name.clone(), value_count.0);
+                    }
+                    if value_count.1 < 2 {
+                        self.constants.remove(&name);
+                    }
+                }
+            }
             self.control_flow_depth -= 1;
+        }
+        if let Some(saved) = saved_constants {
+            self.constants = saved;
         }
     }
 
@@ -1057,7 +1090,8 @@ impl MatchCtx {
     fn collect_constants(&mut self, node: &dyn AstNode) {
         let kind = node.get_attribute("ts_kind").unwrap_or(node.node_type());
         // Only collect from lexical_declaration, variable_declaration
-        if kind == "lexical_declaration" || kind == "variable_declaration" {
+        if kind == "lexical_declaration" || kind == "variable_declaration"
+            || kind == "local_variable_declaration" || kind == "declaration" {
             let children = filter_node_children(node);
             if children.len() >= 2 {
                 // First child might be the keyword (var/let/const), second is the declarator
@@ -1080,17 +1114,24 @@ impl MatchCtx {
             // if they are self-referencing (x = x + 1) which removes the constant,
             // but do NOT collect new constants from inside branches.
             if self.control_flow_depth > 0 {
-                // Still handle self-reference: remove existing constant
+                // MUST-analysis: record assignments for later comparison
+                // across branches (e.g., if-else with same value in both).
                 let children = filter_node_children(node);
                 if children.len() >= 2 {
                     if let Some(name) = children[0].text() {
                         let name = name.trim().to_string();
-                        if let Some(value) = children[1].text() {
-                            let value = value.trim().to_string();
-                            if self.constants.contains_key(&name) && value.contains(&name) {
-                                self.constants.remove(&name);
-                            }
-                        }
+                        let value = children.get(1)
+                            .and_then(|c| c.text())
+                            .map(|t| t.trim().to_string())
+                            .unwrap_or_default();
+                        let depth = self.control_flow_depth;
+                        let entry = self.must_candidates
+                            .entry(depth)
+                            .or_insert_with(HashMap::new)
+                            .entry(name.clone())
+                            .or_insert_with(|| (value.clone(), 0u32));
+                        entry.1 += 1;
+                        self.constants.insert(name, value);
                     }
                 }
             } else {
@@ -1107,11 +1148,16 @@ impl MatchCtx {
                             } else if (value.starts_with('"') && value.ends_with('"'))
                                 || (value.starts_with('\'') && value.ends_with('\''))
                             {
-                                self.constants.entry(name).or_insert(value);
+                                self.constants.insert(name, value);
                             } else if let Ok(_) = value.parse::<i64>() {
-                                self.constants.entry(name).or_insert(value);
+                                self.constants.insert(name, value);
                             } else if value == "true" || value == "false" || value == "null" {
-                                self.constants.entry(name).or_insert(value);
+                                self.constants.insert(name, value);
+                            } else if let Some(const_val) = self.constants.get(&value) {
+                                self.constants.insert(name, const_val.clone());
+                            } else if self.constants.contains_key(&name) {
+                                // Reassigned to unknown value → remove constant
+                                self.constants.remove(&name);
                             }
                         }
                     }
@@ -1280,6 +1326,17 @@ impl MatchCtx {
             if let Some(tt) = target.text() {
                 let tt = tt.trim();
                 let pt = pt.trim();
+
+                // Generic type stripping: pattern "Foo" vs target "Foo<T>"
+                let target_kind_str = target.get_attribute("ts_kind").unwrap_or(target.node_type());
+                if target_kind_str == "generic_type" {
+                    if let Some(angle_pos) = tt.find('<') {
+                        let base = tt[..angle_pos].trim();
+                        if base == pt {
+                            return true;
+                        }
+                    }
+                }
 
                 if pt == tt {
                     return true;
@@ -1697,21 +1754,21 @@ impl MatchCtx {
                     return true;
                 }
             }
-            // Retry: skip import-resolved qualified-name + following identifier
+            // Retry: skip import-resolved qualified-name + following identifier.
+            // Also skip the matched target identifier so remaining pairs align.
             let mut skipped_pats: Vec<&PatternTree> = Vec::new();
             let mut skip_next = false;
+            let mut matched_target_indices: HashSet<usize> = HashSet::new();
             for (pi, p) in pattern_children.iter().enumerate() {
                 if skip_next {
                     skip_next = false;
                     continue;
                 }
-                if is_optional_collection(p) {
-                    continue;
-                }
                 if let PatternTree::Node { kind, children, .. } = p {
                     if QUALIFIED_NAME_KINDS.contains(&kind.as_str()) {
                         if let Some(fqn) = Self::qualified_name_from_children(children) {
-                            for t in target_children.iter() {
+                            let mut was_resolved = false;
+                            for (ti, t) in target_children.iter().enumerate() {
                                 let tk = t.get_attribute("ts_kind").unwrap_or(t.node_type());
                                 if matches!(tk, "identifier" | "type_identifier" | "property_identifier") {
                                     if let Some(tt) = t.text() {
@@ -1725,20 +1782,31 @@ impl MatchCtx {
                                             full == fqn || full.starts_with(&prefix)
                                         });
                                         if resolved {
+                                            matched_target_indices.insert(ti);
                                             skip_next = pi + 1 < pattern_children.len()
                                                 && matches!(&pattern_children[pi + 1], PatternTree::Node { kind: nk, .. } if nk == "identifier");
-                                            continue;
+                                            was_resolved = true;
+                                            break;
                                         }
                                     }
                                 }
+                            }
+                            if was_resolved {
+                                continue;
                             }
                         }
                     }
                 }
                 skipped_pats.push(p);
             }
-            if skipped_pats.len() == target_children.len() {
-                if self.match_children_exact_ref(&skipped_pats, &target_children) {
+            let remaining_targets: Vec<&dyn AstNode> = target_children
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !matched_target_indices.contains(i))
+                .map(|(_, t)| *t)
+                .collect();
+            if skipped_pats.len() == remaining_targets.len() {
+                if self.match_children_exact_ref(&skipped_pats, &remaining_targets) {
                     return true;
                 }
             }
