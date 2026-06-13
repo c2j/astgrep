@@ -300,7 +300,10 @@ impl ConstantPropagator {
         }
 
         // Determine context for children
-        let is_constructor = node.node_type() == "constructor_declaration"
+        // Use ts_kind() to get the raw tree-sitter node kind, not the universal
+        // type (which maps constructor_declaration → FunctionDeclaration)
+        let ts_kind = Self::ts_kind(node);
+        let is_constructor = ts_kind == "constructor_declaration"
             || is_constructor_declaration(node, self.current_class_name.as_deref());
 
         let is_method = node.node_type() == "method_declaration"
