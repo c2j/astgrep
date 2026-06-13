@@ -194,7 +194,14 @@ impl PatternParser {
                         )));
                     }
 
-                    tokens.push(Token::NodeType(name));
+                    // @interface is the Java annotation-type-declaration keyword,
+                    // not a semgrep @kind node-type filter.
+                    if name == "interface" {
+                        tokens.push(Token::Literal("@".to_string()));
+                        tokens.push(Token::Literal("interface".to_string()));
+                    } else {
+                        tokens.push(Token::NodeType(name));
+                    }
                 }
 
                 // Parentheses - structural tokens for grouping

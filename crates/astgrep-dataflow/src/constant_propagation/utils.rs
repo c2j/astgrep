@@ -7,6 +7,13 @@ use crate::constant_propagation::state::{ConstantValue, SourceLocation};
 use astgrep_core::AstNode;
 use std::collections::HashMap;
 
+/// Get the tree-sitter node kind, falling back to the universal node type.
+fn ts_kind(node: &dyn AstNode) -> String {
+    node.get_attribute("ts_kind")
+        .map(String::from)
+        .unwrap_or_else(|| node.node_type().to_string())
+}
+
 /// Get the source location of a node
 pub fn get_node_location(node: &dyn AstNode) -> Option<SourceLocation> {
     node.location()
@@ -54,9 +61,10 @@ pub fn is_static_block_context(node: &dyn AstNode) -> bool {
     }
 
     // Also check if parent node is a static block
-    if node.node_type() == "static_initializer"
-        || node.node_type() == "static_block"
-        || node.node_type() == "static_initialization"
+    let kind = ts_kind(node);
+    if kind == "static_initializer"
+        || kind == "static_block"
+        || kind == "static_initialization"
     {
         return true;
     }
@@ -169,8 +177,10 @@ pub fn extract_constant_from_expression(
     node: &dyn AstNode,
     constants: &HashMap<String, ConstantValue>,
 ) -> Option<ConstantValue> {
-    match node.node_type() {
-        "literal" | "decimal_integer_literal" | "integer_literal" => {
+    let kind = ts_kind(node);
+    match kind.as_str() {
+        "literal" | "decimal_integer_literal" | "integer_literal" | "hex_integer_literal"
+        | "octal_integer_literal" | "binary_integer_literal" => {
             if let Some(text) = node.text() {
                 let trimmed = text.trim();
                 if trimmed.starts_with('"') || trimmed.starts_with('\'') {
@@ -203,6 +213,27 @@ pub fn extract_constant_from_expression(
             } else {
                 None
             }
+        }
+        "method_invocation" | "call_expression" => {
+            // For known string-producing methods, return a string constant
+            if let Some(text) = node.text() {
+                let t = text.trim();
+                if t.contains("String.format") || t.contains("String.valueOf")
+                    || t.contains(".concat(") || t.contains(".toString(")
+                    || t.contains("StringBuilder") || t.contains("StringBuffer")
+                {
+                    return Some(ConstantValue::String(String::new()));
+                }
+            }
+            // Fall through to check children
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if let Some(value) = extract_constant_from_expression(child, constants) {
+                        return Some(value);
+                    }
+                }
+            }
+            None
         }
         _ => {
             // For other node types, check children

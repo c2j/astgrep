@@ -12,21 +12,67 @@ impl AdvancedRuleExecutor {
         dataflow_analysis: Option<&DataFlowAnalysis>,
         full_source: &str,
     ) -> Result<bool> {
-        tracing::debug!(
-            "DEBUG check_pattern_conditions: {} conditions to check, bindings={:?}",
-            pattern.conditions.len(),
-            match_result.bindings
-        );
+        let mut accumulated_bindings: HashMap<String, MatchBinding> = match_result.bindings.clone();
         for condition in &pattern.conditions {
-            if !self.evaluate_condition(condition, match_result, dataflow_analysis, full_source)? {
-                tracing::debug!(
-                    "DEBUG check_pattern_conditions: condition {:?} FAILED",
-                    condition
-                );
+            let snapshot = accumulated_bindings.clone();
+            if !self.evaluate_condition_accumulating(condition, &snapshot, match_result, dataflow_analysis, full_source, &mut accumulated_bindings)? {
                 return Ok(false);
             }
         }
         Ok(true)
+    }
+
+    fn evaluate_condition_accumulating(
+        &self,
+        condition: &Condition,
+        bindings: &HashMap<String, MatchBinding>,
+        original_match: &SemgrepMatchResult,
+        dataflow_analysis: Option<&DataFlowAnalysis>,
+        full_source: &str,
+        accumulated_bindings: &mut HashMap<String, MatchBinding>,
+    ) -> Result<bool> {
+        match condition {
+            Condition::MetavariableRegex(metavar_regex) => {
+                let key = metavar_regex
+                    .metavariable
+                    .trim_start_matches('$')
+                    .trim_start_matches('.')
+                    .to_string();
+                if let Some(metavar_value) = bindings.get(&key) {
+                    let regex_str = &metavar_regex.regex;
+                    let regex = if regex_str.starts_with("(?i)") {
+                        regex::Regex::new(&format!("(?i){}", &regex_str[4..]))
+                    } else {
+                        regex::Regex::new(regex_str)
+                    };
+
+                    if let Ok(re) = regex {
+                        let value_str = metavar_value.as_ref();
+                        if let Some(caps) = re.captures(value_str) {
+                            for name in re.capture_names().flatten() {
+                                if let Some(m) = caps.name(name) {
+                                    accumulated_bindings.insert(
+                                        name.to_string(),
+                                        MatchBinding::new(m.as_str().to_string()),
+                                    );
+                                }
+                            }
+                            Ok(true)
+                        } else {
+                            Ok(false)
+                        }
+                    } else {
+                        Ok(false)
+                    }
+                } else {
+                    Ok(false)
+                }
+            }
+            other => {
+                let temp_result = SemgrepMatchResult::new(original_match.node.clone_node(), bindings.clone());
+                self.evaluate_condition(other, &temp_result, dataflow_analysis, full_source)
+            }
+        }
     }
 
     /// Evaluate a single condition
@@ -163,13 +209,13 @@ impl AdvancedRuleExecutor {
 
                     if let Some(type_info) = inferred_type {
                         // Value is a literal, compare its inferred type
-                        Ok(type_info == metavar_type.var_type)
+                        Ok(self.type_names_match(&type_info, &metavar_type.var_type))
                     } else {
                         // Value is a variable, extract type from source code
                         if let Some(type_info) =
                             self.extract_type_info(match_result, var_value, full_source)
                         {
-                            Ok(type_info == metavar_type.var_type)
+                            Ok(self.type_names_match(&type_info, &metavar_type.var_type))
                         } else {
                             // If we can't determine the type, reject the match
                             // This prevents false positives when type info is unavailable
@@ -187,11 +233,67 @@ impl AdvancedRuleExecutor {
                 let metavar_key = metavar_pattern.metavariable
                     .trim_start_matches('$')
                     .trim_start_matches('.');
+                let is_ellipsis_metavar = metavar_pattern.metavariable.contains("...");
                 tracing::debug!(
                     "DEBUG MetavariablePattern: key='{}', patterns={:?}, bindings={:?}",
                     metavar_key, metavar_pattern.patterns, match_result.bindings
                 );
                 if let Some(bound_value) = match_result.bindings.get(metavar_key) {
+                    if is_ellipsis_metavar && bound_value.as_ref().contains(',') {
+                        let parts: Vec<&str> = bound_value.as_ref().split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+                        let mut any_part_matched = false;
+                        let mut best_bindings: HashMap<String, MatchBinding> = HashMap::new();
+                        'part_loop: for part in &parts {
+                            let part_binding = MatchBinding::new(part.to_string());
+                            let mut part_matched = true;
+                            let mut part_bindings: HashMap<String, MatchBinding> = HashMap::new();
+                            for pattern_str in &metavar_pattern.patterns {
+                                if pattern_str.starts_with("__NOT__:") {
+                                    if self.pattern_text_matches_value(&pattern_str[8..], &part_binding) {
+                                        part_matched = false;
+                                        break;
+                                    }
+                                } else if pattern_str.starts_with("__REGEX__:") {
+                                    let regex_str = &pattern_str[10..];
+                                    if let Ok(re) = regex::Regex::new(regex_str) {
+                                        if !re.is_match(part) {
+                                            part_matched = false;
+                                            break;
+                                        }
+                                    }
+                                } else {
+                                    let (matches, new_bindings) =
+                                        self.pattern_text_matches_with_bindings(pattern_str, &part_binding);
+                                    if !matches {
+                                        part_matched = false;
+                                        break;
+                                    }
+                                    part_bindings.extend(
+                                        new_bindings.into_iter().map(|(k, v)| (k, MatchBinding::new(v))),
+                                    );
+                                }
+                            }
+                            if part_matched {
+                                any_part_matched = true;
+                                best_bindings = part_bindings;
+                                break 'part_loop;
+                            }
+                        }
+                        if !any_part_matched {
+                            return Ok(false);
+                        }
+                        for nested in &metavar_pattern.nested_conditions {
+                            if !self.evaluate_condition_with_bindings(
+                                nested,
+                                &best_bindings,
+                                match_result,
+                                full_source,
+                            )? {
+                                return Ok(false);
+                            }
+                        }
+                        return Ok(true);
+                    }
                     if metavar_pattern.is_either {
                         let mut any_matched = false;
                         let mut best_bindings: HashMap<String, MatchBinding> = HashMap::new();
@@ -208,14 +310,16 @@ impl AdvancedRuleExecutor {
                                 } else if neg_regex {
                                     let regex_str = &pattern_str[14..];
                                     if let Ok(re) = regex::Regex::new(regex_str) {
-                                        if !re.is_match(bound_value.as_ref()) {
+                                        let re_match_value = Self::strip_value_quotes(bound_value.as_ref());
+                                        if !re.is_match(&re_match_value) {
                                             any_matched = true;
                                         }
                                     }
                                 } else {
                                     let regex_str = &pattern_str[10..];
                                     if let Ok(re) = regex::Regex::new(regex_str) {
-                                        if re.is_match(bound_value.as_ref()) {
+                                        let re_match_value = Self::strip_value_quotes(bound_value.as_ref());
+                                        if re.is_match(&re_match_value) {
                                             any_matched = true;
                                         }
                                     }
@@ -265,14 +369,16 @@ impl AdvancedRuleExecutor {
                              } else if pattern_str.starts_with("__NOT_REGEX__:") {
                                  let regex_str = &pattern_str[14..];
                                  if let Ok(re) = regex::Regex::new(regex_str) {
-                                     if re.is_match(bound_value.as_ref()) {
+                                     let re_match_value = Self::strip_value_quotes(bound_value.as_ref());
+                                     if re.is_match(&re_match_value) {
                                          return Ok(false);
                                      }
                                  }
                              } else if pattern_str.starts_with("__REGEX__:") {
                                  let regex_str = &pattern_str[10..];
                                  if let Ok(re) = regex::Regex::new(regex_str) {
-                                     if !re.is_match(bound_value.as_ref()) {
+                                     let re_match_value = Self::strip_value_quotes(bound_value.as_ref());
+                                     if !re.is_match(&re_match_value) {
                                          return Ok(false);
                                      }
                                  }
@@ -338,6 +444,21 @@ impl AdvancedRuleExecutor {
 
         // Build import map for name resolution
         let import_map = self.build_import_map(full_source);
+
+        // Pattern 0: Python-style annotations like "varName: Type" in function params
+        // Must be checked first to avoid Java-style patterns mis-matching Python code
+        let py_param_pattern = format!(
+            r"def\s+\w+\s*\([^)]*{}\s*:\s*(\w+)",
+            regex::escape(var_name)
+        );
+        if let Ok(regex) = regex::Regex::new(&py_param_pattern) {
+            if let Some(captures) = regex.captures(full_source) {
+                if let Some(type_match) = captures.get(1) {
+                    let simple_type = type_match.as_str().to_string();
+                    return self.resolve_type_with_imports(&simple_type, &import_map);
+                }
+            }
+        }
 
         // Pattern 1: Method parameter declarations like "String varName" or "Type varName"
         // Matches: "Type varName" followed by comma, closing paren, or space
@@ -440,7 +561,7 @@ impl AdvancedRuleExecutor {
         if (trimmed.starts_with('"') && trimmed.ends_with('"'))
             || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
         {
-            return Some("String".to_string());
+            return Some("string".to_string());
         }
 
         // Integer literal: digits only (possibly with negative sign)
@@ -701,12 +822,49 @@ impl AdvancedRuleExecutor {
         }
     }
 
+    /// Strip surrounding quotes from a string value (single or double quotes).
+    /// Used when applying regex patterns to metavariable values that may be string literals.
+    fn strip_value_quotes(value: &str) -> String {
+        let trimmed = value.trim();
+        if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        {
+            if trimmed.len() >= 2 {
+                trimmed[1..trimmed.len() - 1].to_string()
+            } else {
+                trimmed.to_string()
+            }
+        } else {
+            trimmed.to_string()
+        }
+    }
+
+    /// Map common type name variations to canonical form
+    fn canonical_type_name(type_name: &str) -> std::borrow::Cow<'static, str> {
+        use std::borrow::Cow;
+        let lower = type_name.to_lowercase();
+        match lower.as_str() {
+            "string" | "str" => Cow::Borrowed("string"),
+            "integer" | "int" => Cow::Borrowed("int"),
+            "number" | "float" | "double" => Cow::Borrowed("number"),
+            "boolean" | "bool" => Cow::Borrowed("boolean"),
+            "null" | "none" | "nil" => Cow::Borrowed("null"),
+            _ => Cow::Owned(type_name.to_string()),
+        }
+    }
+
+    /// Check if two type names match (accounting for aliases)
+    pub(super) fn type_names_match(&self, type_a: &str, type_b: &str) -> bool {
+        Self::canonical_type_name(type_a) == Self::canonical_type_name(type_b)
+    }
+
     /// Check if value matches a type pattern
     pub(super) fn value_matches_type(&self, value: &str, type_name: &str) -> bool {
-        match type_name {
+        let canonical = Self::canonical_type_name(type_name);
+        match canonical.as_ref() {
             "string" => true, // All values are strings at this level
+            "int" => value.parse::<i64>().is_ok(),
             "number" => value.parse::<f64>().is_ok(),
-            "integer" => value.parse::<i64>().is_ok(),
             "boolean" => value == "true" || value == "false",
             "null" => value == "null" || value == "None" || value == "nil",
             _ => false, // Unknown type
@@ -1158,7 +1316,14 @@ impl AdvancedRuleExecutor {
                 && pattern_tokens
                     .iter()
                     .zip(value_tokens.iter())
-                    .all(|(p, v)| *p == *v);
+                    .all(|(p, v)| {
+                        if *p == *v {
+                            return true;
+                        }
+                        let pv = p.trim_matches(|c: char| c == '\'' || c == '"');
+                        let vv = v.trim_matches(|c: char| c == '\'' || c == '"');
+                        pv == vv
+                    });
             return (matches, HashMap::new());
         }
 

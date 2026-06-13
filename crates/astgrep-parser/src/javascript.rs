@@ -318,7 +318,7 @@ impl JavaScriptParser {
 impl LanguageParser for JavaScriptParser {
     fn parse(&self, source: &str, file_path: &Path) -> Result<Box<dyn AstNode>> {
         // Try to use tree-sitter parser first for better AST structure
-        if let Ok(mut ts_parser) = crate::tree_sitter_parser::TreeSitterParser::new() {
+        if let Ok(ts_parser) = crate::tree_sitter_parser::TreeSitterParser::new() {
             if let Ok(Some(tree)) = ts_parser.parse(source, Language::JavaScript) {
                 if let Ok(universal_node) = ts_parser.tree_to_universal_ast(&tree, source) {
                     return Ok(Box::new(universal_node));

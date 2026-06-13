@@ -19,6 +19,7 @@ pub use parser::*;
 pub use precise_matcher::*;
 pub use script_classifier::*;
 
+use crate::tree_matcher::matches_type_constraint;
 use astgrep_core::{AstNode, Result};
 use std::collections::HashMap;
 
@@ -88,7 +89,9 @@ impl PatternMatcher {
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
-            ParsedPattern::TypedMetavar { name, .. } => self.match_metavariable(name, node),
+            ParsedPattern::TypedMetavar { name, expected_type } => {
+                self.match_typed_metavar(name, expected_type, node)
+            }
             ParsedPattern::EllipsisMetavariable(metavar) => {
                 self.match_ellipsis_metavariable(metavar, node)
             }
@@ -128,6 +131,19 @@ impl PatternMatcher {
         } else {
             Ok(false)
         }
+    }
+
+    /// Match typed metavariable with type constraint
+    fn match_typed_metavar(
+        &mut self,
+        metavar: &str,
+        expected_type: &str,
+        node: &dyn AstNode,
+    ) -> Result<bool> {
+        if !matches_type_constraint(expected_type, node) {
+            return Ok(false);
+        }
+        self.match_metavariable(metavar, node)
     }
 
     /// Match ellipsis metavariable (can match zero or more nodes)

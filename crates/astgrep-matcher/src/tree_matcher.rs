@@ -522,8 +522,8 @@ fn collection_delimiter(kind: &str) -> Option<&'static str> {
 /// A pure-ellipsis pattern like `{ ... }` is a wildcard collection that should
 /// match any collection with the same delimiters.
  fn is_pure_ellipsis_pattern(children: &[PatternTree]) -> bool {
-     !children.is_empty()
-         && children.iter().all(|c| {
+     children.is_empty()
+         || children.iter().all(|c| {
              matches!(
                  c,
                  PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }
@@ -585,7 +585,7 @@ fn is_optional_collection(tree: &PatternTree) -> bool {
     }
 }
 
-fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> bool {
+pub(crate) fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> bool {
     let kind = target.get_attribute("ts_kind").unwrap_or(target.node_type());
     let text = target.text().map(|t| t.trim().to_string()).unwrap_or_default();
 
@@ -815,11 +815,11 @@ impl MatchCtx {
     }
 
     /// Build an import map from the root AST node by scanning for import declarations.
-    fn build_import_map(&mut self, root: &dyn AstNode) {
-        let mut map = HashMap::new();
-        let mut wildcards = Vec::new();
-        Self::collect_imports(root, &mut map, &mut wildcards, root);
-        self.import_map = Some(map);
+     fn build_import_map(&mut self, root: &dyn AstNode) {
+         let mut map = HashMap::new();
+         let mut wildcards = Vec::new();
+         Self::collect_imports(root, &mut map, &mut wildcards, root);
+         self.import_map = Some(map);
         self.wildcard_imports = wildcards;
     }
 
@@ -854,9 +854,17 @@ impl MatchCtx {
                 if ck == "scoped_identifier" || ck == "identifier" {
                     if let Some(text) = child.text() {
                         let text = text.trim().to_string();
-                        // Wildcard import: import A.B.*;
-                        if text.ends_with(".*") {
-                            let prefix = text[..text.len() - 2].to_string();
+                        let next_is_dot = i + 1 < node.child_count()
+                            && node.child(i + 1).and_then(|n| n.text()).map_or(false, |t| t.trim() == ".");
+                        let next2_is_star = i + 2 < node.child_count()
+                            && node.child(i + 2).and_then(|n| n.text()).map_or(false, |t| t.trim() == "*");
+                        let is_wildcard = text.ends_with(".*") || (next_is_dot && next2_is_star);
+                        if is_wildcard {
+                            let prefix = if text.ends_with(".*") {
+                                text[..text.len() - 2].to_string()
+                            } else {
+                                text
+                            };
                             if !prefix.is_empty() {
                                 wildcards.push(prefix);
                             }
@@ -1362,7 +1370,7 @@ impl MatchCtx {
             && (matches!(target_kind, "identifier" | "type_identifier" | "property_identifier")
                 || QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()))
         {
-            if let Some(pattern_qn) = Self::qualified_name_from_children(pattern_children) {
+            if let Some(ref pattern_qn) = Self::qualified_name_from_children(pattern_children) {
                 // Case 1: Simple target identifier — check named import + wildcard
                 if matches!(target_kind, "identifier" | "type_identifier" | "property_identifier")
                 {
@@ -1370,14 +1378,22 @@ impl MatchCtx {
                         let target_text = target_text.trim();
                         // Named import: target_text → imported full name
                         if let Some(imported) = self.resolve_import(target_text) {
-                            if imported == &pattern_qn {
+                            if imported == pattern_qn {
+                                return true;
+                            }
+                            let prefix = format!("{}.", pattern_qn);
+                            if imported.starts_with(&prefix) {
                                 return true;
                             }
                         }
                         // Wildcard import: check if any wildcard prefix + "." + target == pattern_qn
                         for wc in &self.wildcard_imports {
                             let full = format!("{}.{}", wc, target_text);
-                            if full == pattern_qn {
+                            if full == *pattern_qn {
+                                return true;
+                            }
+                            let prefix = format!("{}.", pattern_qn);
+                            if full.starts_with(&prefix) {
                                 return true;
                             }
                         }
@@ -1386,12 +1402,15 @@ impl MatchCtx {
                 } else if QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()) {
                     if let Some(target_text) = target.text() {
                         let target_qn = target_text.trim();
-                        for wc in &self.wildcard_imports {
+                        let mut sorted_wc: Vec<&String> = self.wildcard_imports.iter().collect();
+                        sorted_wc.sort_by_key(|w| -(w.len() as isize));
+                        eprintln!("[CASE2] pattern_qn={} target_qn={} wildcards={:?}", pattern_qn, target_qn, sorted_wc);
+                        for wc in &sorted_wc {
                             let prefix = format!("{}.", wc);
+                            eprintln!("[CASE2 try] wc={} prefix={} strip={:?}", wc, prefix, pattern_qn.strip_prefix(&prefix));
                             if let Some(remaining) = pattern_qn.strip_prefix(&prefix) {
-                                if remaining == target_qn {
-                                    return true;
-                                }
+                                eprintln!("[CASE2 result] remaining={} match={}", remaining, remaining == target_qn);
+                                return remaining == target_qn;
                             }
                         }
                     }
@@ -1608,7 +1627,55 @@ impl MatchCtx {
                 ) || is_optional_collection(p)
             })
         {
-            return false;
+            let mut resolved = 0;
+            'outer: for (pi, p) in pattern_children.iter().enumerate() {
+                if let PatternTree::Node { kind, children, .. } = p {
+                    if QUALIFIED_NAME_KINDS.contains(&kind.as_str()) {
+                        if let Some(fqn) = Self::qualified_name_from_children(children) {
+                            for t in target_children.iter() {
+                                let tk = t.get_attribute("ts_kind").unwrap_or(t.node_type());
+                                if matches!(tk, "identifier" | "type_identifier" | "property_identifier") {
+                                    if let Some(tt) = t.text() {
+                                        let tt = tt.trim();
+                                        if let Some(imported) = self.resolve_import(tt) {
+                                            let prefix = format!("{}.", fqn);
+                                            if imported == fqn.as_str() || imported.starts_with(&prefix) {
+                                                resolved += 1;
+                                                if pi + 1 < pattern_children.len() {
+                                                    if let PatternTree::Node { kind: nk, .. } = &pattern_children[pi + 1] {
+                                                        if nk == "identifier" {
+                                                            resolved += 1;
+                                                        }
+                                                    }
+                                                }
+                                                continue 'outer;
+                                            }
+                                        }
+                                        for wc in &self.wildcard_imports {
+                                            let full = format!("{}.{}", wc, tt);
+                                            let prefix = format!("{}.", fqn);
+                                            if full == fqn || full.starts_with(&prefix) {
+                                                resolved += 1;
+                                                if pi + 1 < pattern_children.len() {
+                                                    if let PatternTree::Node { kind: nk, .. } = &pattern_children[pi + 1] {
+                                                        if nk == "identifier" {
+                                                            resolved += 1;
+                                                        }
+                                                    }
+                                                }
+                                                continue 'outer;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if pattern_children.len() - resolved > target_children.len() {
+                return false;
+            }
         }
 
         let has_ellipsis = pattern_children
@@ -1626,10 +1693,56 @@ impl MatchCtx {
                 .filter(|p| !is_optional_collection(p))
                 .collect();
             if filtered.len() == target_children.len() {
-                self.match_children_exact_ref(&filtered, &target_children)
-            } else {
-                self.match_children_with_ellipsis(pattern_children, &target_children)
+                if self.match_children_exact_ref(&filtered, &target_children) {
+                    return true;
+                }
             }
+            // Retry: skip import-resolved qualified-name + following identifier
+            let mut skipped_pats: Vec<&PatternTree> = Vec::new();
+            let mut skip_next = false;
+            for (pi, p) in pattern_children.iter().enumerate() {
+                if skip_next {
+                    skip_next = false;
+                    continue;
+                }
+                if is_optional_collection(p) {
+                    continue;
+                }
+                if let PatternTree::Node { kind, children, .. } = p {
+                    if QUALIFIED_NAME_KINDS.contains(&kind.as_str()) {
+                        if let Some(fqn) = Self::qualified_name_from_children(children) {
+                            for t in target_children.iter() {
+                                let tk = t.get_attribute("ts_kind").unwrap_or(t.node_type());
+                                if matches!(tk, "identifier" | "type_identifier" | "property_identifier") {
+                                    if let Some(tt) = t.text() {
+                                        let tt = tt.trim();
+                                        let resolved = self.resolve_import(tt).map_or(false, |imp| {
+                                            let prefix = format!("{}.", fqn);
+                                            imp == fqn.as_str() || imp.starts_with(&prefix)
+                                        }) || self.wildcard_imports.iter().any(|wc| {
+                                            let full = format!("{}.{}", wc, tt);
+                                            let prefix = format!("{}.", fqn);
+                                            full == fqn || full.starts_with(&prefix)
+                                        });
+                                        if resolved {
+                                            skip_next = pi + 1 < pattern_children.len()
+                                                && matches!(&pattern_children[pi + 1], PatternTree::Node { kind: nk, .. } if nk == "identifier");
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                skipped_pats.push(p);
+            }
+            if skipped_pats.len() == target_children.len() {
+                if self.match_children_exact_ref(&skipped_pats, &target_children) {
+                    return true;
+                }
+            }
+            self.match_children_with_ellipsis(pattern_children, &target_children)
         } else {
             self.match_children_exact(pattern_children, &target_children)
         }

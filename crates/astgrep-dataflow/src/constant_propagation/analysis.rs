@@ -19,6 +19,13 @@ use std::collections::HashMap;
 // This module adds impl methods for analysis algorithms
 
 impl ConstantPropagator {
+    /// Get the tree-sitter node kind, falling back to the universal node type.
+    fn ts_kind(node: &dyn AstNode) -> String {
+        node.get_attribute("ts_kind")
+            .map(String::from)
+            .unwrap_or_else(|| node.node_type().to_string())
+    }
+
     /// Analyze constants in the data flow graph
     pub fn analyze(
         &mut self,
@@ -161,49 +168,59 @@ impl ConstantPropagator {
         // Check if this is a field declaration or variable declaration with an initializer
         let is_field_or_var = node.node_type() == "field_declaration"
             || node.node_type() == "variable_declaration"
+            || node.node_type() == "local_variable_declaration"
             || node.node_type() == "declaration_statement";
 
         if is_field_or_var {
             // For tree-sitter AST, look for variable_declaration children
             for i in 0..node.child_count() {
                 if let Some(child) = node.child(i) {
-                    if child.node_type() == "variable_declaration" {
-                        // Check if it has private modifier by looking at the text
-                        let is_private =
-                            node.text().map(|t| t.contains("private")).unwrap_or(false);
-                        let is_static = node.text().map(|t| t.contains("static")).unwrap_or(false);
+                    if child.node_type() == "variable_declaration"
+                        || Self::ts_kind(child) == "variable_declarator" {
+                        let is_final = node.text().map(|t| t.contains("final")).unwrap_or(false);
 
-                        if is_private {
-                            // Find the identifier and initializer in the variable_declaration
-                            let mut var_name = None;
-                            let mut init_value = None;
+                        // Track fields with constant initializers (final or not)
+                        // For non-final fields, they may still be constant at compile time
+                        let mut var_name = None;
+                        let mut const_value: Option<ConstantValue> = None;
 
-                            for j in 0..child.child_count() {
-                                if let Some(grandchild) = child.child(j) {
-                                    if grandchild.node_type() == "identifier" {
-                                        var_name = grandchild.text().map(|t| t.to_string());
+                        for j in 0..child.child_count() {
+                            if let Some(grandchild) = child.child(j) {
+                                if grandchild.node_type() == "identifier" {
+                                    var_name = grandchild.text().map(|t| t.to_string());
+                                }
+
+                                let gk = Self::ts_kind(grandchild);
+                                // Integer literal
+                                if gk == "literal"
+                                    || gk == "decimal_integer_literal"
+                                    || gk == "integer_literal"
+                                {
+                                    if let Some(t) = grandchild.text() {
+                                        if let Ok(i) = t.parse::<i64>() {
+                                            const_value = Some(ConstantValue::Integer(i));
+                                        }
                                     }
-
-                                    // Look for literal (tree-sitter uses "literal" for numbers)
-                                    if grandchild.node_type() == "literal"
-                                        || grandchild.node_type() == "decimal_integer_literal"
-                                    {
-                                        init_value =
-                                            grandchild.text().and_then(|t| t.parse::<i64>().ok());
+                                }
+                                // String literal
+                                if gk == "string_literal" || gk == "string" {
+                                    if let Some(t) = grandchild.text() {
+                                        const_value = Some(ConstantValue::String(
+                                            t.trim_matches('"').to_string()
+                                        ));
                                     }
                                 }
                             }
+                        }
 
-                            if let (Some(name), Some(value)) = (var_name, init_value) {
-                                self.constants.insert(name, ConstantValue::Integer(value));
-                            }
+                        if let (Some(name), Some(value)) = (var_name, const_value) {
+                            self.constants.insert(name, value);
                         }
 
                         // Handle local variable declarations in methods
                         if context == VisitContext::Method {
-                            // Find the identifier and initializer in the variable_declaration
                             let mut var_name = None;
-                            let mut init_value = None;
+                            let mut init_value: Option<ConstantValue> = None;
                             let location = get_node_location(node);
 
                             for j in 0..child.child_count() {
@@ -211,24 +228,30 @@ impl ConstantPropagator {
                                     if grandchild.node_type() == "identifier" {
                                         var_name = grandchild.text().map(|t| t.to_string());
                                     }
-
-                                    // Look for literal (tree-sitter uses "literal" for numbers)
-                                    if grandchild.node_type() == "literal"
-                                        || grandchild.node_type() == "decimal_integer_literal"
-                                    {
-                                        init_value =
-                                            grandchild.text().and_then(|t| t.parse::<i64>().ok());
-                                    }
                                 }
                             }
 
-                            if let (Some(name), Some(value)) = (var_name, init_value) {
+                            // Use extract_constant_from_expression for the initializer
+                            if let Some(name) = &var_name {
+                                init_value = extract_constant_from_expression(child, &self.constants);
+                            }
+
+                            let has_init = init_value.is_some();
+                            if let (Some(name), Some(value)) = (var_name.clone(), init_value) {
                                 if let Some(loc) = location {
-                                    self.define_local_variable(
-                                        name,
-                                        ConstantValue::Integer(value),
-                                        loc,
-                                    );
+                                    self.define_local_variable(name, value, loc);
+                                }
+                            }
+                            if let Some(ref name) = var_name {
+                                if !has_init {
+                                    // Track local variable declarations even without
+                                    // constant initial values, so later assignments
+                                    // are recognized as local (not field) assignments.
+                                    if !self.variable_definitions.iter().any(|d| d.name == *name) {
+                                        if let Some(loc) = location {
+                                            self.define_local_variable(name.clone(), ConstantValue::Unknown, loc);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -330,11 +353,27 @@ impl ConstantPropagator {
         let left = node.child(0);
         let right = node.child(2);
 
+        // Skip field assignments (this.field = ...) — only track local variables
+        if let Some(left_node) = left {
+            if left_node.node_type() == "field_access"
+                || left_node.text().map(|t| t.starts_with("this.")).unwrap_or(false)
+            {
+                return Ok(());
+            }
+        }
+
         let var_name = if let Some(left_node) = left {
             extract_variable_name_from_assignment_target(left_node)
         } else {
             None
         };
+
+        // Skip assignments to fields (not declared as local variables in this scope)
+        if let Some(ref name) = var_name {
+            if !self.variable_definitions.iter().any(|d| d.name == *name) {
+                return Ok(());
+            }
+        }
 
         let const_value = if let Some(right_node) = right {
             extract_constant_from_expression(right_node, &self.constants)
@@ -438,7 +477,10 @@ impl ConstantPropagator {
 
         if let Some(name) = var_name {
             // Check if this variable is currently tracked as a constant
-            if self.constants.contains_key(&name) {
+            // Also check variable_definitions for locally-defined variables
+            if self.constants.contains_key(&name)
+                || self.variable_definitions.iter().any(|d| d.name == name)
+            {
                 self.mark_reassigned(name);
             }
         }

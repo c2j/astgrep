@@ -339,7 +339,7 @@ impl LanguageParser for SqlParser {
         #[cfg(feature = "sql-tree-sitter")]
         {
             if std::env::var("ASTGREP_SQL_PARSER").as_deref() != Ok("manual") {
-                if let Ok(mut ts_parser) = crate::tree_sitter_parser::TreeSitterParser::new() {
+                if let Ok(ts_parser) = crate::tree_sitter_parser::TreeSitterParser::new() {
                     if let Ok(Some(tree)) = ts_parser.parse(source, Language::Sql) {
                         if let Ok(universal_node) = ts_parser.tree_to_universal_ast(&tree, source) {
                             return Ok(Box::new(universal_node));
