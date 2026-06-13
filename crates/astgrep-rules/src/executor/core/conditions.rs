@@ -355,7 +355,7 @@ impl AdvancedRuleExecutor {
                                         bound_value.as_ref(),
                                         pattern_str,
                                         full_source,
-                                    ).unwrap_or(false)
+                                    )?
                                 {
                                     any_matched = true;
                                     break;
@@ -417,7 +417,7 @@ impl AdvancedRuleExecutor {
                                             bound_value.as_ref(),
                                             pattern_str,
                                             full_source,
-                                        ).unwrap_or(false)
+                                        )?
                                     {
                                         // Name resolution succeeded, continue
                                     } else {

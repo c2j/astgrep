@@ -43,9 +43,8 @@ impl CfgBuilder {
         let root_id = self.add_node(ast);
         self.entry_id = Some(root_id);
         let exit_id = self.build_cfg(ast, root_id)?;
-        // Connect the synthetic root to the real entry so clients that
-        // expect parent→child edges from old code still see connectivity.
         self.graph.add_edge(root_id, exit_id, EdgeType::ControlFlow);
+        self.inject_data_flow_edges(ast);
         Ok(self.graph)
     }
 
@@ -72,8 +71,12 @@ impl CfgBuilder {
     fn build_children(&mut self, parent: &dyn AstNode, parent_id: NodeId) -> Result<NodeId> {
         let mut prev: Option<NodeId> = None;
         let mut last_exit = parent_id;
+        let mut terminated = false;
 
         for i in 0..parent.child_count() {
+            if terminated {
+                break;
+            }
             let Some(child) = parent.child(i) else { continue };
             let child_id = self.add_node(child);
 
@@ -83,8 +86,12 @@ impl CfgBuilder {
                 self.add_cf_edge(parent_id, child_id);
             }
 
-            let exit = self.build_cfg(child, child_id)?;
-            prev = Some(exit);
+            let (exit, is_terminal) = self.build_cfg_with_term(child, child_id)?;
+            if is_terminal {
+                terminated = true;
+            } else {
+                prev = Some(exit);
+            }
             last_exit = exit;
         }
 
@@ -96,40 +103,42 @@ impl CfgBuilder {
     // ------------------------------------------------------------------
 
     fn build_cfg(&mut self, node: &dyn AstNode, node_id: NodeId) -> Result<NodeId> {
+        self.build_cfg_with_term(node, node_id).map(|(id, _)| id)
+    }
+
+    fn build_cfg_with_term(&mut self, node: &dyn AstNode, node_id: NodeId) -> Result<(NodeId, bool)> {
         let kind = ts_kind(node);
         let ty = node.node_type();
 
-        match kind.as_str() {
-            "if_statement" => self.handle_if(node, node_id),
-            "if" => self.handle_if(node, node_id),
-            "switch_statement" | "switch_expression" => self.handle_switch(node, node_id),
-            "try_statement" => self.handle_try(node, node_id),
-            "try_with_resources_statement" => self.handle_try(node, node_id),
+        let (exit, is_terminal) = match kind.as_str() {
             "return_statement" | "return" => {
-                self.add_cf_edge(node_id, node_id); // self-loop marks termination
-                Ok(node_id)
+                (node_id, true)
             }
             "throw_statement" | "throw" => {
-                // throw cuts normal flow – mark as terminal, but still
-                // connect to the enclosing try's catch if present.
-                Ok(node_id)
+                (node_id, true)
             }
-            "lambda_expression" | "arrow_function" => self.handle_lambda(node, node_id),
-            "while_statement" | "for_statement" | "enhanced_for_statement"
-            | "do_statement" | "while" | "for" | "do" => self.handle_loop(node, node_id),
-            "block" | "block_statement" | "program" | "source_file"
-            | "compilation_unit" => self.build_children(node, node_id),
             _ => {
-                // Check universal type for method-like constructs
-                match ty {
-                    "function_declaration" | "function_definition"
-                    | "method_declaration" | "FunctionDeclaration" => {
-                        self.handle_function(node, node_id)
-                    }
-                    _ => self.build_children(node, node_id),
-                }
+                let id = match kind.as_str() {
+                    "if_statement" | "if" => self.handle_if(node, node_id)?,
+                    "switch_statement" | "switch_expression" => self.handle_switch(node, node_id)?,
+                    "try_statement" | "try_with_resources_statement" => self.handle_try(node, node_id)?,
+                    "lambda_expression" | "arrow_function" => self.handle_lambda(node, node_id)?,
+                    "while_statement" | "for_statement" | "enhanced_for_statement"
+                    | "do_statement" | "while" | "for" | "do" => self.handle_loop(node, node_id)?,
+                    "block" | "block_statement" | "program" | "source_file"
+                    | "compilation_unit" => self.build_children(node, node_id)?,
+                    _ => match ty {
+                        "function_declaration" | "function_definition"
+                        | "method_declaration" | "FunctionDeclaration" => {
+                            self.handle_function(node, node_id)?
+                        }
+                        _ => self.build_children(node, node_id)?,
+                    },
+                };
+                (id, false)
             }
-        }
+        };
+        Ok((exit, is_terminal))
     }
 
     // ------------------------------------------------------------------
@@ -137,76 +146,64 @@ impl CfgBuilder {
     // ------------------------------------------------------------------
 
     fn handle_if(&mut self, node: &dyn AstNode, node_id: NodeId) -> Result<NodeId> {
-        // Collect children: condition, consequence, (optional) alternative
-        let mut condition: Option<(usize, NodeId)> = None;
-        let mut consequence: Option<(usize, NodeId)> = None;
-        let mut alternative: Option<(usize, NodeId)> = None;
+        let mut condition_idx: Option<usize> = None;
+        let mut consequence_idx: Option<usize> = None;
+        let mut alternative_idx: Option<usize> = None;
 
         for i in 0..node.child_count() {
             let Some(child) = node.child(i) else { continue };
             let ckind = ts_kind(child);
-            let cid = self.add_node(child);
 
             if ckind.contains("condition") || ckind == "parenthesized_expression" {
-                condition = Some((i, cid));
+                let cid = self.add_node(child);
+                self.add_cf_edge(node_id, cid);
+                condition_idx = Some(i);
             } else if ckind.contains("else") {
-                alternative = Some((i, cid));
-            } else if consequence.is_none() {
-                consequence = Some((i, cid));
+                alternative_idx = Some(i);
+            } else if consequence_idx.is_none() {
+                let cid = self.add_node(child);
+                self.add_cf_edge(node_id, cid);
+                consequence_idx = Some(i);
             } else {
-                alternative = Some((i, cid));
+                alternative_idx = Some(i);
             }
         }
-
-        // Wire node → condition
-        let cond_id = if let Some((_, cid)) = condition {
-            self.add_cf_edge(node_id, cid);
-            cid
-        } else {
-            node_id
-        };
 
         let join = self.add_node_phantom("if_join", node);
 
         // Consequence branch
-        if let Some((_, csq_id)) = consequence {
-            self.add_cf_edge(cond_id, csq_id);
-            let csq_exit = self.build_cfg(
-                node.child(csq_id - self.child_offset(node, csq_id)).unwrap_or(node),
-                csq_id,
-            )?;
+        if let Some(i) = consequence_idx {
+            let csq = node.child(i).unwrap();
+            let csq_id = self.graph.node_ids().last().unwrap_or(node_id);
+            let csq_exit = self.build_cfg(csq, csq_id)?;
             self.add_cf_edge(csq_exit, join);
         } else {
-            self.add_cf_edge(cond_id, join);
+            self.add_cf_edge(node_id, join);
         }
 
         // Alternative (else) branch
-        if let Some((_, alt_id)) = alternative {
-            let alt_node = node
-                .child(alt_id - self.child_offset(node, alt_id))
-                .unwrap_or(node);
-            // The "else" keyword itself may be a separate child; look for the
-            // actual block child after it.
-            if ts_kind(alt_node) == "else" {
-                // Find the next sibling (the else body)
-                let alt_idx = alt_id - self.child_offset(node, alt_id) + 1;
+        if let Some(i) = alternative_idx {
+            let alt = node.child(i).unwrap();
+            if ts_kind(alt) == "else" {
+                let alt_idx = i + 1;
                 if alt_idx < node.child_count() {
                     if let Some(body) = node.child(alt_idx) {
                         let body_id = self.add_node(body);
-                        self.add_cf_edge(cond_id, body_id);
+                        self.add_cf_edge(node_id, body_id);
                         let body_exit = self.build_cfg(body, body_id)?;
                         self.add_cf_edge(body_exit, join);
                         return Ok(join);
                     }
                 }
-                self.add_cf_edge(cond_id, join);
+                self.add_cf_edge(node_id, join);
             } else {
-                self.add_cf_edge(cond_id, alt_id);
-                let alt_exit = self.build_cfg(alt_node, alt_id)?;
+                let alt_id = self.add_node(alt);
+                self.add_cf_edge(node_id, alt_id);
+                let alt_exit = self.build_cfg(alt, alt_id)?;
                 self.add_cf_edge(alt_exit, join);
             }
         } else {
-            self.add_cf_edge(cond_id, join);
+            self.add_cf_edge(node_id, join);
         }
 
         Ok(join)
@@ -257,7 +254,14 @@ impl CfgBuilder {
             }
             Ok(fin_id)
         } else if !catches.is_empty() {
-            Ok(*catches.last().unwrap_or(&node_id))
+            let join = self.add_node_phantom("try_join", node);
+            if let Some(try_id) = try_body {
+                self.add_cf_edge(try_id, join);
+            }
+            for &catch_id in &catches {
+                self.add_cf_edge(catch_id, join);
+            }
+            Ok(join)
         } else {
             Ok(node_id)
         }
@@ -344,19 +348,14 @@ impl CfgBuilder {
             self.add_cf_edge(node_id, cid);
 
             if ckind.contains("condition") || ckind == "parenthesized_expression" {
-                // Condition → body
-                // (body will be connected when found)
                 continue;
             }
 
-            if ckind == "block" || ckind == "block_statement" || ckind == "statement_block" {
-                body_id = Some(cid);
-                let body_exit = self.build_cfg(child, cid)?;
-                // Back edge: body → condition (loop)
-                self.add_cf_edge(body_exit, node_id);
-                // Exit edge: body → join (break)
-                self.add_cf_edge(body_exit, join);
-            }
+            // Accept block-like children AND any non-condition child as the body
+            body_id = Some(cid);
+            let body_exit = self.build_cfg(child, cid)?;
+            self.add_cf_edge(body_exit, node_id);
+            self.add_cf_edge(body_exit, join);
         }
 
         if body_id.is_none() {
@@ -399,6 +398,98 @@ impl CfgBuilder {
             }
         }
         0
+    }
+
+    /// Walk AST and add data-flow edges for assignment, call, return nodes.
+    fn inject_data_flow_edges(&mut self, ast: &dyn AstNode) {
+        self.visit_for_df(ast);
+    }
+
+    fn visit_for_df(&mut self, node: &dyn AstNode) {
+        let ty = node.node_type();
+
+        // Collect matching child graph-node IDs before mutating the graph.
+        let mut df_targets: Vec<(NodeId, NodeId)> = Vec::new();
+
+        // Find this AST node's graph NodeId by matching type + text
+        let parent_id_opt: Option<NodeId> = {
+            let mut ids: Vec<NodeId> = Vec::new();
+            for id in self.graph.node_ids() {
+                if let Some(n) = self.graph.get_node(id) {
+                    if n.node_type == ty && n.text.as_deref() == node.text() {
+                        ids.push(id);
+                        break;
+                    }
+                }
+            }
+            ids.into_iter().next()
+        };
+
+        if let Some(parent_id) = parent_id_opt {
+            if ty == "assignment_expression" {
+                for i in 0..node.child_count() {
+                    if let Some(child) = node.child(i) {
+                        if child.node_type() == "identifier" {
+                            if let Some(ctext) = child.text() {
+                                for cid in self.graph.node_ids() {
+                                    if let Some(n) = self.graph.get_node(cid) {
+                                        if n.node_type == "identifier" && n.text.as_deref() == Some(ctext) {
+                                            df_targets.push((parent_id, cid));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if ty == "call_expression" {
+                for i in 0..node.child_count() {
+                    if let Some(child) = node.child(i) {
+                        if child.node_type() != "identifier"
+                            || node.child(0).map(|c| c.node_type()) != Some("identifier")
+                        {
+                            if let Some(ctext) = child.text() {
+                                for cid in self.graph.node_ids() {
+                                    if let Some(n) = self.graph.get_node(cid) {
+                                        if n.node_type == child.node_type() && n.text.as_deref() == Some(ctext) {
+                                            df_targets.push((cid, parent_id));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if ty == "return_statement" {
+                for i in 0..node.child_count() {
+                    if let Some(child) = node.child(i) {
+                        if let Some(ctext) = child.text() {
+                            for cid in self.graph.node_ids() {
+                                if let Some(n) = self.graph.get_node(cid) {
+                                    if n.node_type == child.node_type() && n.text.as_deref() == Some(ctext) {
+                                        df_targets.push((cid, parent_id));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Apply edges outside the immutable borrow scope
+        for (from, to) in df_targets {
+            self.add_df_edge(from, to);
+        }
+
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                self.visit_for_df(child);
+            }
+        }
     }
 }
 

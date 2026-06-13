@@ -92,8 +92,8 @@ impl DataFlowAnalyzer {
     }
 
     /// Build the data flow graph from AST using the CFG builder.
-    /// Replaces the old tree-based `visit_node()` traversal with proper
-    /// control-flow modeling (if/else, loops, try/catch, switch).
+    /// CFG edges model control flow (if/else, loops, try/catch, switch).
+    /// Data-flow edges (assignment, call, return) are added by the builder.
     fn build_graph(&mut self, ast: &dyn AstNode) -> Result<()> {
         self.graph = crate::cfg::build_control_flow_graph(ast)?;
         Ok(())
