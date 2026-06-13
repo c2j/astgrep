@@ -174,8 +174,8 @@ impl AdvancedSemgrepMatcher {
                             }
                         }
                     }
-                    if !self.constant_values.is_empty()
-                        || (!tree_found
+                     if !self.constant_values.is_empty()
+                         || (!tree_found
                             && (!self.import_map.is_empty() || !self.wildcard_imports.is_empty())
                             && self.pattern_has_fqn(&pattern_str))
                      {

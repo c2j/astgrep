@@ -1000,7 +1000,8 @@ impl AdvancedRuleExecutor {
         let mut cleaned = pattern_str.to_string();
 
         // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)` or `(Type[] $VAR)`
-        let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
+        // Also match `($META.Type $VAR)` where $META is a metavar used as the type prefix
+        let re = regex::Regex::new(r"\(([\w.\$]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
             .expect("typed metavar regex should compile");
 
         let mut replacements: Vec<(usize, usize, String)> = Vec::new();
