@@ -1002,20 +1002,25 @@ impl AdvancedRuleExecutor {
         // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)` or `(Type[] $VAR)`
         let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
             .expect("typed metavar regex should compile");
+
+        let mut replacements: Vec<(usize, usize, String)> = Vec::new();
         for cap in re.captures_iter(pattern_str) {
+            let full_match = cap.get(0).expect("full match");
             let type_name = cap.get(1).expect("type capture group").as_str().to_string();
             let var_name = cap.get(2).expect("var capture group").as_str().to_string();
-            type_constraints.push((var_name, type_name));
+            // Skip varargs syntax: (double... $X) is NOT a typed metavar
+            if type_name.ends_with("...") {
+                continue;
+            }
+            type_constraints.push((var_name.clone(), type_name));
+            replacements.push((full_match.start(), full_match.end(), format!("${}", var_name)));
         }
 
-        // Replace typed metavar syntax with just $VAR, preserving structure.
-        // e.g. $METHOD(Object $PARAM) → $METHOD $PARAM (add space between adjacent identifiers)
-        cleaned = re.replace_all(&cleaned, " $$2 ").to_string();
-        // Clean up excess spaces
-        cleaned = cleaned.replace("  ", " ").trim().to_string();
-        // But restore necessary structural parens: METHOD $PARAM) needs them
-        // Actually the issue is specific: when a typed metavar follows a metavar name
-        // without separator, the adjacent metavars merge. Handle this by inserting space.
+        let mut cleaned = pattern_str.to_string();
+        for (start, end, replacement) in replacements.iter().rev() {
+            cleaned.replace_range(*start..*end, replacement);
+        }
+        cleaned = cleaned.trim().to_string();
 
         let processed_pattern = Pattern {
             pattern_type: PatternType::Simple(cleaned),
@@ -1067,6 +1072,25 @@ impl AdvancedRuleExecutor {
                 propagator,
                 full_source,
             ) {
+                return true;
+            }
+        }
+
+        // For non-primitive types (class names, array types), be lenient:
+        // accept any expression that isn't obviously a literal of a different type.
+        // Primitive type checking (int, boolean, etc.) is handled above via
+        // value_is_known_type which does strict validation.
+        let primitives = ["int", "boolean", "bool", "float", "double",
+                          "char", "byte", "short", "long", "string", "String", "void"];
+        let base = expected_type.split('<').next().unwrap_or(expected_type)
+            .trim_end_matches("[]");
+        if !primitives.contains(&base.to_lowercase().as_str()) {
+            // Not a primitive — accept unless var_value is an obvious literal of wrong type
+            let is_obviously_wrong = var_value.parse::<i64>().is_ok()
+                || (var_value.starts_with('"') && var_value.ends_with('"'))
+                || var_value == "true" || var_value == "false"
+                || var_value == "null";
+            if !is_obviously_wrong {
                 return true;
             }
         }

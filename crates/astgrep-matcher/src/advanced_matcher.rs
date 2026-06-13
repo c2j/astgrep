@@ -26,6 +26,8 @@ pub struct AdvancedSemgrepMatcher {
     constant_values: HashMap<String, ConstantValue>,
     full_source: Option<String>,
     inside_match_cache: HashMap<String, Vec<((usize, usize, usize, usize), HashMap<String, String>)>>,
+    import_map: HashMap<String, String>,
+    wildcard_imports: Vec<String>,
     symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
     tree_matcher: TreeMatcher,
     language_hint: Option<astgrep_core::Language>,
@@ -84,6 +86,8 @@ impl AdvancedSemgrepMatcher {
             constant_values: HashMap::new(),
             full_source: None,
             inside_match_cache: HashMap::new(),
+            import_map: HashMap::new(),
+            wildcard_imports: Vec::new(),
             symbolic_propagator: None,
             tree_matcher: TreeMatcher::new(),
             language_hint: None,
@@ -128,25 +132,83 @@ impl AdvancedSemgrepMatcher {
          pattern: &SemgrepPattern,
          root: &dyn AstNode,
      ) -> Result<Vec<SemgrepMatchResult>> {
-         self.full_source = root.text().map(|s| s.to_string());
-         self.inside_match_cache.clear();
+          self.full_source = root.text().map(|s| s.to_string());
+          self.inside_match_cache.clear();
+           self.import_map.clear();
+           self.wildcard_imports.clear();
+           if let Some(ref source) = self.full_source {
+               let import_re = regex::Regex::new(r"import\s+(static\s+)?([\w.]+)(\.\*)?\s*;").unwrap();
+               for cap in import_re.captures_iter(source) {
+                   if let Some(full) = cap.get(2) {
+                       let full = full.as_str();
+                       if cap.get(3).is_some() {
+                           self.wildcard_imports.push(full.to_string());
+                       } else if let Some(last_dot) = full.rfind('.') {
+                           let short = &full[last_dot + 1..];
+                           self.import_map.insert(short.to_string(), full.to_string());
+                       } else {
+                           self.import_map.insert(full.to_string(), full.to_string());
+                       }
+                   }
+               }
+            }
 
-          let mut matches = Vec::new();
-          let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
+            let mut matches = Vec::new();
+            let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
 
-          if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
-              if let Some(lang) = self.language_hint {
-                  let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
-                  if !tree_results.is_empty() {
-                      // Prefer tree matcher results — they have correct AST-level
-                      // bindings (e.g. $X = "this.strlist" not just "this").
-                      // Also more precise: old engine over-matches due to text-based comparison.
-                      matches = tree_results;
-                  }
-              }
-          }
+             if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
+                 if let Some(lang) = self.language_hint {
+                    let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
+                    let tree_found = !tree_results.is_empty();
+                    if tree_found {
+                        if self.constant_values.is_empty() {
+                            matches = tree_results;
+                        } else {
+                            for r in tree_results {
+                                let is_new = !matches.iter().any(|m| {
+                                    m.node.location() == r.node.location()
+                                });
+                                if is_new {
+                                    matches.push(r);
+                                }
+                            }
+                        }
+                    }
+                    if !self.constant_values.is_empty()
+                        || (!tree_found
+                            && (!self.import_map.is_empty() || !self.wildcard_imports.is_empty())
+                            && self.pattern_has_fqn(&pattern_str))
+                     {
+                         let mut text_matches = Vec::new();
+                         let _ = self.find_matches_recursive(pattern, root, &mut text_matches, 0);
+                         for r in text_matches {
+                             let is_new = !matches.iter().any(|m| {
+                                 m.node.location() == r.node.location()
+                             });
+                             if is_new {
+                                 matches.push(r);
+                             }
+                         }
+                     }
+                }
+           }
 
         Ok(matches)
+    }
+
+    fn resolve_import(&self, short_name: &str) -> Option<String> {
+        if let Some(full) = self.import_map.get(short_name) {
+            return Some(full.clone());
+        }
+        for wc in &self.wildcard_imports {
+            return Some(format!("{}.{}", wc, short_name));
+        }
+        None
+    }
+
+    fn pattern_has_fqn(&self, pattern_str: &str) -> bool {
+        let re = regex::Regex::new(r"\b\w+\.\w+").unwrap();
+        re.is_match(pattern_str)
     }
 
     /// Recursively find matches in the AST
@@ -890,6 +952,28 @@ impl AdvancedSemgrepMatcher {
         }
     }
 
+    /// Extract regex and flags from =~/pattern/flags literal
+    fn extract_regex(literal: &str) -> Option<String> {
+        if !literal.starts_with("=~/") || literal.len() <= 4 {
+            return None;
+        }
+        let body = &literal[3..]; // strip =~
+        if body.ends_with('/') {
+            return Some(body[..body.len()-1].to_string());
+        }
+        // Handle trailing flags: =~/pattern/i, =~/pattern/m, =~/pattern/im
+        if let Some(last_slash) = body.rfind('/') {
+            let pattern = &body[..last_slash];
+            let flags = &body[last_slash+1..];
+            let mut prefix = String::new();
+            if flags.contains('i') { prefix.push_str("(?i)"); }
+            if flags.contains('m') { prefix.push_str("(?m)"); }
+            if flags.contains('s') { prefix.push_str("(?s)"); }
+            return Some(format!("{}{}", prefix, pattern));
+        }
+        None
+    }
+
     /// Match literal text with constant propagation support
     fn match_literal(&self, literal: &str, node: &dyn AstNode) -> Result<bool> {
         if let Some(text) = node.text() {
@@ -910,9 +994,8 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
 
-            if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
-                let regex_str = &literal[3..literal.len() - 1];
-                if let Ok(re) = Regex::new(regex_str) {
+            if let Some(regex_str) = Self::extract_regex(literal) {
+                if let Ok(re) = Regex::new(&regex_str) {
                     let content = if text.len() >= 2
                         && ((text.starts_with('"') && text.ends_with('"'))
                         || (text.starts_with('\'') && text.ends_with('\''))
@@ -929,6 +1012,26 @@ impl AdvancedSemgrepMatcher {
 
             if text.contains(literal) {
                 return Ok(true);
+            }
+
+            // Import resolution: check if the target identifier resolves to
+            // the pattern's fully-qualified name via import statements.
+            // e.g., pattern "java.util.ArrayList", target "ArrayList" with
+            // import java.util.ArrayList; → match.
+            if literal.contains('.') && !text.contains('.') {
+                if let Some(resolved) = self.resolve_import(text) {
+                    if resolved == literal {
+                        return Ok(true);
+                    }
+                }
+            }
+            // Reverse: pattern is short name, target is FQN
+            if text.contains('.') && !literal.contains('.') {
+                if let Some(resolved) = self.resolve_import(literal) {
+                    if resolved == text {
+                        return Ok(true);
+                    }
+                }
             }
 
             if !literal.contains(' ') && !literal.contains('.') && literal.len() > 1 {
@@ -951,6 +1054,11 @@ impl AdvancedSemgrepMatcher {
                         ConstantValue::Null => "null".to_string(),
                         ConstantValue::Unknown => return Ok(false),
                     };
+
+                    // "..." literal means "match any string" — accept any string constant
+                    if literal == "..." {
+                        return Ok(true);
+                    }
 
                     if constant_str == literal {
                         return Ok(true);
@@ -1206,13 +1314,22 @@ impl AdvancedSemgrepMatcher {
         for p in patterns {
             match p {
                 ParsedPattern::Literal(s) => {
-                    if !buf.is_empty()
-                        && !s.starts_with(|c: char| "({[;,.})]".contains(c))
-                        && !buf.ends_with(|c: char| "({[".contains(c))
-                    {
-                        buf.push(' ');
+                    // Keep numeric literals and single-char punctuation separate
+                    // so CP can match identifiers against specific literal values.
+                    let is_break = s.chars().all(|c| c.is_ascii_digit())
+                        || (s.len() == 1 && !s.chars().next().map_or(false, |c| c.is_alphabetic()));
+                    if !buf.is_empty() && is_break {
+                        flush(&mut buf, &mut groups);
+                        groups.push(ParsedPattern::Literal(s.clone()));
+                    } else {
+                        if !buf.is_empty()
+                            && !s.starts_with(|c: char| "({[;,.})]".contains(c))
+                            && !buf.ends_with(|c: char| "({[".contains(c))
+                        {
+                            buf.push(' ');
+                        }
+                        buf.push_str(s);
                     }
-                    buf.push_str(s);
                 }
                 other => {
                     flush(&mut buf, &mut groups);
@@ -1384,6 +1501,15 @@ impl AdvancedSemgrepMatcher {
                 if self.match_literal(literal, child)? {
                     return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
                 }
+                // Try matching against grandchildren (e.g., argument inside argument_list)
+                let gc: Vec<&dyn AstNode> = (0..child.child_count())
+                    .filter_map(|i| child.child(i))
+                    .collect();
+                if !gc.is_empty() {
+                    if self.try_match_ast_at_offset(&[ParsedPattern::Literal(literal.clone())], &gc, 0, child, depth + 1)? {
+                        return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                    }
+                }
                 Ok(false)
             }
 
@@ -1548,9 +1674,8 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
 
-            if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
-                let regex_str = &literal[3..literal.len() - 1];
-                if let Ok(re) = Regex::new(regex_str) {
+            if let Some(regex_str) = Self::extract_regex(literal) {
+                if let Ok(re) = Regex::new(&regex_str) {
                     let content = if text.len() >= 2
                         && ((text.starts_with('"') && text.ends_with('"'))
                             || (text.starts_with('\'') && text.ends_with('\''))
@@ -1614,10 +1739,9 @@ impl AdvancedSemgrepMatcher {
         // Check if this node type is appropriate for the pattern
         let pattern_text = patterns
             .iter()
-            .map(|p| match p {
-                ParsedPattern::Literal(s) => s.clone(),
-                ParsedPattern::Metavariable(s) => format!("${}", s),
-                _ => "".to_string(),
+            .filter_map(|p| match p {
+                ParsedPattern::Literal(s) => Some(s.clone()),
+                _ => None,
             })
             .collect::<Vec<_>>()
             .join(" ");
@@ -1767,6 +1891,45 @@ impl AdvancedSemgrepMatcher {
             self.metavar_manager.restore(snapshot);
         }
 
+        if !self.import_map.is_empty() || !self.wildcard_imports.is_empty() {
+            let import_expanded = self.expand_tokens_with_imports(&text_tokens);
+            let has_stripped = self.strip_wildcard_fqn(patterns) != patterns;
+            let pattern_has_fqn = Self::pattern_contains_fqn(patterns);
+            if pattern_has_fqn && import_expanded != text_tokens {
+                for start_pos in 0..import_expanded.len() {
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.try_match_sequence_at_position(patterns, &import_expanded, start_pos, node)? {
+                        return Ok(true);
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+            }
+            if has_stripped {
+                let stripped_patterns = self.strip_wildcard_fqn(patterns);
+                for start_pos in 0..text_tokens.len() {
+                    // Require word boundary: stripped pattern starts after
+                    // a non-identifier context, not mid-qualified-name.
+                    if start_pos > 0 && text_tokens[start_pos - 1] == "." {
+                        continue;
+                    }
+                    let snapshot = self.metavar_manager.snapshot();
+                    if self.try_match_sequence_at_position(&stripped_patterns, &text_tokens, start_pos, node)? {
+                        return Ok(true);
+                    }
+                    self.metavar_manager.restore(snapshot);
+                }
+                if import_expanded != text_tokens {
+                    for start_pos in 0..import_expanded.len() {
+                        let snapshot = self.metavar_manager.snapshot();
+                        if self.try_match_sequence_at_position(&stripped_patterns, &import_expanded, start_pos, node)? {
+                            return Ok(true);
+                        }
+                        self.metavar_manager.restore(snapshot);
+                    }
+                }
+            }
+        }
+
         // If no match with original tokens, try with expanded tokens
         if !expanded_tokens.is_empty() && expanded_tokens != text_tokens {
             for start_pos in 0..expanded_tokens.len() {
@@ -1784,6 +1947,98 @@ impl AdvancedSemgrepMatcher {
         }
 
                 Ok(false)
+    }
+
+    fn strip_wildcard_fqn(&self, patterns: &[ParsedPattern]) -> Vec<ParsedPattern> {
+        if patterns.len() < 3 {
+            return patterns.to_vec();
+        }
+        // Reconstruct FQN from consecutive Literal + "." + Literal sequences
+        let mut fqn_parts = Vec::new();
+        let mut fqn_len = 0;
+        let mut i = 0;
+        while i + 2 < patterns.len() {
+            if let ParsedPattern::Literal(part) = &patterns[i] {
+                if let ParsedPattern::Literal(dot) = &patterns[i + 1] {
+                    if dot == "." {
+                        fqn_parts.push(part.clone());
+                        fqn_len = i + 2; // point after the dot
+                        i += 2;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        if fqn_parts.is_empty() {
+            return patterns.to_vec();
+        }
+        // Add the last part (after the last dot)
+        if fqn_len < patterns.len() {
+            if let ParsedPattern::Literal(last) = &patterns[fqn_len] {
+                fqn_parts.push(last.clone());
+                fqn_len += 1;
+            }
+        }
+        let fqn = fqn_parts.join(".");
+        let mut sorted_wildcards: Vec<&String> = self.wildcard_imports.iter().collect();
+        sorted_wildcards.sort_by_key(|w| -(w.len() as isize));
+        for wc in &sorted_wildcards {
+            let prefix = format!("{}.", wc);
+            if let Some(simple) = fqn.strip_prefix(&prefix) {
+                let mut stripped = Vec::new();
+                for part in simple.split('.') {
+                    stripped.push(ParsedPattern::Literal(part.to_string()));
+                    stripped.push(ParsedPattern::Literal(".".to_string()));
+                }
+                stripped.pop();
+                stripped.extend_from_slice(&patterns[fqn_len..]);
+                return stripped;
+            }
+        }
+        patterns.to_vec()
+    }
+
+    fn pattern_contains_fqn(patterns: &[ParsedPattern]) -> bool {
+        let mut i = 0;
+        while i + 2 < patterns.len() {
+            if let ParsedPattern::Literal(a) = &patterns[i] {
+                if let ParsedPattern::Literal(dot) = &patterns[i + 1] {
+                    if dot == "." {
+                        if let ParsedPattern::Literal(_b) = &patterns[i + 2] {
+                            return true;
+                        }
+                    }
+                }
+            }
+            i += 1;
+        }
+        false
+    }
+
+    fn expand_tokens_with_imports(&self, tokens: &[String]) -> Vec<String> {
+        let mut expanded = Vec::new();
+        for (i, token) in tokens.iter().enumerate() {
+            // Skip expansion if preceded by "." — token is already part
+            // of a fully-qualified name (e.g., "Bar" in "Foo.Bar").
+            let preceded_by_dot = i > 0 && tokens[i - 1] == ".";
+            if !preceded_by_dot {
+                if let Some(full) = self.import_map.get(token.as_str()) {
+                    for part in full.split('.') {
+                        expanded.push(part.to_string());
+                        expanded.push(".".to_string());
+                    }
+                    expanded.pop();
+                    continue;
+                }
+            }
+            expanded.push(token.clone());
+        }
+        expanded
     }
 
     /// Expand tokens using symbolic propagation
@@ -1919,9 +2174,8 @@ impl AdvancedSemgrepMatcher {
                         matched_opening_brace = true;
                                             }
                     // =~/regex/ syntax: match string content against regex
-                    if literal.starts_with("=~/") && literal.ends_with('/') && literal.len() > 4 {
-                        let regex_str = &literal[3..literal.len() - 1]; // strip =~/ and trailing /
-                        if let Ok(re) = Regex::new(regex_str) {
+                    if let Some(regex_str) = Self::extract_regex(literal) {
+                        if let Ok(re) = Regex::new(&regex_str) {
                             let token = &text_tokens[text_idx];
                             let content = if token.len() >= 2
                                 && ((token.starts_with('"') && token.ends_with('"'))
@@ -1962,7 +2216,46 @@ impl AdvancedSemgrepMatcher {
                         if found_string {
                             // This is a string literal wildcard, match any string literal
                                                         text_idx += 1;
-                        } else {
+                        } else if !self.constant_values.is_empty() {
+                            // Check constant propagation: identifier might have a string constant
+                            let token = &text_tokens[text_idx];
+                            if let Some(constant) = self.constant_values.get(token.as_str()) {
+                                if matches!(constant, ConstantValue::String(_)) {
+                                    text_idx += 1;
+                                    found_string = true;
+                                }
+                            }
+                        }
+                        if !found_string {
+                            // Check if current token starts a String-producing expression
+                            // like String.format(...) or "string".concat(...)
+                            let lookahead: String = text_tokens[text_idx..]
+                                .iter()
+                                .take(20)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join("");
+                            if lookahead.contains("String.format")
+                                || lookahead.contains("String.valueOf")
+                                || lookahead.contains(".concat(")
+                                || lookahead.contains("StringBuilder")
+                                || lookahead.contains("StringBuffer")
+                            {
+                                // Skip tokens until matching closing paren
+                                let mut depth = 0;
+                                while text_idx < text_tokens.len() {
+                                    let t = &text_tokens[text_idx];
+                                    if t == "(" { depth += 1; }
+                                    else if t == ")" {
+                                        if depth == 0 { break; }
+                                        depth -= 1;
+                                    }
+                                    text_idx += 1;
+                                }
+                                found_string = true;
+                            }
+                        }
+                        if !found_string {
                             // No string literal found where expected
                                                         return Ok(false);
                         }
@@ -2022,6 +2315,22 @@ impl AdvancedSemgrepMatcher {
                         }
                     } else if text_tokens[text_idx] != *literal {
                         let text_token = &text_tokens[text_idx];
+                        // Check constant propagation: identifier might have a matching constant
+                        if !self.constant_values.is_empty() {
+                            if let Some(constant) = self.constant_values.get(text_token.as_str()) {
+                                let const_str = match constant {
+                                    ConstantValue::String(s) => s.clone(),
+                                    ConstantValue::Integer(i) => i.to_string(),
+                                    ConstantValue::Boolean(b) => b.to_string(),
+                                    ConstantValue::Null => "null".to_string(),
+                                    ConstantValue::Unknown => String::new(),
+                                };
+                                if const_str == *literal {
+                                    text_idx += 1;
+                                    continue;
+                                }
+                            }
+                        }
                         let matched = if text_token.starts_with('"')
                             && text_token.ends_with('"')
                             && text_token.len() >= 2
@@ -2188,7 +2497,7 @@ impl AdvancedSemgrepMatcher {
                             } else if found_delim && end_pos == text_idx {
                                 return Ok(false);
                             } else {
-                                                            }
+            }
                         }
                     }
 

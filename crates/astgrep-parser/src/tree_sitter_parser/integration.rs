@@ -6,6 +6,7 @@
 use astgrep_ast::UniversalNode;
 use astgrep_core::{Language, Result};
 use std::collections::HashMap;
+use std::sync::RwLock;
 use tree_sitter::{Parser, Tree};
 
 /// Pattern types for AST-based matching
@@ -63,8 +64,12 @@ impl MetaVariableBindings {
 }
 
 /// Tree-sitter based parser
+///
+/// Uses `RwLock` for interior mutability so that `parse()` can take `&self`
+/// while tree-sitter's `Parser` requires `&mut self` to parse.
+/// `RwLock` is required over `RefCell` because `LanguageParser` requires `Sync`.
 pub struct TreeSitterParser {
-    parsers: HashMap<Language, Parser>,
+    parsers: RwLock<HashMap<Language, Parser>>,
 }
 
 impl TreeSitterParser {
@@ -122,12 +127,14 @@ impl TreeSitterParser {
             }
         }
 
-        Ok(Self { parsers })
+        Ok(Self {
+            parsers: RwLock::new(parsers),
+        })
     }
 
     /// Parse source code using tree-sitter
-    pub fn parse(&mut self, source: &str, language: Language) -> Result<Option<Tree>> {
-        if let Some(parser) = self.parsers.get_mut(&language) {
+    pub fn parse(&self, source: &str, language: Language) -> Result<Option<Tree>> {
+        if let Some(parser) = self.parsers.write().unwrap().get_mut(&language) {
             Ok(parser.parse(source, None))
         } else {
             Ok(None)
@@ -232,7 +239,7 @@ impl TreeSitterParser {
 impl Default for TreeSitterParser {
     fn default() -> Self {
         Self::new().unwrap_or_else(|_| Self {
-            parsers: HashMap::new(),
+            parsers: RwLock::new(HashMap::new()),
         })
     }
 }
@@ -244,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_python_parsing() {
-        let mut parser = TreeSitterParser::new().unwrap();
+        let parser = TreeSitterParser::new().unwrap();
         let source = r#"
 def hello():
     print("world")
@@ -259,7 +266,7 @@ def hello():
 
     #[test]
     fn test_pattern_matching() {
-        let mut parser = TreeSitterParser::new().unwrap();
+        let parser = TreeSitterParser::new().unwrap();
         let source = r#"
 print("hello")
 x = 42

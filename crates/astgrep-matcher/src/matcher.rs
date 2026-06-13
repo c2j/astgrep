@@ -6,6 +6,7 @@
 use crate::{
     conditions::{ConditionEvaluator, ConditionType},
     metavar::*,
+    tree_matcher::matches_type_constraint,
     ParsedPattern, PatternParser,
 };
 use astgrep_core::{AstNode, Result};
@@ -153,7 +154,9 @@ impl AdvancedPatternMatcher {
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
-            ParsedPattern::TypedMetavar { name, .. } => self.match_metavariable(name, node),
+            ParsedPattern::TypedMetavar { name, expected_type } => {
+                self.match_typed_metavar(name, expected_type, node)
+            }
             ParsedPattern::EllipsisMetavariable(metavar) => {
                 self.match_ellipsis_metavariable(metavar, node)
             }
@@ -186,6 +189,19 @@ impl AdvancedPatternMatcher {
         } else {
             Ok(false)
         }
+    }
+
+    /// Match typed metavariable with type constraint
+    fn match_typed_metavar(
+        &mut self,
+        metavar: &str,
+        expected_type: &str,
+        node: &dyn AstNode,
+    ) -> Result<bool> {
+        if !matches_type_constraint(expected_type, node) {
+            return Ok(false);
+        }
+        self.match_metavariable(metavar, node)
     }
 
     /// Match ellipsis metavariable (can match zero or more nodes)

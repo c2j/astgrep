@@ -170,6 +170,7 @@ impl TreeSitterParser {
             // Function definitions
             "function_definition"
             | "function_declaration"
+            | "method_declaration"
             | "method_definition"
             | "constructor_definition"
             | "arrow_function"
@@ -306,6 +307,30 @@ impl TreeSitterParser {
             | "intersect"
             | "except" => NodeType::BinaryExpression,
             "literal" | "number_literal" | "boolean_literal" => NodeType::Literal,
+
+            // Java-specific constructs (tree-sitter-java)
+            "constructor_declaration" => NodeType::FunctionDeclaration,
+            "field_declaration" | "constant_declaration" => NodeType::FieldDeclaration,
+            "annotation_type_declaration"
+            | "marker_annotation"
+            | "normal_annotation"
+            | "single_element_annotation" => NodeType::Decorator,
+            "generic_type"
+            | "type_arguments"
+            | "type_parameters"
+            | "wildcard"
+            | "super_wildcard"
+            | "extends_wildcard" => NodeType::ExpressionStatement,
+            "array_creation_expression" => NodeType::ArrayExpression,
+            "cast_expression" => NodeType::UnaryExpression,
+            "instanceof_expression" => NodeType::BinaryExpression,
+            "synchronized_statement" | "assert_statement" => NodeType::ExpressionStatement,
+            "resource_specification" | "resource" => NodeType::ExpressionStatement,
+            "method_reference" => NodeType::MemberExpression,
+            "switch_expression" => NodeType::SwitchStatement,
+            "labeled_statement" => NodeType::ExpressionStatement,
+            "enum_declaration" | "enum_constant" => NodeType::ClassDeclaration,
+            "record_declaration" => NodeType::ClassDeclaration,
 
             // Error handling
             "ERROR" => NodeType::Unknown,

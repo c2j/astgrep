@@ -157,13 +157,23 @@ impl RuleEngine {
 
         let rules_with_conditions: Vec<Rule> = rules
             .iter()
-            .filter(|r| r.patterns.iter().any(|p| !p.conditions.is_empty()))
+            .filter(|r| {
+                r.patterns.iter().any(|p| {
+                    !p.conditions.is_empty()
+                        || pattern_has_typed_metavar(p)
+                })
+            })
             .map(|r| (*r).clone())
             .collect();
 
         let rules_without_conditions: Vec<Rule> = rules
             .iter()
-            .filter(|r| r.patterns.iter().all(|p| p.conditions.is_empty()))
+            .filter(|r| {
+                r.patterns.iter().all(|p| {
+                    p.conditions.is_empty()
+                        && !pattern_has_typed_metavar(p)
+                })
+            })
             .map(|r| (*r).clone())
             .collect();
 
@@ -210,6 +220,21 @@ impl Default for RuleEngine {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Check if a pattern contains typed metavariable syntax `(TYPE $VAR)`.
+///
+/// Patterns with typed metavariables must be routed through `AdvancedRuleExecutor`
+/// which handles type constraint extraction and post-filtering.
+fn pattern_has_typed_metavar(pattern: &crate::types::Pattern) -> bool {
+    use crate::types::PatternType;
+    let pattern_str = match &pattern.pattern_type {
+        PatternType::Simple(s) => s.as_str(),
+        _ => return false,
+    };
+    // Same regex as in executor/core/mod.rs::preprocess_typed_metavariables
+    let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)");
+    re.map(|r| r.is_match(pattern_str)).unwrap_or(false)
 }
 
 #[cfg(test)]

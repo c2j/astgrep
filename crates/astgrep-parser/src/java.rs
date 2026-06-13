@@ -1,13 +1,15 @@
 //! Java language parser and adapter
 //!
-//! This module provides Java-specific parsing and AST adaptation.
+//! This module provides Java-specific parsing using tree-sitter-java for
+//! full AST generation, replacing the previous simplified manual parsing.
 
 use crate::adapters::{AdapterContext, AdapterMetadata, AstAdapter};
-use astgrep_ast::{AstBuilder, NodeType, UniversalNode};
+use crate::tree_sitter_parser::TreeSitterParser;
+use astgrep_ast::UniversalNode;
 use astgrep_core::{AstNode, Language, LanguageParser, Result};
 use std::path::Path;
 
-/// Java AST adapter
+/// Java AST adapter — provides metadata and tree-sitter-based node adaptation.
 pub struct JavaAdapter;
 
 impl Default for JavaAdapter {
@@ -17,228 +19,22 @@ impl Default for JavaAdapter {
 }
 
 impl JavaAdapter {
-    /// Create a new Java adapter
+    /// Create a new Java adapter.
     pub fn new() -> Self {
         Self
     }
 
-    /// Parse Java-specific constructs
-    fn parse_java_construct(
-        &self,
-        source: &str,
-        context: &AdapterContext,
-    ) -> Result<UniversalNode> {
-        // Simplified Java parsing - in reality would use tree-sitter-java
-        let trimmed = source.trim();
-
-        // For multi-line source, try to identify the main construct
-        if trimmed.contains("class ") {
-            self.parse_class_declaration(source, context)
-        } else if trimmed.starts_with("package ") {
-            self.parse_package_declaration(source, context)
-        } else if trimmed.starts_with("import ") {
-            self.parse_import_declaration(source, context)
-        } else if trimmed.contains("public ")
-            || trimmed.contains("private ")
-            || trimmed.contains("protected ")
-        {
-            self.parse_method_or_field(source, context)
-        } else {
-            // Default to program with the source as content
-            Ok(AstBuilder::program(vec![AstBuilder::expression_statement(
-                AstBuilder::string_literal(trimmed).with_text(trimmed.to_string()),
-            )])
-            .with_text(source.to_string()))
-        }
-    }
-
-    /// Parse package declaration
-    fn parse_package_declaration(
-        &self,
-        source: &str,
-        _context: &AdapterContext,
-    ) -> Result<UniversalNode> {
-        let package_line = source.lines().next().unwrap_or("").trim();
-        if let Some(package_name) = package_line
-            .strip_prefix("package ")
-            .and_then(|s| s.strip_suffix(";"))
-        {
-            Ok(AstBuilder::package_declaration(package_name.trim()))
-        } else {
-            Err(astgrep_core::AnalysisError::parse_error(
-                "Invalid package declaration",
-            ))
-        }
-    }
-
-    /// Parse import declaration
-    fn parse_import_declaration(
-        &self,
-        source: &str,
-        _context: &AdapterContext,
-    ) -> Result<UniversalNode> {
-        let import_line = source.lines().next().unwrap_or("").trim();
-        if let Some(import_path) = import_line
-            .strip_prefix("import ")
-            .and_then(|s| s.strip_suffix(";"))
-        {
-            let is_static = import_path.starts_with("static ");
-            let path = if is_static {
-                import_path.strip_prefix("static ").unwrap_or(import_path)
-            } else {
-                import_path
-            };
-
-            Ok(AstBuilder::import_declaration(path.trim(), is_static))
-        } else {
-            Err(astgrep_core::AnalysisError::parse_error(
-                "Invalid import declaration",
-            ))
-        }
-    }
-
-    /// Parse class declaration using TreeSitter for better AST quality
-    fn parse_class_declaration(
-        &self,
-        source: &str,
-        _context: &AdapterContext,
-    ) -> Result<UniversalNode> {
-        // Use TreeSitterParser for better AST quality
-        use crate::tree_sitter_parser::TreeSitterParser;
-
-        let mut ts_parser = TreeSitterParser::new().map_err(|e| {
-            astgrep_core::AnalysisError::parse_error(format!(
-                "Failed to create TreeSitterParser: {}",
-                e
-            ))
-        })?;
-
+    /// Parse Java source code using tree-sitter-java.
+    fn parse_with_tree_sitter(&self, source: &str) -> Result<UniversalNode> {
+        let ts_parser = TreeSitterParser::new()?;
         let tree = ts_parser
-            .parse(source, astgrep_core::Language::Java)
-            .map_err(|e| {
-                astgrep_core::AnalysisError::parse_error(format!("Failed to parse Java: {}", e))
-            })?
+            .parse(source, Language::Java)?
             .ok_or_else(|| {
-                astgrep_core::AnalysisError::parse_error("Failed to parse Java: no tree returned")
+                astgrep_core::AnalysisError::parse_error(
+                    "Java parser returned no tree",
+                )
             })?;
-
-        let universal_ast = ts_parser
-            .tree_to_universal_ast(&tree, source)
-            .map_err(|e| {
-                astgrep_core::AnalysisError::parse_error(format!(
-                    "Failed to convert to universal AST: {}",
-                    e
-                ))
-            })?;
-
-        Ok(universal_ast)
-    }
-
-    /// Parse method or field declaration
-    fn parse_method_or_field(
-        &self,
-        source: &str,
-        _context: &AdapterContext,
-    ) -> Result<UniversalNode> {
-        // Very simplified method/field parsing
-        let trimmed = source.trim();
-
-        if trimmed.contains('(') && trimmed.contains(')') {
-            // Likely a method
-            self.parse_method_declaration(trimmed)
-        } else {
-            // Likely a field
-            self.parse_field_declaration(trimmed)
-        }
-    }
-
-    /// Parse method declaration
-    fn parse_method_declaration(&self, source: &str) -> Result<UniversalNode> {
-        let mut method_name = "unknownMethod";
-        let mut return_type = "void";
-        let is_public = source.contains("public ");
-        let is_private = source.contains("private ");
-        let is_static = source.contains("static ");
-
-        // Extract method name (simplified)
-        if let Some(paren_pos) = source.find('(') {
-            let before_paren = &source[..paren_pos];
-            if let Some(name_start) = before_paren.rfind(' ') {
-                method_name = before_paren[name_start + 1..].trim();
-
-                // Extract return type
-                let before_name = &before_paren[..name_start];
-                if let Some(type_start) = before_name.rfind(' ') {
-                    return_type = before_name[type_start + 1..].trim();
-                }
-            }
-        }
-
-        let mut method_node = UniversalNode::new(NodeType::MethodDeclaration)
-            .with_identifier(method_name.to_string())
-            .with_attribute("return_type".to_string(), return_type.to_string());
-
-        if is_public {
-            method_node = method_node.with_modifier("public");
-        }
-        if is_private {
-            method_node = method_node.with_modifier("private");
-        }
-        if is_static {
-            method_node = method_node.with_modifier("static");
-        }
-
-        Ok(method_node.with_text(source.to_string()))
-    }
-
-    /// Parse field declaration
-    fn parse_field_declaration(&self, source: &str) -> Result<UniversalNode> {
-        let mut field_name = "unknownField";
-        let mut field_type = "Object";
-        let is_public = source.contains("public ");
-        let is_private = source.contains("private ");
-        let is_static = source.contains("static ");
-        let is_final = source.contains("final ");
-
-        // Extract field name and type (simplified)
-        let parts: Vec<&str> = source.split_whitespace().collect();
-        if parts.len() >= 2 {
-            // Find type and name
-            let mut type_index = 0;
-            for (i, part) in parts.iter().enumerate() {
-                if !["public", "private", "protected", "static", "final"].contains(part) {
-                    type_index = i;
-                    break;
-                }
-            }
-
-            if type_index < parts.len() - 1 {
-                field_type = parts[type_index];
-                field_name = parts[type_index + 1]
-                    .trim_end_matches(';')
-                    .trim_end_matches('=');
-                if let Some(eq_pos) = field_name.find('=') {
-                    field_name = field_name[..eq_pos].trim();
-                }
-            }
-        }
-
-        let mut field_node = AstBuilder::field_declaration(field_name, field_type);
-
-        if is_public {
-            field_node = field_node.with_modifier("public");
-        }
-        if is_private {
-            field_node = field_node.with_modifier("private");
-        }
-        if is_static {
-            field_node = field_node.with_modifier("static");
-        }
-        if is_final {
-            field_node = field_node.with_modifier("final");
-        }
-
-        Ok(field_node.with_text(source.to_string()))
+        ts_parser.tree_to_universal_ast(&tree, source)
     }
 }
 
@@ -248,9 +44,7 @@ impl AstAdapter for JavaAdapter {
         _node: &dyn std::any::Any,
         context: &AdapterContext,
     ) -> Result<UniversalNode> {
-        // In a real implementation, this would convert tree-sitter Java nodes
-        // For now, we'll parse the source directly
-        self.parse_java_construct(&context.source_code, context)
+        self.parse_with_tree_sitter(&context.source_code)
     }
 
     fn language(&self) -> Language {
@@ -261,7 +55,7 @@ impl AstAdapter for JavaAdapter {
         AdapterMetadata::new(
             "JavaAdapter".to_string(),
             "1.0.0".to_string(),
-            "Java AST adapter using simplified parsing".to_string(),
+            "Java AST adapter using tree-sitter-java".to_string(),
         )
         .with_feature("package_declarations".to_string())
         .with_feature("import_declarations".to_string())
@@ -272,35 +66,43 @@ impl AstAdapter for JavaAdapter {
     }
 }
 
-/// Java language parser
+/// Java language parser backed by tree-sitter-java.
+///
+/// Produces a full `UniversalNode` AST via `TreeSitterParser`,
+/// replacing the previous simplified manual parsing approach.
 pub struct JavaParser {
-    adapter: JavaAdapter,
+    ts_parser: TreeSitterParser,
 }
 
 impl JavaParser {
-    /// Create a new Java parser
+    /// Create a new Java parser.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the tree-sitter-java grammar cannot be initialized.
+    /// This should never happen in practice since grammars are statically linked.
     pub fn new() -> Self {
         Self {
-            adapter: JavaAdapter::new(),
+            ts_parser: TreeSitterParser::new().expect(
+                "TreeSitterParser initialization failed: \
+                 tree-sitter grammars are statically linked and should always initialize",
+            ),
         }
-    }
-
-    /// Parse Java source code
-    fn parse_java_source(&self, source: &str, file_path: &Path) -> Result<Box<dyn AstNode>> {
-        let context = AdapterContext::new(
-            file_path.to_string_lossy().to_string(),
-            source.to_string(),
-            Language::Java,
-        );
-
-        let universal_node = self.adapter.parse_java_construct(source, &context)?;
-        Ok(Box::new(universal_node))
     }
 }
 
 impl LanguageParser for JavaParser {
-    fn parse(&self, source: &str, file_path: &Path) -> Result<Box<dyn AstNode>> {
-        self.parse_java_source(source, file_path)
+    fn parse(&self, source: &str, _file_path: &Path) -> Result<Box<dyn AstNode>> {
+        let tree = self
+            .ts_parser
+            .parse(source, Language::Java)?
+            .ok_or_else(|| {
+                astgrep_core::AnalysisError::parse_error(
+                    "Java parser returned no tree",
+                )
+            })?;
+        let universal = self.ts_parser.tree_to_universal_ast(&tree, source)?;
+        Ok(Box::new(universal))
     }
 
     fn language(&self) -> Language {
@@ -342,108 +144,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_package_declaration() {
-        let adapter = JavaAdapter::new();
-        let context = AdapterContext::new(
-            "Test.java".to_string(),
-            "package com.example;".to_string(),
-            Language::Java,
-        );
-
-        let result = adapter.parse_package_declaration("package com.example;", &context);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "package_declaration");
-    }
-
-    #[test]
-    fn test_parse_import_declaration() {
-        let adapter = JavaAdapter::new();
-        let context = AdapterContext::new(
-            "Test.java".to_string(),
-            "import java.util.List;".to_string(),
-            Language::Java,
-        );
-
-        let result = adapter.parse_import_declaration("import java.util.List;", &context);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "import_declaration");
-    }
-
-    #[test]
-    fn test_parse_static_import() {
-        let adapter = JavaAdapter::new();
-        let context = AdapterContext::new(
-            "Test.java".to_string(),
-            "import static java.lang.Math.PI;".to_string(),
-            Language::Java,
-        );
-
-        let result = adapter.parse_import_declaration("import static java.lang.Math.PI;", &context);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "import_declaration");
-    }
-
-    #[test]
-    fn test_parse_simple_class() {
-        let adapter = JavaAdapter::new();
-        let context = AdapterContext::new(
-            "Test.java".to_string(),
-            "public class Test {}".to_string(),
-            Language::Java,
-        );
-
-        let result = adapter.parse_class_declaration("public class Test {}", &context);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "program");
-    }
-
-    #[test]
-    fn test_parse_class_with_extends() {
-        let adapter = JavaAdapter::new();
-        let source = "public class Child extends Parent {}";
-        let context =
-            AdapterContext::new("Child.java".to_string(), source.to_string(), Language::Java);
-
-        let result = adapter.parse_class_declaration(source, &context);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "program");
-    }
-
-    #[test]
-    fn test_parse_method_declaration() {
-        let adapter = JavaAdapter::new();
-        let source = "public void testMethod() {}";
-
-        let result = adapter.parse_method_declaration(source);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "method_declaration");
-    }
-
-    #[test]
-    fn test_parse_field_declaration() {
-        let adapter = JavaAdapter::new();
-        let source = "private String name;";
-
-        let result = adapter.parse_field_declaration(source);
-        assert!(result.is_ok());
-
-        let node = result.unwrap();
-        assert_eq!(node.node_type(), "field_declaration");
-    }
-
-    #[test]
     fn test_java_adapter_metadata() {
         let adapter = JavaAdapter::new();
         let metadata = adapter.metadata();
@@ -458,6 +158,50 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_simple_class() {
+        let parser = JavaParser::new();
+        let source = "public class Test {}";
+
+        let result = parser.parse(source, Path::new("Test.java"));
+        assert!(result.is_ok());
+
+        let ast = result.unwrap();
+        assert!(ast.text().is_some());
+    }
+
+    #[test]
+    fn test_parse_class_with_method() {
+        let parser = JavaParser::new();
+        let source = r#"
+public class Test {
+    public void hello() {
+        System.out.println("world");
+    }
+}
+"#;
+
+        let result = parser.parse(source, Path::new("Test.java"));
+        assert!(result.is_ok());
+
+        let ast = result.unwrap();
+        assert!(ast.text().is_some());
+    }
+
+    #[test]
+    fn test_parse_method_invocation() {
+        let parser = JavaParser::new();
+        // tree-sitter-java can parse standalone expressions via statement wrappers
+        let source = "class Wrapper { void m() { stmt.execute(query); } }";
+
+        let result = parser.parse(source, Path::new("Wrapper.java"));
+        assert!(result.is_ok());
+
+        let ast = result.unwrap();
+        let text = ast.text().unwrap_or_default();
+        assert!(text.contains("execute"));
+    }
+
+    #[test]
     fn test_full_java_parsing() {
         let parser = JavaParser::new();
         let source = r#"
@@ -467,7 +211,7 @@ import java.util.List;
 
 public class Test {
     private String name;
-    
+
     public void setName(String name) {
         this.name = name;
     }

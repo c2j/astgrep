@@ -471,6 +471,41 @@ enum PlaceholderKind {
              i += 1;
              continue;
          }
+         // Check for typed metavar syntax: (TYPE $NAME)
+         if chars[i] == '(' {
+             let mut j = i + 1;
+             while j < chars.len() && chars[j] == ' ' { j += 1; }
+             let type_start = j;
+             while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '_' || chars[j] == '.') {
+                 j += 1;
+             }
+             if j > type_start {
+                 let type_name: String = chars[type_start..j].iter().collect();
+                 while j < chars.len() && chars[j] == ' ' { j += 1; }
+                 if j < chars.len() && chars[j] == '$' {
+                     let mut k = j + 1;
+                     while k < chars.len() && (chars[k].is_alphanumeric() || chars[k] == '_') {
+                         k += 1;
+                     }
+                     if k > j + 1 {
+                         let name: String = chars[j + 1..k].iter().collect();
+                         while k < chars.len() && chars[k] == ' ' { k += 1; }
+                         if k < chars.len() && chars[k] == ')' {
+                             // (TYPE $NAME) → TypedMetavar
+                             let placeholder = format!("{}{}{}_t_{}{}", MG_PREFIX, name, MG_SUFFIX, type_name, MG_SUFFIX);
+                             meta_map.insert(placeholder.clone(), PlaceholderKind::TypedMetavar {
+                                 name: name.clone(),
+                                 type_name,
+                             });
+                             result.push_str(&placeholder);
+                             i = k + 1;
+                             continue;
+                         }
+                     }
+                 }
+             }
+         }
+
          if chars[i] == '$' {
             // Check for ellipsis metavar: $...NAME
             if i + 3 < chars.len() && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '.' {
