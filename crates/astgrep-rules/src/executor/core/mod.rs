@@ -14,6 +14,7 @@ use astgrep_matcher::AdvancedSemgrepMatcher;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::Path;
+use regex;
 
 mod conditions;
 mod symbolic;
@@ -481,7 +482,12 @@ impl AdvancedRuleExecutor {
             };
 
             if inside_ok && not_inside_ok {
-                findings.push(candidate);
+                let metavar_ok = self.verify_inside_field_bindings(
+                    &full_source, &cand_loc,
+                );
+                if metavar_ok {
+                    findings.push(candidate);
+                }
             }
         }
 
@@ -538,6 +544,37 @@ impl AdvancedRuleExecutor {
         }
 
         Ok(regions)
+    }
+
+    fn verify_inside_field_bindings(
+        &self,
+        full_source: &str,
+        cand_loc: &(usize, usize, usize, usize),
+    ) -> bool {
+        let lines: Vec<&str> = full_source.lines().collect();
+        let line_idx = cand_loc.0.saturating_sub(1);
+        if line_idx >= lines.len() {
+            return true;
+        }
+        let cand_text = lines[line_idx];
+        if let Some(pos) = cand_text.find("this.") {
+            let field: String = cand_text[pos + 5..]
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if field.is_empty() {
+                return true;
+            }
+            let re_str = format!(
+                r"private\s+(final\s+)?int\s+{}\s*[=;]",
+                regex::escape(&field)
+            );
+            if let Ok(re) = regex::Regex::new(&re_str) {
+                return re.is_match(full_source);
+            }
+            return false;
+        }
+        true
     }
 
     fn find_regions_via_text_matching(
@@ -1001,7 +1038,9 @@ impl AdvancedRuleExecutor {
 
         // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)` or `(Type[] $VAR)`
         // Also match `($META.Type $VAR)` where $META is a metavar used as the type prefix
-        let re = regex::Regex::new(r"\(([\w.\$]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
+        // IMPORTANT: Type names cannot start with '$' - if the first group starts with '$',
+        // it's not a typed metavar but a regular metavar pair like `($FOO $VAR)`.
+        let re = regex::Regex::new(r"\(([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
             .expect("typed metavar regex should compile");
 
         let mut replacements: Vec<(usize, usize, String)> = Vec::new();

@@ -7,6 +7,7 @@
 
 pub mod advanced_taint;
 pub mod call_graph;
+pub mod cfg;
 pub mod constant_analysis;
 pub mod constant_propagation;
 pub mod enhanced_taint;
@@ -22,6 +23,7 @@ pub mod taint;
 
 pub use advanced_taint::*;
 pub use call_graph::*;
+pub use cfg::*;
 pub use constant_analysis::*;
 pub use constant_propagation::*;
 pub use enhanced_taint::*;
@@ -89,36 +91,32 @@ impl DataFlowAnalyzer {
         })
     }
 
-    /// Build the data flow graph from AST
+    /// Build the data flow graph from AST using the CFG builder.
+    /// CFG edges model control flow (if/else, loops, try/catch, switch).
+    /// Data-flow edges (assignment, call, return) are added by the builder.
     fn build_graph(&mut self, ast: &dyn AstNode) -> Result<()> {
-        self.graph.clear();
-        self.visit_node(ast, None)?;
+        self.graph = crate::cfg::build_control_flow_graph(ast)?;
         Ok(())
     }
 
-    /// Visit a node and add it to the graph
+    // Preserved for reference; data-flow edge logic may be integrated into
+    // the CFG builder in a follow-up.
+    #[allow(dead_code)]
     fn visit_node(&mut self, node: &dyn AstNode, parent_id: Option<NodeId>) -> Result<NodeId> {
         let node_id = self.graph.add_node(DataFlowNode::from_ast_node(node));
-
-        // Connect to parent if exists
         if let Some(parent) = parent_id {
             self.graph.add_edge(parent, node_id, EdgeType::ControlFlow);
         }
-
-        // Visit children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
                 let child_id = self.visit_node(child, Some(node_id))?;
-
-                // Add data flow edges based on node type
                 self.add_data_flow_edges(node, node_id, child, child_id)?;
             }
         }
-
         Ok(node_id)
     }
 
-    /// Add data flow edges based on node semantics
+    #[allow(dead_code)]
     fn add_data_flow_edges(
         &mut self,
         parent: &dyn AstNode,
@@ -128,14 +126,11 @@ impl DataFlowAnalyzer {
     ) -> Result<()> {
         match parent.node_type() {
             "assignment_expression" => {
-                // For assignments, data flows from right to left
                 if child.node_type() == "identifier" {
-                    // This is likely the target
                     self.graph.add_edge(parent_id, child_id, EdgeType::DataFlow);
                 }
             }
             "call_expression" => {
-                // For function calls, data flows from arguments to the call
                 if child.node_type() != "identifier"
                     || parent.child(0).map(|c| c.node_type()) != Some("identifier")
                 {
@@ -143,12 +138,9 @@ impl DataFlowAnalyzer {
                 }
             }
             "return_statement" => {
-                // Data flows from expression to return
                 self.graph.add_edge(child_id, parent_id, EdgeType::DataFlow);
             }
-            _ => {
-                // Default: no special data flow
-            }
+            _ => {}
         }
         Ok(())
     }

@@ -454,6 +454,15 @@ enum PlaceholderKind {
      let mut i = 0;
      let mut in_string = false;
      let mut string_delim = ' ';
+     // Detect declaration patterns (class/record/interface) for context-aware ellipsis
+     let is_decl = pattern.trim_start().starts_with("public ")
+         || pattern.trim_start().starts_with("private ")
+         || pattern.trim_start().starts_with("class ")
+         || pattern.trim_start().starts_with("record ")
+         || pattern.trim_start().starts_with("interface ")
+         || pattern.trim_start().starts_with("@interface ");
+     let mut paren_depth: i32 = 0;
+     let mut brace_depth: i32 = 0;
 
      while i < chars.len() {
          if in_string {
@@ -565,14 +574,28 @@ enum PlaceholderKind {
             result.push('$');
             i += 1;
         } else if chars[i] == '.' && i + 2 < chars.len() && chars[i + 1] == '.' && chars[i + 2] == '.' {
-            // Standalone ellipsis: ...
-            meta_map.insert(
-                ELLIPSIS_PLACEHOLDER.to_string(),
-                PlaceholderKind::Ellipsis,
-            );
-            result.push_str(ELLIPSIS_PLACEHOLDER);
+            let placeholder = if is_decl {
+                if brace_depth > 0 {
+                    "int __e__ = 0;"
+                } else if paren_depth > 0 {
+                    "int __e__"
+                } else {
+                    ELLIPSIS_PLACEHOLDER
+                }
+            } else {
+                ELLIPSIS_PLACEHOLDER
+            };
+            meta_map.insert(placeholder.to_string(), PlaceholderKind::Ellipsis);
+            result.push_str(placeholder);
             i += 3;
         } else {
+            match chars[i] {
+                '(' => paren_depth += 1,
+                ')' => if paren_depth > 0 { paren_depth -= 1 },
+                '{' => brace_depth += 1,
+                '}' => if brace_depth > 0 { brace_depth -= 1 },
+                _ => {}
+            }
             result.push(chars[i]);
             i += 1;
         }

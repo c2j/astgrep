@@ -19,6 +19,14 @@ impl AdvancedRuleExecutor {
                 return Ok(false);
             }
         }
+        // Evaluate metavariable-pattern if present (stored separately from conditions)
+        if let Some(ref metavar_pattern) = pattern.metavariable_pattern {
+            let condition = Condition::MetavariablePattern(metavar_pattern.clone());
+            let snapshot = accumulated_bindings.clone();
+            if !self.evaluate_condition_accumulating(&condition, &snapshot, match_result, dataflow_analysis, full_source, &mut accumulated_bindings)? {
+                return Ok(false);
+            }
+        }
         Ok(true)
     }
 
@@ -340,6 +348,18 @@ impl AdvancedRuleExecutor {
                                     );
                                     break;
                                 }
+                                // Fallback: if pattern looks like a FQN (e.g. org.foo.Foo),
+                                // try import-aware name resolution
+                                if Self::is_likely_fqn_pattern(pattern_str)
+                                    && self.evaluate_name_constraint(
+                                        bound_value.as_ref(),
+                                        pattern_str,
+                                        full_source,
+                                    )?
+                                {
+                                    any_matched = true;
+                                    break;
+                                }
                             }
                         }
                         if !any_matched {
@@ -390,7 +410,19 @@ impl AdvancedRuleExecutor {
                                     pattern_str, bound_value.as_ref(), matches, new_bindings
                                 );
                                 if !matches {
-                                    return Ok(false);
+                                    // Fallback: if pattern looks like a FQN (e.g. org.foo.Foo),
+                                    // try import-aware name resolution
+                                    if Self::is_likely_fqn_pattern(pattern_str)
+                                        && self.evaluate_name_constraint(
+                                            bound_value.as_ref(),
+                                            pattern_str,
+                                            full_source,
+                                        )?
+                                    {
+                                        // Name resolution succeeded, continue
+                                    } else {
+                                        return Ok(false);
+                                    }
                                 }
                                 combined_bindings.extend(
                                     new_bindings
@@ -1424,5 +1456,15 @@ impl AdvancedRuleExecutor {
             }
         }
         true
+    }
+
+    fn is_likely_fqn_pattern(pattern: &str) -> bool {
+        let trimmed = pattern.trim();
+        if trimmed.is_empty() || trimmed.contains("...") {
+            return false;
+        }
+        let re = regex::Regex::new(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$")
+            .ok();
+        re.is_some_and(|r| r.is_match(trimmed))
     }
 }

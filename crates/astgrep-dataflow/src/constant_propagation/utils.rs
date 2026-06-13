@@ -72,28 +72,42 @@ pub fn is_static_block_context(node: &dyn AstNode) -> bool {
     false
 }
 
-/// Check if this is a constructor declaration
-/// Java constructors appear as declaration_statement with:
-/// - 4 children: [modifiers, identifier(class_name), params, body]
-/// - No return type (unlike methods which have 5 children with return type)
+/// Check if this is a constructor declaration.
+///
+/// Handles two forms:
+/// 1. Tree-sitter-java `constructor_declaration` nodes (detected via ts_kind)
+/// 2. Other grammars that wrap constructors as `declaration_statement`
+///    with 4 children: [modifiers, identifier(class_name), params, body]
 pub fn is_constructor_declaration(node: &dyn AstNode, class_name: Option<&str>) -> bool {
-    // Must be a declaration_statement
+    // Check raw tree-sitter kind first (handles constructor_declaration nodes
+    // that are mapped to FunctionDeclaration in the universal type system)
+    if ts_kind(node) == "constructor_declaration" {
+        if let Some(class) = class_name {
+            // Verify the identifier matches the expected class name
+            return node.child_count() > 0
+                && (0..node.child_count()).any(|i| {
+                    node.child(i).is_some_and(|c| {
+                        c.node_type() == "identifier"
+                            && c.text().is_some_and(|t| t == class)
+                    })
+                });
+        }
+        return true;
+    }
+
+    // Fallback: declaration_statement wrapping (other tree-sitter grammars)
     if node.node_type() != "declaration_statement" {
         return false;
     }
 
-    // Constructors have exactly 4 children (no return type)
-    // Methods have 5 children (with return type)
     if node.child_count() != 4 {
         return false;
     }
 
-    // Find the identifier (should be the class name for constructors)
     for i in 0..node.child_count() {
         if let Some(child) = node.child(i) {
             if child.node_type() == "identifier" {
                 if let Some(name) = child.text() {
-                    // If class_name is provided, check if they match
                     if let Some(class) = class_name {
                         if name == class {
                             return true;
