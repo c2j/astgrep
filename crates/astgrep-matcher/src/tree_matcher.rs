@@ -1120,6 +1120,7 @@ impl MatchCtx {
                 if children.len() >= 2 {
                     if let Some(name) = children[0].text() {
                         let name = name.trim().to_string();
+                        let name = name.strip_prefix("this.").unwrap_or(&name).to_string();
                         let value = children.get(1)
                             .and_then(|c| c.text())
                             .map(|t| t.trim().to_string())
@@ -1139,6 +1140,7 @@ impl MatchCtx {
                 if children.len() >= 2 {
                     if let Some(name) = children[0].text() {
                         let name = name.trim().to_string();
+                        let name = name.strip_prefix("this.").unwrap_or(&name).to_string();
                         if let Some(value) = children[1].text() {
                             let value = value.trim().to_string();
                             // If the variable appears on BOTH sides (self-reference, e.g. s = s + ...),

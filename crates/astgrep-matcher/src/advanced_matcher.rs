@@ -1293,9 +1293,6 @@ impl AdvancedSemgrepMatcher {
         }
 
         let groups = Self::group_consecutive_literals(patterns);
-        if groups.len() > children.len() {
-            return Ok(false);
-        }
 
         self.try_coalesced_at_offset(&groups, children, 0, depth)
     }
@@ -1366,6 +1363,16 @@ impl AdvancedSemgrepMatcher {
                 let child = children[child_offset];
                 if self.match_literal(combined, child)? {
                     return self.try_coalesced_at_offset(remaining, children, child_offset + 1, depth + 1);
+                }
+                for consume in 2..=(children.len().saturating_sub(child_offset)) {
+                    let merged: String = children[child_offset..child_offset + consume]
+                        .iter()
+                        .filter_map(|c| c.text())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if merged.contains(combined.as_str()) {
+                        return self.try_coalesced_at_offset(remaining, children, child_offset + consume, depth + 1);
+                    }
                 }
                 Ok(false)
             }
