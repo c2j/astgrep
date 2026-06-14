@@ -1,0 +1,27 @@
+rules:
+  - id: GAUSSDB-SEC-001
+    name: "SELECT * 使用检测"
+    description: "SELECT * 可能导致不必要的网络传输和列暴露，建议显式列出所需列"
+    languages: [sql]
+    dialects: [gaussdb, opengauss, standard]
+    patterns:
+      - pattern: "SELECT *"
+    message: "建议避免使用 SELECT *，显式列出所需列名"
+    severity: WARNING
+    confidence: MEDIUM
+    metadata:
+      category: security
+      cwe: "CWE-200"
+
+  - id: GAUSSDB-HINT-001
+    name: "Plan Hint 使用检测"
+    description: "检测 /*+ ... */ 优化器 hint 使用，便于性能审计"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "/*+"
+    message: "检测到 Plan Hint 使用，请验证 hint 关键字是否被 GaussDB 支持"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: performance

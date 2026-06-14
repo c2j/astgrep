@@ -1,0 +1,93 @@
+rules:
+  - id: GAUSSDB-TYPE-001
+    name: "GaussDB VARCHAR2 使用建议"
+    description: "VARCHAR2 是 Oracle 兼容类型，建议使用 VARCHAR 替代以保持标准 SQL 兼容性"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "VARCHAR2"
+    message: "VARCHAR2 是 Oracle 兼容类型，建议使用 VARCHAR(n) 替代"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: compatibility
+      cwe: "CWE-1106"
+
+  - id: GAUSSDB-TYPE-002
+    name: "GaussDB NUMBER 类型使用建议"
+    description: "NUMBER 是 Oracle 兼容类型，注意精度/标度与标准 NUMERIC 的行为差异"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "NUMBER"
+    message: "NUMBER 是 Oracle 兼容类型，与 NUMERIC 存在精度差异，请确认业务逻辑"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: compatibility
+
+  - id: GAUSSDB-CONFLICT-001
+    name: "GaussDB 不支持 ON CONFLICT 语法"
+    description: "GaussDB 不支持 PostgreSQL 的 ON CONFLICT ... DO UPDATE/NOTHING 语法，需使用 MERGE INTO 替代"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "ON CONFLICT"
+    message: "GaussDB 不支持 ON CONFLICT 语法，请使用 MERGE INTO ... WHEN NOT MATCHED THEN INSERT 替代"
+    severity: ERROR
+    confidence: HIGH
+    metadata:
+      category: compatibility
+      cwe: "CWE-1106"
+
+  - id: GAUSSDB-STORE-001
+    name: "GaussDB 存储引擎指定检测"
+    description: "检测 ustore/astore 存储引擎使用，便于迁移评估"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "storage_type"
+    message: "检测到存储引擎参数 storage_type，请确认 ustore(astore) 兼容性"
+    severity: INFO
+    confidence: MEDIUM
+    metadata:
+      category: storage
+
+  - id: GAUSSDB-PREDICT-001
+    name: "GaussDB PREDICT BY AI 推理语句"
+    description: "PREDICT BY 是 GaussDB AI 特性，迁移到其他数据库时需特殊处理"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "PREDICT BY"
+    message: "PREDICT BY 是 GaussDB AI 特性，目标数据库可能不支持"
+    severity: WARNING
+    confidence: HIGH
+    metadata:
+      category: ai-compatibility
+
+  - id: GAUSSDB-TIMECAPSULE-001
+    name: "GaussDB TIMECAPSULE 闪回语句"
+    description: "TIMECAPSULE TABLE 是 GaussDB 闪回特性，迁移到其他数据库时需移除或替代"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "TIMECAPSULE"
+    message: "TIMECAPSULE TABLE 是 GaussDB 闪回特性，目标数据库可能不支持"
+    severity: WARNING
+    confidence: HIGH
+    metadata:
+      category: compatibility
+
+  - id: GAUSSDB-SHRINK-001
+    name: "GaussDB SHRINK 压缩语句"
+    description: "SHRINK TABLE/INDEX 是 GaussDB 维护命令，迁移时需评估目标数据库的等价操作"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SHRINK"
+    message: "SHRINK 是 GaussDB 特有命令，目标数据库可能需要使用 VACUUM/REINDEX 等替代"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: compatibility
