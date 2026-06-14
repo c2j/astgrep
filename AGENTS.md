@@ -40,6 +40,9 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 | CLI commands | `crates/astgrep-cli/src/commands/*.rs` | 14 commands including migrate, validate_enhanced |
 | Output formats | `crates/astgrep-cli/src/output/analysis/{sarif,json,text,html,markdown,semgrep}.rs` | 6 output formats |
 | SQL parsing | `crates/astgrep-parser/src/sql.rs` | Uses tree-sitter-sequel, NOT tree-sitter-sql |
+| SQL dialects | `crates/astgrep-parser/src/dialect/` | SqlDialect enum + dispatcher; GaussDB→ogsql-parser, PolarDB→sqlparser-rs |
+| SQL dialect adapters | `crates/astgrep-parser/src/adapter/{ogsql,sqlparser}/` | Convert parser-specific AST → UniversalNode |
+| SQL dialect rules | `tests/categories/rules/sql_dialects/{gaussdb,polardb_mysql}/` | Dialect-specific YAML rules |
 | Error types | `crates/astgrep-core/src/error.rs` | `AnalysisError` enum with thiserror |
 | Config | `crates/astgrep-core/src/config.rs` | AnalysisConfig, SQL statement boundary toggle |
 | Test cases | `tests/categories/patterns/{lang}/` | .sgrep + target file pairs, `// MATCH:` / `// ERROR:` annotations |
