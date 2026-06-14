@@ -1,9 +1,15 @@
 //! SQL dialect dispatcher.
 //!
-//! Provides a unified `SqlDialectParser` trait that future phases will implement
-//! per dialect. Phase 1 only wires up the `Standard` path (delegating to existing
-//! `SqlParser`); other dialects return a clear "not yet implemented" error.
+//! Provides a unified `SqlDialectParser` trait that each dialect implements.
+//!
+//! - `Standard` → delegates to existing `SqlParser` (tree-sitter-sequel)
+//! - `GaussDB` / `OpenGauss` → delegates to `OgsqlAdapter` (ogsql-parser v0.6.20)
+//! - `PolarDBMySQL` → stub returning `NotYetImplemented` (planned Phase 4)
 
+pub mod gaussdb;
+pub mod opengauss;
+
+use astgrep_ast::{NodeType, UniversalNode};
 use astgrep_core::{LanguageParser, SqlDialect};
 use std::path::Path;
 
@@ -61,19 +67,32 @@ pub enum DialectParseError {
 
 /// Dispatch to the appropriate parser implementation based on dialect.
 ///
-/// Phase 1 behavior:
-/// - `Standard` → returns `StandardDialectParser` (delegates to existing `SqlParser`)
-/// - `GaussDB` / `OpenGauss` → returns parser but `parse()` returns `NotYetImplemented` (Phase 2)
-/// - `PolarDBMySQL` → same (Phase 4)
+/// - `Standard` → `StandardDialectParser` (existing `SqlParser` via tree-sitter-sequel)
+/// - `GaussDB` / `OpenGauss` → real dialect parsers backed by `OgsqlAdapter`
+/// - `PolarDBMySQL` → stub returning `NotYetImplemented` (planned Phase 4)
 pub fn dispatch(dialect: SqlDialect) -> Box<dyn SqlDialectParser> {
     match dialect {
         SqlDialect::Standard => Box::new(StandardDialectParser::new()),
-        SqlDialect::GaussDB => Box::new(StubDialectParser::new(SqlDialect::GaussDB, "Phase 2")),
-        SqlDialect::OpenGauss => Box::new(StubDialectParser::new(SqlDialect::OpenGauss, "Phase 2")),
+        SqlDialect::GaussDB => Box::new(gaussdb::GaussDBDialect::new()),
+        SqlDialect::OpenGauss => Box::new(opengauss::OpenGaussDialect::new()),
         SqlDialect::PolarDBMySQL => {
             Box::new(StubDialectParser::new(SqlDialect::PolarDBMySQL, "Phase 4"))
         }
         _ => Box::new(StubDialectParser::new(dialect, "TBD")),
+    }
+}
+
+/// Wrap a vec of per-statement UniversalNodes into a single node suitable
+/// for `Box<dyn AstNode>`.
+///
+/// - Empty vec → empty `Program` node.
+/// - Single statement → return it directly (no artificial wrapper).
+/// - Multiple statements → `Program` node with each statement as a child.
+pub(crate) fn wrap_statements(nodes: Vec<UniversalNode>) -> UniversalNode {
+    match nodes.len() {
+        0 => UniversalNode::new(NodeType::Program),
+        1 => nodes.into_iter().next().expect("len == 1 checked above"),
+        _ => UniversalNode::new(NodeType::Program).add_children(nodes),
     }
 }
 
@@ -167,28 +186,62 @@ mod tests {
     }
 
     #[test]
-    fn test_dispatch_gaussdb_returns_stub_with_phase2_message() {
+    fn test_dispatch_gaussdb_returns_real_parser() {
         let parser = dispatch(SqlDialect::GaussDB);
         assert_eq!(parser.dialect(), SqlDialect::GaussDB);
         let result = parser.parse("SELECT 1", Path::new("test.sql"));
-        match result {
-            Err(DialectParseError::NotYetImplemented {
-                dialect,
-                planned_phase,
-            }) => {
-                assert_eq!(dialect, SqlDialect::GaussDB);
-                assert_eq!(planned_phase, "Phase 2");
-            }
-            _ => panic!("expected NotYetImplemented, got unexpected result"),
-        }
+        assert!(
+            result.is_ok(),
+            "GaussDB should parse SELECT: {:?}",
+            result.err()
+        );
     }
 
     #[test]
-    fn test_dispatch_opengauss_returns_stub_with_phase2_message() {
+    fn test_dispatch_opengauss_returns_real_parser() {
         let parser = dispatch(SqlDialect::OpenGauss);
         assert_eq!(parser.dialect(), SqlDialect::OpenGauss);
         let result = parser.parse("SELECT 1", Path::new("test.sql"));
-        assert!(result.is_err());
+        assert!(
+            result.is_ok(),
+            "OpenGauss should parse SELECT: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_gaussdb_parses_predict_by() {
+        let parser = dispatch(SqlDialect::GaussDB);
+        let result = parser.parse("PREDICT BY model FEATURES (col1)", Path::new("t.sql"));
+        assert!(
+            result.is_ok(),
+            "PREDICT BY should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_gaussdb_parses_merge_into() {
+        let parser = dispatch(SqlDialect::GaussDB);
+        let sql = "MERGE INTO t USING s ON t.id = s.id WHEN MATCHED THEN UPDATE SET t.x = s.x";
+        let result = parser.parse(sql, Path::new("t.sql"));
+        assert!(
+            result.is_ok(),
+            "MERGE INTO should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_gaussdb_mode_default_centralized() {
+        let dialect = gaussdb::GaussDBDialect::new();
+        assert_eq!(dialect.mode(), gaussdb::GaussDBMode::Centralized);
+    }
+
+    #[test]
+    fn test_gaussdb_mode_distributed() {
+        let dialect = gaussdb::GaussDBDialect::with_mode(gaussdb::GaussDBMode::Distributed);
+        assert_eq!(dialect.mode(), gaussdb::GaussDBMode::Distributed);
     }
 
     #[test]
