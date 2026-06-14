@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-"""
-Test file for pattern-inside functionality.
-This file contains various nested code patterns to test context matching.
-"""
+# @rule eval-inside-function
+# @desc pattern_inside feature test cases (positive)
+# @expect MATCH
+
 
 import requests
 import urllib.request

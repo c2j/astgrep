@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-"""
-Test file for pattern-not functionality.
-This file contains various code patterns to test exclusion logic.
-"""
+# @rule function-calls-except-safe
+# @desc pattern_not feature test cases (positive)
+# @expect MATCH
+
 
 import requests
 import hashlib

@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-"""
-Test file for metavariables functionality.
-This file contains various code patterns to test metavariable binding and constraints.
-"""
+# @rule dangerous-function-with-regex
+# @desc metavariables feature test cases (positive)
+# @expect MATCH
+
 
 import subprocess
 import os

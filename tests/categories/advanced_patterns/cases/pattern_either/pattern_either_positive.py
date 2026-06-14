@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-"""
-Test file for pattern-either functionality.
-This file contains various code patterns that should be matched by the either patterns.
-"""
+# @rule dangerous-function-calls
+# @desc pattern_either feature test cases (positive)
+# @expect MATCH
+
 
 import hashlib
 import requests

@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-"""
-Test file for pattern-regex functionality.
-This file contains various string patterns to test regex matching.
-"""
+# @rule api-keys-regex
+# @desc pattern_regex feature test cases (positive)
+# @expect MATCH
+
 
 # Test 1: API keys (should match api-keys-regex)
 def test_api_keys():
