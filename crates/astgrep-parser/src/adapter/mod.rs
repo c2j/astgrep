@@ -4,9 +4,10 @@
 //! Each sub-module implements an adapter for a specific parser ecosystem:
 //!
 //! - `ogsql` — adapter for `ogsql-parser` (openGauss/GaussDB SQL dialect)
+//! - `sqlparser` — adapter for `sqlparser-rs` (PolarDB-MySQL dialect)
 
 pub mod ogsql;
+pub mod sqlparser;
 
-// Re-export the ogsql adapter types so callers can use
-// `astgrep_parser::OgsqlAdapter` directly.
 pub use ogsql::{OgsqlAdapter, OgsqlAdapterError};
+pub use sqlparser::{SqlparserAdapter, SqlparserAdapterError};

@@ -1,0 +1,18 @@
+-- Test file for PolarDB-MySQL rules
+-- // MATCH: POLARDB-SEC-001 (SELECT *)
+SELECT * FROM users;
+
+-- // MATCH: POLARDB-SEC-002 (UPDATE without WHERE)
+UPDATE users SET name = 'Bob';
+
+-- // MATCH: POLARDB-SEC-003 (DELETE without WHERE)
+DELETE FROM users;
+
+-- // MATCH: POLARDB-GSI-001 (GLOBAL INDEX)
+CREATE GLOBAL INDEX idx_global ON orders(id);
+
+-- // MATCH: POLARDB-SHARD-001 (DBPARTITION)
+CREATE TABLE orders (id INT) DBPARTITION BY HASH(id);
+
+-- // MATCH: POLARDB-VERCOMMENT-001 (versioned comment)
+SELECT /*!99990 800020200 */ * FROM t1;

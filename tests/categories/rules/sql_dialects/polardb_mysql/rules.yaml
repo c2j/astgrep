@@ -1,0 +1,83 @@
+rules:
+  - id: POLARDB-GSI-001
+    name: "PolarDB GLOBAL INDEX 使用检测"
+    description: "GLOBAL INDEX 是 PolarDB-X 特有语法，迁移到标准 MySQL 时需移除"
+    languages: [sql]
+    dialects: [polardb-mysql]
+    patterns:
+      - pattern: "GLOBAL"
+    message: "检测到 GLOBAL INDEX 语法，目标数据库可能不支持"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: compatibility
+
+  - id: POLARDB-SHARD-001
+    name: "PolarDB-X 分库分表语法检测"
+    description: "DBPARTITION/TBPARTITION 是 PolarDB-X 分布式语法"
+    languages: [sql]
+    dialects: [polardb-mysql]
+    patterns:
+      - pattern: "DBPARTITION"
+    message: "检测到 PolarDB-X 分库分表语法 DBPARTITION，标准 MySQL 不支持"
+    severity: WARNING
+    confidence: HIGH
+    metadata:
+      category: compatibility
+
+  - id: POLARDB-VERCOMMENT-001
+    name: "MySQL 版本注释检测"
+    description: "/*!99990 ... */ 是 MySQL/PolarDB 版本注释语法"
+    languages: [sql]
+    dialects: [polardb-mysql]
+    patterns:
+      - pattern: "/*!99990"
+    message: "检测到 MySQL 版本注释语法，注意兼容性版本号"
+    severity: INFO
+    confidence: MEDIUM
+    metadata:
+      category: compatibility
+
+  - id: POLARDB-SEC-001
+    name: "SELECT * 使用检测"
+    description: "SELECT * 可能导致不必要的网络传输和列暴露"
+    languages: [sql]
+    dialects: [polardb-mysql]
+    patterns:
+      - pattern: "SELECT *"
+    message: "建议避免使用 SELECT *，显式列出所需列名"
+    severity: WARNING
+    confidence: MEDIUM
+    metadata:
+      category: security
+      cwe: "CWE-200"
+
+  - id: POLARDB-SEC-002
+    name: "UPDATE 缺少 WHERE 子句"
+    description: "不带 WHERE 的 UPDATE 会更新全表数据"
+    languages: [sql]
+    dialects: [polardb-mysql]
+    patterns:
+      - pattern: "UPDATE $T SET $S"
+      - pattern-not: "UPDATE $T SET $S WHERE $W"
+    message: "UPDATE 语句缺少 WHERE 子句，将更新全表数据"
+    severity: WARNING
+    confidence: HIGH
+    metadata:
+      category: security
+      cwe: "CWE-1106"
+
+  - id: POLARDB-SEC-003
+    name: "DELETE 缺少 WHERE 子句"
+    description: "不带 WHERE 的 DELETE 会清空全表数据"
+    languages: [sql]
+    dialects: [polardb-mysql]
+    patterns:
+      - pattern: "DELETE FROM $T"
+      - pattern-not: "DELETE FROM $T WHERE $W"
+    message: "DELETE 语句缺少 WHERE 子句，将删除全表数据"
+    severity: ERROR
+    confidence: HIGH
+    metadata:
+      category: security
+      cwe: "CWE-1106"
