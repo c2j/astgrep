@@ -1,0 +1,19 @@
+rules:
+  - id: GAUSSDB-SET-001
+    name: "GaussDB UPDATE SET 多列子查询 (>2列)"
+    description: >
+      检测 UPDATE SET (col1, col2, col3, ...) = (SELECT ...) 语句。
+      当 SET 子句元组赋值超过2个字段时，GaussDB 可能存在限制或性能问题。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "$SQL"
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: "(?s)SET\\s*\\([^)]*,[^)]*,"
+    message: "UPDATE SET 子句包含3+字段子查询赋值，GaussDB可能有限制"
+    severity: WARNING
+    confidence: HIGH
+    metadata:
+      category: compatibility
+      cwe: "CWE-1106"
