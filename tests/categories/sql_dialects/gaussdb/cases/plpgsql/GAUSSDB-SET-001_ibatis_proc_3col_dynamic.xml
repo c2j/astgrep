@@ -1,0 +1,33 @@
+-- @rule GAUSSDB-SET-001
+-- @desc iBatis mapper with stored procedure call (CALL) wrapping 3-col SET subquery
+-- @expect MATCH
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- @rule GAUSSDB-SET-001 -->
+<!-- @desc iBatis mapper: UPDATE SET 3 columns in dynamic SQL -->
+<!-- @expect MATCH -->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.InventoryMapper">
+
+    <update id="reconcileStock">
+        UPDATE inventory_target t
+        SET (
+            t.quantity,
+            t.unit_cost,
+            t.supplier_id
+        ) = (
+            SELECT
+                SUM(s.quantity),
+                AVG(s.unit_cost),
+                MAX(s.supplier_id)
+            FROM stock_movements s
+            WHERE s.product_id = t.product_id
+              AND s.warehouse_id = #{warehouseId}
+        )
+        WHERE t.warehouse_id = #{warehouseId}
+        <if test="autoReconcile != null">
+            AND t.auto_reconcile = #{autoReconcile}
+        </if>
+    </update>
+
+</mapper>
