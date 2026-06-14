@@ -1,5 +1,6 @@
 rules:
-- id: test-string-match
+- id: SIMPLE-STR-001
+  name: "String literal hello"
   pattern: '"hello"'
   message: Found hello string
   severity: ERROR
