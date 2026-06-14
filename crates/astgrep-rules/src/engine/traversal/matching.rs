@@ -64,7 +64,11 @@ fn looks_like_raw_regex(pattern: &str) -> bool {
     if let Some(open) = pattern.find('[') {
         if let Some(close) = pattern[open..].find(']') {
             let inner = &pattern[open + 1..open + close];
-            if inner.contains('-') || inner.contains("\\d") || inner.contains("\\w") || inner.contains("\\s") {
+            if inner.contains('-')
+                || inner.contains("\\d")
+                || inner.contains("\\w")
+                || inner.contains("\\s")
+            {
                 return true;
             }
         }
@@ -113,7 +117,10 @@ pub(crate) fn find_pattern_spans_in_source(
         pattern
     };
 
-    let regex_str = if inner_pattern.starts_with("=~/") && inner_pattern.ends_with('/') && inner_pattern.len() > 4 {
+    let regex_str = if inner_pattern.starts_with("=~/")
+        && inner_pattern.ends_with('/')
+        && inner_pattern.len() > 4
+    {
         // Semgrep =~/regex/ syntax: match regex against string content
         inner_pattern[3..inner_pattern.len() - 1].to_string()
     } else if looks_like_raw_regex(inner_pattern) {
@@ -166,7 +173,12 @@ pub(crate) fn semgrep_pattern_to_regex(pattern: &str) -> String {
 
     while i < len {
         // Handle <... ...> deep expression matching
-        if i + 4 < len && chars[i] == '<' && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '.' {
+        if i + 4 < len
+            && chars[i] == '<'
+            && chars[i + 1] == '.'
+            && chars[i + 2] == '.'
+            && chars[i + 3] == '.'
+        {
             result.push_str(".*?");
             i += 4;
             if i < len && chars[i] == ' ' {
@@ -174,14 +186,24 @@ pub(crate) fn semgrep_pattern_to_regex(pattern: &str) -> String {
             }
             continue;
         }
-        if i + 3 < len && chars[i] == '.' && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '>' {
+        if i + 3 < len
+            && chars[i] == '.'
+            && chars[i + 1] == '.'
+            && chars[i + 2] == '.'
+            && chars[i + 3] == '>'
+        {
             result.push_str("");
             i += 4;
             continue;
         }
 
         // Handle $...NAME (named ellipsis metavariable)
-        if chars[i] == '$' && i + 3 < len && chars[i + 1] == '.' && chars[i + 2] == '.' && chars[i + 3] == '.' {
+        if chars[i] == '$'
+            && i + 3 < len
+            && chars[i + 1] == '.'
+            && chars[i + 2] == '.'
+            && chars[i + 3] == '.'
+        {
             i += 4;
             let mut name = String::new();
             while i < len && (chars[i].is_alphanumeric() || chars[i] == '_') {
@@ -202,7 +224,9 @@ pub(crate) fn semgrep_pattern_to_regex(pattern: &str) -> String {
                 i += 1;
             }
             let _ = name;
-            result.push_str("(?:[a-zA-Z_]\\w*(?:\\.[a-zA-Z_]\\w*)*|\\d+(?:\\.\\d+)?|\"[^\"]*\"|'[^']*')");
+            result.push_str(
+                "(?:[a-zA-Z_]\\w*(?:\\.[a-zA-Z_]\\w*)*|\\d+(?:\\.\\d+)?|\"[^\"]*\"|'[^']*')",
+            );
             continue;
         }
 
@@ -218,7 +242,13 @@ pub(crate) fn semgrep_pattern_to_regex(pattern: &str) -> String {
                 i += 1;
             }
             let inner_regex = semgrep_pattern_to_regex(&inner);
-            result.push_str(&format!("\\$\\{{{}\\}}", inner_regex.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")));
+            result.push_str(&format!(
+                "\\$\\{{{}\\}}",
+                inner_regex
+                    .replace("\\", "\\\\")
+                    .replace("(", "\\(")
+                    .replace(")", "\\)")
+            ));
             continue;
         }
 

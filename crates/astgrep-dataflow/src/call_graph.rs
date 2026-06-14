@@ -113,10 +113,7 @@ impl CallGraph {
             node_id,
         };
 
-        self.calls
-            .entry(caller_id)
-            .or_default()
-            .push(call);
+        self.calls.entry(caller_id).or_default().push(call);
 
         // Create parameter mapping
         if let Some(func_def) = self.functions.get(&callee_signature) {
@@ -441,9 +438,19 @@ mod tests {
         };
 
         let main_id = graph.add_function(sig_main.clone(), vec![], None, 0);
-        graph.add_function(sig_foo.clone(), vec!["a".to_string(), "b".to_string()], None, 1);
+        graph.add_function(
+            sig_foo.clone(),
+            vec!["a".to_string(), "b".to_string()],
+            None,
+            1,
+        );
 
-        let call_id = graph.add_call(main_id, sig_foo.clone(), vec!["1".to_string(), "2".to_string()], 2);
+        let call_id = graph.add_call(
+            main_id,
+            sig_foo.clone(),
+            vec!["1".to_string(), "2".to_string()],
+            2,
+        );
 
         let mapping = graph.get_param_mapping(call_id);
         assert!(mapping.is_some());

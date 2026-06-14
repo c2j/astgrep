@@ -869,7 +869,9 @@ mod tests {
     #[test]
     fn test_symbolic_propagator_reset() {
         let mut propagator = SymbolicPropagator::new();
-        propagator.state.bind("x".to_string(), SymbolicValue::variable("y"));
+        propagator
+            .state
+            .bind("x".to_string(), SymbolicValue::variable("y"));
         propagator.reset();
         assert!(propagator.state().variables.is_empty());
     }
@@ -877,7 +879,9 @@ mod tests {
     #[test]
     fn test_symbolic_propagator_is_derived_from() {
         let mut propagator = SymbolicPropagator::new();
-        propagator.state.bind("a".to_string(), SymbolicValue::variable("b"));
+        propagator
+            .state
+            .bind("a".to_string(), SymbolicValue::variable("b"));
 
         assert!(propagator.is_derived_from("a", &SymbolicValue::variable("b")));
         assert!(!propagator.is_derived_from("a", &SymbolicValue::variable("c")));
@@ -886,8 +890,12 @@ mod tests {
     #[test]
     fn test_symbolic_propagator_contains_alias() {
         let mut propagator = SymbolicPropagator::new();
-        propagator.state.bind("a".to_string(), SymbolicValue::variable("b"));
-        propagator.state.bind("c".to_string(), SymbolicValue::variable("b"));
+        propagator
+            .state
+            .bind("a".to_string(), SymbolicValue::variable("b"));
+        propagator
+            .state
+            .bind("c".to_string(), SymbolicValue::variable("b"));
 
         assert!(propagator.contains_alias("value_of_b", "b"));
         assert!(propagator.contains_alias("value_of_a", "b"));

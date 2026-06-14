@@ -344,7 +344,10 @@ mod tests {
     #[test]
     fn test_comparison_op_from_str() {
         assert_eq!(ComparisonOp::parse_name("=="), Some(ComparisonOp::Equals));
-        assert_eq!(ComparisonOp::parse_name("!="), Some(ComparisonOp::NotEquals));
+        assert_eq!(
+            ComparisonOp::parse_name("!="),
+            Some(ComparisonOp::NotEquals)
+        );
         assert_eq!(
             ComparisonOp::parse_name("contains"),
             Some(ComparisonOp::Contains)

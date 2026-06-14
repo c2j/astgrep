@@ -27,13 +27,9 @@ impl JavaAdapter {
     /// Parse Java source code using tree-sitter-java.
     fn parse_with_tree_sitter(&self, source: &str) -> Result<UniversalNode> {
         let ts_parser = TreeSitterParser::new()?;
-        let tree = ts_parser
-            .parse(source, Language::Java)?
-            .ok_or_else(|| {
-                astgrep_core::AnalysisError::parse_error(
-                    "Java parser returned no tree",
-                )
-            })?;
+        let tree = ts_parser.parse(source, Language::Java)?.ok_or_else(|| {
+            astgrep_core::AnalysisError::parse_error("Java parser returned no tree")
+        })?;
         ts_parser.tree_to_universal_ast(&tree, source)
     }
 }
@@ -97,9 +93,7 @@ impl LanguageParser for JavaParser {
             .ts_parser
             .parse(source, Language::Java)?
             .ok_or_else(|| {
-                astgrep_core::AnalysisError::parse_error(
-                    "Java parser returned no tree",
-                )
+                astgrep_core::AnalysisError::parse_error("Java parser returned no tree")
             })?;
         let universal = self.ts_parser.tree_to_universal_ast(&tree, source)?;
         Ok(Box::new(universal))

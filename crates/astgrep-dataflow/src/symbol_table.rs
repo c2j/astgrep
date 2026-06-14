@@ -375,7 +375,11 @@ mod tests {
             .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
             .ok();
         table
-            .define_symbol("y".to_string(), 2, TypeInfo::Primitive("string".to_string()))
+            .define_symbol(
+                "y".to_string(),
+                2,
+                TypeInfo::Primitive("string".to_string()),
+            )
             .ok();
 
         let symbols = table.get_current_scope_symbols();
@@ -404,7 +408,10 @@ mod tests {
         table.update_symbol_type("x".to_string(), TypeInfo::Primitive("string".to_string()));
 
         let type_info = table.get_symbol_type("x");
-        assert_eq!(type_info.unwrap(), &TypeInfo::Primitive("string".to_string()));
+        assert_eq!(
+            type_info.unwrap(),
+            &TypeInfo::Primitive("string".to_string())
+        );
     }
 
     #[test]
@@ -419,6 +426,9 @@ mod tests {
 
         assert_eq!(table.current_scope_id, 0);
         assert!(table.resolve_symbol("x").is_none());
-        assert!(matches!(table.get_current_scope_type(), Some(ScopeType::Global)));
+        assert!(matches!(
+            table.get_current_scope_type(),
+            Some(ScopeType::Global)
+        ));
     }
 }

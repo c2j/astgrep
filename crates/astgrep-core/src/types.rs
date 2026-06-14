@@ -63,7 +63,10 @@ impl Language {
             &format!(".{}", ext)
         };
 
-        crate::constants::languages::ALL_LANGUAGES.iter().find(|&&lang| lang.extensions().contains(&ext)).copied()
+        crate::constants::languages::ALL_LANGUAGES
+            .iter()
+            .find(|&&lang| lang.extensions().contains(&ext))
+            .copied()
     }
 }
 
@@ -200,6 +203,8 @@ pub struct AnalysisConfig {
     pub output_format: OutputFormat,
     pub parallel: bool,
     pub max_threads: Option<usize>,
+    #[serde(default)]
+    pub sql_dialect: Option<SqlDialect>,
 }
 
 impl Default for AnalysisConfig {
@@ -217,8 +222,60 @@ impl Default for AnalysisConfig {
             output_format: OutputFormat::Json,
             parallel: true,
             max_threads: Some(crate::constants::performance::DEFAULT_THREAD_COUNT),
+            sql_dialect: None,
         }
     }
+}
+
+/// SQL 方言枚举。新增方言时必须保留向前兼容（已有 match 不会因新 variant 编译失败）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[non_exhaustive]
+pub enum SqlDialect {
+    /// 通用 SQL（tree-sitter-sequel）
+    Standard,
+    /// 华为 GaussDB 集中式
+    #[serde(rename = "gaussdb")]
+    GaussDB,
+    /// 开源 OpenGauss（默认集中式，可切换分布式）
+    #[serde(rename = "opengauss")]
+    OpenGauss,
+    /// 阿里 PolarDB MySQL 兼容版
+    #[serde(rename = "polardb-mysql")]
+    PolarDBMySQL,
+}
+
+impl SqlDialect {
+    /// 返回该方言使用的底层 parser 家族，用于派发器选择路径。
+    pub fn parser_family(&self) -> SqlParserFamily {
+        match self {
+            SqlDialect::Standard => SqlParserFamily::TreeSitterSequel,
+            SqlDialect::GaussDB | SqlDialect::OpenGauss => SqlParserFamily::Ogsql,
+            SqlDialect::PolarDBMySQL => SqlParserFamily::Sqlparser,
+        }
+    }
+
+    /// 从字符串解析方言。未知字符串返回 `None`，由调用方决定 fallback 策略。
+    // from_str conflicts with std::str::FromStr which returns Result instead of Option
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "standard" | "sql" => Some(Self::Standard),
+            "gaussdb" | "gauss" => Some(Self::GaussDB),
+            "opengauss" | "og" => Some(Self::OpenGauss),
+            "polardb-mysql" | "polardb" => Some(Self::PolarDBMySQL),
+            _ => None,
+        }
+    }
+}
+
+/// SQL parser 家族分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SqlParserFamily {
+    TreeSitterSequel,
+    Ogsql,
+    Sqlparser,
 }
 
 /// Output format options
@@ -274,7 +331,10 @@ mod tests {
     #[test]
     fn test_language_from_str() {
         assert_eq!(Language::parse_name("java"), Some(Language::Java));
-        assert_eq!(Language::parse_name("JavaScript"), Some(Language::JavaScript));
+        assert_eq!(
+            Language::parse_name("JavaScript"),
+            Some(Language::JavaScript)
+        );
         assert_eq!(Language::parse_name("python"), Some(Language::Python));
         assert_eq!(Language::parse_name("sql"), Some(Language::Sql));
         assert_eq!(Language::parse_name("bash"), Some(Language::Bash));
@@ -381,5 +441,95 @@ mod tests {
         assert_eq!(config.languages.len(), 6);
         assert!(config.parallel);
         assert_eq!(config.output_format, OutputFormat::Json);
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_standard() {
+        assert_eq!(SqlDialect::from_str("standard"), Some(SqlDialect::Standard));
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_sql_alias() {
+        assert_eq!(SqlDialect::from_str("sql"), Some(SqlDialect::Standard));
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_gaussdb() {
+        assert_eq!(SqlDialect::from_str("gaussdb"), Some(SqlDialect::GaussDB));
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_gaussdb_case_insensitive() {
+        assert_eq!(SqlDialect::from_str("GAUSSDB"), Some(SqlDialect::GaussDB));
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_opengauss() {
+        assert_eq!(
+            SqlDialect::from_str("opengauss"),
+            Some(SqlDialect::OpenGauss)
+        );
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_og_alias() {
+        assert_eq!(SqlDialect::from_str("og"), Some(SqlDialect::OpenGauss));
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_polardb_mysql() {
+        assert_eq!(
+            SqlDialect::from_str("polardb-mysql"),
+            Some(SqlDialect::PolarDBMySQL)
+        );
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_polardb_alias() {
+        assert_eq!(
+            SqlDialect::from_str("polardb"),
+            Some(SqlDialect::PolarDBMySQL)
+        );
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_unknown() {
+        assert_eq!(SqlDialect::from_str("oracle"), None);
+    }
+
+    #[test]
+    fn test_sql_dialect_from_str_empty() {
+        assert_eq!(SqlDialect::from_str(""), None);
+    }
+
+    #[test]
+    fn test_sql_dialect_parser_family() {
+        assert_eq!(
+            SqlDialect::Standard.parser_family(),
+            SqlParserFamily::TreeSitterSequel
+        );
+        assert_eq!(SqlDialect::GaussDB.parser_family(), SqlParserFamily::Ogsql);
+        assert_eq!(
+            SqlDialect::OpenGauss.parser_family(),
+            SqlParserFamily::Ogsql
+        );
+        assert_eq!(
+            SqlDialect::PolarDBMySQL.parser_family(),
+            SqlParserFamily::Sqlparser
+        );
+    }
+
+    #[test]
+    fn test_sql_dialect_serde_roundtrip() {
+        let serialized = serde_json::to_string(&SqlDialect::GaussDB).unwrap();
+        assert_eq!(serialized, "\"gaussdb\"");
+        let deserialized: SqlDialect = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, SqlDialect::GaussDB);
+    }
+
+    #[test]
+    fn test_analysis_config_default_sql_dialect() {
+        let config = AnalysisConfig::default();
+        assert_eq!(config.sql_dialect, None);
     }
 }

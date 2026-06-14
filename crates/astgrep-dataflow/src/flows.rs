@@ -528,7 +528,10 @@ mod tests {
         assert_eq!(stats.highest_severity(), Some(VulnerabilityCategory::High));
 
         stats.critical_count = 1;
-        assert_eq!(stats.highest_severity(), Some(VulnerabilityCategory::Critical));
+        assert_eq!(
+            stats.highest_severity(),
+            Some(VulnerabilityCategory::Critical)
+        );
     }
 
     #[test]

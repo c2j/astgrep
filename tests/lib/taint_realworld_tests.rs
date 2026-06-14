@@ -4,11 +4,11 @@
 //! These tests cross module boundaries: parser → AST → matcher → dataflow → findings.
 
 use astgrep_core::Language;
-use astgrep_parser::LanguageParserRegistry;
-use astgrep_rules::{RuleEngine, RuleParser, RuleContext};
 use astgrep_dataflow::DataFlowAnalyzer;
-use std::path::PathBuf;
+use astgrep_parser::LanguageParserRegistry;
+use astgrep_rules::{RuleContext, RuleEngine, RuleParser};
 use std::fs;
+use std::path::PathBuf;
 use tempfile::TempDir;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
         custom_data: std::collections::HashMap::new(),
         enable_constant_propagation: true,
         sql_stmt_boundary: None,
+        sql_dialect: None,
     }
 }
 
@@ -49,7 +50,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 import java.sql.*;
@@ -67,12 +70,16 @@ public class UserServlet extends HttpServlet {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("UserServlet.java"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("UserServlet.java"), source)
         .expect("parse java");
     let ctx = make_context("UserServlet.java", Language::Java, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
-    assert!(findings.len() <= 20, "SQL injection taint pipeline completed");
+    assert!(
+        findings.len() <= 20,
+        "SQL injection taint pipeline completed"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,7 +105,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 import java.sql.*;
@@ -117,7 +126,8 @@ public class SafeServlet extends HttpServlet {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("SafeServlet.java"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("SafeServlet.java"), source)
         .expect("parse java");
     let ctx = make_context("SafeServlet.java", Language::Java, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
@@ -125,9 +135,13 @@ public class SafeServlet extends HttpServlet {
     // The rule matches Statement.execute, but PreparedStatement.executeQuery is different.
     // This test verifies the sanitizer path: even if we had a taint rule,
     // the use of PreparedStatement with setString should not produce a finding.
-    let has_sql = findings.iter()
+    let has_sql = findings
+        .iter()
         .any(|f| f.rule_id.contains("sql") || f.message.to_lowercase().contains("sql"));
-    assert!(!has_sql, "PreparedStatement should sanitize SQL injection taint");
+    assert!(
+        !has_sql,
+        "PreparedStatement should sanitize SQL injection taint"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -153,7 +167,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 function displayComment(req) {
@@ -163,13 +179,15 @@ function displayComment(req) {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("xss.js"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("xss.js"), source)
         .expect("parse js");
     let ctx = make_context("xss.js", Language::JavaScript, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
     assert!(!findings.is_empty(), "Should detect XSS via innerHTML");
-    let has_xss = findings.iter()
+    let has_xss = findings
+        .iter()
         .any(|f| f.rule_id.contains("xss") || f.message.to_lowercase().contains("xss"));
     assert!(has_xss, "Expected XSS finding");
 }
@@ -197,7 +215,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 import os
@@ -208,13 +228,15 @@ def run_user_command():
     os.system(full_cmd)
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("cmdinj.py"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("cmdinj.py"), source)
         .expect("parse python");
     let ctx = make_context("cmdinj.py", Language::Python, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
     assert!(!findings.is_empty(), "Should detect command injection");
-    let has_cmd = findings.iter()
+    let has_cmd = findings
+        .iter()
         .any(|f| f.rule_id.contains("command") || f.message.to_lowercase().contains("command"));
     assert!(has_cmd, "Expected command injection finding");
 }
@@ -242,7 +264,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 import os
@@ -254,7 +278,8 @@ def safe_command():
     os.system(sanitized)
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("safe.py"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("safe.py"), source)
         .expect("parse python");
     let ctx = make_context("safe.py", Language::Python, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
@@ -262,7 +287,10 @@ def safe_command():
     // The rule still matches os.system() syntactically, but a full taint engine
     // with sanitizer awareness would not flag this. Since our current rule is
     // pattern-only, we document the expectation for future taint integration.
-    println!("Findings with sanitizer: {} (pattern-only rule may still match)", findings.len());
+    println!(
+        "Findings with sanitizer: {} (pattern-only rule may still match)",
+        findings.len()
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,7 +316,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 import java.sql.*;
@@ -312,12 +342,16 @@ public class CrossFuncServlet extends HttpServlet {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("CrossFunc.java"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("CrossFunc.java"), source)
         .expect("parse java");
     let ctx = make_context("CrossFunc.java", Language::Java, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
-    assert!(findings.len() <= 20, "Cross-function taint pipeline completed");
+    assert!(
+        findings.len() <= 20,
+        "Cross-function taint pipeline completed"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,7 +377,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 function processData(req) {
@@ -356,13 +392,21 @@ function processData(req) {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("multi_source.js"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("multi_source.js"), source)
         .expect("parse js");
     let ctx = make_context("multi_source.js", Language::JavaScript, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
-    assert!(!findings.is_empty(), "Should detect eval with converging taint sources");
-    assert_eq!(findings.len(), 1, "Single sink should produce single finding");
+    assert!(
+        !findings.is_empty(),
+        "Should detect eval with converging taint sources"
+    );
+    assert_eq!(
+        findings.len(),
+        1,
+        "Single sink should produce single finding"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -388,7 +432,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 function merge(target, source) {
@@ -405,12 +451,16 @@ function handleRequest(req) {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("proto_pollution.js"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("proto_pollution.js"), source)
         .expect("parse js");
     let ctx = make_context("proto_pollution.js", Language::JavaScript, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
-    assert!(findings.len() <= 20, "Prototype pollution pipeline completed");
+    assert!(
+        findings.len() <= 20,
+        "Prototype pollution pipeline completed"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -436,7 +486,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 from flask import request
@@ -447,7 +499,8 @@ def download_file():
     return f.read()
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("path_traversal.py"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("path_traversal.py"), source)
         .expect("parse python");
     let ctx = make_context("path_traversal.py", Language::Python, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
@@ -478,7 +531,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 import javax.naming.*;
@@ -495,7 +550,8 @@ public class LdapSearchServlet extends HttpServlet {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("LdapSearch.java"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("LdapSearch.java"), source)
         .expect("parse java");
     let ctx = make_context("LdapSearch.java", Language::Java, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
@@ -524,12 +580,16 @@ public class FlowTest {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("FlowTest.java"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("FlowTest.java"), source)
         .expect("parse java");
 
     // Verify the analyzer can be created and the AST is valid for dataflow processing
     assert!(true, "DataFlowAnalyzer created and AST parsed successfully");
-    println!("DataFlowAnalyzer integration: AST has {} top-level children", ast.child_count());
+    println!(
+        "DataFlowAnalyzer integration: AST has {} top-level children",
+        ast.child_count()
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -555,7 +615,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 function renderPage(req) {
@@ -567,10 +629,14 @@ function renderPage(req) {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("concat.js"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("concat.js"), source)
         .expect("parse js");
     let ctx = make_context("concat.js", Language::JavaScript, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
-    assert!(!findings.is_empty(), "Should detect taint through concatenation chain");
+    assert!(
+        !findings.is_empty(),
+        "Should detect taint through concatenation chain"
+    );
 }

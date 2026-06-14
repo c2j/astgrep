@@ -62,10 +62,7 @@ pub fn is_static_block_context(node: &dyn AstNode) -> bool {
 
     // Also check if parent node is a static block
     let kind = ts_kind(node);
-    if kind == "static_initializer"
-        || kind == "static_block"
-        || kind == "static_initialization"
-    {
+    if kind == "static_initializer" || kind == "static_block" || kind == "static_initialization" {
         return true;
     }
 
@@ -87,8 +84,7 @@ pub fn is_constructor_declaration(node: &dyn AstNode, class_name: Option<&str>) 
             return node.child_count() > 0
                 && (0..node.child_count()).any(|i| {
                     node.child(i).is_some_and(|c| {
-                        c.node_type() == "identifier"
-                            && c.text().is_some_and(|t| t == class)
+                        c.node_type() == "identifier" && c.text().is_some_and(|t| t == class)
                     })
                 });
         }
@@ -193,12 +189,18 @@ pub fn extract_constant_from_expression(
 ) -> Option<ConstantValue> {
     let kind = ts_kind(node);
     match kind.as_str() {
-        "literal" | "decimal_integer_literal" | "integer_literal" | "hex_integer_literal"
-        | "octal_integer_literal" | "binary_integer_literal" => {
+        "literal"
+        | "decimal_integer_literal"
+        | "integer_literal"
+        | "hex_integer_literal"
+        | "octal_integer_literal"
+        | "binary_integer_literal" => {
             if let Some(text) = node.text() {
                 let trimmed = text.trim();
                 if trimmed.starts_with('"') || trimmed.starts_with('\'') {
-                    Some(ConstantValue::String(trimmed.trim_matches(|c| c == '"' || c == '\'').to_string()))
+                    Some(ConstantValue::String(
+                        trimmed.trim_matches(|c| c == '"' || c == '\'').to_string(),
+                    ))
                 } else if let Ok(i) = trimmed.parse::<i64>() {
                     Some(ConstantValue::Integer(i))
                 } else {
@@ -210,7 +212,9 @@ pub fn extract_constant_from_expression(
         }
         "string_literal" | "literal_string" => {
             if let Some(text) = node.text() {
-                Some(ConstantValue::String(text.trim_matches(|c| c == '"' || c == '\'').to_string()))
+                Some(ConstantValue::String(
+                    text.trim_matches(|c| c == '"' || c == '\'').to_string(),
+                ))
             } else {
                 None
             }
@@ -232,9 +236,12 @@ pub fn extract_constant_from_expression(
             // For known string-producing methods, return a string constant
             if let Some(text) = node.text() {
                 let t = text.trim();
-                if t.contains("String.format") || t.contains("String.valueOf")
-                    || t.contains(".concat(") || t.contains(".toString(")
-                    || t.contains("StringBuilder") || t.contains("StringBuffer")
+                if t.contains("String.format")
+                    || t.contains("String.valueOf")
+                    || t.contains(".concat(")
+                    || t.contains(".toString(")
+                    || t.contains("StringBuilder")
+                    || t.contains("StringBuffer")
                 {
                     return Some(ConstantValue::String(String::new()));
                 }

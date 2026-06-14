@@ -25,7 +25,8 @@ pub struct AdvancedSemgrepMatcher {
     max_depth: Option<usize>,
     constant_values: HashMap<String, ConstantValue>,
     full_source: Option<String>,
-    inside_match_cache: HashMap<String, Vec<((usize, usize, usize, usize), HashMap<String, String>)>>,
+    inside_match_cache:
+        HashMap<String, Vec<((usize, usize, usize, usize), HashMap<String, String>)>>,
     import_map: HashMap<String, String>,
     wildcard_imports: Vec<String>,
     symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
@@ -40,7 +41,13 @@ impl Default for AdvancedSemgrepMatcher {
 }
 
 impl AdvancedSemgrepMatcher {
-    fn extract_source_range(source: &str, sl: usize, sc: usize, el: usize, ec: usize) -> Option<String> {
+    fn extract_source_range(
+        source: &str,
+        sl: usize,
+        sc: usize,
+        el: usize,
+        ec: usize,
+    ) -> Option<String> {
         let lines: Vec<&str> = source.lines().collect();
         if sl == 0 || el == 0 || sl > lines.len() || el > lines.len() {
             return None;
@@ -127,71 +134,71 @@ impl AdvancedSemgrepMatcher {
         self.language_hint = Some(lang);
     }
 
-     pub fn find_matches(
-         &mut self,
-         pattern: &SemgrepPattern,
-         root: &dyn AstNode,
-     ) -> Result<Vec<SemgrepMatchResult>> {
-          self.full_source = root.text().map(|s| s.to_string());
-          self.inside_match_cache.clear();
-           self.import_map.clear();
-           self.wildcard_imports.clear();
-           if let Some(ref source) = self.full_source {
-               let import_re = regex::Regex::new(r"import\s+(static\s+)?([\w.]+)(\.\*)?\s*;").unwrap();
-               for cap in import_re.captures_iter(source) {
-                   if let Some(full) = cap.get(2) {
-                       let full = full.as_str();
-                       if cap.get(3).is_some() {
-                           self.wildcard_imports.push(full.to_string());
-                       } else if let Some(last_dot) = full.rfind('.') {
-                           let short = &full[last_dot + 1..];
-                           self.import_map.insert(short.to_string(), full.to_string());
-                       } else {
-                           self.import_map.insert(full.to_string(), full.to_string());
-                       }
-                   }
-               }
+    pub fn find_matches(
+        &mut self,
+        pattern: &SemgrepPattern,
+        root: &dyn AstNode,
+    ) -> Result<Vec<SemgrepMatchResult>> {
+        self.full_source = root.text().map(|s| s.to_string());
+        self.inside_match_cache.clear();
+        self.import_map.clear();
+        self.wildcard_imports.clear();
+        if let Some(ref source) = self.full_source {
+            let import_re = regex::Regex::new(r"import\s+(static\s+)?([\w.]+)(\.\*)?\s*;").unwrap();
+            for cap in import_re.captures_iter(source) {
+                if let Some(full) = cap.get(2) {
+                    let full = full.as_str();
+                    if cap.get(3).is_some() {
+                        self.wildcard_imports.push(full.to_string());
+                    } else if let Some(last_dot) = full.rfind('.') {
+                        let short = &full[last_dot + 1..];
+                        self.import_map.insert(short.to_string(), full.to_string());
+                    } else {
+                        self.import_map.insert(full.to_string(), full.to_string());
+                    }
+                }
             }
+        }
 
-            let mut matches = Vec::new();
-            let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
+        let mut matches = Vec::new();
+        let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
 
-             if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
-                 if let Some(lang) = self.language_hint {
-                    let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
-                    let tree_found = !tree_results.is_empty();
-                    if tree_found {
-                        if self.constant_values.is_empty() {
-                            matches = tree_results;
-                        } else {
-                            for r in tree_results {
-                                let is_new = !matches.iter().any(|m| {
-                                    m.node.location() == r.node.location()
-                                });
-                                if is_new {
-                                    matches.push(r);
-                                }
+        if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
+            if let Some(lang) = self.language_hint {
+                let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
+                let tree_found = !tree_results.is_empty();
+                if tree_found {
+                    if self.constant_values.is_empty() {
+                        matches = tree_results;
+                    } else {
+                        for r in tree_results {
+                            let is_new = !matches
+                                .iter()
+                                .any(|m| m.node.location() == r.node.location());
+                            if is_new {
+                                matches.push(r);
                             }
                         }
                     }
-                     if !self.constant_values.is_empty()
-                         || (!tree_found
-                            && (!self.import_map.is_empty() || !self.wildcard_imports.is_empty())
-                            && self.pattern_has_fqn(&pattern_str))
-                     {
-                         let mut text_matches = Vec::new();
-                         let _ = self.find_matches_recursive(pattern, root, &mut text_matches, 0);
-                         for r in text_matches {
-                             let is_new = !matches.iter().any(|m| {
-                                 m.node.location() == r.node.location()
-                             });
-                             if is_new {
-                                 matches.push(r);
-                             }
-                         }
-                     }
                 }
-           }
+                if !self.constant_values.is_empty()
+                    || (!tree_found
+                        && (!self.import_map.is_empty() || !self.wildcard_imports.is_empty())
+                        && self.pattern_has_fqn(&pattern_str))
+                {
+                    let mut text_matches = Vec::new();
+                    let _ = self.find_matches_recursive(pattern, root, &mut text_matches, 0);
+                    for r in text_matches {
+                        let is_new = !matches
+                            .iter()
+                            .any(|m| m.node.location() == r.node.location());
+                        if is_new {
+                            matches.push(r);
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(matches)
     }
@@ -229,26 +236,28 @@ impl AdvancedSemgrepMatcher {
 
         // First, recurse into children
         let mut subtree_has_match = false;
-                for i in 0..node.child_count() {
+        for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                                if self.find_matches_recursive(pattern, child, matches, depth + 1)? {
+                if self.find_matches_recursive(pattern, child, matches, depth + 1)? {
                     subtree_has_match = true;
-                                    }
+                }
             } else {
-                            }
+            }
         }
 
         // Try to match at current node only if no descendant produced a match
         if !subtree_has_match {
             let snapshot = self.metavar_manager.snapshot();
-                        if self.matches_pattern(pattern, node)? {
+            if self.matches_pattern(pattern, node)? {
                 let mut match_bindings = self.metavar_manager.get_binding_matches();
                 // Fill in empty binding values using full_source + location
                 if let Some(ref source) = self.full_source {
                     for (_, binding) in match_bindings.iter_mut() {
                         if binding.value.is_empty() {
                             if let Some((sl, sc, el, ec)) = binding.location {
-                                if let Some(text) = Self::extract_source_range(source, sl, sc, el, ec) {
+                                if let Some(text) =
+                                    Self::extract_source_range(source, sl, sc, el, ec)
+                                {
                                     binding.value = text;
                                 }
                             }
@@ -287,8 +296,8 @@ impl AdvancedSemgrepMatcher {
         // If pattern type matches, evaluate conditions (e.g., metavariable-regex)
         if type_matches && !pattern.conditions.is_empty() {
             let bindings = self.metavar_manager.get_binding_values();
-                        let result = self.evaluate_conditions(&pattern.conditions, &bindings);
-                        return result;
+            let result = self.evaluate_conditions(&pattern.conditions, &bindings);
+            return result;
         }
 
         Ok(type_matches)
@@ -460,7 +469,6 @@ impl AdvancedSemgrepMatcher {
         patterns: &[SemgrepPattern],
         node: &dyn AstNode,
     ) -> Result<bool> {
-        
         // Separate patterns into categories
         let (context_patterns, rest): (Vec<_>, Vec<_>) = patterns.iter().partition(|p| {
             matches!(
@@ -480,18 +488,17 @@ impl AdvancedSemgrepMatcher {
         // When there are no content patterns, treat Inside patterns as content patterns.
         // Semgrep semantics: patterns: [pattern-inside: X] with no pattern: key
         // means "match X directly" (Inside acts as both filter and content).
-        let (effective_context, effective_content) = if content_patterns.is_empty() && !context_patterns.is_empty() {
-            (Vec::new(), context_patterns)
-        } else {
-            (context_patterns, content_patterns)
-        };
+        let (effective_context, effective_content) =
+            if content_patterns.is_empty() && !context_patterns.is_empty() {
+                (Vec::new(), context_patterns)
+            } else {
+                (context_patterns, content_patterns)
+            };
 
-        
         let snapshot = self.metavar_manager.snapshot();
 
         // Step 1: Check ALL context patterns (pattern-inside) to establish bindings
         for pattern in &effective_context {
-            
             let context_matches = match &pattern.pattern_type {
                 PatternType::Inside(inner) => self.matches_inside_context(inner, node, patterns)?,
                 PatternType::NotInside(inner) => {
@@ -502,23 +509,22 @@ impl AdvancedSemgrepMatcher {
             };
 
             if !context_matches {
-                                self.metavar_manager.restore(snapshot);
+                self.metavar_manager.restore(snapshot);
                 return Ok(false);
             }
-
-                    }
+        }
 
         // Step 2: Match content patterns with established bindings
         for pattern in &effective_content {
-                        if !self.matches_pattern(pattern, node)? {
-                                self.metavar_manager.restore(snapshot);
+            if !self.matches_pattern(pattern, node)? {
+                self.metavar_manager.restore(snapshot);
                 return Ok(false);
             }
-                    }
+        }
 
         // Step 3: Check negative patterns (must NOT match)
         for pattern in &negative_patterns {
-                        let neg_snapshot = self.metavar_manager.snapshot();
+            let neg_snapshot = self.metavar_manager.snapshot();
             let negative_matches = match &pattern.pattern_type {
                 PatternType::Not(inner) => self.matches_not_pattern(inner.as_ref(), node)?,
                 PatternType::NotRegex(regex) => {
@@ -527,13 +533,13 @@ impl AdvancedSemgrepMatcher {
                 _ => unreachable!(),
             };
             if !negative_matches {
-                                self.metavar_manager.restore(snapshot);
+                self.metavar_manager.restore(snapshot);
                 return Ok(false);
             }
             self.metavar_manager.restore(neg_snapshot);
         }
 
-                Ok(true)
+        Ok(true)
     }
 
     /// Check if a node is inside a pattern context (for pattern-inside)
@@ -567,8 +573,11 @@ impl AdvancedSemgrepMatcher {
                 for (match_loc, bindings) in &inside_matches {
                     if self.location_contains(match_loc, &node_loc) {
                         for (var_name, value) in bindings {
-                            let normalized_name = var_name.strip_prefix('$').unwrap_or(var_name).to_string();
-                            let _ = self.metavar_manager.bind(normalized_name, value.clone(), node);
+                            let normalized_name =
+                                var_name.strip_prefix('$').unwrap_or(var_name).to_string();
+                            let _ = self
+                                .metavar_manager
+                                .bind(normalized_name, value.clone(), node);
                         }
                         return Ok(true);
                     }
@@ -593,14 +602,17 @@ impl AdvancedSemgrepMatcher {
         if let Some(ref full_source) = self.full_source {
             if let Some(regions) = self.find_inside_regions(pattern_str, full_source) {
                 for (reg_start, reg_end, bindings) in &regions {
-                    if let Some(loc) = self.byte_offsets_to_location(*reg_start, *reg_end, full_source) {
+                    if let Some(loc) =
+                        self.byte_offsets_to_location(*reg_start, *reg_end, full_source)
+                    {
                         results.push((loc, bindings.clone()));
                     }
                 }
             }
         }
 
-        self.inside_match_cache.insert(pattern_str.to_string(), results.clone());
+        self.inside_match_cache
+            .insert(pattern_str.to_string(), results.clone());
         Ok(results)
     }
 
@@ -643,11 +655,19 @@ impl AdvancedSemgrepMatcher {
     ) -> bool {
         let (os, oc, oe, oec) = *outer;
         let (is, ic, ie, iec) = *inner;
-        if os < is { return true; }
-        if os > is { return false; }
+        if os < is {
+            return true;
+        }
+        if os > is {
+            return false;
+        }
         if oc <= ic {
-            if oe > ie { return true; }
-            if oe < ie { return false; }
+            if oe > ie {
+                return true;
+            }
+            if oe < ie {
+                return false;
+            }
             return oec >= iec;
         }
         false
@@ -661,21 +681,23 @@ impl AdvancedSemgrepMatcher {
         if let Some(node_loc) = node.location() {
             let node_text = node.text().unwrap_or("").to_string();
             if let Some(ref full_source) = self.full_source {
-                let parsed = self.parser.parse(
-                    match &inner_pattern.pattern_type {
+                let parsed = self
+                    .parser
+                    .parse(match &inner_pattern.pattern_type {
                         PatternType::Simple(s) => s.as_str(),
                         _ => "",
-                    }
-                ).unwrap_or(ParsedPattern::Wildcard);
+                    })
+                    .unwrap_or(ParsedPattern::Wildcard);
 
                 let search_text = match &inner_pattern.pattern_type {
                     PatternType::Simple(s) => {
-                        let key_tokens: Vec<&str> = s.split(|c: char| c.is_whitespace() || "(){}[];,".contains(c))
+                        let key_tokens: Vec<&str> = s
+                            .split(|c: char| c.is_whitespace() || "(){}[];,".contains(c))
                             .filter(|t| !t.is_empty() && !t.starts_with('$') && *t != "...")
                             .take(3)
                             .collect();
                         key_tokens
-                    },
+                    }
                     _ => vec![],
                 };
 
@@ -691,7 +713,9 @@ impl AdvancedSemgrepMatcher {
                                 let enc_start_col = col_pos + 1;
 
                                 let snapshot = self.metavar_manager.snapshot();
-                                if enc_start_line < node_loc.0 || (enc_start_line == node_loc.0 && enc_start_col <= node_loc.1) {
+                                if enc_start_line < node_loc.0
+                                    || (enc_start_line == node_loc.0 && enc_start_col <= node_loc.1)
+                                {
                                     self.metavar_manager.restore(snapshot);
                                     return Ok(true);
                                 }
@@ -810,11 +834,11 @@ impl AdvancedSemgrepMatcher {
                     results.push((full_match.start(), full_match.end(), bindings));
                 }
             }
-                        if !results.is_empty() {
+            if !results.is_empty() {
                 return Some(results);
             }
         } else {
-                    }
+        }
 
         None
     }
@@ -874,7 +898,6 @@ impl AdvancedSemgrepMatcher {
             let field_type = captures.get(1)?.as_str();
             let metavar_name = captures.get(2)?.as_str();
 
-                        
             // The source_text might be just a small node text (like "private") or the full file
             // We need to search for field declarations in the available text
             // Match: private int x; or private int x = ...;
@@ -887,7 +910,7 @@ impl AdvancedSemgrepMatcher {
             for cap in decl_pattern.captures_iter(source_text) {
                 if let Some(field_name_match) = cap.get(1) {
                     let field_name = field_name_match.as_str().to_string();
-                                        bindings.insert(format!("${}", metavar_name), field_name);
+                    bindings.insert(format!("${}", metavar_name), field_name);
                     // Note: In a full implementation, we'd handle multiple fields of the same type
                     // For now, we take the first match
                     break;
@@ -896,8 +919,7 @@ impl AdvancedSemgrepMatcher {
 
             // If no field found in this text, we might need to look at a broader context
             // For now, store what we're looking for so we can validate later
-            if !bindings.contains_key(&format!("${}", metavar_name)) {
-                            }
+            if !bindings.contains_key(&format!("${}", metavar_name)) {}
         }
 
         // Also handle class name metavariable $T
@@ -907,7 +929,7 @@ impl AdvancedSemgrepMatcher {
             if let Some(cap) = class_pattern.captures(source_text) {
                 if let Some(class_name_match) = cap.get(1) {
                     let class_name = class_name_match.as_str().to_string();
-                                        bindings.insert("$T".to_string(), class_name);
+                    bindings.insert("$T".to_string(), class_name);
                 }
             }
         }
@@ -938,9 +960,10 @@ impl AdvancedSemgrepMatcher {
         match pattern {
             ParsedPattern::Literal(literal) => self.match_literal(literal, node),
             ParsedPattern::Metavariable(metavar) => self.match_metavariable(metavar, node),
-            ParsedPattern::TypedMetavar { name, expected_type } => {
-                self.match_typed_metavar(name, expected_type, node)
-            }
+            ParsedPattern::TypedMetavar {
+                name,
+                expected_type,
+            } => self.match_typed_metavar(name, expected_type, node),
             ParsedPattern::EllipsisMetavariable(metavar) => {
                 self.match_ellipsis_metavariable(metavar, node)
             }
@@ -959,16 +982,22 @@ impl AdvancedSemgrepMatcher {
         }
         let body = &literal[3..]; // strip =~
         if body.ends_with('/') {
-            return Some(body[..body.len()-1].to_string());
+            return Some(body[..body.len() - 1].to_string());
         }
         // Handle trailing flags: =~/pattern/i, =~/pattern/m, =~/pattern/im
         if let Some(last_slash) = body.rfind('/') {
             let pattern = &body[..last_slash];
-            let flags = &body[last_slash+1..];
+            let flags = &body[last_slash + 1..];
             let mut prefix = String::new();
-            if flags.contains('i') { prefix.push_str("(?i)"); }
-            if flags.contains('m') { prefix.push_str("(?m)"); }
-            if flags.contains('s') { prefix.push_str("(?s)"); }
+            if flags.contains('i') {
+                prefix.push_str("(?i)");
+            }
+            if flags.contains('m') {
+                prefix.push_str("(?m)");
+            }
+            if flags.contains('s') {
+                prefix.push_str("(?s)");
+            }
             return Some(format!("{}{}", prefix, pattern));
         }
         None
@@ -998,8 +1027,8 @@ impl AdvancedSemgrepMatcher {
                 if let Ok(re) = Regex::new(&regex_str) {
                     let content = if text.len() >= 2
                         && ((text.starts_with('"') && text.ends_with('"'))
-                        || (text.starts_with('\'') && text.ends_with('\''))
-                        || (text.starts_with('`') && text.ends_with('`')))
+                            || (text.starts_with('\'') && text.ends_with('\''))
+                            || (text.starts_with('`') && text.ends_with('`')))
                     {
                         &text[1..text.len() - 1]
                     } else {
@@ -1084,8 +1113,7 @@ impl AdvancedSemgrepMatcher {
             };
             let existing = self.metavar_manager.get_binding_values();
             let _ = existing;
-            self.metavar_manager
-                .bind(bind_key, text.to_string(), node)
+            self.metavar_manager.bind(bind_key, text.to_string(), node)
         } else {
             Ok(false)
         }
@@ -1136,10 +1164,19 @@ impl AdvancedSemgrepMatcher {
     /// Check if a tree-sitter node type matches an expected type name
     fn node_matches_type(node_type: &str, expected_type: &str) -> bool {
         let generic_types = [
-            "Literal", "Identifier", "BinaryExpression", "UnaryExpression",
-            "CallExpression", "MemberExpression", "AssignmentExpression",
-            "ConditionalExpression", "ArrayExpression", "ObjectExpression",
-            "LambdaExpression", "ExpressionStatement", "BlockStatement",
+            "Literal",
+            "Identifier",
+            "BinaryExpression",
+            "UnaryExpression",
+            "CallExpression",
+            "MemberExpression",
+            "AssignmentExpression",
+            "ConditionalExpression",
+            "ArrayExpression",
+            "ObjectExpression",
+            "LambdaExpression",
+            "ExpressionStatement",
+            "BlockStatement",
         ];
         if generic_types.contains(&node_type) {
             return false;
@@ -1158,27 +1195,28 @@ impl AdvancedSemgrepMatcher {
             ),
             "boolean" | "bool" => matches!(
                 node_type,
-                "true" | "false" | "boolean_literal"
-                    | "boolean_type"
+                "true" | "false" | "boolean_literal" | "boolean_type"
             ),
             "string" => matches!(
                 node_type,
-                "string_literal" | "string" | "template_string"
-                    | "concatenated_string" | "fstring" | "fstring_string"
+                "string_literal"
+                    | "string"
+                    | "template_string"
+                    | "concatenated_string"
+                    | "fstring"
+                    | "fstring_string"
             ),
             "float" | "double" => matches!(
                 node_type,
-                "decimal_floating_point_literal"
-                    | "floating_point_literal"
-                    | "float_literal"
+                "decimal_floating_point_literal" | "floating_point_literal" | "float_literal"
             ),
             "char" | "character" => matches!(node_type, "character_literal"),
             "short" | "byte" => node_type.contains("integer"),
-            "long" => {
-                node_type.contains("integer")
-            }
+            "long" => node_type.contains("integer"),
             _ => {
-                node_type.to_lowercase().contains(&expected_type.to_lowercase())
+                node_type
+                    .to_lowercase()
+                    .contains(&expected_type.to_lowercase())
                     || node_type == expected_type
             }
         }
@@ -1195,16 +1233,10 @@ impl AdvancedSemgrepMatcher {
                 if ts_kind.contains("string") || ts_kind.contains("String") {
                     return false;
                 }
-                text.parse::<i64>().is_ok()
-                    || text.starts_with("0x")
-                    || text.starts_with("0b")
+                text.parse::<i64>().is_ok() || text.starts_with("0x") || text.starts_with("0b")
             }
-            "boolean" | "bool" => {
-                text == "true" || text == "false"
-            }
-            "float" | "double" => {
-                text.parse::<f64>().is_ok()
-            }
+            "boolean" | "bool" => text == "true" || text == "false",
+            "float" | "double" => text.parse::<f64>().is_ok(),
             "string" | "String" => {
                 (text.starts_with('"') && text.ends_with('"'))
                     || (text.starts_with('\'') && text.ends_with('\''))
@@ -1222,16 +1254,10 @@ impl AdvancedSemgrepMatcher {
                     || text_value.starts_with("0x")
                     || text_value.starts_with("0b")
             }
-            "boolean" | "bool" => {
-                text_value == "true" || text_value == "false"
-            }
-            "float" | "double" => {
-                text_value.parse::<f64>().is_ok()
-            }
+            "boolean" | "bool" => text_value == "true" || text_value == "false",
+            "float" | "double" => text_value.parse::<f64>().is_ok(),
             "char" | "character" => {
-                text_value.len() >= 3
-                    && text_value.starts_with('\'')
-                    && text_value.ends_with('\'')
+                text_value.len() >= 3 && text_value.starts_with('\'') && text_value.ends_with('\'')
             }
             "string" | "String" => {
                 (text_value.starts_with('"') && text_value.ends_with('"'))
@@ -1257,7 +1283,9 @@ impl AdvancedSemgrepMatcher {
             .filter_map(|i| node.child(i))
             .filter(|c| {
                 let nt = c.node_type();
-                if nt == "comment" || nt.ends_with("_comment") || nt == "line_comment"
+                if nt == "comment"
+                    || nt.ends_with("_comment")
+                    || nt == "line_comment"
                     || nt == "block_comment"
                 {
                     return false;
@@ -1271,8 +1299,8 @@ impl AdvancedSemgrepMatcher {
             .collect();
 
         if children.is_empty() && !patterns.is_empty() {
-                return Ok(false);
-            }
+            return Ok(false);
+        }
 
         self.try_coalesced_literal_match(patterns, &children, node, depth)
     }
@@ -1362,7 +1390,12 @@ impl AdvancedSemgrepMatcher {
             ParsedPattern::Literal(combined) => {
                 let child = children[child_offset];
                 if self.match_literal(combined, child)? {
-                    return self.try_coalesced_at_offset(remaining, children, child_offset + 1, depth + 1);
+                    return self.try_coalesced_at_offset(
+                        remaining,
+                        children,
+                        child_offset + 1,
+                        depth + 1,
+                    );
                 }
                 for consume in 2..=(children.len().saturating_sub(child_offset)) {
                     let merged: String = children[child_offset..child_offset + consume]
@@ -1371,7 +1404,12 @@ impl AdvancedSemgrepMatcher {
                         .collect::<Vec<_>>()
                         .join(" ");
                     if merged.contains(combined.as_str()) {
-                        return self.try_coalesced_at_offset(remaining, children, child_offset + consume, depth + 1);
+                        return self.try_coalesced_at_offset(
+                            remaining,
+                            children,
+                            child_offset + consume,
+                            depth + 1,
+                        );
                     }
                 }
                 Ok(false)
@@ -1387,8 +1425,16 @@ impl AdvancedSemgrepMatcher {
                             metavar.to_string()
                         };
                         let snapshot = self.metavar_manager.snapshot();
-                        if self.metavar_manager.bind(bind_key, text.to_string(), child)? {
-                            if self.try_coalesced_at_offset(remaining, children, child_offset + 1, depth + 1)? {
+                        if self
+                            .metavar_manager
+                            .bind(bind_key, text.to_string(), child)?
+                        {
+                            if self.try_coalesced_at_offset(
+                                remaining,
+                                children,
+                                child_offset + 1,
+                                depth + 1,
+                            )? {
                                 return Ok(true);
                             }
                         }
@@ -1413,8 +1459,16 @@ impl AdvancedSemgrepMatcher {
                         continue;
                     };
                     let snapshot = self.metavar_manager.snapshot();
-                    if self.metavar_manager.bind(metavar.to_string(), combined, bind_node)? {
-                        if self.try_coalesced_at_offset(remaining, children, child_offset + skip, depth + 1)? {
+                    if self
+                        .metavar_manager
+                        .bind(metavar.to_string(), combined, bind_node)?
+                    {
+                        if self.try_coalesced_at_offset(
+                            remaining,
+                            children,
+                            child_offset + skip,
+                            depth + 1,
+                        )? {
                             return Ok(true);
                         }
                     }
@@ -1426,7 +1480,12 @@ impl AdvancedSemgrepMatcher {
             ParsedPattern::Wildcard => {
                 for skip in 0..=(children.len().saturating_sub(child_offset)) {
                     let snapshot = self.metavar_manager.snapshot();
-                    if self.try_coalesced_at_offset(remaining, children, child_offset + skip, depth + 1)? {
+                    if self.try_coalesced_at_offset(
+                        remaining,
+                        children,
+                        child_offset + skip,
+                        depth + 1,
+                    )? {
                         return Ok(true);
                     }
                     self.metavar_manager.restore(snapshot);
@@ -1461,7 +1520,13 @@ impl AdvancedSemgrepMatcher {
             ParsedPattern::Wildcard => {
                 for skip in 0..=(children.len().saturating_sub(child_offset)) {
                     let snapshot = self.metavar_manager.snapshot();
-                    if self.try_match_ast_at_offset(remaining, children, child_offset + skip, parent_node, depth)? {
+                    if self.try_match_ast_at_offset(
+                        remaining,
+                        children,
+                        child_offset + skip,
+                        parent_node,
+                        depth,
+                    )? {
                         return Ok(true);
                     }
                     self.metavar_manager.restore(snapshot);
@@ -1487,8 +1552,17 @@ impl AdvancedSemgrepMatcher {
                     } else {
                         parent_node
                     };
-                    if self.metavar_manager.bind(metavar.to_string(), combined, bind_node)? {
-                        if self.try_match_ast_at_offset(remaining, children, child_offset + skip, parent_node, depth)? {
+                    if self
+                        .metavar_manager
+                        .bind(metavar.to_string(), combined, bind_node)?
+                    {
+                        if self.try_match_ast_at_offset(
+                            remaining,
+                            children,
+                            child_offset + skip,
+                            parent_node,
+                            depth,
+                        )? {
                             return Ok(true);
                         }
                     }
@@ -1503,18 +1577,42 @@ impl AdvancedSemgrepMatcher {
                 }
                 let child = children[child_offset];
                 if self.match_literal_exact(literal, child)? {
-                    return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                    return self.try_match_ast_at_offset(
+                        remaining,
+                        children,
+                        child_offset + 1,
+                        parent_node,
+                        depth,
+                    );
                 }
                 if self.match_literal(literal, child)? {
-                    return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                    return self.try_match_ast_at_offset(
+                        remaining,
+                        children,
+                        child_offset + 1,
+                        parent_node,
+                        depth,
+                    );
                 }
                 // Try matching against grandchildren (e.g., argument inside argument_list)
                 let gc: Vec<&dyn AstNode> = (0..child.child_count())
                     .filter_map(|i| child.child(i))
                     .collect();
                 if !gc.is_empty() {
-                    if self.try_match_ast_at_offset(&[ParsedPattern::Literal(literal.clone())], &gc, 0, child, depth + 1)? {
-                        return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                    if self.try_match_ast_at_offset(
+                        &[ParsedPattern::Literal(literal.clone())],
+                        &gc,
+                        0,
+                        child,
+                        depth + 1,
+                    )? {
+                        return self.try_match_ast_at_offset(
+                            remaining,
+                            children,
+                            child_offset + 1,
+                            parent_node,
+                            depth,
+                        );
                     }
                 }
                 Ok(false)
@@ -1535,8 +1633,17 @@ impl AdvancedSemgrepMatcher {
                         metavar.to_string()
                     };
                     let snapshot = self.metavar_manager.snapshot();
-                    if self.metavar_manager.bind(bind_key, text.to_string(), child)? {
-                        if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                    if self
+                        .metavar_manager
+                        .bind(bind_key, text.to_string(), child)?
+                    {
+                        if self.try_match_ast_at_offset(
+                            remaining,
+                            children,
+                            child_offset + 1,
+                            parent_node,
+                            depth,
+                        )? {
                             return Ok(true);
                         }
                     }
@@ -1545,14 +1652,23 @@ impl AdvancedSemgrepMatcher {
                 Ok(false)
             }
 
-            ParsedPattern::TypedMetavar { name, expected_type } => {
+            ParsedPattern::TypedMetavar {
+                name,
+                expected_type,
+            } => {
                 if child_offset >= children.len() {
                     return Ok(false);
                 }
                 let child = children[child_offset];
                 let snapshot = self.metavar_manager.snapshot();
                 if self.match_typed_metavar(name, expected_type, child)? {
-                    if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                    if self.try_match_ast_at_offset(
+                        remaining,
+                        children,
+                        child_offset + 1,
+                        parent_node,
+                        depth,
+                    )? {
                         return Ok(true);
                     }
                 }
@@ -1568,7 +1684,13 @@ impl AdvancedSemgrepMatcher {
                 for alt in alts {
                     let snapshot = self.metavar_manager.snapshot();
                     if self.match_parsed_pattern(alt, child, depth + 1)? {
-                        if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                        if self.try_match_ast_at_offset(
+                            remaining,
+                            children,
+                            child_offset + 1,
+                            parent_node,
+                            depth,
+                        )? {
                             return Ok(true);
                         }
                     }
@@ -1583,7 +1705,13 @@ impl AdvancedSemgrepMatcher {
                 }
                 let child = children[child_offset];
                 if child.node_type() == nt {
-                    return self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth);
+                    return self.try_match_ast_at_offset(
+                        remaining,
+                        children,
+                        child_offset + 1,
+                        parent_node,
+                        depth,
+                    );
                 }
                 Ok(false)
             }
@@ -1596,11 +1724,8 @@ impl AdvancedSemgrepMatcher {
                 // Sequence([Literal("foo"),...,Literal("bar"),...]) and matched
                 // against block children [expr_stmt(foo), expr_stmt(bar)]).
                 if !inner.is_empty() {
-                    let combined: Vec<ParsedPattern> = inner
-                        .iter()
-                        .chain(remaining.iter())
-                        .cloned()
-                        .collect();
+                    let combined: Vec<ParsedPattern> =
+                        inner.iter().chain(remaining.iter()).cloned().collect();
                     let snapshot = self.metavar_manager.snapshot();
                     if self.try_match_ast_at_offset(
                         &combined,
@@ -1643,7 +1768,13 @@ impl AdvancedSemgrepMatcher {
                 let child = children[child_offset];
                 let snapshot = self.metavar_manager.snapshot();
                 if self.match_deep_expr(inner, child, depth + 1)? {
-                    if self.try_match_ast_at_offset(remaining, children, child_offset + 1, parent_node, depth)? {
+                    if self.try_match_ast_at_offset(
+                        remaining,
+                        children,
+                        child_offset + 1,
+                        parent_node,
+                        depth,
+                    )? {
                         return Ok(true);
                     }
                 }
@@ -1658,9 +1789,13 @@ impl AdvancedSemgrepMatcher {
             // "..." matches any non-empty string literal
             if literal == "..." {
                 let nt = node.node_type();
-                if nt == "string" || nt == "string_literal" || nt == "literal"
-                    || nt == "template_string" || nt == "concatenated_string"
-                    || nt == "fstring" || nt == "fstring_string"
+                if nt == "string"
+                    || nt == "string_literal"
+                    || nt == "literal"
+                    || nt == "template_string"
+                    || nt == "concatenated_string"
+                    || nt == "fstring"
+                    || nt == "fstring_string"
                 {
                     let t = text.trim();
                     if (t.starts_with('"') && t.ends_with('"') && t.len() > 2)
@@ -1705,13 +1840,20 @@ impl AdvancedSemgrepMatcher {
             }
             let trimmed = text.trim();
             let stripped = trimmed
-                .strip_prefix('"').and_then(|s| s.strip_suffix('"'))
-                .or_else(|| trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .or_else(|| {
+                    trimmed
+                        .strip_prefix('\'')
+                        .and_then(|s| s.strip_suffix('\''))
+                })
                 .unwrap_or(trimmed);
             if stripped == literal.trim() {
                 return Ok(true);
             }
-            let is_punctuation = literal.chars().all(|c| "!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c));
+            let is_punctuation = literal
+                .chars()
+                .all(|c| "!@#$%^&*()-=+[]{}|;:'\",.<>?/\\`~".contains(c));
             if is_punctuation && text.trim() == literal {
                 return Ok(true);
             }
@@ -1757,7 +1899,8 @@ impl AdvancedSemgrepMatcher {
         let node_type = node.node_type();
 
         if (pattern_text.contains("public void") || pattern_text.contains("function"))
-            && !node_type.contains("declaration") && !node_type.contains("method")
+            && !node_type.contains("declaration")
+            && !node_type.contains("method")
         {
             for i in 0..node.child_count() {
                 if let Some(child) = node.child(i) {
@@ -1772,7 +1915,8 @@ impl AdvancedSemgrepMatcher {
         }
 
         if pattern_text.to_lowercase().contains("return")
-            && node_type != "return_statement" && !node_type.contains("return")
+            && node_type != "return_statement"
+            && !node_type.contains("return")
         {
             for i in 0..node.child_count() {
                 if let Some(child) = node.child(i) {
@@ -1792,7 +1936,7 @@ impl AdvancedSemgrepMatcher {
         // For function declaration patterns, try to include the closing brace
         // Only apply this for single function declarations, not for class nodes
         let node_type = node.node_type();
-                if (pattern_text.contains("public void") || pattern_text.contains("function"))
+        if (pattern_text.contains("public void") || pattern_text.contains("function"))
             && pattern_text.contains("{")
             && pattern_text.contains("}")
             && !node_type.contains("class")
@@ -1818,16 +1962,16 @@ impl AdvancedSemgrepMatcher {
 
                 if brace_count == 0 {
                     // Found matching closing brace, include it
-                                        let with_both_braces = node_text[..close_pos + 1].to_string();
-                                        // Strip any comments before opening brace and between braces
-                                        let cleaned = with_both_braces
+                    let with_both_braces = node_text[..close_pos + 1].to_string();
+                    // Strip any comments before opening brace and between braces
+                    let cleaned = with_both_braces
                         .lines()
                         .map(|line| {
-                                                        if let Some(comment_pos) = line.find("//") {
+                            if let Some(comment_pos) = line.find("//") {
                                 let result = &line[..comment_pos];
-                                                                // Preserve empty lines as-is, don't convert to empty string
+                                // Preserve empty lines as-is, don't convert to empty string
                                 if result.is_empty() {
-                                                                        "" // Keep empty lines as-is
+                                    "" // Keep empty lines as-is
                                 } else {
                                     result
                                 }
@@ -1837,9 +1981,9 @@ impl AdvancedSemgrepMatcher {
                         })
                         .collect::<Vec<_>>()
                         .join("\n");
-                                        node_text = cleaned;
+                    node_text = cleaned;
                 } else {
-                                    }
+                }
             }
         }
 
@@ -1883,17 +2027,16 @@ impl AdvancedSemgrepMatcher {
     ) -> Result<bool> {
         // Tokenize the text
         let text_tokens = self.tokenize(text);
-                        
+
         // Expand tokens using symbolic propagation if available
         let expanded_tokens = self.expand_tokens_with_symbolic_propagation(&text_tokens);
-        if !expanded_tokens.is_empty() && expanded_tokens != text_tokens {
-                    }
+        if !expanded_tokens.is_empty() && expanded_tokens != text_tokens {}
 
         // Try to match with original tokens first
         for start_pos in 0..text_tokens.len() {
             let snapshot = self.metavar_manager.snapshot();
             if self.try_match_sequence_at_position(patterns, &text_tokens, start_pos, node)? {
-                                return Ok(true);
+                return Ok(true);
             }
             self.metavar_manager.restore(snapshot);
         }
@@ -1905,7 +2048,12 @@ impl AdvancedSemgrepMatcher {
             if pattern_has_fqn && import_expanded != text_tokens {
                 for start_pos in 0..import_expanded.len() {
                     let snapshot = self.metavar_manager.snapshot();
-                    if self.try_match_sequence_at_position(patterns, &import_expanded, start_pos, node)? {
+                    if self.try_match_sequence_at_position(
+                        patterns,
+                        &import_expanded,
+                        start_pos,
+                        node,
+                    )? {
                         return Ok(true);
                     }
                     self.metavar_manager.restore(snapshot);
@@ -1920,7 +2068,12 @@ impl AdvancedSemgrepMatcher {
                         continue;
                     }
                     let snapshot = self.metavar_manager.snapshot();
-                    if self.try_match_sequence_at_position(&stripped_patterns, &text_tokens, start_pos, node)? {
+                    if self.try_match_sequence_at_position(
+                        &stripped_patterns,
+                        &text_tokens,
+                        start_pos,
+                        node,
+                    )? {
                         return Ok(true);
                     }
                     self.metavar_manager.restore(snapshot);
@@ -1928,7 +2081,12 @@ impl AdvancedSemgrepMatcher {
                 if import_expanded != text_tokens {
                     for start_pos in 0..import_expanded.len() {
                         let snapshot = self.metavar_manager.snapshot();
-                        if self.try_match_sequence_at_position(&stripped_patterns, &import_expanded, start_pos, node)? {
+                        if self.try_match_sequence_at_position(
+                            &stripped_patterns,
+                            &import_expanded,
+                            start_pos,
+                            node,
+                        )? {
                             return Ok(true);
                         }
                         self.metavar_manager.restore(snapshot);
@@ -1947,13 +2105,13 @@ impl AdvancedSemgrepMatcher {
                     start_pos,
                     node,
                 )? {
-                                        return Ok(true);
+                    return Ok(true);
                 }
                 self.metavar_manager.restore(snapshot);
             }
         }
 
-                Ok(false)
+        Ok(false)
     }
 
     fn strip_wildcard_fqn(&self, patterns: &[ParsedPattern]) -> Vec<ParsedPattern> {
@@ -2056,8 +2214,7 @@ impl AdvancedSemgrepMatcher {
         }
 
         let propagator = self.symbolic_propagator.as_ref().unwrap();
-                for (var, val) in propagator.state().variables.iter() {
-                    }
+        for (var, val) in propagator.state().variables.iter() {}
 
         let mut expanded = Vec::new();
 
@@ -2072,7 +2229,7 @@ impl AdvancedSemgrepMatcher {
             if let Some(symbolic_value) = propagator.state().get(token) {
                 let expanded_text = self.symbolic_value_to_tokens(symbolic_value);
                 if !expanded_text.is_empty() {
-                                        expanded.extend(expanded_text);
+                    expanded.extend(expanded_text);
                 } else {
                     expanded.push(token.clone());
                 }
@@ -2168,7 +2325,7 @@ impl AdvancedSemgrepMatcher {
                 return Ok(false);
             }
 
-                        match pattern {
+            match pattern {
                 ParsedPattern::Literal(literal) => {
                     if *literal == ";" {
                         if text_idx < text_tokens.len() && text_tokens[text_idx] == ";" {
@@ -2179,7 +2336,7 @@ impl AdvancedSemgrepMatcher {
                     // Track if we matched to opening brace
                     if *literal == "{" {
                         matched_opening_brace = true;
-                                            }
+                    }
                     // =~/regex/ syntax: match string content against regex
                     if let Some(regex_str) = Self::extract_regex(literal) {
                         if let Ok(re) = Regex::new(&regex_str) {
@@ -2222,7 +2379,7 @@ impl AdvancedSemgrepMatcher {
 
                         if found_string {
                             // This is a string literal wildcard, match any string literal
-                                                        text_idx += 1;
+                            text_idx += 1;
                         } else if !self.constant_values.is_empty() {
                             // Check constant propagation: identifier might have a string constant
                             let token = &text_tokens[text_idx];
@@ -2252,9 +2409,12 @@ impl AdvancedSemgrepMatcher {
                                 let mut depth = 0;
                                 while text_idx < text_tokens.len() {
                                     let t = &text_tokens[text_idx];
-                                    if t == "(" { depth += 1; }
-                                    else if t == ")" {
-                                        if depth == 0 { break; }
+                                    if t == "(" {
+                                        depth += 1;
+                                    } else if t == ")" {
+                                        if depth == 0 {
+                                            break;
+                                        }
                                         depth -= 1;
                                     }
                                     text_idx += 1;
@@ -2264,7 +2424,7 @@ impl AdvancedSemgrepMatcher {
                         }
                         if !found_string {
                             // No string literal found where expected
-                                                        return Ok(false);
+                            return Ok(false);
                         }
                     } else if literal.starts_with('$') {
                         // Special case: metavariable like "$RE"
@@ -2275,14 +2435,14 @@ impl AdvancedSemgrepMatcher {
                             let content = &token[1..token.len() - 1];
                             // Keep the $ prefix to match how metavariable-regex stores the name
                             let metavar = literal;
-                                                        if !self.metavar_manager.bind(
+                            if !self.metavar_manager.bind(
                                 metavar.to_string(),
                                 content.to_string(),
                                 node,
                             )? {
-                                                                return Ok(false);
+                                return Ok(false);
                             }
-                                                        text_idx += 1;
+                            text_idx += 1;
                         } else {
                             // Token is not a string literal, so this doesn't match
                             return Ok(false);
@@ -2301,14 +2461,14 @@ impl AdvancedSemgrepMatcher {
                                 let content = &token[1..token.len() - 1];
                                 // Use the inner metavariable name (with $ prefix)
                                 let metavar = inner;
-                                                                if !self.metavar_manager.bind(
+                                if !self.metavar_manager.bind(
                                     metavar.to_string(),
                                     content.to_string(),
                                     node,
                                 )? {
-                                                                        return Ok(false);
+                                    return Ok(false);
                                 }
-                                                                text_idx += 1;
+                                text_idx += 1;
                             } else {
                                 // Token is not a string literal, so this doesn't match
                                 return Ok(false);
@@ -2365,13 +2525,13 @@ impl AdvancedSemgrepMatcher {
                                 ConstantValue::Boolean(b) => b.to_string(),
                                 ConstantValue::Null => "null".to_string(),
                                 ConstantValue::Unknown => {
-                                                                        return Ok(false);
+                                    return Ok(false);
                                 }
                             };
                             if constant_str == *literal {
-                                                                text_idx += 1;
+                                text_idx += 1;
                             } else {
-                                                                return Ok(false);
+                                return Ok(false);
                             }
                         } else if text_tokens[text_idx] == "this"
                             && text_idx + 2 < text_tokens.len()
@@ -2386,14 +2546,14 @@ impl AdvancedSemgrepMatcher {
                                     ConstantValue::Boolean(b) => b.to_string(),
                                     ConstantValue::Null => "null".to_string(),
                                     ConstantValue::Unknown => {
-                                                                                return Ok(false);
+                                        return Ok(false);
                                     }
                                 };
                                 if constant_str == *literal {
-                                                                        // Consume all three tokens: "this", ".", "x"
+                                    // Consume all three tokens: "this", ".", "x"
                                     text_idx += 3;
                                 } else {
-                                                                        return Ok(false);
+                                    return Ok(false);
                                 }
                             } else {
                                 return Ok(false);
@@ -2416,10 +2576,13 @@ impl AdvancedSemgrepMatcher {
                             }
                         }
                     } else {
-                                                text_idx += 1;
+                        text_idx += 1;
                     }
                 }
-                ParsedPattern::TypedMetavar { name, expected_type } => {
+                ParsedPattern::TypedMetavar {
+                    name,
+                    expected_type,
+                } => {
                     if text_idx >= text_tokens.len() {
                         return Ok(false);
                     }
@@ -2496,7 +2659,7 @@ impl AdvancedSemgrepMatcher {
                                 } else {
                                     metavar.clone()
                                 };
-                                                                if !self.metavar_manager.bind(bind_key, value.clone(), node)? {
+                                if !self.metavar_manager.bind(bind_key, value.clone(), node)? {
                                     return Ok(false);
                                 }
                                 text_idx = end_pos;
@@ -2504,7 +2667,7 @@ impl AdvancedSemgrepMatcher {
                             } else if found_delim && end_pos == text_idx {
                                 return Ok(false);
                             } else {
-            }
+                            }
                         }
                     }
 
@@ -2520,14 +2683,17 @@ impl AdvancedSemgrepMatcher {
                     } else {
                         metavar.clone()
                     };
-                                        if !self.metavar_manager.bind(bind_key, value.clone(), node)? {
-                                                return Ok(false);
+                    if !self.metavar_manager.bind(bind_key, value.clone(), node)? {
+                        return Ok(false);
                     }
                     text_idx += 1;
                 }
                 ParsedPattern::EllipsisMetavariable(metavar) => {
                     let remaining_patterns = &patterns[pattern_idx + 1..];
-                    let existing_value = self.metavar_manager.get_binding(metavar).map(|b| b.value.clone());
+                    let existing_value = self
+                        .metavar_manager
+                        .get_binding(metavar)
+                        .map(|b| b.value.clone());
 
                     if let Some(stored_value) = existing_value {
                         // Already bound (second occurrence) — verify span matches stored value
@@ -2554,7 +2720,10 @@ impl AdvancedSemgrepMatcher {
                         let captured_content = text_tokens[text_idx..end_pos].join(" ");
                         let snapshot = self.metavar_manager.snapshot();
 
-                        if self.metavar_manager.bind(metavar.clone(), captured_content, node)? {
+                        if self
+                            .metavar_manager
+                            .bind(metavar.clone(), captured_content, node)?
+                        {
                             if self.try_match_sequence_at_position(
                                 remaining_patterns,
                                 text_tokens,
@@ -2610,7 +2779,8 @@ impl AdvancedSemgrepMatcher {
                                             if text_tokens[text_idx] != *lit {
                                                 // Forward-match: skip to find the literal
                                                 let mut fwd = text_idx + 1;
-                                                let max_fwd = (text_idx + 10).min(text_tokens.len());
+                                                let max_fwd =
+                                                    (text_idx + 10).min(text_tokens.len());
                                                 let mut found = false;
                                                 while fwd < max_fwd {
                                                     if text_tokens[fwd] == *lit {
@@ -3258,7 +3428,7 @@ impl AdvancedSemgrepMatcher {
                             .metavar_manager
                             .bind(metavar.clone(), token.clone(), node)?
                         {
-                                                        return Ok(true);
+                            return Ok(true);
                         }
                         self.metavar_manager.restore(snapshot);
                     }
@@ -3305,17 +3475,17 @@ impl AdvancedSemgrepMatcher {
                 }
             }
             Condition::MetavariableName(metavar_name) => {
-                                let key = metavar_name.metavariable.trim_start_matches('$');
+                let key = metavar_name.metavariable.trim_start_matches('$');
                 if let Some(value) = bindings.get(key) {
                     let full_source = self.full_source.as_deref().unwrap_or("");
-                                        let result = self.evaluate_name_constraint(
+                    let result = self.evaluate_name_constraint(
                         value,
                         &metavar_name.name_pattern,
                         full_source,
                     );
-                                        result
+                    result
                 } else {
-                                        Ok(false)
+                    Ok(false)
                 }
             }
             Condition::MetavariableAnalysis(metavar_analysis) => {
@@ -3400,7 +3570,6 @@ impl AdvancedSemgrepMatcher {
         let import_map = self.build_import_map(full_source);
         let resolved_value = self.resolve_name_to_fqn(value, &import_map);
 
-        
         if name_pattern.contains("*") {
             let regex_pattern = name_pattern.replace(".", "\\.").replace("*", ".*");
             if let Ok(regex) = Regex::new(&regex_pattern) {
@@ -3411,9 +3580,7 @@ impl AdvancedSemgrepMatcher {
         } else if resolved_value == name_pattern {
             Ok(true)
         } else if name_pattern.ends_with(&format!(".{}", value)) {
-            Ok(import_map
-                .get(value)
-                .is_some_and(|fqn| fqn == name_pattern))
+            Ok(import_map.get(value).is_some_and(|fqn| fqn == name_pattern))
         } else if resolved_value.ends_with(&format!(".{}", name_pattern)) {
             Ok(true)
         } else {
@@ -3510,7 +3677,6 @@ impl AdvancedSemgrepMatcher {
                         let var_part = bit_parts[0].trim();
                         let mask_part = bit_parts[1].trim();
 
-                        
                         // Check if this is the metavariable we're evaluating
                         if var_part.starts_with("$") {
                             // Parse the mask value
@@ -3520,7 +3686,7 @@ impl AdvancedSemgrepMatcher {
                                     // Parse the actual value
                                     if let Ok(val) = value.parse::<i64>() {
                                         let result = val | mask;
-                                                                                return Ok(result == expected);
+                                        return Ok(result == expected);
                                     }
                                 }
                             }
@@ -3547,7 +3713,6 @@ impl AdvancedSemgrepMatcher {
                     left_side
                 };
 
-                
                 // Check if this is the metavariable we're evaluating
                 if var_part.starts_with("$") {
                     // Parse the expected result
@@ -3556,7 +3721,7 @@ impl AdvancedSemgrepMatcher {
                         if let Ok(val) = value.parse::<i64>() {
                             // Python's ~ operator: ~x = -(x + 1)
                             let result = -(val + 1);
-                                                        return Ok(result == expected);
+                            return Ok(result == expected);
                         }
                     }
                 }
@@ -3608,7 +3773,7 @@ impl AdvancedSemgrepMatcher {
             }
         }
 
-                Ok(true)
+        Ok(true)
     }
 
     /// Check entropy constraints
@@ -3736,7 +3901,9 @@ impl AdvancedSemgrepMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use astgrep_core::{PatternType, SemgrepPattern, MetavariableRegex, MetavariableComparison, ComparisonOperator};
+    use astgrep_core::{
+        ComparisonOperator, MetavariableComparison, MetavariableRegex, PatternType, SemgrepPattern,
+    };
 
     // Mock AST node for testing
     #[derive(Clone)]
@@ -3802,11 +3969,11 @@ mod tests {
 
         // Create a pattern that should NOT match "test_function"
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::NotRegex("test_.*".to_string()),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::NotRegex("test_.*".to_string()),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let test_node = MockNode::new("test_function");
         let regular_node = MockNode::new("regular_function");
@@ -3827,11 +3994,11 @@ mod tests {
 
         // Create not-inside pattern
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::NotInside(Box::new(inner_pattern)),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::NotInside(Box::new(inner_pattern)),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         // Create test nodes
         let class_node = MockNode::new("class");
@@ -3877,7 +4044,10 @@ mod tests {
         use astgrep_dataflow::ConstantValue;
         let mut constants = HashMap::new();
         constants.insert("MAX_SIZE".to_string(), ConstantValue::Integer(100));
-        constants.insert("NAME".to_string(), ConstantValue::String("test".to_string()));
+        constants.insert(
+            "NAME".to_string(),
+            ConstantValue::String("test".to_string()),
+        );
 
         let matcher = AdvancedSemgrepMatcher::new().with_constant_values(constants);
         assert_eq!(matcher.constant_values.len(), 2);
@@ -3888,7 +4058,10 @@ mod tests {
         use astgrep_dataflow::ConstantValue;
         let mut matcher = AdvancedSemgrepMatcher::new();
         let mut constants = HashMap::new();
-        constants.insert("KEY".to_string(), ConstantValue::String("value".to_string()));
+        constants.insert(
+            "KEY".to_string(),
+            ConstantValue::String("value".to_string()),
+        );
 
         matcher.set_constant_values(constants);
         assert_eq!(matcher.constant_values.len(), 1);
@@ -3963,14 +4136,14 @@ mod tests {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("target");
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::Either(vec![
-                        SemgrepPattern::simple("other".to_string()),
-                        SemgrepPattern::simple("target".to_string()),
-                    ]),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::Either(vec![
+                SemgrepPattern::simple("other".to_string()),
+                SemgrepPattern::simple("target".to_string()),
+            ]),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &node);
         assert!(result.is_ok());
@@ -3981,14 +4154,14 @@ mod tests {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("test_node");
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::All(vec![
-                        SemgrepPattern::simple("test".to_string()),
-                        SemgrepPattern::simple("node".to_string()),
-                    ]),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::All(vec![
+                SemgrepPattern::simple("test".to_string()),
+                SemgrepPattern::simple("node".to_string()),
+            ]),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &node);
         assert!(result.is_ok());
@@ -3999,14 +4172,14 @@ mod tests {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("target");
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::Any(vec![
-                        SemgrepPattern::simple("other".to_string()),
-                        SemgrepPattern::simple("target".to_string()),
-                    ]),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::Any(vec![
+                SemgrepPattern::simple("other".to_string()),
+                SemgrepPattern::simple("target".to_string()),
+            ]),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &node);
         assert!(result.is_ok());
@@ -4017,11 +4190,11 @@ mod tests {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("hello");
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::Not(Box::new(SemgrepPattern::simple("world".to_string()))),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::Not(Box::new(SemgrepPattern::simple("world".to_string()))),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &node);
         assert!(result.is_ok());
@@ -4032,11 +4205,11 @@ mod tests {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("test_function");
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::Regex(r"test_.*".to_string()),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::Regex(r"test_.*".to_string()),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &node);
         assert!(result.is_ok());
@@ -4047,11 +4220,11 @@ mod tests {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("hello");
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::NotRegex(r"world.*".to_string()),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::NotRegex(r"world.*".to_string()),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &node);
         assert!(result.is_ok());
@@ -4063,11 +4236,13 @@ mod tests {
         let inner = MockNode::new("inner");
         let root = MockNode::with_children("outer", vec![inner]);
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::Inside(Box::new(SemgrepPattern::simple("inner".to_string()))),
-                    metavariable_pattern: None,
-                    conditions: Vec::new(),
-                    focus: None,
-                };
+            pattern_type: PatternType::Inside(Box::new(SemgrepPattern::simple(
+                "inner".to_string(),
+            ))),
+            metavariable_pattern: None,
+            conditions: Vec::new(),
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &root);
         assert!(result.is_ok());
@@ -4078,16 +4253,14 @@ mod tests {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("test_value");
         let pattern = SemgrepPattern {
-                    pattern_type: PatternType::Simple("test".to_string()),
-                    metavariable_pattern: None,
-                    conditions: vec![
-                        Condition::MetavariableRegex(MetavariableRegex {
-                            metavariable: "$X".to_string(),
-                            regex: r".*value.*".to_string(),
-                        }),
-                    ],
-                    focus: None,
-                };
+            pattern_type: PatternType::Simple("test".to_string()),
+            metavariable_pattern: None,
+            conditions: vec![Condition::MetavariableRegex(MetavariableRegex {
+                metavariable: "$X".to_string(),
+                regex: r".*value.*".to_string(),
+            })],
+            focus: None,
+        };
 
         let result = matcher.matches_pattern(&pattern, &node);
         assert!(result.is_ok());
@@ -4110,12 +4283,10 @@ mod tests {
         let mut bindings: HashMap<String, String> = HashMap::new();
         bindings.insert("X".to_string(), "hello_world".to_string());
 
-        let conditions = vec![
-            Condition::MetavariableRegex(MetavariableRegex {
-                metavariable: "$X".to_string(),
-                regex: r"hello_.*".to_string(),
-            }),
-        ];
+        let conditions = vec![Condition::MetavariableRegex(MetavariableRegex {
+            metavariable: "$X".to_string(),
+            regex: r"hello_.*".to_string(),
+        })];
 
         let result = matcher.evaluate_conditions(&conditions, &bindings);
         assert!(result.is_ok());
@@ -4128,12 +4299,10 @@ mod tests {
         let mut bindings: HashMap<String, String> = HashMap::new();
         bindings.insert("X".to_string(), "hello".to_string());
 
-        let conditions = vec![
-            Condition::MetavariableRegex(MetavariableRegex {
-                metavariable: "$X".to_string(),
-                regex: r"^world$".to_string(),
-            }),
-        ];
+        let conditions = vec![Condition::MetavariableRegex(MetavariableRegex {
+            metavariable: "$X".to_string(),
+            regex: r"^world$".to_string(),
+        })];
 
         let result = matcher.evaluate_conditions(&conditions, &bindings);
         assert!(result.is_ok());
@@ -4146,13 +4315,11 @@ mod tests {
         let mut bindings: HashMap<String, String> = HashMap::new();
         bindings.insert("X".to_string(), "100".to_string());
 
-        let conditions = vec![
-            Condition::MetavariableComparison(MetavariableComparison {
-                metavariable: "X".to_string(),
-                operator: ComparisonOperator::GreaterThan,
-                value: "50".to_string(),
-            }),
-        ];
+        let conditions = vec![Condition::MetavariableComparison(MetavariableComparison {
+            metavariable: "X".to_string(),
+            operator: ComparisonOperator::GreaterThan,
+            value: "50".to_string(),
+        })];
 
         let result = matcher.evaluate_conditions(&conditions, &bindings);
         assert!(result.is_ok());
@@ -4345,7 +4512,8 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.unwrap());
 
-        let result_long = matcher.check_complexity("line1\nline2\nline3\nline4\nline5\nline6", &config);
+        let result_long =
+            matcher.check_complexity("line1\nline2\nline3\nline4\nline5\nline6", &config);
         assert!(result_long.is_ok());
         assert!(!result_long.unwrap());
     }
@@ -4488,7 +4656,8 @@ mod tests {
     fn test_match_parsed_pattern_literal() {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("hello");
-        let result = matcher.match_parsed_pattern(&ParsedPattern::Literal("hello".to_string()), &node, 0);
+        let result =
+            matcher.match_parsed_pattern(&ParsedPattern::Literal("hello".to_string()), &node, 0);
         assert!(result.is_ok());
     }
 
@@ -4496,7 +4665,8 @@ mod tests {
     fn test_match_parsed_pattern_metavariable() {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::with_type("identifier", "test_var");
-        let result = matcher.match_parsed_pattern(&ParsedPattern::Metavariable("X".to_string()), &node, 0);
+        let result =
+            matcher.match_parsed_pattern(&ParsedPattern::Metavariable("X".to_string()), &node, 0);
         assert!(result.is_ok());
     }
 
@@ -4504,8 +4674,8 @@ mod tests {
     fn test_match_parsed_pattern_node_type() {
         let mut matcher = AdvancedSemgrepMatcher::new();
         let node = MockNode::new("test");
-        let result = matcher.match_parsed_pattern(
-            &ParsedPattern::NodeType("mock".to_string()), &node, 0);
+        let result =
+            matcher.match_parsed_pattern(&ParsedPattern::NodeType("mock".to_string()), &node, 0);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -4555,15 +4725,25 @@ mod tests {
         let mut import_map = HashMap::new();
         import_map.insert("List".to_string(), "java.util.List".to_string());
 
-        assert_eq!(matcher.resolve_name_to_fqn("List", &import_map), "java.util.List");
-        assert_eq!(matcher.resolve_name_to_fqn("Unknown", &import_map), "Unknown");
-        assert_eq!(matcher.resolve_name_to_fqn("java.util.Map", &import_map), "java.util.Map");
+        assert_eq!(
+            matcher.resolve_name_to_fqn("List", &import_map),
+            "java.util.List"
+        );
+        assert_eq!(
+            matcher.resolve_name_to_fqn("Unknown", &import_map),
+            "Unknown"
+        );
+        assert_eq!(
+            matcher.resolve_name_to_fqn("java.util.Map", &import_map),
+            "java.util.Map"
+        );
     }
 
     #[test]
     fn test_evaluate_name_constraint_exact() {
         let matcher = AdvancedSemgrepMatcher::new();
-        let result = matcher.evaluate_name_constraint("List", "java.util.List", "import java.util.List;");
+        let result =
+            matcher.evaluate_name_constraint("List", "java.util.List", "import java.util.List;");
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -4571,7 +4751,8 @@ mod tests {
     #[test]
     fn test_evaluate_name_constraint_wildcard() {
         let matcher = AdvancedSemgrepMatcher::new();
-        let result = matcher.evaluate_name_constraint("List", "java.util.*", "import java.util.List;");
+        let result =
+            matcher.evaluate_name_constraint("List", "java.util.*", "import java.util.List;");
         assert!(result.is_ok());
         assert!(result.unwrap());
     }

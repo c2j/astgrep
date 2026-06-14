@@ -7,14 +7,14 @@ use crate::executor::types::{is_operator_node, TaintMatch};
 use crate::types::*;
 use astgrep_core::{
     AstNode, ComparisonOperator, Finding, Language, Location, MatchBinding, MetavariableAnalysis,
-    Result, SemgrepMatchResult, Severity,
+    Result, SemgrepMatchResult, Severity, SqlDialect,
 };
 use astgrep_dataflow::{DataFlowAnalysis, DataFlowAnalyzer};
 use astgrep_matcher::AdvancedSemgrepMatcher;
+use regex;
 use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::Path;
-use regex;
 
 mod conditions;
 mod symbolic;
@@ -52,6 +52,7 @@ impl AdvancedRuleExecutor {
         language: Language,
         file_path: Option<&Path>,
         enable_constant_propagation: bool,
+        sql_dialect: Option<SqlDialect>,
     ) -> Result<ComprehensiveAnalysisResult> {
         let start_time = std::time::Instant::now();
 
@@ -60,7 +61,7 @@ impl AdvancedRuleExecutor {
         // Filter applicable rules
         let applicable_rules: Vec<&Rule> = rules
             .iter()
-            .filter(|rule| rule.applies_to(language))
+            .filter(|rule| rule.applies_to(language) && rule.applies_to_dialect(sql_dialect))
             .collect();
 
         if applicable_rules.is_empty() {
@@ -214,15 +215,15 @@ impl AdvancedRuleExecutor {
     }
 
     /// Execute pattern-based analysis
-     fn execute_pattern_analysis(
-         &mut self,
-         rule: &Rule,
-         pattern: &Pattern,
-         ast: &dyn AstNode,
-         dataflow_analysis: Option<&DataFlowAnalysis>,
-         file_path: Option<&Path>,
-     ) -> Result<Vec<Finding>> {
-         let mut findings = Vec::new();
+    fn execute_pattern_analysis(
+        &mut self,
+        rule: &Rule,
+        pattern: &Pattern,
+        ast: &dyn AstNode,
+        dataflow_analysis: Option<&DataFlowAnalysis>,
+        file_path: Option<&Path>,
+    ) -> Result<Vec<Finding>> {
+        let mut findings = Vec::new();
 
         // Handle Either patterns by recursively processing each alternative
         // so each inner pattern's conditions are checked
@@ -246,7 +247,12 @@ impl AdvancedRuleExecutor {
         // containment.
         if let PatternType::All(sub_patterns) = &pattern.pattern_type {
             let result = self.execute_all_with_inside_constraints(
-                rule, pattern, sub_patterns, ast, dataflow_analysis, file_path,
+                rule,
+                pattern,
+                sub_patterns,
+                ast,
+                dataflow_analysis,
+                file_path,
             )?;
             if let Some(findings) = result {
                 return Ok(findings);
@@ -274,9 +280,7 @@ impl AdvancedRuleExecutor {
         let has_ellipsis = pattern_str.contains("...");
 
         // If no matches found and symbolic propagation is enabled, try expanding variables
-        let matches = if matches.is_empty()
-            && self.symbolic_propagator.is_some()
-        {
+        let matches = if matches.is_empty() && self.symbolic_propagator.is_some() {
             self.find_matches_via_symbolic_propagation(&semgrep_pattern, ast, &type_constraints)?
         } else {
             matches
@@ -353,8 +357,12 @@ impl AdvancedRuleExecutor {
             if conditions_passed {
                 for (var_name, expected_type) in &type_constraints {
                     if let Some(var_value) = match_result.bindings.get(var_name) {
-                        let type_check_passed =
-                            self.check_variable_type(var_value, expected_type, &full_source, match_line);
+                        let type_check_passed = self.check_variable_type(
+                            var_value,
+                            expected_type,
+                            &full_source,
+                            match_line,
+                        );
                         if !type_check_passed {
                             final_conditions_passed = false;
                             break;
@@ -424,7 +432,8 @@ impl AdvancedRuleExecutor {
 
         let mut candidates: Vec<Finding> = Vec::new();
         if content_patterns.is_empty() {
-            let all_regions: Vec<(usize, usize, usize, usize)> = inside_region_groups.iter().flatten().copied().collect();
+            let all_regions: Vec<(usize, usize, usize, usize)> =
+                inside_region_groups.iter().flatten().copied().collect();
             for region in &all_regions {
                 let location = Location {
                     file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
@@ -445,13 +454,20 @@ impl AdvancedRuleExecutor {
         } else {
             for content_pat in &content_patterns {
                 let content_findings = self.execute_pattern_analysis(
-                    rule, content_pat, ast, dataflow_analysis, file_path,
+                    rule,
+                    content_pat,
+                    ast,
+                    dataflow_analysis,
+                    file_path,
                 )?;
                 candidates.extend(content_findings);
 
                 if candidates.is_empty() {
                     let text_findings = self.find_content_via_text_matching(
-                        content_pat, rule, &full_source, file_path,
+                        content_pat,
+                        rule,
+                        &full_source,
+                        file_path,
                     )?;
                     candidates.extend(text_findings);
                 }
@@ -471,20 +487,22 @@ impl AdvancedRuleExecutor {
                 inside_patterns.is_empty()
             } else {
                 inside_region_groups.iter().all(|regions| {
-                    regions.iter().any(|region| span_contains(region, &cand_loc))
+                    regions
+                        .iter()
+                        .any(|region| span_contains(region, &cand_loc))
                 })
             };
 
             let not_inside_ok = if not_inside_regions.is_empty() {
                 true
             } else {
-                !not_inside_regions.iter().any(|region| span_contains(region, &cand_loc))
+                !not_inside_regions
+                    .iter()
+                    .any(|region| span_contains(region, &cand_loc))
             };
 
             if inside_ok && not_inside_ok {
-                let metavar_ok = self.verify_inside_field_bindings(
-                    &full_source, &cand_loc,
-                );
+                let metavar_ok = self.verify_inside_field_bindings(&full_source, &cand_loc);
                 if metavar_ok {
                     findings.push(candidate);
                 }
@@ -504,17 +522,32 @@ impl AdvancedRuleExecutor {
             };
             let neg_spans: Vec<(usize, usize, usize, usize)> = neg_findings
                 .iter()
-                .map(|f| (f.location.start_line, f.location.start_column, f.location.end_line, f.location.end_column))
+                .map(|f| {
+                    (
+                        f.location.start_line,
+                        f.location.start_column,
+                        f.location.end_line,
+                        f.location.end_column,
+                    )
+                })
                 .collect();
             findings.retain(|f| {
-                let loc = (f.location.start_line, f.location.start_column, f.location.end_line, f.location.end_column);
+                let loc = (
+                    f.location.start_line,
+                    f.location.start_column,
+                    f.location.end_line,
+                    f.location.end_column,
+                );
                 !neg_spans.iter().any(|ns| spans_overlap(ns, &loc))
             });
         }
 
         if !parent_pattern.conditions.is_empty() {
             let filtered = self.apply_conditions_to_findings(
-                &parent_pattern.conditions, &findings, dataflow_analysis, &full_source,
+                &parent_pattern.conditions,
+                &findings,
+                dataflow_analysis,
+                &full_source,
             )?;
             findings = filtered;
         }
@@ -599,7 +632,8 @@ impl AdvancedRuleExecutor {
         if let Ok(re) = regex::Regex::new(&final_regex) {
             for cap in re.captures_iter(source) {
                 if let Some(full_match) = cap.get(0) {
-                    let region = byte_span_to_location(source, full_match.start(), full_match.end());
+                    let region =
+                        byte_span_to_location(source, full_match.start(), full_match.end());
                     regions.push(region);
                 }
             }
@@ -633,9 +667,8 @@ impl AdvancedRuleExecutor {
         if let Ok(re) = regex::Regex::new(&final_regex) {
             for cap in re.captures_iter(source) {
                 if let Some(full_match) = cap.get(0) {
-                    let (sl, sc, el, ec) = byte_span_to_location(
-                        source, full_match.start(), full_match.end(),
-                    );
+                    let (sl, sc, el, ec) =
+                        byte_span_to_location(source, full_match.start(), full_match.end());
                     let matched_text = full_match.as_str();
                     let location = Location {
                         file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
@@ -646,18 +679,26 @@ impl AdvancedRuleExecutor {
                     };
                     let mut message = rule.description.clone();
                     let mut metadata = HashMap::new();
-                    metadata.insert("pattern".to_string(), Value::String(pattern_str.to_string()));
+                    metadata.insert(
+                        "pattern".to_string(),
+                        Value::String(pattern_str.to_string()),
+                    );
                     if let Some(category) = rule.get_metadata_string("category") {
                         metadata.insert("category".to_string(), Value::String(category));
                     }
 
                     let finding = Finding::new(
                         rule.id.clone(),
-                        if message.is_empty() { format!("Match: {}", matched_text) } else { message },
+                        if message.is_empty() {
+                            format!("Match: {}", matched_text)
+                        } else {
+                            message
+                        },
                         rule.severity,
                         rule.confidence,
                         location,
-                    ).with_metadata("pattern".to_string(), pattern_str.to_string());
+                    )
+                    .with_metadata("pattern".to_string(), pattern_str.to_string());
 
                     let finding = if let Some(ref fix) = rule.fix {
                         finding.with_fix(fix.clone())
@@ -1040,8 +1081,10 @@ impl AdvancedRuleExecutor {
         // Also match `($META.Type $VAR)` where $META is a metavar used as the type prefix
         // IMPORTANT: Type names cannot start with '$' - if the first group starts with '$',
         // it's not a typed metavar but a regular metavar pair like `($FOO $VAR)`.
-        let re = regex::Regex::new(r"\(([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)")
-            .expect("typed metavar regex should compile");
+        let re = regex::Regex::new(
+            r"\(([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)",
+        )
+        .expect("typed metavar regex should compile");
 
         let mut replacements: Vec<(usize, usize, String)> = Vec::new();
         for cap in re.captures_iter(pattern_str) {
@@ -1053,7 +1096,11 @@ impl AdvancedRuleExecutor {
                 continue;
             }
             type_constraints.push((var_name.clone(), type_name));
-            replacements.push((full_match.start(), full_match.end(), format!("${}", var_name)));
+            replacements.push((
+                full_match.start(),
+                full_match.end(),
+                format!("${}", var_name),
+            ));
         }
 
         let mut cleaned = pattern_str.to_string();
@@ -1093,7 +1140,12 @@ impl AdvancedRuleExecutor {
 
         if let Some(line) = match_line {
             if let Some(source_line) = full_source.lines().nth(line - 1) {
-                if Self::line_expression_matches_type(source_line, var_value, expected_type, full_source) {
+                if Self::line_expression_matches_type(
+                    source_line,
+                    var_value,
+                    expected_type,
+                    full_source,
+                ) {
                     return true;
                 }
             }
@@ -1101,7 +1153,13 @@ impl AdvancedRuleExecutor {
 
         let import_map = self.build_import_map(full_source);
         let lookup_value = var_value.strip_prefix("this.").unwrap_or(var_value);
-        if Self::declaration_matches_type(lookup_value, expected_type, full_source, &import_map, match_line) {
+        if Self::declaration_matches_type(
+            lookup_value,
+            expected_type,
+            full_source,
+            &import_map,
+            match_line,
+        ) {
             return true;
         }
 
@@ -1120,15 +1178,21 @@ impl AdvancedRuleExecutor {
         // accept any expression that isn't obviously a literal of a different type.
         // Primitive type checking (int, boolean, etc.) is handled above via
         // value_is_known_type which does strict validation.
-        let primitives = ["int", "boolean", "bool", "float", "double",
-                          "char", "byte", "short", "long", "string", "String", "void"];
-        let base = expected_type.split('<').next().unwrap_or(expected_type)
+        let primitives = [
+            "int", "boolean", "bool", "float", "double", "char", "byte", "short", "long", "string",
+            "String", "void",
+        ];
+        let base = expected_type
+            .split('<')
+            .next()
+            .unwrap_or(expected_type)
             .trim_end_matches("[]");
         if !primitives.contains(&base.to_lowercase().as_str()) {
             // Not a primitive — accept unless var_value is an obvious literal of wrong type
             let is_obviously_wrong = var_value.parse::<i64>().is_ok()
                 || (var_value.starts_with('"') && var_value.ends_with('"'))
-                || var_value == "true" || var_value == "false"
+                || var_value == "true"
+                || var_value == "false"
                 || var_value == "null";
             if !is_obviously_wrong {
                 return true;
@@ -1138,7 +1202,12 @@ impl AdvancedRuleExecutor {
         false
     }
 
-    fn line_expression_matches_type(line: &str, var_value: &str, expected_type: &str, full_source: &str) -> bool {
+    fn line_expression_matches_type(
+        line: &str,
+        var_value: &str,
+        expected_type: &str,
+        full_source: &str,
+    ) -> bool {
         if let Some(idx) = line.find(".println(").or_else(|| line.find(".print(")) {
             let after = &line[idx + 9..];
             if let Some(end) = Self::find_closing_paren(after) {
@@ -1159,15 +1228,22 @@ impl AdvancedRuleExecutor {
         let mut quote_char = ' ';
         for (i, c) in s.char_indices() {
             if in_string {
-                if c == quote_char { in_string = false; }
+                if c == quote_char {
+                    in_string = false;
+                }
                 continue;
             }
             match c {
-                '"' | '\'' => { in_string = true; quote_char = c; }
+                '"' | '\'' => {
+                    in_string = true;
+                    quote_char = c;
+                }
                 '(' => depth += 1,
                 ')' => {
                     depth -= 1;
-                    if depth == 0 { return Some(i); }
+                    if depth == 0 {
+                        return Some(i);
+                    }
                 }
                 _ => {}
             }
@@ -1178,12 +1254,9 @@ impl AdvancedRuleExecutor {
     fn value_is_known_type(value: &str, expected_type: &str, full_source: &str) -> bool {
         match expected_type.to_lowercase().as_str() {
             "boolean" | "bool" => Self::is_boolean_value(value, full_source),
-            "int" | "integer" | "short" | "byte" | "long" => {
-                Self::is_int_value(value)
-            }
+            "int" | "integer" | "short" | "byte" | "long" => Self::is_int_value(value),
             "float" | "double" => {
-                !value.starts_with('"') && !value.starts_with('\'')
-                    && value.parse::<f64>().is_ok()
+                !value.starts_with('"') && !value.starts_with('\'') && value.parse::<f64>().is_ok()
             }
             "string" | "String" => {
                 (value.starts_with('"') && value.ends_with('"') && value.len() >= 2)
@@ -1200,8 +1273,10 @@ impl AdvancedRuleExecutor {
         if value == "true" || value == "false" {
             return true;
         }
-        if value.contains("==") || value.contains("!=")
-            || value.contains(">=") || value.contains("<=")
+        if value.contains("==")
+            || value.contains("!=")
+            || value.contains(">=")
+            || value.contains("<=")
             || (value.contains('>') && !value.contains(">>"))
             || (value.contains('<') && !value.contains("<<"))
         {
@@ -1213,11 +1288,16 @@ impl AdvancedRuleExecutor {
         if value.starts_with('!') || value.contains("!(") {
             return true;
         }
-        if value.contains(".equals(") || value.contains(".isEmpty()")
-            || value.contains(".matches(") || value.contains(".contains(")
-            || value.contains(".startsWith(") || value.contains(".endsWith(")
-            || value.contains(".isDirectory(") || value.contains(".isFile(")
-            || value.contains(".hasNext(") || value.contains(".hasMoreElements(")
+        if value.contains(".equals(")
+            || value.contains(".isEmpty()")
+            || value.contains(".matches(")
+            || value.contains(".contains(")
+            || value.contains(".startsWith(")
+            || value.contains(".endsWith(")
+            || value.contains(".isDirectory(")
+            || value.contains(".isFile(")
+            || value.contains(".hasNext(")
+            || value.contains(".hasMoreElements(")
         {
             return true;
         }
@@ -1226,8 +1306,7 @@ impl AdvancedRuleExecutor {
                 let parts: Vec<&str> = value.split(op).collect();
                 let has_boolean_token = parts.iter().any(|p| {
                     let t = p.trim();
-                    t == "true" || t == "false"
-                        || Self::declared_as_boolean(t, full_source)
+                    t == "true" || t == "false" || Self::declared_as_boolean(t, full_source)
                 });
                 if has_boolean_token {
                     return true;
@@ -1237,8 +1316,10 @@ impl AdvancedRuleExecutor {
         if value.contains(".") && value.contains("(") {
             if let Some(base) = value.split('.').next() {
                 let generic_bool_re = regex::Regex::new(&format!(
-                    r"<[^>\n]*(?:Boolean|boolean)[^>\n]*>\s+{}\b", regex::escape(base)
-                )).ok();
+                    r"<[^>\n]*(?:Boolean|boolean)[^>\n]*>\s+{}\b",
+                    regex::escape(base)
+                ))
+                .ok();
                 if let Some(re) = generic_bool_re {
                     if re.is_match(full_source) {
                         return true;
@@ -1266,8 +1347,10 @@ impl AdvancedRuleExecutor {
         if value.parse::<i64>().is_ok() {
             return true;
         }
-        if value.starts_with("0x") || value.starts_with("0X")
-            || value.starts_with("0b") || value.starts_with("0B")
+        if value.starts_with("0x")
+            || value.starts_with("0X")
+            || value.starts_with("0b")
+            || value.starts_with("0B")
         {
             return true;
         }
@@ -1276,9 +1359,12 @@ impl AdvancedRuleExecutor {
             let has_string = value.contains("\"") || value.contains("'");
             return !has_string;
         }
-        if value.contains(".size()") || value.contains(".length()")
-            || value.contains(".hashCode()") || value.contains(".compareTo(")
-            || value.contains(".indexOf(") || value.contains(".lastIndexOf(")
+        if value.contains(".size()")
+            || value.contains(".length()")
+            || value.contains(".hashCode()")
+            || value.contains(".compareTo(")
+            || value.contains(".indexOf(")
+            || value.contains(".lastIndexOf(")
         {
             return true;
         }
@@ -1292,12 +1378,19 @@ impl AdvancedRuleExecutor {
         import_map: &std::collections::HashMap<String, String>,
         match_line: Option<usize>,
     ) -> bool {
-         let base_expected = expected_type.split('<').next().unwrap_or(expected_type).trim_end_matches("[]");
-         let var_pattern = format!(
-             r"(?:final\s+)?(\w+(?:\.\w+)*(?:<[^>]*>)?(?:\[\])?)\s+{}\s*[=;),:]", 
-             regex::escape(var_value)
+        let base_expected = expected_type
+            .split('<')
+            .next()
+            .unwrap_or(expected_type)
+            .trim_end_matches("[]");
+        let var_pattern = format!(
+            r"(?:final\s+)?(\w+(?:\.\w+)*(?:<[^>]*>)?(?:\[\])?)\s+{}\s*[=;),:]",
+            regex::escape(var_value)
         );
-        let var_init_pattern = format!(r"var\s+{}\s*=\s*new\s+(\w+(?:\.\w+)*)", regex::escape(var_value));
+        let var_init_pattern = format!(
+            r"var\s+{}\s*=\s*new\s+(\w+(?:\.\w+)*)",
+            regex::escape(var_value)
+        );
         if let Ok(re) = regex::Regex::new(&var_pattern) {
             let mut closest_match: Option<(usize, bool)> = None;
             for cap in re.captures_iter(full_source) {
@@ -1307,9 +1400,17 @@ impl AdvancedRuleExecutor {
                     let decl_line = full_source[..decl_start].lines().count() + 1;
                     let actual_type = if decl_type == "var" {
                         if let Ok(var_re) = regex::Regex::new(&var_init_pattern) {
-                            var_re.captures(full_source).and_then(|c| c.get(1)).map(|m| m.as_str()).unwrap_or("var")
-                        } else { "var" }
-                    } else { decl_type };
+                            var_re
+                                .captures(full_source)
+                                .and_then(|c| c.get(1))
+                                .map(|m| m.as_str())
+                                .unwrap_or("var")
+                        } else {
+                            "var"
+                        }
+                    } else {
+                        decl_type
+                    };
                     let matches = Self::types_equivalent(actual_type, base_expected, import_map);
                     if let Some(ml) = match_line {
                         if decl_line < ml {
@@ -1330,7 +1431,11 @@ impl AdvancedRuleExecutor {
         false
     }
 
-    fn types_equivalent(decl_type: &str, expected_type: &str, import_map: &std::collections::HashMap<String, String>) -> bool {
+    fn types_equivalent(
+        decl_type: &str,
+        expected_type: &str,
+        import_map: &std::collections::HashMap<String, String>,
+    ) -> bool {
         let decl_base = decl_type.split('<').next().unwrap_or(decl_type);
         let exp_base = expected_type.split('<').next().unwrap_or(expected_type);
         if decl_base == exp_base {
@@ -1359,7 +1464,9 @@ impl AdvancedRuleExecutor {
         ];
         for group in boxing_groups {
             let decl_in_group = group.iter().any(|&t| t == decl_type || t == simple_decl);
-            let expected_in_group = group.iter().any(|&t| t == expected_type || t == simple_expected);
+            let expected_in_group = group
+                .iter()
+                .any(|&t| t == expected_type || t == simple_expected);
             if decl_in_group && expected_in_group {
                 return true;
             }
@@ -1500,20 +1607,25 @@ fn span_contains(
 ) -> bool {
     let (os, oc, oe, oec) = *outer;
     let (is, ic, ie, iec) = *inner;
-    if os < is { return true; }
-    if os > is { return false; }
+    if os < is {
+        return true;
+    }
+    if os > is {
+        return false;
+    }
     if oc <= ic {
-        if oe > ie { return true; }
-        if oe < ie { return false; }
+        if oe > ie {
+            return true;
+        }
+        if oe < ie {
+            return false;
+        }
         return oec >= iec;
     }
     false
 }
 
-fn spans_overlap(
-    a: &(usize, usize, usize, usize),
-    b: &(usize, usize, usize, usize),
-) -> bool {
+fn spans_overlap(a: &(usize, usize, usize, usize), b: &(usize, usize, usize, usize)) -> bool {
     let (a_sl, a_sc, a_el, a_ec) = *a;
     let (b_sl, b_sc, b_el, b_ec) = *b;
     if a_el < b_sl || b_el < a_sl {
@@ -1528,7 +1640,11 @@ fn spans_overlap(
     true
 }
 
-fn byte_span_to_location(source: &str, start_byte: usize, end_byte: usize) -> (usize, usize, usize, usize) {
+fn byte_span_to_location(
+    source: &str,
+    start_byte: usize,
+    end_byte: usize,
+) -> (usize, usize, usize, usize) {
     let mut line = 1;
     let mut col = 1;
     let mut start_line = 0;
@@ -1593,7 +1709,7 @@ impl Rule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use astgrep_core::{AstNode, Language, Severity, Confidence};
+    use astgrep_core::{AstNode, Confidence, Language, Severity};
 
     #[derive(Clone)]
     struct MockAstNode {
@@ -1663,9 +1779,13 @@ mod tests {
     #[test]
     fn test_advanced_executor_reset() {
         let mut executor = AdvancedRuleExecutor::new();
-        executor.execution_stats.record_rule_execution("test", std::time::Duration::from_millis(10), 5);
+        executor.execution_stats.record_rule_execution(
+            "test",
+            std::time::Duration::from_millis(10),
+            5,
+        );
         assert_eq!(executor.statistics().rules_executed, 1);
-        
+
         executor.reset();
         assert_eq!(executor.statistics().rules_executed, 0);
     }
@@ -1705,7 +1825,7 @@ mod tests {
         assert!(result.has_critical_findings());
         assert_eq!(result.findings_by_severity(Severity::Error).len(), 1);
         assert_eq!(result.findings_by_severity(Severity::Warning).len(), 1);
-        
+
         let summary = result.summary();
         assert_eq!(summary.total_findings, 2);
         assert_eq!(summary.error_count, 1);
@@ -1716,12 +1836,12 @@ mod tests {
     fn test_execution_statistics_record() {
         let mut stats = ExecutionStatistics::new();
         assert_eq!(stats.rules_executed, 0);
-        
+
         stats.record_rule_execution("rule1", std::time::Duration::from_millis(50), 3);
         assert_eq!(stats.rules_executed, 1);
         assert_eq!(stats.total_findings, 3);
         assert_eq!(stats.rule_finding_counts.get("rule1"), Some(&3));
-        
+
         stats.record_rule_error("rule2", std::time::Duration::from_millis(20));
         assert_eq!(stats.rules_executed, 2);
         assert_eq!(stats.total_findings, 3);
@@ -1794,10 +1914,9 @@ mod tests {
         );
         assert!(rule.has_constant_propagation());
 
-        let disabled = rule.clone().add_metadata(
-            "constant_propagation".to_string(),
-            "false".to_string(),
-        );
+        let disabled = rule
+            .clone()
+            .add_metadata("constant_propagation".to_string(), "false".to_string());
         assert!(!disabled.has_constant_propagation());
     }
 
@@ -1824,13 +1943,9 @@ mod tests {
             vec![Language::Java],
         );
 
-        let result = executor.execute_comprehensive_analysis(
-            &[java_rule],
-            &ast,
-            Language::Python,
-            None,
-            false,
-        ).unwrap();
+        let result = executor
+            .execute_comprehensive_analysis(&[java_rule], &ast, Language::Python, None, false, None)
+            .unwrap();
 
         assert!(result.findings.is_empty());
         assert!(result.rule_results.is_empty());

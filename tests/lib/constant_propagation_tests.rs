@@ -2,8 +2,8 @@
 //!
 //! Tests for verifying that constant propagation and analysis features work correctly.
 
-use astgrep_dataflow::constant_propagation::{ConstantPropagator, ConstantValue};
 use astgrep_dataflow::constant_analysis::{ConstantAnalyzer, ConstantInfo};
+use astgrep_dataflow::constant_propagation::{ConstantPropagator, ConstantValue};
 
 #[test]
 fn test_constant_value_string() {
@@ -49,7 +49,7 @@ fn test_constant_value_equality() {
     let cv1 = ConstantValue::String("test".to_string());
     let cv2 = ConstantValue::String("test".to_string());
     let cv3 = ConstantValue::String("other".to_string());
-    
+
     assert_eq!(cv1, cv2);
     assert_ne!(cv1, cv3);
 }
@@ -64,10 +64,10 @@ fn test_constant_propagator_new() {
 #[test]
 fn test_constant_propagator_is_constant() {
     let mut propagator = ConstantPropagator::new();
-    
+
     // Initially, no constants
     assert!(!propagator.is_constant("x"));
-    
+
     // After marking reassigned, still not constant
     propagator.mark_reassigned("x".to_string());
     assert!(!propagator.is_constant("x"));
@@ -76,10 +76,10 @@ fn test_constant_propagator_is_constant() {
 #[test]
 fn test_constant_propagator_mark_reassigned() {
     let mut propagator = ConstantPropagator::new();
-    
+
     // Mark as reassigned
     propagator.mark_reassigned("x".to_string());
-    
+
     // Should not be constant
     assert!(!propagator.is_constant("x"));
 }
@@ -94,15 +94,13 @@ fn test_constant_info_new() {
 
 #[test]
 fn test_constant_info_mark_mutable() {
-    let info = ConstantInfo::new(ConstantValue::Integer(42))
-        .mark_mutable();
+    let info = ConstantInfo::new(ConstantValue::Integer(42)).mark_mutable();
     assert!(info.is_mutable);
 }
 
 #[test]
 fn test_constant_info_mark_sensitive() {
-    let info = ConstantInfo::new(ConstantValue::String("secret".to_string()))
-        .mark_sensitive();
+    let info = ConstantInfo::new(ConstantValue::String("secret".to_string())).mark_sensitive();
     assert!(info.is_sensitive);
 }
 
@@ -110,10 +108,10 @@ fn test_constant_info_mark_sensitive() {
 fn test_constant_info_increment_assignments() {
     let mut info = ConstantInfo::new(ConstantValue::Integer(42));
     assert_eq!(info.assignment_count, 1);
-    
+
     info.increment_assignments();
     assert_eq!(info.assignment_count, 2);
-    
+
     info.increment_assignments();
     assert_eq!(info.assignment_count, 3);
 }
@@ -129,24 +127,33 @@ fn test_constant_analyzer_new() {
 fn test_constant_analyzer_register() {
     let mut analyzer = ConstantAnalyzer::new();
     analyzer.register_constant("x".to_string(), ConstantValue::Integer(42));
-    
+
     assert!(analyzer.is_constant("x"));
-    assert_eq!(analyzer.get_constant_value("x"), Some(&ConstantValue::Integer(42)));
+    assert_eq!(
+        analyzer.get_constant_value("x"),
+        Some(&ConstantValue::Integer(42))
+    );
 }
 
 #[test]
 fn test_constant_analyzer_sensitive_by_name() {
     let mut analyzer = ConstantAnalyzer::new();
-    analyzer.register_constant("password".to_string(), ConstantValue::String("secret123".to_string()));
-    
+    analyzer.register_constant(
+        "password".to_string(),
+        ConstantValue::String("secret123".to_string()),
+    );
+
     assert!(analyzer.is_sensitive("password"));
 }
 
 #[test]
 fn test_constant_analyzer_sensitive_by_value() {
     let mut analyzer = ConstantAnalyzer::new();
-    analyzer.register_constant("var".to_string(), ConstantValue::String("password123".to_string()));
-    
+    analyzer.register_constant(
+        "var".to_string(),
+        ConstantValue::String("password123".to_string()),
+    );
+
     assert!(analyzer.is_sensitive("var"));
 }
 
@@ -154,15 +161,21 @@ fn test_constant_analyzer_sensitive_by_value() {
 fn test_constant_analyzer_not_sensitive() {
     let mut analyzer = ConstantAnalyzer::new();
     analyzer.register_constant("count".to_string(), ConstantValue::Integer(42));
-    
+
     assert!(!analyzer.is_sensitive("count"));
 }
 
 #[test]
 fn test_constant_analyzer_fold_integer() {
     let analyzer = ConstantAnalyzer::new();
-    assert_eq!(analyzer.fold_constants("42"), Some(ConstantValue::Integer(42)));
-    assert_eq!(analyzer.fold_constants("-10"), Some(ConstantValue::Integer(-10)));
+    assert_eq!(
+        analyzer.fold_constants("42"),
+        Some(ConstantValue::Integer(42))
+    );
+    assert_eq!(
+        analyzer.fold_constants("-10"),
+        Some(ConstantValue::Integer(-10))
+    );
 }
 
 #[test]
@@ -177,8 +190,14 @@ fn test_constant_analyzer_fold_string() {
 #[test]
 fn test_constant_analyzer_fold_boolean() {
     let analyzer = ConstantAnalyzer::new();
-    assert_eq!(analyzer.fold_constants("true"), Some(ConstantValue::Boolean(true)));
-    assert_eq!(analyzer.fold_constants("false"), Some(ConstantValue::Boolean(false)));
+    assert_eq!(
+        analyzer.fold_constants("true"),
+        Some(ConstantValue::Boolean(true))
+    );
+    assert_eq!(
+        analyzer.fold_constants("false"),
+        Some(ConstantValue::Boolean(false))
+    );
 }
 
 #[test]
@@ -196,12 +215,18 @@ fn test_constant_analyzer_fold_invalid() {
 #[test]
 fn test_constant_analyzer_function_returns() {
     let mut analyzer = ConstantAnalyzer::new();
-    analyzer.register_function_return("get_password".to_string(), ConstantValue::String("secret".to_string()));
-    
+    analyzer.register_function_return(
+        "get_password".to_string(),
+        ConstantValue::String("secret".to_string()),
+    );
+
     let returns = analyzer.get_function_returns("get_password");
     assert!(returns.is_some());
     assert_eq!(returns.unwrap().len(), 1);
-    assert_eq!(returns.unwrap()[0], ConstantValue::String("secret".to_string()));
+    assert_eq!(
+        returns.unwrap()[0],
+        ConstantValue::String("secret".to_string())
+    );
 }
 
 #[test]
@@ -209,7 +234,7 @@ fn test_constant_analyzer_multiple_function_returns() {
     let mut analyzer = ConstantAnalyzer::new();
     analyzer.register_function_return("get_value".to_string(), ConstantValue::Integer(1));
     analyzer.register_function_return("get_value".to_string(), ConstantValue::Integer(2));
-    
+
     let returns = analyzer.get_function_returns("get_value");
     assert!(returns.is_some());
     assert_eq!(returns.unwrap().len(), 2);
@@ -218,10 +243,16 @@ fn test_constant_analyzer_multiple_function_returns() {
 #[test]
 fn test_constant_analyzer_get_sensitive_constants() {
     let mut analyzer = ConstantAnalyzer::new();
-    analyzer.register_constant("password".to_string(), ConstantValue::String("secret".to_string()));
+    analyzer.register_constant(
+        "password".to_string(),
+        ConstantValue::String("secret".to_string()),
+    );
     analyzer.register_constant("count".to_string(), ConstantValue::Integer(42));
-    analyzer.register_constant("api_key".to_string(), ConstantValue::String("key123".to_string()));
-    
+    analyzer.register_constant(
+        "api_key".to_string(),
+        ConstantValue::String("key123".to_string()),
+    );
+
     let sensitive = analyzer.get_sensitive_constants();
     assert_eq!(sensitive.len(), 2);
 }
@@ -230,8 +261,11 @@ fn test_constant_analyzer_get_sensitive_constants() {
 fn test_constant_analyzer_add_sensitive_pattern() {
     let mut analyzer = ConstantAnalyzer::new();
     analyzer.add_sensitive_pattern("custom_secret".to_string());
-    
-    analyzer.register_constant("custom_secret_var".to_string(), ConstantValue::String("value".to_string()));
+
+    analyzer.register_constant(
+        "custom_secret_var".to_string(),
+        ConstantValue::String("value".to_string()),
+    );
     assert!(analyzer.is_sensitive("custom_secret_var"));
 }
 
@@ -239,7 +273,7 @@ fn test_constant_analyzer_add_sensitive_pattern() {
 fn test_constant_analyzer_get_constant() {
     let mut analyzer = ConstantAnalyzer::new();
     analyzer.register_constant("x".to_string(), ConstantValue::Integer(42));
-    
+
     let info = analyzer.get_constant("x");
     assert!(info.is_some());
     assert_eq!(info.unwrap().assignment_count, 1);
@@ -249,12 +283,12 @@ fn test_constant_analyzer_get_constant() {
 #[test]
 fn test_constant_value_hash() {
     use std::collections::HashSet;
-    
+
     let mut set = HashSet::new();
     set.insert(ConstantValue::String("test".to_string()));
     set.insert(ConstantValue::Integer(42));
     set.insert(ConstantValue::Boolean(true));
-    
+
     assert_eq!(set.len(), 3);
     assert!(set.contains(&ConstantValue::String("test".to_string())));
 }
@@ -264,4 +298,3 @@ fn test_constant_analyzer_default() {
     let analyzer = ConstantAnalyzer::default();
     assert!(analyzer.get_all_constants().is_empty());
 }
-

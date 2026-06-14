@@ -100,9 +100,7 @@ impl AnalysisError {
 
     /// Create a new IO error
     pub fn io_error(message: impl Into<String>) -> Self {
-        Self::IoError(std::io::Error::other(
-            message.into(),
-        ))
+        Self::IoError(std::io::Error::other(message.into()))
     }
 
     /// Create a new timeout error

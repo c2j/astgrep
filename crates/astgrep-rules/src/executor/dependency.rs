@@ -608,7 +608,10 @@ impl VariableDependencyGraph {
                 }
             } else if line.contains(pattern_text) {
                 // For other patterns, use simple substring matching
-                eprintln!("[DEBUG] Propagator pattern matched (substring): {}", pattern_text);
+                eprintln!(
+                    "[DEBUG] Propagator pattern matched (substring): {}",
+                    pattern_text
+                );
 
                 // Extract from and to metavariables
                 let from_var = self.extract_metavariable(&propagator.from, line, pattern_text);
@@ -619,7 +622,10 @@ impl VariableDependencyGraph {
                     propagations.push((from, to));
                 }
             } else if pattern_text.contains('$') {
-                eprintln!("[DEBUG] Trying regex matching for propagator pattern: '{}' on line: '{}'", pattern_text, line);
+                eprintln!(
+                    "[DEBUG] Trying regex matching for propagator pattern: '{}' on line: '{}'",
+                    pattern_text, line
+                );
                 let mut var_order: Vec<String> = Vec::new();
                 let mut remaining = pattern_text;
                 let mut regex_pat = String::new();
@@ -643,8 +649,16 @@ impl VariableDependencyGraph {
                             .filter_map(|i| captures.get(i).map(|m| m.as_str().to_string()))
                             .collect();
 
-                        let from_var = Self::extract_metavar_value(&var_order, &captured_values, &propagator.from);
-                        let to_var = Self::extract_metavar_value(&var_order, &captured_values, &propagator.to);
+                        let from_var = Self::extract_metavar_value(
+                            &var_order,
+                            &captured_values,
+                            &propagator.from,
+                        );
+                        let to_var = Self::extract_metavar_value(
+                            &var_order,
+                            &captured_values,
+                            &propagator.to,
+                        );
 
                         if let (Some(from), Some(to)) = (from_var, to_var) {
                             eprintln!("[DEBUG] Propagator (regex): {} -> {}", from, to);
@@ -719,12 +733,19 @@ impl VariableDependencyGraph {
         None
     }
 
-    fn extract_metavar_value(var_order: &[String], captured: &[String], metavar: &str) -> Option<String> {
+    fn extract_metavar_value(
+        var_order: &[String],
+        captured: &[String],
+        metavar: &str,
+    ) -> Option<String> {
         if !metavar.starts_with('$') {
             return Some(metavar.to_string());
         }
         let name = &metavar[1..];
-        var_order.iter().position(|v| v == name).and_then(|idx| captured.get(idx).cloned())
+        var_order
+            .iter()
+            .position(|v| v == name)
+            .and_then(|idx| captured.get(idx).cloned())
     }
 
     /// Process getter calls that are used as method arguments (not in assignments)

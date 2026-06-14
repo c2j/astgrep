@@ -2,8 +2,8 @@
 //!
 //! This module contains taint analysis methods for tracking data flow from sources to sinks
 
-use super::*;
 use super::taint_env::is_tainted_as_array_index;
+use super::*;
 
 impl AdvancedRuleExecutor {
     /// Execute taint analysis for taint mode rules
@@ -19,7 +19,8 @@ impl AdvancedRuleExecutor {
         // Read actual file content when file_path is available (preserves original line numbering).
         // Falls back to ast.text() which may strip leading empty lines, causing line offset issues.
         let source_text = if let Some(path) = file_path {
-            std::fs::read_to_string(path).unwrap_or_else(|_| ast.text().unwrap_or_default().to_string())
+            std::fs::read_to_string(path)
+                .unwrap_or_else(|_| ast.text().unwrap_or_default().to_string())
         } else {
             ast.text().unwrap_or_default().to_string()
         };
@@ -80,18 +81,18 @@ impl AdvancedRuleExecutor {
             dataflow_spec.taint_assume_safe_numbers.unwrap_or(false)
         };
 
-        let assume_safe_indexes =
-            if let Some(val) = rule.metadata.get("taint_assume_safe_indexes") {
-                if let serde_yaml::Value::String(ref s) = val {
-                    s == "true"
-                } else if let serde_yaml::Value::Bool(ref b) = val {
-                    *b
-                } else {
-                    false
-                }
+        let assume_safe_indexes = if let Some(val) = rule.metadata.get("taint_assume_safe_indexes")
+        {
+            if let serde_yaml::Value::String(ref s) = val {
+                s == "true"
+            } else if let serde_yaml::Value::Bool(ref b) = val {
+                *b
             } else {
-                dataflow_spec.taint_assume_safe_indexes.unwrap_or(false)
-            };
+                false
+            }
+        } else {
+            dataflow_spec.taint_assume_safe_indexes.unwrap_or(false)
+        };
 
         let assume_safe_functions =
             if let Some(val) = rule.metadata.get("taint_assume_safe_functions") {
@@ -250,15 +251,15 @@ impl AdvancedRuleExecutor {
 
             eprintln!(
                 "[DEBUG] Merged taint flows: {} (heuristic) + {} (env new) = {} total",
-                merged.len() - added_from_env, added_from_env, merged.len()
+                merged.len() - added_from_env,
+                added_from_env,
+                merged.len()
             );
 
             // Filter flows that go through array index access when assume_safe_indexes is set
             if assume_safe_indexes {
                 let before = merged.len();
-                merged.retain(|(source, sink)| {
-                    !flow_goes_through_array_index(source, sink)
-                });
+                merged.retain(|(source, sink)| !flow_goes_through_array_index(source, sink));
                 let removed = before - merged.len();
                 if removed > 0 {
                     eprintln!(
@@ -437,7 +438,7 @@ impl AdvancedRuleExecutor {
                         if !value.is_empty() {
                             let raw_val = value.value.clone();
                             let cleaned = if raw_val.starts_with('(') && raw_val.ends_with(')') {
-                                raw_val[1..raw_val.len()-1].trim().to_string()
+                                raw_val[1..raw_val.len() - 1].trim().to_string()
                             } else {
                                 raw_val.clone()
                             };
@@ -477,8 +478,8 @@ impl AdvancedRuleExecutor {
                 if var_name.is_none() {
                     // Check if the original pattern is a string literal pattern (e.g. '"password"')
                     // Tree-sitter may return string content without quotes (e.g. "password")
-                    let is_string_pattern = normalized_pattern.starts_with('"')
-                        && normalized_pattern.ends_with('"');
+                    let is_string_pattern =
+                        normalized_pattern.starts_with('"') && normalized_pattern.ends_with('"');
                     if is_string_pattern {
                         if let Some(text) = m.node.text() {
                             let text = text.trim().trim_matches('"');
@@ -613,14 +614,14 @@ impl AdvancedRuleExecutor {
                     .iter()
                     .map(|(k, v)| (k.clone(), v.value.clone()))
                     .collect();
-                 sources.push(TaintMatch {
-                     node: m.node,
-                     bindings: str_bindings,
-                     binding_locations: HashMap::new(),
-                     var_name,
-                     method_name,
-                     focus_metavariables: Vec::new(),
-                 });
+                sources.push(TaintMatch {
+                    node: m.node,
+                    bindings: str_bindings,
+                    binding_locations: HashMap::new(),
+                    var_name,
+                    method_name,
+                    focus_metavariables: Vec::new(),
+                });
             }
         }
 
@@ -754,7 +755,7 @@ impl AdvancedRuleExecutor {
                     if let Some(value) = m.bindings.get(focus_var_no_dollar) {
                         let raw_val = value.value.clone();
                         let cleaned = if raw_val.starts_with('(') && raw_val.ends_with(')') {
-                            raw_val[1..raw_val.len()-1].trim().to_string()
+                            raw_val[1..raw_val.len() - 1].trim().to_string()
                         } else {
                             raw_val.clone()
                         };
@@ -881,18 +882,31 @@ impl AdvancedRuleExecutor {
 
         fn is_control_flow_exit(trimmed: &str) -> bool {
             let lowered = trimmed.to_lowercase();
-            let exit_keywords = ["return ", "return;", "return(",
-                                 "raise ", "raise(", "raise;",
-                                 "throw ", "throw(", "throw;",
-                                 "break;", "break ",
-                                 "continue;", "continue "];
+            let exit_keywords = [
+                "return ",
+                "return;",
+                "return(",
+                "raise ",
+                "raise(",
+                "raise;",
+                "throw ",
+                "throw(",
+                "throw;",
+                "break;",
+                "break ",
+                "continue;",
+                "continue ",
+            ];
             for kw in &exit_keywords {
                 if lowered.starts_with(kw) {
                     return true;
                 }
             }
-            lowered == "return" || lowered == "raise" || lowered == "throw"
-                || lowered == "break" || lowered == "continue"
+            lowered == "return"
+                || lowered == "raise"
+                || lowered == "throw"
+                || lowered == "break"
+                || lowered == "continue"
         }
 
         // Walk lines top-to-bottom
@@ -936,7 +950,11 @@ impl AdvancedRuleExecutor {
                     if let Some(ref var) = source_match.var_name {
                         let normalized_var = var.strip_prefix("this.").unwrap_or(var);
                         // Strip array index: x[i] → x for array-level taint tracking
-                        let base_var = normalized_var.split('[').next().unwrap_or(normalized_var).trim();
+                        let base_var = normalized_var
+                            .split('[')
+                            .next()
+                            .unwrap_or(normalized_var)
+                            .trim();
                         env.taint(base_var, line_num, *source_idx);
                         let display_var = if base_var != normalized_var {
                             format!("{} (base: {})", normalized_var, base_var)
@@ -980,14 +998,22 @@ impl AdvancedRuleExecutor {
                                 .collect();
                             let from_val = if prop.from.starts_with('$') {
                                 let name = &prop.from[1..];
-                                var_order.iter().position(|v| v == name)
+                                var_order
+                                    .iter()
+                                    .position(|v| v == name)
                                     .and_then(|idx| captured.get(idx).cloned())
-                            } else { None };
+                            } else {
+                                None
+                            };
                             let to_val = if prop.to.starts_with('$') {
                                 let name = &prop.to[1..];
-                                var_order.iter().position(|v| v == name)
+                                var_order
+                                    .iter()
+                                    .position(|v| v == name)
                                     .and_then(|idx| captured.get(idx).cloned())
-                            } else { None };
+                            } else {
+                                None
+                            };
                             if let (Some(ref from), Some(ref to)) = (from_val, to_val) {
                                 if env.is_tainted(from) {
                                     env.taint(to, line_num, 0);
@@ -1035,9 +1061,8 @@ impl AdvancedRuleExecutor {
                 let mut propagated = false;
                 for tvar in env.tainted_vars() {
                     if contains_var_reference(value, &tvar) {
-                        let is_sanitized = sanitizer_fns
-                            .iter()
-                            .any(|sf| value.contains(sf.as_str()));
+                        let is_sanitized =
+                            sanitizer_fns.iter().any(|sf| value.contains(sf.as_str()));
                         if is_sanitized {
                             env.sanitize(&target_var);
                             eprintln!(
@@ -1056,9 +1081,7 @@ impl AdvancedRuleExecutor {
                                 "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (numeric call, safe_numbers)",
                                 line_num, tvar, target_var
                             );
-                        } else if taint_only_propagate_through_assignments
-                            && value.trim() != tvar
-                        {
+                        } else if taint_only_propagate_through_assignments && value.trim() != tvar {
                             // Only propagate through direct assignments (x = y), not expressions (x = y+1)
                             eprintln!(
                                 "[DEBUG-TAINT-ENV] Line {}: NOT propagating '{}' -> '{}' (not pure assignment)",
@@ -1074,7 +1097,12 @@ impl AdvancedRuleExecutor {
                             );
                         } else {
                             // Strip brackets from propagation target: x[i] → x (array-level tracking)
-                            let prop_target = target_var.split('[').next().unwrap_or(&target_var).trim().to_string();
+                            let prop_target = target_var
+                                .split('[')
+                                .next()
+                                .unwrap_or(&target_var)
+                                .trim()
+                                .to_string();
                             env.propagate(&prop_target, &tvar);
                             eprintln!(
                                 "[DEBUG-TAINT-ENV] Line {}: propagated '{}' -> '{}'",
@@ -1098,7 +1126,12 @@ impl AdvancedRuleExecutor {
                     // Array element assignment: x[i] = non_source → untaint array x
                     // Skip if a source was matched at this line (source match already seeds taint)
                     if target_var.contains('[') && !source_map.contains_key(&line_num) {
-                        let target_base = target_var.split('[').next().unwrap_or(&target_var).trim().to_string();
+                        let target_base = target_var
+                            .split('[')
+                            .next()
+                            .unwrap_or(&target_var)
+                            .trim()
+                            .to_string();
                         if env.is_tainted(&target_base) {
                             env.untaint(&target_base);
                             eprintln!(
@@ -1116,43 +1149,38 @@ impl AdvancedRuleExecutor {
                     let sink_text = sink_match.node.text().unwrap_or_default();
 
                     // Determine if sink's argument is tainted
-                    let (sink_tainted, source_var_name) = if let Some(ref sink_var) =
-                        sink_match.var_name
-                    {
-                        let normalized = sink_var.strip_prefix("this.").unwrap_or(sink_var);
-                        if env.is_tainted(normalized) {
-                            (true, normalized.to_string())
+                    let (sink_tainted, source_var_name) =
+                        if let Some(ref sink_var) = sink_match.var_name {
+                            let normalized = sink_var.strip_prefix("this.").unwrap_or(sink_var);
+                            if env.is_tainted(normalized) {
+                                (true, normalized.to_string())
+                            } else {
+                                // Check if any tainted var appears in sink text
+                                let found = env
+                                    .tainted_vars()
+                                    .iter()
+                                    .find(|tv| contains_var_reference(&sink_text, tv))
+                                    .cloned();
+                                (found.is_some(), found.unwrap_or_default())
+                            }
                         } else {
-                            // Check if any tainted var appears in sink text
                             let found = env
                                 .tainted_vars()
                                 .iter()
                                 .find(|tv| contains_var_reference(&sink_text, tv))
                                 .cloned();
                             (found.is_some(), found.unwrap_or_default())
-                        }
-                    } else {
-                        let found = env
-                            .tainted_vars()
-                            .iter()
-                            .find(|tv| contains_var_reference(&sink_text, tv))
-                            .cloned();
-                        (found.is_some(), found.unwrap_or_default())
-                    };
+                        };
 
                     if sink_tainted {
                         if let Some(src_idx) = env.get_source_idx(&source_var_name) {
                             if src_idx < sources.len() {
                                 // Method scope isolation: compare sink method with CORRECT source
-                                let scope_ok = match (
-                                    &sink_match.method_name,
-                                    sources.get(src_idx),
-                                ) {
+                                let scope_ok = match (&sink_match.method_name, sources.get(src_idx))
+                                {
                                     (Some(sink_method), Some(source)) => {
                                         match &source.method_name {
-                                            Some(src_method) => {
-                                                src_method == sink_method
-                                            }
+                                            Some(src_method) => src_method == sink_method,
                                             None => true,
                                         }
                                     }
@@ -1165,25 +1193,15 @@ impl AdvancedRuleExecutor {
                                     "[DEBUG-TAINT-ENV] FLOW FOUND: source {} -> sink at line {}",
                                     src_idx, line_num
                                 );
-                                flows.push((
-                                    sources[src_idx].clone(),
-                                    (*sink_match).clone(),
-                                ));
+                                flows.push((sources[src_idx].clone(), (*sink_match).clone()));
                             }
                         } else if let Some(first_source) = sources.first() {
                             // Fallback: scope check with first source
-                            let scope_ok = match (
-                                &sink_match.method_name,
-                                sources.first(),
-                            ) {
-                                (Some(sink_method), Some(source)) => {
-                                    match &source.method_name {
-                                        Some(src_method) => {
-                                            src_method == sink_method
-                                        }
-                                        None => true,
-                                    }
-                                }
+                            let scope_ok = match (&sink_match.method_name, sources.first()) {
+                                (Some(sink_method), Some(source)) => match &source.method_name {
+                                    Some(src_method) => src_method == sink_method,
+                                    None => true,
+                                },
                                 _ => true,
                             };
                             if !scope_ok {
@@ -1193,22 +1211,18 @@ impl AdvancedRuleExecutor {
                                 "[DEBUG-TAINT-ENV] FLOW FOUND (fallback): first source -> sink at line {}",
                                 line_num
                             );
-                            flows.push((
-                                first_source.clone(),
-                                (*sink_match).clone(),
-                            ));
+                            flows.push((first_source.clone(), (*sink_match).clone()));
                         }
                     } else {
                         // Check for sourceless source on same line as sink
                         if let Some(sourceless_entries) = sourceless_map.get(&line_num) {
                             let sink_text = sink_match.node.text().unwrap_or_default();
                             // Extract sink argument (text between outermost parens)
-                            let sink_arg = sink_text.find('(')
-                                .and_then(|open| {
-                                    sink_text.rfind(')').map(|close| {
-                                        sink_text[open+1..close].trim()
-                                    })
-                                });
+                            let sink_arg = sink_text.find('(').and_then(|open| {
+                                sink_text
+                                    .rfind(')')
+                                    .map(|close| sink_text[open + 1..close].trim())
+                            });
                             for (src_idx, source_match) in sourceless_entries {
                                 let source_text = source_match.node.text().unwrap_or_default();
                                 let matched = if has_non_exact_sinks {
@@ -1236,10 +1250,7 @@ impl AdvancedRuleExecutor {
                                         "[DEBUG-TAINT-ENV] FLOW FOUND (sourceless): source {} -> sink at line {}",
                                         src_idx, line_num
                                     );
-                                    flows.push((
-                                        sources[*src_idx].clone(),
-                                        (*sink_match).clone(),
-                                    ));
+                                    flows.push((sources[*src_idx].clone(), (*sink_match).clone()));
                                     break;
                                 }
                             }
@@ -1249,10 +1260,7 @@ impl AdvancedRuleExecutor {
             }
         }
 
-        eprintln!(
-            "[DEBUG-TAINT-ENV] Found {} flows",
-            flows.len()
-        );
+        eprintln!("[DEBUG-TAINT-ENV] Found {} flows", flows.len());
         flows
     }
 

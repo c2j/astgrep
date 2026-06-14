@@ -82,7 +82,9 @@ impl ConstantPropagator {
 
                 for pred_id in predecessors {
                     if let Some(pred_constant) = self.node_constants.get(&pred_id).cloned() {
-                        if let std::collections::hash_map::Entry::Vacant(e) = self.node_constants.entry(node_id) {
+                        if let std::collections::hash_map::Entry::Vacant(e) =
+                            self.node_constants.entry(node_id)
+                        {
                             e.insert(pred_constant);
                             changed = true;
                         }
@@ -144,9 +146,7 @@ impl ConstantPropagator {
         }
 
         for def in &self.variable_definitions {
-            if !self.reassigned.contains(&def.name)
-                && !self.constants.contains_key(&def.name)
-            {
+            if !self.reassigned.contains(&def.name) && !self.constants.contains_key(&def.name) {
                 self.constants.insert(def.name.clone(), def.value.clone());
             }
         }
@@ -176,7 +176,8 @@ impl ConstantPropagator {
             for i in 0..node.child_count() {
                 if let Some(child) = node.child(i) {
                     if child.node_type() == "variable_declaration"
-                        || Self::ts_kind(child) == "variable_declarator" {
+                        || Self::ts_kind(child) == "variable_declarator"
+                    {
                         let is_final = node.text().map(|t| t.contains("final")).unwrap_or(false);
 
                         // Track fields with constant initializers (final or not)
@@ -206,7 +207,7 @@ impl ConstantPropagator {
                                 if gk == "string_literal" || gk == "string" {
                                     if let Some(t) = grandchild.text() {
                                         const_value = Some(ConstantValue::String(
-                                            t.trim_matches('"').to_string()
+                                            t.trim_matches('"').to_string(),
                                         ));
                                     }
                                 }
@@ -233,7 +234,8 @@ impl ConstantPropagator {
 
                             // Use extract_constant_from_expression for the initializer
                             if let Some(name) = &var_name {
-                                init_value = extract_constant_from_expression(child, &self.constants);
+                                init_value =
+                                    extract_constant_from_expression(child, &self.constants);
                             }
 
                             let has_init = init_value.is_some();
@@ -249,7 +251,11 @@ impl ConstantPropagator {
                                     // are recognized as local (not field) assignments.
                                     if !self.variable_definitions.iter().any(|d| d.name == *name) {
                                         if let Some(loc) = location {
-                                            self.define_local_variable(name.clone(), ConstantValue::Unknown, loc);
+                                            self.define_local_variable(
+                                                name.clone(),
+                                                ConstantValue::Unknown,
+                                                loc,
+                                            );
                                         }
                                     }
                                 }
@@ -359,7 +365,10 @@ impl ConstantPropagator {
         // Skip field assignments (this.field = ...) — only track local variables
         if let Some(left_node) = left {
             if left_node.node_type() == "field_access"
-                || left_node.text().map(|t| t.starts_with("this.")).unwrap_or(false)
+                || left_node
+                    .text()
+                    .map(|t| t.starts_with("this."))
+                    .unwrap_or(false)
             {
                 return Ok(());
             }

@@ -11,7 +11,10 @@ pub enum ParsedPattern {
     Literal(String),
     Metavariable(String),
     /// Typed metavariable: (type $VAR) e.g. (int $X), (String $S)
-    TypedMetavar { name: String, expected_type: String },
+    TypedMetavar {
+        name: String,
+        expected_type: String,
+    },
     EllipsisMetavariable(String),
     NodeType(String),
     Sequence(Vec<ParsedPattern>),
@@ -25,7 +28,10 @@ impl fmt::Display for ParsedPattern {
         match self {
             ParsedPattern::Literal(s) => write!(f, "\"{}\"", s),
             ParsedPattern::Metavariable(s) => write!(f, "${}", s),
-            ParsedPattern::TypedMetavar { name, expected_type } => {
+            ParsedPattern::TypedMetavar {
+                name,
+                expected_type,
+            } => {
                 write!(f, "({} ${})", expected_type, name)
             }
             ParsedPattern::EllipsisMetavariable(s) => write!(f, "$...{}", s),
@@ -263,8 +269,8 @@ impl PatternParser {
                 }
 
                 // Operators and punctuation that should be separate tokens
-                ';' | '{' | '}' | '[' | ']' | ',' | ':' | '+' | '-' | '*'
-                | '/' | '%' | '^' | '~' | '?' | '!' => {
+                ';' | '{' | '}' | '[' | ']' | ',' | ':' | '+' | '-' | '*' | '/' | '%' | '^'
+                | '~' | '?' | '!' => {
                     tokens.push(Token::Literal(ch.to_string()));
                 }
 
@@ -383,8 +389,7 @@ impl PatternParser {
                 Token::Literal(s) if s == "<" => {
                     // Check for deep expression: <... pattern ...>
                     if pos + 1 < tokens.len() && matches!(&tokens[pos + 1], Token::Wildcard) {
-                        let (nested_pattern, new_pos) =
-                            self.parse_deep_expr(tokens, pos)?;
+                        let (nested_pattern, new_pos) = self.parse_deep_expr(tokens, pos)?;
                         patterns.push(nested_pattern);
                         pos = new_pos;
                     } else {
@@ -495,8 +500,18 @@ impl PatternParser {
                 let is_type = type_name.chars().next().map_or(false, |c| c.is_uppercase())
                     || matches!(
                         type_name.as_str(),
-                        "int" | "boolean" | "bool" | "float" | "double" | "char"
-                            | "byte" | "short" | "long" | "string" | "String" | "void"
+                        "int"
+                            | "boolean"
+                            | "bool"
+                            | "float"
+                            | "double"
+                            | "char"
+                            | "byte"
+                            | "short"
+                            | "long"
+                            | "string"
+                            | "String"
+                            | "void"
                     );
                 if is_type {
                     return Ok((
@@ -520,11 +535,7 @@ impl PatternParser {
     }
 
     /// Parse a deep expression: <... pattern ...>
-    fn parse_deep_expr(
-        &self,
-        tokens: &[Token],
-        start: usize,
-    ) -> Result<(ParsedPattern, usize)> {
+    fn parse_deep_expr(&self, tokens: &[Token], start: usize) -> Result<(ParsedPattern, usize)> {
         // Expect <... at start
         if start + 1 >= tokens.len() {
             return Err(AnalysisError::pattern_match_error("Expected <..."));
@@ -532,7 +543,9 @@ impl PatternParser {
         if !matches!(&tokens[start], Token::Literal(s) if s == "<")
             || !matches!(&tokens[start + 1], Token::Wildcard)
         {
-            return Err(AnalysisError::pattern_match_error("Expected <... for deep expression"));
+            return Err(AnalysisError::pattern_match_error(
+                "Expected <... for deep expression",
+            ));
         }
 
         let mut pos = start + 2; // skip < and ...
@@ -731,7 +744,10 @@ mod tests {
     fn test_parse_unmatched_parentheses() {
         let parser = PatternParser::new();
         let result = parser.parse("(hello");
-        assert!(result.is_ok(), "Parser should tolerate unmatched parentheses gracefully");
+        assert!(
+            result.is_ok(),
+            "Parser should tolerate unmatched parentheses gracefully"
+        );
     }
 
     #[test]

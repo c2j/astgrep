@@ -29,7 +29,7 @@
 
 use astgrep_core::Language;
 use astgrep_parser::LanguageParserRegistry;
-use astgrep_rules::{RuleEngine, RuleParser, RuleContext};
+use astgrep_rules::{RuleContext, RuleEngine, RuleParser};
 use std::path::PathBuf;
 
 fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
@@ -40,6 +40,7 @@ fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
         custom_data: std::collections::HashMap::new(),
         enable_constant_propagation: true,
         sql_stmt_boundary: None,
+        sql_dialect: None,
     }
 }
 
@@ -61,7 +62,11 @@ fn test_regression_template_java_parser_does_not_crash_on_empty_file() {
     // Parser should not panic; it may succeed with an empty AST or return an error.
     match result {
         Ok(ast) => {
-            assert_eq!(ast.node_type(), "program", "Empty file should still produce program root");
+            assert_eq!(
+                ast.node_type(),
+                "program",
+                "Empty file should still produce program root"
+            );
         }
         Err(e) => {
             assert!(!e.to_string().is_empty(), "Error should have a message");
@@ -80,10 +85,16 @@ function λ(x) { return x + 1; }
 "#;
 
     let result = parser_registry.parse_file(&PathBuf::from("unicode.js"), source);
-    assert!(result.is_ok(), "JS parser should handle unicode identifiers without crashing");
+    assert!(
+        result.is_ok(),
+        "JS parser should handle unicode identifiers without crashing"
+    );
 
     let ast = result.unwrap();
-    assert!(ast.child_count() > 0, "Unicode source should produce AST children");
+    assert!(
+        ast.child_count() > 0,
+        "Unicode source should produce AST children"
+    );
 }
 
 #[test]
@@ -100,7 +111,10 @@ print(query)
 "#;
 
     let result = parser_registry.parse_file(&PathBuf::from("multiline.py"), source);
-    assert!(result.is_ok(), "Python parser should handle multiline strings");
+    assert!(
+        result.is_ok(),
+        "Python parser should handle multiline strings"
+    );
 }
 
 #[test]
@@ -122,7 +136,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     // Clean code: no eval anywhere
     let source = r#"
@@ -133,7 +149,8 @@ public class Clean {
 }
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("Clean.java"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("Clean.java"), source)
         .expect("parse java");
     let ctx = make_context("Clean.java", Language::Java, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
@@ -155,7 +172,10 @@ WHERE active = true; -- end comment
     match result {
         Ok(ast) => {
             let text = ast.text().unwrap_or("");
-            assert!(text.contains("SELECT"), "AST text should preserve SQL keywords");
+            assert!(
+                text.contains("SELECT"),
+                "AST text should preserve SQL keywords"
+            );
         }
         Err(e) => {
             // If comments aren't supported yet, that's acceptable but documented

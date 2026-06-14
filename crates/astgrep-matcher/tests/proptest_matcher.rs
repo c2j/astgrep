@@ -3,8 +3,8 @@
 //! These tests verify that pattern parsing and matching handle arbitrary
 //! input gracefully — never panic, always produce consistent results.
 
-use astgrep_matcher::{PatternMatcher, PatternParser};
 use astgrep_ast::AstBuilder;
+use astgrep_matcher::{PatternMatcher, PatternParser};
 use proptest::prelude::*;
 
 proptest! {

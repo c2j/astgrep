@@ -266,7 +266,13 @@ mod tests {
             "SQL_INJECTION".to_string(),
             "Test sink".to_string(),
         );
-        let flow = TaintFlow::new(source.clone(), sink, vec![id1, id2], 0.9, "SQL_INJECTION".to_string());
+        let flow = TaintFlow::new(
+            source.clone(),
+            sink,
+            vec![id1, id2],
+            0.9,
+            "SQL_INJECTION".to_string(),
+        );
 
         let analysis = DataFlowAnalysis {
             graph: graph.clone(),

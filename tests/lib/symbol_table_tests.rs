@@ -2,7 +2,7 @@
 //!
 //! Tests for symbol management, type tracking, and scope handling.
 
-use astgrep_dataflow::symbol_table::{SymbolTable, TypeInfo, ScopeType, Symbol};
+use astgrep_dataflow::symbol_table::{ScopeType, Symbol, SymbolTable, TypeInfo};
 
 #[test]
 fn test_type_info_primitive() {
@@ -24,9 +24,9 @@ fn test_type_info_array() {
 
 #[test]
 fn test_type_info_nested_array() {
-    let nested = TypeInfo::Array(Box::new(
-        TypeInfo::Array(Box::new(TypeInfo::Primitive("string".to_string())))
-    ));
+    let nested = TypeInfo::Array(Box::new(TypeInfo::Array(Box::new(TypeInfo::Primitive(
+        "string".to_string(),
+    )))));
     assert_eq!(nested.to_string(), "string[][]");
 }
 
@@ -106,11 +106,7 @@ fn test_symbol_table_creation() {
 #[test]
 fn test_symbol_table_define_symbol() {
     let mut table = SymbolTable::new();
-    let result = table.define_symbol(
-        "x".to_string(),
-        1,
-        TypeInfo::Primitive("int".to_string()),
-    );
+    let result = table.define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()));
 
     assert!(result.is_ok());
     assert!(table.resolve_symbol("x").is_some());
@@ -119,7 +115,9 @@ fn test_symbol_table_define_symbol() {
 #[test]
 fn test_symbol_table_resolve_symbol() {
     let mut table = SymbolTable::new();
-    table.define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+        .ok();
 
     let symbol = table.resolve_symbol("x");
     assert!(symbol.is_some());
@@ -136,7 +134,9 @@ fn test_symbol_table_resolve_nonexistent_symbol() {
 #[test]
 fn test_symbol_table_get_symbol_type() {
     let mut table = SymbolTable::new();
-    table.define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+        .ok();
 
     let type_info = table.get_symbol_type("x");
     assert!(type_info.is_some());
@@ -146,12 +146,17 @@ fn test_symbol_table_get_symbol_type() {
 #[test]
 fn test_symbol_table_update_symbol_type() {
     let mut table = SymbolTable::new();
-    table.define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+        .ok();
 
     table.update_symbol_type("x".to_string(), TypeInfo::Primitive("string".to_string()));
 
     let type_info = table.get_symbol_type("x");
-    assert_eq!(type_info.unwrap(), &TypeInfo::Primitive("string".to_string()));
+    assert_eq!(
+        type_info.unwrap(),
+        &TypeInfo::Primitive("string".to_string())
+    );
 }
 
 #[test]
@@ -160,7 +165,10 @@ fn test_symbol_table_enter_scope() {
     let scope_id = table.enter_scope(ScopeType::Function("foo".to_string()));
 
     assert_eq!(scope_id, 1);
-    assert_eq!(table.get_current_scope_type(), Some(&ScopeType::Function("foo".to_string())));
+    assert_eq!(
+        table.get_current_scope_type(),
+        Some(&ScopeType::Function("foo".to_string()))
+    );
 }
 
 #[test]
@@ -185,11 +193,23 @@ fn test_symbol_table_nested_scopes() {
     let mut table = SymbolTable::new();
 
     // Define in global scope
-    table.define_symbol("global_x".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol(
+            "global_x".to_string(),
+            1,
+            TypeInfo::Primitive("int".to_string()),
+        )
+        .ok();
 
     // Enter function scope
     table.enter_scope(ScopeType::Function("foo".to_string()));
-    table.define_symbol("local_x".to_string(), 2, TypeInfo::Primitive("string".to_string())).ok();
+    table
+        .define_symbol(
+            "local_x".to_string(),
+            2,
+            TypeInfo::Primitive("string".to_string()),
+        )
+        .ok();
 
     // Should find both
     assert!(table.resolve_symbol("global_x").is_some());
@@ -208,15 +228,33 @@ fn test_symbol_table_deeply_nested_scopes() {
     let mut table = SymbolTable::new();
 
     // Global scope
-    table.define_symbol("global".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol(
+            "global".to_string(),
+            1,
+            TypeInfo::Primitive("int".to_string()),
+        )
+        .ok();
 
     // Function scope
     table.enter_scope(ScopeType::Function("foo".to_string()));
-    table.define_symbol("func_var".to_string(), 2, TypeInfo::Primitive("string".to_string())).ok();
+    table
+        .define_symbol(
+            "func_var".to_string(),
+            2,
+            TypeInfo::Primitive("string".to_string()),
+        )
+        .ok();
 
     // Block scope
     table.enter_scope(ScopeType::Block);
-    table.define_symbol("block_var".to_string(), 3, TypeInfo::Primitive("bool".to_string())).ok();
+    table
+        .define_symbol(
+            "block_var".to_string(),
+            3,
+            TypeInfo::Primitive("bool".to_string()),
+        )
+        .ok();
 
     // Should find all three
     assert!(table.resolve_symbol("global").is_some());
@@ -237,8 +275,16 @@ fn test_symbol_table_deeply_nested_scopes() {
 #[test]
 fn test_symbol_table_get_current_scope_symbols() {
     let mut table = SymbolTable::new();
-    table.define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
-    table.define_symbol("y".to_string(), 2, TypeInfo::Primitive("string".to_string())).ok();
+    table
+        .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+        .ok();
+    table
+        .define_symbol(
+            "y".to_string(),
+            2,
+            TypeInfo::Primitive("string".to_string()),
+        )
+        .ok();
 
     let symbols = table.get_current_scope_symbols();
     assert!(symbols.is_some());
@@ -248,7 +294,9 @@ fn test_symbol_table_get_current_scope_symbols() {
 #[test]
 fn test_symbol_table_clear() {
     let mut table = SymbolTable::new();
-    table.define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+        .ok();
 
     table.clear();
 
@@ -262,9 +310,18 @@ fn test_symbol_table_class_scope() {
 
     // Enter class scope
     table.enter_scope(ScopeType::Class("MyClass".to_string()));
-    table.define_symbol("member".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol(
+            "member".to_string(),
+            1,
+            TypeInfo::Primitive("int".to_string()),
+        )
+        .ok();
 
-    assert_eq!(table.get_current_scope_type(), Some(&ScopeType::Class("MyClass".to_string())));
+    assert_eq!(
+        table.get_current_scope_type(),
+        Some(&ScopeType::Class("MyClass".to_string()))
+    );
     assert!(table.resolve_symbol("member").is_some());
 }
 
@@ -274,7 +331,13 @@ fn test_symbol_table_loop_scope() {
 
     // Enter loop scope
     table.enter_scope(ScopeType::Loop);
-    table.define_symbol("loop_var".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol(
+            "loop_var".to_string(),
+            1,
+            TypeInfo::Primitive("int".to_string()),
+        )
+        .ok();
 
     assert_eq!(table.get_current_scope_type(), Some(&ScopeType::Loop));
     assert!(table.resolve_symbol("loop_var").is_some());
@@ -285,11 +348,19 @@ fn test_symbol_shadowing() {
     let mut table = SymbolTable::new();
 
     // Define in global scope
-    table.define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string())).ok();
+    table
+        .define_symbol("x".to_string(), 1, TypeInfo::Primitive("int".to_string()))
+        .ok();
 
     // Enter function scope and shadow
     table.enter_scope(ScopeType::Function("foo".to_string()));
-    table.define_symbol("x".to_string(), 2, TypeInfo::Primitive("string".to_string())).ok();
+    table
+        .define_symbol(
+            "x".to_string(),
+            2,
+            TypeInfo::Primitive("string".to_string()),
+        )
+        .ok();
 
     // Should resolve to the local one
     let symbol = table.resolve_symbol("x");
@@ -302,4 +373,3 @@ fn test_symbol_shadowing() {
     let symbol = table.resolve_symbol("x");
     assert_eq!(symbol.unwrap().node_id, 1);
 }
-

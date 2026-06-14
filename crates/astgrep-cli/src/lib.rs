@@ -1,7 +1,7 @@
 //! Command-line interface for astgrep
 
 use anyhow::Result;
-use astgrep_core::{AnalysisConfig, Confidence, Language, OutputFormat, Severity};
+use astgrep_core::{AnalysisConfig, Confidence, Language, OutputFormat, Severity, SqlDialect};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -138,6 +138,10 @@ pub enum Commands {
         /// SQL: constrain simple matching within single statements (semicolon delimited). YAML 'options.sql_statement_boundary' overrides this.
         #[arg(long = "sql-statement-boundary", value_enum, default_value = "on")]
         sql_statement_boundary: OnOffCli,
+
+        /// SQL dialect: standard | gaussdb | opengauss | polardb-mysql
+        #[arg(long, value_name = "DIALECT")]
+        dialect: Option<String>,
 
         /// Enable constant propagation analysis (default: true)
         #[arg(long = "constant-propagation", default_value = "true")]
@@ -356,6 +360,7 @@ pub async fn run() -> Result<()> {
             max_threads,
             compatible,
             sql_statement_boundary,
+            dialect,
             constant_propagation,
         } => {
             info!("Starting code analysis");
@@ -365,6 +370,13 @@ pub async fn run() -> Result<()> {
                 vec![cli.config.unwrap()]
             } else {
                 rules
+            };
+
+            let sql_dialect = match dialect.as_deref() {
+                Some(s) => Some(SqlDialect::from_str(s).ok_or_else(|| {
+                    anyhow::anyhow!("Unknown SQL dialect: {}. Valid values: standard, gaussdb, opengauss, polardb-mysql", s)
+                })?),
+                None => None,
             };
 
             let config = build_enhanced_analysis_config(
@@ -391,6 +403,7 @@ pub async fn run() -> Result<()> {
                 compatible,
                 Some(matches!(sql_statement_boundary, OnOffCli::On)),
                 constant_propagation,
+                sql_dialect,
             )?;
 
             commands::analyze_enhanced::run_enhanced(config, output).await
@@ -538,6 +551,7 @@ fn build_enhanced_analysis_config(
     compatible: Option<String>,
     sql_statement_boundary: Option<bool>,
     constant_propagation: bool,
+    sql_dialect: Option<SqlDialect>,
 ) -> Result<EnhancedAnalysisConfig> {
     let target_paths = if targets.is_empty() {
         vec![PathBuf::from(".")]
@@ -595,6 +609,7 @@ fn build_enhanced_analysis_config(
         compatible_mode: compatible,
         sql_statement_boundary,
         enable_constant_propagation: constant_propagation,
+        sql_dialect,
     })
 }
 
@@ -682,6 +697,7 @@ fn build_analysis_config(
         output_format,
         parallel,
         max_threads,
+        sql_dialect: None,
     })
 }
 
@@ -707,6 +723,7 @@ pub struct EnhancedAnalysisConfig {
     pub compatible_mode: Option<String>,
     pub sql_statement_boundary: Option<bool>,
     pub enable_constant_propagation: bool,
+    pub sql_dialect: Option<SqlDialect>,
 }
 
 #[cfg(test)]

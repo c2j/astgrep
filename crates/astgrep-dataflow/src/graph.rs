@@ -46,14 +46,8 @@ impl DataFlowGraph {
             edge_type,
         };
 
-        self.edges
-            .entry(from)
-            .or_default()
-            .push(edge.clone());
-        self.reverse_edges
-            .entry(to)
-            .or_default()
-            .push(edge);
+        self.edges.entry(from).or_default().push(edge.clone());
+        self.reverse_edges.entry(to).or_default().push(edge);
     }
 
     /// Get a node by ID

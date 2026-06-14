@@ -192,7 +192,8 @@ impl BashAdapter {
 
     /// Parse source statement
     fn parse_source_statement(&self, source: &str) -> Result<UniversalNode> {
-        let file_path = source.strip_prefix("source ")
+        let file_path = source
+            .strip_prefix("source ")
             .or_else(|| source.strip_prefix(". "))
             .unwrap_or_default();
 

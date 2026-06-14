@@ -101,12 +101,13 @@ impl RuleEngine {
         ast: &dyn astgrep_core::AstNode,
         context: &RuleContext,
     ) -> Result<Vec<RuleResult>> {
-        let applicable_rules = self.rules_for_language(context.language);
-        let results = self.executor.execute_rules(
-            &applicable_rules.into_iter().cloned().collect::<Vec<_>>(),
-            ast,
-            context,
-        );
+        let applicable_rules: Vec<Rule> = self
+            .rules_for_language(context.language)
+            .into_iter()
+            .filter(|r| r.applies_to_dialect(context.sql_dialect))
+            .cloned()
+            .collect();
+        let results = self.executor.execute_rules(&applicable_rules, ast, context);
         Ok(results)
     }
 
@@ -118,7 +119,7 @@ impl RuleEngine {
         context: &RuleContext,
     ) -> Result<Option<RuleResult>> {
         if let Some(rule) = self.rules.iter().find(|r| r.id == rule_id) {
-            if rule.applies_to(context.language) {
+            if rule.applies_to(context.language) && rule.applies_to_dialect(context.sql_dialect) {
                 let result = self.executor.execute_rule(rule, ast, context);
                 Ok(Some(result))
             } else {
@@ -154,14 +155,17 @@ impl RuleEngine {
         }
 
         let rules = self.rules_for_language(context.language);
+        let rules: Vec<&Rule> = rules
+            .into_iter()
+            .filter(|r| r.applies_to_dialect(context.sql_dialect))
+            .collect();
 
         let rules_with_conditions: Vec<Rule> = rules
             .iter()
             .filter(|r| {
-                r.patterns.iter().any(|p| {
-                    !p.conditions.is_empty()
-                        || pattern_has_typed_metavar(p)
-                })
+                r.patterns
+                    .iter()
+                    .any(|p| !p.conditions.is_empty() || pattern_has_typed_metavar(p))
             })
             .map(|r| (*r).clone())
             .collect();
@@ -169,10 +173,9 @@ impl RuleEngine {
         let rules_without_conditions: Vec<Rule> = rules
             .iter()
             .filter(|r| {
-                r.patterns.iter().all(|p| {
-                    p.conditions.is_empty()
-                        && !pattern_has_typed_metavar(p)
-                })
+                r.patterns
+                    .iter()
+                    .all(|p| p.conditions.is_empty() && !pattern_has_typed_metavar(p))
             })
             .map(|r| (*r).clone())
             .collect();
@@ -203,6 +206,7 @@ impl RuleEngine {
                 context.language,
                 Some(std::path::Path::new(&context.file_path)),
                 context.enable_constant_propagation,
+                context.sql_dialect,
             )?;
             findings.extend(comp_result.findings);
         }
@@ -240,7 +244,7 @@ fn pattern_has_typed_metavar(pattern: &crate::types::Pattern) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use astgrep_core::{Confidence, Language, Severity};
+    use astgrep_core::{Confidence, Language, Severity, SqlDialect};
 
     #[test]
     fn test_rule_engine_creation() {
@@ -353,6 +357,105 @@ rules:
         engine.clear_rules();
         assert_eq!(engine.rule_count(), 0);
         assert!(engine.rules().is_empty());
+    }
+
+    #[test]
+    fn test_dialect_filtering_in_engine() {
+        let yaml = r#"
+rules:
+  - id: gaussdb-only
+    name: GaussDB Only
+    description: A rule that only applies to GaussDB
+    message: Only GaussDB
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - "SELECT"
+    dialects: [gaussdb]
+  - id: any-dialect
+    name: Any Dialect
+    description: A rule without dialect constraint
+    message: Any dialect
+    severity: WARNING
+    languages: [sql]
+    patterns:
+      - "SELECT"
+"#;
+
+        let mut engine = RuleEngine::new();
+        engine.load_rules_from_yaml(yaml).unwrap();
+        assert_eq!(engine.rule_count(), 2);
+
+        // When dialect is Some(GaussDB), both rules should apply
+        let ctx_gaussdb = RuleContext {
+            file_path: "test.sql".to_string(),
+            language: Language::Sql,
+            source_code: "SELECT 1".to_string(),
+            custom_data: std::collections::HashMap::new(),
+            enable_constant_propagation: false,
+            sql_stmt_boundary: None,
+            sql_dialect: Some(SqlDialect::GaussDB),
+        };
+        let gaussdb_rules: Vec<&Rule> = engine
+            .rules()
+            .iter()
+            .filter(|r| {
+                r.applies_to(Language::Sql) && r.applies_to_dialect(ctx_gaussdb.sql_dialect)
+            })
+            .collect();
+        assert_eq!(
+            gaussdb_rules.len(),
+            2,
+            "Both rules should apply for GaussDB"
+        );
+
+        // When dialect is Some(OpenGauss), only the unconstrained rule should apply
+        let ctx_opengauss = RuleContext {
+            file_path: "test.sql".to_string(),
+            language: Language::Sql,
+            source_code: "SELECT 1".to_string(),
+            custom_data: std::collections::HashMap::new(),
+            enable_constant_propagation: false,
+            sql_stmt_boundary: None,
+            sql_dialect: Some(SqlDialect::OpenGauss),
+        };
+        let opengauss_rules: Vec<&Rule> = engine
+            .rules()
+            .iter()
+            .filter(|r| {
+                r.applies_to(Language::Sql) && r.applies_to_dialect(ctx_opengauss.sql_dialect)
+            })
+            .collect();
+        assert_eq!(
+            opengauss_rules.len(),
+            1,
+            "Only the unconstrained rule should apply for OpenGauss"
+        );
+        assert_eq!(opengauss_rules[0].id, "any-dialect");
+
+        // When dialect is None, only the unconstrained rule should apply
+        let ctx_no_dialect = RuleContext {
+            file_path: "test.sql".to_string(),
+            language: Language::Sql,
+            source_code: "SELECT 1".to_string(),
+            custom_data: std::collections::HashMap::new(),
+            enable_constant_propagation: false,
+            sql_stmt_boundary: None,
+            sql_dialect: None,
+        };
+        let no_dialect_rules: Vec<&Rule> = engine
+            .rules()
+            .iter()
+            .filter(|r| {
+                r.applies_to(Language::Sql) && r.applies_to_dialect(ctx_no_dialect.sql_dialect)
+            })
+            .collect();
+        assert_eq!(
+            no_dialect_rules.len(),
+            1,
+            "Only the unconstrained rule should apply for no dialect"
+        );
+        assert_eq!(no_dialect_rules[0].id, "any-dialect");
     }
 
     #[test]

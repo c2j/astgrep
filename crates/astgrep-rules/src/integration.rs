@@ -55,6 +55,7 @@ impl RuleExecutionExample {
             enabled: true,
             mode: crate::types::RuleMode::Search,
             sql_stmt_boundary: None,
+            dialects: None,
         }
     }
 
@@ -98,6 +99,7 @@ impl RuleExecutionExample {
             enabled: true,
             mode: crate::types::RuleMode::Search,
             sql_stmt_boundary: None,
+            dialects: None,
         }
     }
 
@@ -204,6 +206,7 @@ impl RuleExecutionExample {
             Language::Java,
             Some(Path::new("example.java")),
             true, // Enable constant propagation
+            None,
         )?;
 
         // Display comprehensive results

@@ -208,6 +208,7 @@ fn analyze_with_rule_engine(
         if let Some(flag) = config.sql_statement_boundary {
             context = context.add_data("sql_statement_boundary".to_string(), flag.to_string());
         }
+        context.sql_dialect = config.sql_dialect;
 
         // Perform constant propagation analysis if enabled
         // Use tree-sitter parser for better AST quality if available
@@ -349,6 +350,7 @@ fn analyze_with_rule_engine(
                             ctx_sql = ctx_sql
                                 .add_data("sql_statement_boundary".to_string(), flag.to_string());
                         }
+                        ctx_sql.sql_dialect = config.sql_dialect;
 
                         for rule in &sql_rules {
                             if let Ok(Some(result)) =

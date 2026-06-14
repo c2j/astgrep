@@ -5,10 +5,10 @@
 
 use astgrep_core::Language;
 use astgrep_parser::LanguageParserRegistry;
-use astgrep_rules::{RuleEngine, RuleParser, RuleContext};
+use astgrep_rules::{RuleContext, RuleEngine, RuleParser};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::path::PathBuf;
 
 fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
     RuleContext {
@@ -18,6 +18,7 @@ fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
         custom_data: std::collections::HashMap::new(),
         enable_constant_propagation: true,
         sql_stmt_boundary: None,
+        sql_dialect: None,
     }
 }
 
@@ -44,7 +45,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
     let rule_engine = Arc::new(Mutex::new(rule_engine));
 
     let source = r#"
@@ -68,7 +71,8 @@ public class ConcurrentTest {
         let path = path.clone();
 
         let handle = thread::spawn(move || {
-            let ast = parser_registry.parse_file(&path, &source)
+            let ast = parser_registry
+                .parse_file(&path, &source)
                 .expect(&format!("parse iteration {}", i));
             let ctx = make_context("ConcurrentTest.java", Language::Java, &source);
             let mut engine = rule_engine.lock().unwrap();
@@ -86,7 +90,11 @@ public class ConcurrentTest {
     let results = results.lock().unwrap();
     assert_eq!(results.len(), 100, "All 100 iterations should complete");
     for (i, count) in results.iter() {
-        assert!(*count > 0, "Iteration {} should find at least one finding", i);
+        assert!(
+            *count > 0,
+            "Iteration {} should find at least one finding",
+            i
+        );
     }
     println!("✓ 100 concurrent analyses of same file completed without crash");
 }
@@ -114,7 +122,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
     let rule_engine = Arc::new(Mutex::new(rule_engine));
 
     let files: Vec<(&str, &str)> = vec![
@@ -137,7 +147,8 @@ rules:
 
         let handle = thread::spawn(move || {
             let path = PathBuf::from(&name);
-            let ast = parser_registry.parse_file(&path, &content)
+            let ast = parser_registry
+                .parse_file(&path, &content)
                 .expect(&format!("parse {}", name));
             let ctx = make_context(&name, Language::JavaScript, &content);
             let mut engine = rule_engine.lock().unwrap();
@@ -219,7 +230,10 @@ fn test_concurrent_parser_registry_access() {
     let total_ok: usize = results.iter().map(|(_, ok)| ok).sum();
     let expected = num_threads * iterations_per_thread;
     assert_eq!(total_ok, expected, "All {} parses should succeed", expected);
-    println!("✓ Concurrent parser registry access: {}/{} succeeded", total_ok, expected);
+    println!(
+        "✓ Concurrent parser registry access: {}/{} succeeded",
+        total_ok, expected
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,7 +277,9 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
     let rule_engine = Arc::new(Mutex::new(rule_engine));
 
     let tasks: Vec<(&str, Language, &str)> = vec![
@@ -277,11 +293,7 @@ rules:
             Language::JavaScript,
             r#"function f() { document.body.innerHTML = 'x'; }"#,
         ),
-        (
-            "cmd.py",
-            Language::Python,
-            r#"import os; os.system('ls')"#,
-        ),
+        ("cmd.py", Language::Python, r#"import os; os.system('ls')"#),
     ];
 
     let results = Arc::new(Mutex::new(Vec::new()));
@@ -298,7 +310,8 @@ rules:
 
             let handle = thread::spawn(move || {
                 let path = PathBuf::from(&name);
-                let ast = parser_registry.parse_file(&path, &source)
+                let ast = parser_registry
+                    .parse_file(&path, &source)
                     .expect(&format!("parse {}", name));
                 let ctx = make_context(&name, lang, &source);
                 let mut engine = rule_engine.lock().unwrap();
@@ -315,7 +328,11 @@ rules:
     }
 
     let results = results.lock().unwrap();
-    assert_eq!(results.len(), 60, "All 60 tasks (20 rounds × 3 files) should complete");
+    assert_eq!(
+        results.len(),
+        60,
+        "All 60 tasks (20 rounds × 3 files) should complete"
+    );
     let total_findings: usize = results.iter().map(|(_, c)| c).sum();
     assert!(total_findings > 0, "Should have findings across all runs");
     println!(

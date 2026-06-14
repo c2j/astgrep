@@ -266,7 +266,11 @@ rules:
 
         let result = validate_rule_file(&rule_file).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().to_lowercase().contains("invalid severity"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .to_lowercase()
+            .contains("invalid severity"));
     }
 
     #[tokio::test]

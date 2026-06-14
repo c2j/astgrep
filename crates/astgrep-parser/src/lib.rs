@@ -5,18 +5,20 @@
 pub mod adapters;
 pub mod base_adapter;
 pub mod bash;
+pub mod dialect;
 pub mod java;
 pub mod javascript;
 pub mod javascript_optimizer;
+pub mod pattern_tree;
 pub mod python;
 pub mod registry;
 pub mod script_discovery;
 pub mod sql;
-pub mod pattern_tree;
 pub mod tree_sitter_parser;
 pub mod xml;
 
 pub use adapters::*;
+pub use dialect::{dispatch, DialectParseError, SqlDialectParser};
 pub use registry::*;
 
 // Re-export types for macro usage
@@ -140,9 +142,9 @@ mod tests {
     impl LanguageParser for MockParser {
         fn parse(&self, source: &str, _file_path: &Path) -> Result<Box<dyn AstNode>> {
             Ok(Box::new(astgrep_ast::AstBuilder::program(vec![
-                astgrep_ast::AstBuilder::expression_statement(
-                    astgrep_ast::AstBuilder::identifier(source),
-                ),
+                astgrep_ast::AstBuilder::expression_statement(astgrep_ast::AstBuilder::identifier(
+                    source,
+                )),
             ])))
         }
 
@@ -206,7 +208,10 @@ mod tests {
         let mut registry = LanguageParserRegistry::new();
         registry.clear_parsers();
         registry.register_parser(Language::Java, Box::new(MockParser::new(Language::Java)));
-        registry.register_parser(Language::Python, Box::new(MockParser::new(Language::Python)));
+        registry.register_parser(
+            Language::Python,
+            Box::new(MockParser::new(Language::Python)),
+        );
 
         let languages = registry.supported_languages();
         assert_eq!(languages.len(), 2);
@@ -229,13 +234,34 @@ mod tests {
     fn test_detect_language() {
         let registry = LanguageParserRegistry::new();
 
-        assert_eq!(registry.detect_language(Path::new("test.java")).unwrap(), Language::Java);
-        assert_eq!(registry.detect_language(Path::new("test.js")).unwrap(), Language::JavaScript);
-        assert_eq!(registry.detect_language(Path::new("test.py")).unwrap(), Language::Python);
-        assert_eq!(registry.detect_language(Path::new("test.sql")).unwrap(), Language::Sql);
-        assert_eq!(registry.detect_language(Path::new("test.sh")).unwrap(), Language::Bash);
-        assert_eq!(registry.detect_language(Path::new("test.ddl")).unwrap(), Language::Sql);
-        assert_eq!(registry.detect_language(Path::new("test.dml")).unwrap(), Language::Sql);
+        assert_eq!(
+            registry.detect_language(Path::new("test.java")).unwrap(),
+            Language::Java
+        );
+        assert_eq!(
+            registry.detect_language(Path::new("test.js")).unwrap(),
+            Language::JavaScript
+        );
+        assert_eq!(
+            registry.detect_language(Path::new("test.py")).unwrap(),
+            Language::Python
+        );
+        assert_eq!(
+            registry.detect_language(Path::new("test.sql")).unwrap(),
+            Language::Sql
+        );
+        assert_eq!(
+            registry.detect_language(Path::new("test.sh")).unwrap(),
+            Language::Bash
+        );
+        assert_eq!(
+            registry.detect_language(Path::new("test.ddl")).unwrap(),
+            Language::Sql
+        );
+        assert_eq!(
+            registry.detect_language(Path::new("test.dml")).unwrap(),
+            Language::Sql
+        );
 
         assert!(registry.detect_language(Path::new("test.unknown")).is_err());
         assert!(registry.detect_language(Path::new("no_extension")).is_err());

@@ -155,7 +155,10 @@ mod tests {
         };
         assert_eq!(config.timeout, std::time::Duration::from_secs(120));
         assert_eq!(config.working_directory, Some(PathBuf::from("/workspace")));
-        assert_eq!(config.environment_variables.get("KEY"), Some(&"VALUE".to_string()));
+        assert_eq!(
+            config.environment_variables.get("KEY"),
+            Some(&"VALUE".to_string())
+        );
         assert_eq!(config.capture_output, false);
     }
 
@@ -217,7 +220,10 @@ mod tests {
             duration_ms: 60000,
         };
         assert_eq!(result.stdout, None);
-        assert_eq!(result.stderr.as_ref().unwrap(), "Script execution timed out");
+        assert_eq!(
+            result.stderr.as_ref().unwrap(),
+            "Script execution timed out"
+        );
         assert_eq!(result.exit_code, None);
         assert_eq!(result.timed_out, true);
         assert_eq!(result.duration_ms, 60000);
@@ -234,7 +240,11 @@ mod tests {
         };
         assert_eq!(result.stdout, None);
         assert_eq!(result.timed_out, false);
-        assert!(result.stderr.as_ref().unwrap().contains("permission denied"));
+        assert!(result
+            .stderr
+            .as_ref()
+            .unwrap()
+            .contains("permission denied"));
     }
 
     #[test]

@@ -538,7 +538,11 @@ impl ScriptClassifier {
             // Fallback classification
             return Ok(ClassificationResult {
                 script_type: ScriptType::Utility,
-                confidence: if self.config.enable_fallback { 0.1 } else { 0.0 },
+                confidence: if self.config.enable_fallback {
+                    0.1
+                } else {
+                    0.0
+                },
                 classification_method: "fallback".to_string(),
                 supporting_evidence: vec!["No classification methods available".to_string()],
                 alternative_types: Vec::new(),
@@ -1001,7 +1005,10 @@ mod tests {
         let result = classifier.classify_script(&asset)?;
 
         // Bash shebang should be detected
-        assert_eq!(result.metadata.shebang_detected, Some("/bin/bash".to_string()));
+        assert_eq!(
+            result.metadata.shebang_detected,
+            Some("/bin/bash".to_string())
+        );
 
         Ok(())
     }
@@ -1026,7 +1033,10 @@ mod tests {
         let result = classifier.classify_script(&asset)?;
 
         // Python shebang should be detected
-        assert_eq!(result.metadata.shebang_detected, Some("/usr/bin/python3".to_string()));
+        assert_eq!(
+            result.metadata.shebang_detected,
+            Some("/usr/bin/python3".to_string())
+        );
 
         Ok(())
     }
@@ -1051,7 +1061,10 @@ mod tests {
         let result = classifier.classify_script(&asset)?;
 
         // Node shebang should be detected
-        assert_eq!(result.metadata.shebang_detected, Some("/usr/bin/node".to_string()));
+        assert_eq!(
+            result.metadata.shebang_detected,
+            Some("/usr/bin/node".to_string())
+        );
 
         Ok(())
     }
@@ -1062,7 +1075,10 @@ mod tests {
         let script_path = temp_dir.path().join("runner_script.sh");
 
         // Create a script with runner keywords
-        fs::write(&script_path, "#!/bin/bash\nrun_tests() {\n  execute_all\n  launch_app\n}\n")?;
+        fs::write(
+            &script_path,
+            "#!/bin/bash\nrun_tests() {\n  execute_all\n  launch_app\n}\n",
+        )?;
 
         let asset = TestAsset::new(
             "test-runner".to_string(),
@@ -1088,7 +1104,10 @@ mod tests {
         let script_path = temp_dir.path().join("ci_script.sh");
 
         // Create a script with CI keywords
-        fs::write(&script_path, "#!/bin/bash\necho 'ci pipeline build deploy'\n")?;
+        fs::write(
+            &script_path,
+            "#!/bin/bash\necho 'ci pipeline build deploy'\n",
+        )?;
 
         let asset = TestAsset::new(
             "test-ci".to_string(),
@@ -1112,7 +1131,10 @@ mod tests {
         let temp_dir = tempdir()?;
         let script_path = temp_dir.path().join("util_script.sh");
 
-        fs::write(&script_path, "#!/bin/bash\nhelper_function() {\n  util\n  tool\n  library\n  import\n}\n")?;
+        fs::write(
+            &script_path,
+            "#!/bin/bash\nhelper_function() {\n  util\n  tool\n  library\n  import\n}\n",
+        )?;
 
         let asset = TestAsset::new(
             "test-utility".to_string(),
@@ -1162,7 +1184,10 @@ mod tests {
         let script_path = temp_dir.path().join("run_content.sh");
 
         // Create a script with runner patterns
-        fs::write(&script_path, "#!/bin/bash\nrun_all_tests() {\n  execute_command\n  start_service\n  launch_app\n}\n")?;
+        fs::write(
+            &script_path,
+            "#!/bin/bash\nrun_all_tests() {\n  execute_command\n  start_service\n  launch_app\n}\n",
+        )?;
 
         let asset = TestAsset::new(
             "test-run-content".to_string(),
@@ -1187,7 +1212,10 @@ mod tests {
         let script_path = temp_dir.path().join("build_content.sh");
 
         // Create a script with CI patterns
-        fs::write(&script_path, "#!/bin/bash\necho 'ci build pipeline deploy jenkins'\n")?;
+        fs::write(
+            &script_path,
+            "#!/bin/bash\necho 'ci build pipeline deploy jenkins'\n",
+        )?;
 
         let asset = TestAsset::new(
             "test-ci-content".to_string(),
@@ -1313,12 +1341,10 @@ mod tests {
         let rule = ClassificationRule {
             name: "test_rule".to_string(),
             script_type: ScriptType::Validator,
-            conditions: vec![
-                ClassificationCondition::FilenameContains {
-                    pattern: "validate".to_string(),
-                    case_sensitive: false,
-                },
-            ],
+            conditions: vec![ClassificationCondition::FilenameContains {
+                pattern: "validate".to_string(),
+                case_sensitive: false,
+            }],
             weight: 1.0,
             description: "Test rule".to_string(),
         };
@@ -1591,7 +1617,9 @@ mod tests {
         let results: Vec<ClassificationResult> = Vec::new();
         let start_time = std::time::Instant::now();
 
-        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+        let result = classifier
+            .combine_classification_results(results, &start_time)
+            .unwrap();
 
         assert!(matches!(result.script_type, ScriptType::Utility));
         assert!(result.confidence > 0.0); // Fallback enabled by default
@@ -1614,7 +1642,9 @@ mod tests {
         let results: Vec<ClassificationResult> = Vec::new();
         let start_time = std::time::Instant::now();
 
-        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+        let result = classifier
+            .combine_classification_results(results, &start_time)
+            .unwrap();
 
         assert!(matches!(result.script_type, ScriptType::Utility));
         assert_eq!(result.confidence, 0.0); // No fallback
@@ -1640,7 +1670,9 @@ mod tests {
         }];
         let start_time = std::time::Instant::now();
 
-        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+        let result = classifier
+            .combine_classification_results(results, &start_time)
+            .unwrap();
 
         // Low confidence with fallback should return Utility
         assert!(matches!(result.script_type, ScriptType::Utility));
@@ -1666,7 +1698,9 @@ mod tests {
         }];
         let start_time = std::time::Instant::now();
 
-        let result = classifier.combine_classification_results(results, &start_time).unwrap();
+        let result = classifier
+            .combine_classification_results(results, &start_time)
+            .unwrap();
 
         // High confidence should return the original result
         assert!(matches!(result.script_type, ScriptType::Validator));
@@ -1799,7 +1833,10 @@ mod tests {
         // Unknown shebang should return Utility with 0 confidence
         assert!(matches!(result.script_type, ScriptType::Utility));
         assert_eq!(result.confidence, 0.0);
-        assert_eq!(result.metadata.shebang_detected, Some("/usr/bin/ruby".to_string()));
+        assert_eq!(
+            result.metadata.shebang_detected,
+            Some("/usr/bin/ruby".to_string())
+        );
 
         Ok(())
     }
