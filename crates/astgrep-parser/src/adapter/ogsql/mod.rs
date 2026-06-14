@@ -5,9 +5,11 @@
 //! tests passing).
 //!
 //! Phase 2.2: DML statements (SELECT/INSERT/UPDATE/DELETE/MERGE) are mapped in
-//! sibling files `dml.rs` and `expr.rs`. Other statement variants return
-//! `UnsupportedStatement` and will be handled in Phase 2.3–2.4.
+//! sibling files `dml.rs` and `expr.rs`.
+//! Phase 2.3: DDL statements (CREATE TABLE/INDEX/VIEW/FUNCTION/PROCEDURE/PACKAGE,
+//! DROP, ALTER TABLE) are mapped in `ddl.rs`.
 
+mod ddl;
 mod dml;
 mod expr;
 
@@ -90,24 +92,33 @@ impl OgsqlAdapter {
                     variant: "InsertFirst",
                 })
             }
-            // Everything else is unsupported (DDL, TCL, utility statements for Phase 2.3–2.4)
+
+            // ── DDL (Phase 2.3) ──
+            ogsql_parser::ast::Statement::CreateTable(ref s) => ddl::convert_create_table(s),
+            ogsql_parser::ast::Statement::CreateIndex(ref s) => ddl::convert_create_index(s),
+            ogsql_parser::ast::Statement::CreateGlobalIndex(ref s) => {
+                ddl::convert_create_global_index(s)
+            }
+            ogsql_parser::ast::Statement::CreateView(ref s) => ddl::convert_create_view(s),
+            ogsql_parser::ast::Statement::CreateFunction(ref s) => ddl::convert_create_function(s),
+            ogsql_parser::ast::Statement::CreateProcedure(ref s) => {
+                ddl::convert_create_procedure(s)
+            }
+            ogsql_parser::ast::Statement::CreatePackage(ref s) => ddl::convert_create_package(s),
+            ogsql_parser::ast::Statement::Drop(ref s) => ddl::convert_drop(s),
+            ogsql_parser::ast::Statement::AlterTable(ref s) => ddl::convert_alter_table(s),
+
+            // Still unsupported (TCL, utility statements, remaining DDL for Phase 2.4)
             other => {
                 let variant = match other {
                     ogsql_parser::ast::Statement::Replace(_) => "Replace",
-                    ogsql_parser::ast::Statement::CreateTable(_) => "CreateTable",
                     ogsql_parser::ast::Statement::CreateTableAs(_) => "CreateTableAs",
-                    ogsql_parser::ast::Statement::CreateIndex(_) => "CreateIndex",
-                    ogsql_parser::ast::Statement::CreateView(_) => "CreateView",
                     ogsql_parser::ast::Statement::CreateMaterializedView(_) => {
                         "CreateMaterializedView"
                     }
                     ogsql_parser::ast::Statement::CreateSequence(_) => "CreateSequence",
-                    ogsql_parser::ast::Statement::CreateFunction(_) => "CreateFunction",
-                    ogsql_parser::ast::Statement::CreateProcedure(_) => "CreateProcedure",
-                    ogsql_parser::ast::Statement::CreatePackage(_) => "CreatePackage",
+                    ogsql_parser::ast::Statement::CreatePackageBody(_) => "CreatePackageBody",
                     ogsql_parser::ast::Statement::CreateTrigger(_) => "CreateTrigger",
-                    ogsql_parser::ast::Statement::AlterTable(_) => "AlterTable",
-                    ogsql_parser::ast::Statement::Drop(_) => "Drop",
                     ogsql_parser::ast::Statement::Truncate(_) => "Truncate",
                     ogsql_parser::ast::Statement::Copy(_) => "Copy",
                     ogsql_parser::ast::Statement::Explain(_) => "Explain",
