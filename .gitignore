@@ -23,6 +23,8 @@ Thumbs.db
 /coverage/
 /tests/validation_reports
 /tests/scripts/tests/validation_reports
+/tests/test_report.json
+/tests/scripts/tests/test_report.json
 /tmp
 
 # Benchmark results
