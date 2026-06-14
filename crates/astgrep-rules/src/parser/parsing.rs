@@ -3,7 +3,9 @@
 //! This module provides functionality to parse rules from YAML format.
 
 use crate::types::*;
-use astgrep_core::{AnalysisError, ComparisonOperator, Confidence, Language, Result, Severity};
+use astgrep_core::{
+    AnalysisError, ComparisonOperator, Confidence, Language, Result, Severity, SqlDialect,
+};
 use astgrep_core::{ComplexityAnalysis, EntropyAnalysis, MetavariableAnalysis, TypeAnalysis};
 use serde_yaml::Value;
 use std::collections::HashMap;
@@ -132,16 +134,16 @@ impl RuleParser {
                             dataflow.taint_only_propagate_through_assignments = Some(b);
                         }
                     }
-                    if let Some(val) = options_obj.get(&Value::String(
-                        "taint_assume_safe_indexes".to_string(),
-                    )) {
+                    if let Some(val) =
+                        options_obj.get(&Value::String("taint_assume_safe_indexes".to_string()))
+                    {
                         if let Some(b) = val.as_bool() {
                             dataflow.taint_assume_safe_indexes = Some(b);
                         }
                     }
-                    if let Some(val) = options_obj.get(&Value::String(
-                        "taint_assume_safe_functions".to_string(),
-                    )) {
+                    if let Some(val) =
+                        options_obj.get(&Value::String("taint_assume_safe_functions".to_string()))
+                    {
                         if let Some(b) = val.as_bool() {
                             dataflow.taint_assume_safe_functions = Some(b);
                         }
@@ -181,6 +183,7 @@ impl RuleParser {
         rule.metadata = metadata;
         rule.enabled = enabled;
         rule.mode = mode;
+        rule.dialects = self.parse_dialects(rule_obj, index)?;
 
         Ok(rule)
     }
@@ -308,9 +311,8 @@ impl RuleParser {
         }
 
         // Parse taint_assume_safe_indexes option
-        if let Some(val) = options_obj.get(&Value::String(
-            "taint_assume_safe_indexes".to_string(),
-        )) {
+        if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_indexes".to_string()))
+        {
             let str_val = if let Some(b) = val.as_bool() {
                 b.to_string()
             } else if let Some(s) = val.as_str() {
@@ -322,10 +324,7 @@ impl RuleParser {
             } else {
                 return Ok(Some(options));
             };
-            options.insert(
-                "taint_assume_safe_indexes".to_string(),
-                str_val,
-            );
+            options.insert("taint_assume_safe_indexes".to_string(), str_val);
         }
 
         Ok(Some(options))
@@ -1496,6 +1495,33 @@ impl RuleParser {
         Ok(Some(PathsFilter { includes, excludes }))
     }
 
+    /// Parse dialects field from rule YAML.
+    /// Accepts a sequence of dialect strings, e.g. `dialects: [gaussdb, opengauss]`.
+    /// Returns `Ok(None)` when field is absent (backward compat).
+    fn parse_dialects(
+        &self,
+        obj: &serde_yaml::Mapping,
+        _index: usize,
+    ) -> Result<Option<Vec<SqlDialect>>> {
+        let dialects_value = match obj.get(&Value::String("dialects".to_string())) {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        let array = dialects_value
+            .as_sequence()
+            .ok_or_else(|| AnalysisError::parse_error("'dialects' must be an array".to_string()))?;
+        let mut result = Vec::with_capacity(array.len());
+        for v in array {
+            let s = v.as_str().ok_or_else(|| {
+                AnalysisError::parse_error("'dialects' entries must be strings".to_string())
+            })?;
+            let d = SqlDialect::from_str(s)
+                .ok_or_else(|| AnalysisError::parse_error(format!("unknown dialect: {}", s)))?;
+            result.push(d);
+        }
+        Ok(Some(result))
+    }
+
     /// Parse optional string array
     fn parse_optional_string_array(
         &self,
@@ -1644,7 +1670,7 @@ impl RuleParser {
                         is_fallback: true,
                         exact: None,
                         requires: None,
-                                        });
+                    });
                 } else {
                     return Err(AnalysisError::parse_error(format!(
                         "Rule {} sink at index {} must have a 'pattern' field",
@@ -2038,7 +2064,7 @@ impl RuleParser {
                 is_fallback: false,
                 exact: None,
                 requires: None,
-                        });
+            });
         }
 
         // If it's an object, parse fields
@@ -2189,7 +2215,7 @@ impl RuleParser {
                 is_fallback,
                 exact,
                 requires,
-                        });
+            });
         }
 
         Err(AnalysisError::parse_error(
@@ -2549,8 +2575,14 @@ rules:
         let parser = RuleParser::new();
         let rules = parser.parse_yaml(yaml).unwrap();
         assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0].metadata.get("cwe"), Some(&Value::String("CWE-89".to_string())));
-        assert_eq!(rules[0].metadata.get("owasp"), Some(&Value::String("A03:2021".to_string())));
+        assert_eq!(
+            rules[0].metadata.get("cwe"),
+            Some(&Value::String("CWE-89".to_string()))
+        );
+        assert_eq!(
+            rules[0].metadata.get("owasp"),
+            Some(&Value::String("A03:2021".to_string()))
+        );
         assert!(rules[0].metadata.contains_key("references"));
     }
 
@@ -2674,7 +2706,10 @@ rules:
                 panic!("Expected Simple inside Inside");
             }
         } else {
-            panic!("Expected Inside pattern type, got {:?}", rules[0].patterns[0].pattern_type);
+            panic!(
+                "Expected Inside pattern type, got {:?}",
+                rules[0].patterns[0].pattern_type
+            );
         }
     }
 
@@ -2704,7 +2739,10 @@ rules:
                     panic!("Expected Simple inside Not");
                 }
             } else {
-                panic!("Expected Not pattern type, got {:?}", sub_patterns[1].pattern_type);
+                panic!(
+                    "Expected Not pattern type, got {:?}",
+                    sub_patterns[1].pattern_type
+                );
             }
         } else {
             panic!("Expected All pattern type");
@@ -3002,7 +3040,10 @@ rules:
         let parser = RuleParser::new();
         let rules = parser.parse_yaml(yaml).unwrap();
         assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0].patterns[0].focus, Some(vec!["$X".to_string(), "$Y".to_string()]));
+        assert_eq!(
+            rules[0].patterns[0].focus,
+            Some(vec!["$X".to_string(), "$Y".to_string()])
+        );
     }
 
     #[test]
@@ -4003,10 +4044,14 @@ rules:
         let parser = RuleParser::new();
         let rules = parser.parse_yaml(yaml).unwrap();
         let main_pattern = &rules[0].patterns[0];
-        let found = main_pattern.conditions.iter().any(|c| {
-            matches!(c, Condition::MetavariablePattern(mp) if mp.analysis.is_some())
-        });
-        assert!(found, "Expected MetavariablePattern condition with analysis");
+        let found = main_pattern
+            .conditions
+            .iter()
+            .any(|c| matches!(c, Condition::MetavariablePattern(mp) if mp.analysis.is_some()));
+        assert!(
+            found,
+            "Expected MetavariablePattern condition with analysis"
+        );
     }
 
     #[test]
@@ -4031,10 +4076,14 @@ rules:
         let parser = RuleParser::new();
         let rules = parser.parse_yaml(yaml).unwrap();
         let main_pattern = &rules[0].patterns[0];
-        let found = main_pattern.conditions.iter().any(|c| {
-            matches!(c, Condition::MetavariablePattern(mp) if mp.patterns.len() == 2)
-        });
-        assert!(found, "Expected MetavariablePattern with 2 patterns from pattern-either");
+        let found = main_pattern
+            .conditions
+            .iter()
+            .any(|c| matches!(c, Condition::MetavariablePattern(mp) if mp.patterns.len() == 2));
+        assert!(
+            found,
+            "Expected MetavariablePattern with 2 patterns from pattern-either"
+        );
     }
 
     #[test]
@@ -4364,7 +4413,10 @@ rules:
         let found = main_pattern.conditions.iter().any(|c| {
             matches!(c, Condition::MetavariablePattern(mp) if mp.patterns.iter().any(|p| p.starts_with("__NOT__:")))
         });
-        assert!(found, "Expected MetavariablePattern with __NOT__ prefixed pattern");
+        assert!(
+            found,
+            "Expected MetavariablePattern with __NOT__ prefixed pattern"
+        );
     }
 
     #[test]
@@ -4618,5 +4670,68 @@ rules:
             PatternType::Simple(s) => assert_eq!(s, "System.out.println($MSG)"),
             other => panic!("Expected Simple pattern type, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_parse_dialects_field() {
+        let yaml = r#"
+rules:
+  - id: dialect-rule
+    name: Dialect Rule
+    description: Rule with dialect constraint
+    message: Dialect test
+    severity: ERROR
+    languages: [sql]
+    patterns:
+      - "SELECT * FROM $TABLE"
+    dialects: [gaussdb, opengauss]
+"#;
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        let rule = &rules[0];
+        assert_eq!(
+            rule.dialects,
+            Some(vec![SqlDialect::GaussDB, SqlDialect::OpenGauss])
+        );
+    }
+
+    #[test]
+    fn test_parse_no_dialects_field() {
+        let yaml = r#"
+rules:
+  - id: no-dialect-rule
+    name: No Dialect Rule
+    description: Rule without dialects field
+    message: No dialect
+    severity: WARNING
+    languages: [sql]
+    patterns:
+      - "DROP TABLE $TABLE"
+"#;
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].dialects, None);
+    }
+
+    #[test]
+    fn test_parse_dialects_empty_list() {
+        let yaml = r#"
+rules:
+  - id: empty-dialect-rule
+    name: Empty Dialect Rule
+    description: Rule with empty dialects list
+    message: Empty dialects
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "SELECT 1"
+    dialects: []
+"#;
+        let parser = RuleParser::new();
+        let rules = parser.parse_yaml(yaml).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].dialects, Some(vec![]));
     }
 }

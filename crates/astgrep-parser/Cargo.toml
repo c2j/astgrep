@@ -8,6 +8,7 @@ description = "Language parsers and adapters for astgrep"
 astgrep-core = { path = "../astgrep-core" }
 astgrep-ast = { path = "../astgrep-ast" }
 anyhow.workspace = true
+thiserror.workspace = true
 tree-sitter.workspace = true
 tree-sitter-python.workspace = true
 tree-sitter-javascript.workspace = true

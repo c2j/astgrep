@@ -51,8 +51,10 @@ impl RuleExecutionEngine {
         // 5) Inside/NotInside/Not/NotRegex: delegate to advanced executor
         if matches!(
             &pattern.pattern_type,
-            PatternType::Inside(_) | PatternType::NotInside(_)
-                | PatternType::Not(_) | PatternType::NotRegex(_)
+            PatternType::Inside(_)
+                | PatternType::NotInside(_)
+                | PatternType::Not(_)
+                | PatternType::NotRegex(_)
         ) {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
@@ -196,12 +198,11 @@ impl RuleExecutionEngine {
         // For patterns containing binary operators, augment text matching with AST matching
         // to handle associative reordering (e.g. A & B should also match B & A)
         let has_binary_op = [
-            " + ", " - ", " * ", " / ", " % ", " ** ",
-            " & ", " | ", " ^ ", " && ", " || ",
-            " and ", " or ", " xor ",
-            " == ", " != ", " < ", " > ", " <= ", " >= ",
-            " << ", " >> ",
-        ].iter().any(|op| pattern_str.contains(op));
+            " + ", " - ", " * ", " / ", " % ", " ** ", " & ", " | ", " ^ ", " && ", " || ",
+            " and ", " or ", " xor ", " == ", " != ", " < ", " > ", " <= ", " >= ", " << ", " >> ",
+        ]
+        .iter()
+        .any(|op| pattern_str.contains(op));
 
         let mut text_findings = Vec::new();
         let seg_by_stmt = if matches!(context.language, Language::Sql) {
@@ -289,14 +290,14 @@ impl RuleExecutionEngine {
     }
 
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
-     fn execute_advanced_pattern(
-         &self,
-         pattern: &Pattern,
-         rule: &Rule,
-         context: &RuleContext,
-         _ast: &dyn AstNode,
-     ) -> Result<Vec<Finding>> {
-         use crate::executor::AdvancedRuleExecutor;
+    fn execute_advanced_pattern(
+        &self,
+        pattern: &Pattern,
+        rule: &Rule,
+        context: &RuleContext,
+        _ast: &dyn AstNode,
+    ) -> Result<Vec<Finding>> {
+        use crate::executor::AdvancedRuleExecutor;
         let mut advanced_executor = AdvancedRuleExecutor::new();
 
         // Create a rule with just this pattern
@@ -311,6 +312,7 @@ impl RuleExecutionEngine {
             context.language,
             Some(file_path),
             true, // enable constant propagation
+            context.sql_dialect,
         )?;
 
         Ok(result.findings)
@@ -343,6 +345,7 @@ impl RuleExecutionEngine {
             context.language,
             Some(file_path),
             true,
+            context.sql_dialect,
         )?;
 
         Ok(result.findings)

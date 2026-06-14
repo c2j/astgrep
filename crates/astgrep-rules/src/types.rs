@@ -2,6 +2,7 @@
 //!
 //! This module defines the core types used in the rule system.
 
+use astgrep_core::SqlDialect;
 use astgrep_core::{
     ComparisonOperator, Confidence, Finding, Language, MetavariableAnalysis, Severity,
 };
@@ -46,6 +47,9 @@ pub struct Rule {
     pub mode: RuleMode,
     /// SQL statement boundary setting
     pub sql_stmt_boundary: Option<bool>,
+    /// SQL dialects this rule applies to. None = all dialects (backward compat).
+    #[serde(default)]
+    pub dialects: Option<Vec<SqlDialect>>,
 }
 
 impl Rule {
@@ -74,12 +78,26 @@ impl Rule {
             enabled: true,
             mode: RuleMode::Search,
             sql_stmt_boundary: None,
+            dialects: None,
         }
     }
 
     /// Check if this rule applies to the given language
     pub fn applies_to(&self, language: Language) -> bool {
         self.enabled && self.languages.contains(&language)
+    }
+
+    /// Check if this rule applies to the given SQL dialect.
+    ///
+    /// Rules with `dialects: None` apply to ALL dialects (backward compatible).
+    /// Rules with `dialects: Some([...])` only apply to listed dialects.
+    /// Rules with `dialects: Some([...])` do NOT apply when dialect is None (non-SQL context).
+    pub fn applies_to_dialect(&self, dialect: Option<SqlDialect>) -> bool {
+        match (&self.dialects, dialect) {
+            (None, _) => true,
+            (Some(_), None) => false,
+            (Some(list), Some(d)) => list.contains(&d),
+        }
     }
 
     /// Add a pattern to this rule
@@ -657,6 +675,8 @@ pub struct RuleContext {
     pub enable_constant_propagation: bool,
     /// SQL statement boundary setting
     pub sql_stmt_boundary: Option<bool>,
+    /// SQL dialect to use for SQL analysis
+    pub sql_dialect: Option<SqlDialect>,
 }
 
 impl RuleContext {
@@ -669,6 +689,7 @@ impl RuleContext {
             custom_data: HashMap::new(),
             enable_constant_propagation: true, // Default to true
             sql_stmt_boundary: None,
+            sql_dialect: None,
         }
     }
 
@@ -734,7 +755,7 @@ impl RuleResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use astgrep_core::{Confidence, Language, Severity};
+    use astgrep_core::{Confidence, Language, Severity, SqlDialect};
 
     #[test]
     fn test_rule_creation() {
@@ -885,5 +906,74 @@ mod tests {
 
         assert!(!error_result.is_success());
         assert_eq!(error_result.error, Some("Parse error".to_string()));
+    }
+
+    fn make_rule_with_dialects(dialects: Option<Vec<SqlDialect>>) -> Rule {
+        Rule {
+            id: "test".to_string(),
+            name: "test".to_string(),
+            description: "test".to_string(),
+            severity: Severity::Warning,
+            confidence: Confidence::Medium,
+            languages: vec![Language::Sql],
+            patterns: vec![],
+            dataflow: None,
+            fix: None,
+            fix_regex: None,
+            paths: None,
+            metadata: std::collections::HashMap::new(),
+            enabled: true,
+            mode: RuleMode::Search,
+            sql_stmt_boundary: None,
+            dialects,
+        }
+    }
+
+    #[test]
+    fn test_applies_to_dialect_none_none() {
+        let rule = make_rule_with_dialects(None);
+        assert!(rule.applies_to_dialect(None));
+    }
+
+    #[test]
+    fn test_applies_to_dialect_none_standard() {
+        let rule = make_rule_with_dialects(None);
+        assert!(rule.applies_to_dialect(Some(SqlDialect::Standard)));
+    }
+
+    #[test]
+    fn test_applies_to_dialect_none_gaussdb() {
+        let rule = make_rule_with_dialects(None);
+        assert!(rule.applies_to_dialect(Some(SqlDialect::GaussDB)));
+    }
+
+    #[test]
+    fn test_applies_to_dialect_some_gaussdb_none_context() {
+        let rule = make_rule_with_dialects(Some(vec![SqlDialect::GaussDB]));
+        assert!(!rule.applies_to_dialect(None));
+    }
+
+    #[test]
+    fn test_applies_to_dialect_some_gaussdb_gaussdb() {
+        let rule = make_rule_with_dialects(Some(vec![SqlDialect::GaussDB]));
+        assert!(rule.applies_to_dialect(Some(SqlDialect::GaussDB)));
+    }
+
+    #[test]
+    fn test_applies_to_dialect_some_gaussdb_opengauss() {
+        let rule = make_rule_with_dialects(Some(vec![SqlDialect::GaussDB]));
+        assert!(!rule.applies_to_dialect(Some(SqlDialect::OpenGauss)));
+    }
+
+    #[test]
+    fn test_applies_to_dialect_some_multiple() {
+        let rule = make_rule_with_dialects(Some(vec![SqlDialect::GaussDB, SqlDialect::OpenGauss]));
+        assert!(rule.applies_to_dialect(Some(SqlDialect::OpenGauss)));
+    }
+
+    #[test]
+    fn test_applies_to_dialect_empty_list() {
+        let rule = make_rule_with_dialects(Some(vec![]));
+        assert!(!rule.applies_to_dialect(Some(SqlDialect::GaussDB)));
     }
 }

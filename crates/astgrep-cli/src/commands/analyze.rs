@@ -81,6 +81,7 @@ mod tests {
             output_format: OutputFormat::Json,
             parallel: true,
             max_threads: None,
+            sql_dialect: None,
         };
 
         // Should not fail even with nonexistent paths
@@ -101,6 +102,7 @@ mod tests {
             output_format: OutputFormat::Json,
             parallel: true,
             max_threads: None,
+            sql_dialect: None,
         };
 
         let result = run(config, Some(output_path.clone())).await;
@@ -125,6 +127,7 @@ mod tests {
             output_format: OutputFormat::Json,
             parallel: true,
             max_threads: None,
+            sql_dialect: None,
         };
 
         let result = run(config, None).await;

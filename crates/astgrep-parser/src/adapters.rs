@@ -3,7 +3,7 @@
 //! This module provides the base functionality for adapting different language ASTs.
 
 use astgrep_ast::{AstBuilder, NodeType, UniversalNode};
-use astgrep_core::{AstNode, Language, LanguageParser, Location, Result};
+use astgrep_core::{AstNode, Language, LanguageParser, Location, Result, SqlDialect};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -35,6 +35,7 @@ pub struct AdapterContext {
     pub file_path: String,
     pub source_code: String,
     pub language: Language,
+    pub sql_dialect: Option<SqlDialect>,
     pub line_map: Vec<usize>, // Byte offsets for each line
     pub metadata: HashMap<String, String>,
 }
@@ -47,6 +48,7 @@ impl AdapterContext {
             file_path,
             source_code,
             language,
+            sql_dialect: None,
             line_map,
             metadata: HashMap::new(),
         }
@@ -192,7 +194,14 @@ impl LanguageParser for BaseParser {
 
     fn supports_file(&self, file_path: &Path) -> bool {
         if let Some(extension) = file_path.extension().and_then(|e| e.to_str()) {
-            matches!((self.language, extension.to_lowercase().as_str()), (Language::Java, "java") | (Language::JavaScript, "js" | "jsx" | "ts" | "tsx") | (Language::Python, "py" | "pyw") | (Language::Sql, "sql" | "ddl" | "dml") | (Language::Bash, "sh" | "bash" | "zsh"))
+            matches!(
+                (self.language, extension.to_lowercase().as_str()),
+                (Language::Java, "java")
+                    | (Language::JavaScript, "js" | "jsx" | "ts" | "tsx")
+                    | (Language::Python, "py" | "pyw")
+                    | (Language::Sql, "sql" | "ddl" | "dml")
+                    | (Language::Bash, "sh" | "bash" | "zsh")
+            )
         } else {
             false
         }
