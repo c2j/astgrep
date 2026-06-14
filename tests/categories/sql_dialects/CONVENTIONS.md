@@ -58,20 +58,52 @@ Examples:
 ## Test Case File Naming
 
 ```
-{RULE_ID}_{short_description}.sql          ← positive case (rule SHOULD fire)
-{RULE_ID}_{short_description}.neg.sql      ← negative case (rule should NOT fire)
+{RULE_ID}_{short_description}.{ext}          ← positive case (rule SHOULD fire)
+{RULE_ID}_{short_description}.neg.{ext}      ← negative case (rule should NOT fire)
 ```
 
+| Extension | Source language | Annotation syntax |
+|---|---|---|
+| `.sql` | Pure SQL | `-- @rule ...` |
+| `.java` | Java with embedded SQL | `// @rule ...` |
+| `.xml` | iBatis/MyBatis mapper XML | `<!-- @rule ... -->` |
+
 - `short_description`: lowercase, underscores, ≤30 chars
-- `.neg.sql` suffix marks negative cases
+- `.neg.` infix marks negative cases
 - Each rule should have **at least 1 positive + 1 negative** test case
+- Cross-language cases share the same RULE_ID but have different extensions
 
-## Test Case Format
+## Test Case Annotations
 
+Each test file starts with annotations in the appropriate comment syntax:
+
+**SQL** (`.sql`):
 ```sql
 -- @rule GAUSSDB-SET-001
--- @desc UPDATE SET 3+ columns from subquery
+-- @desc 3 columns SET subquery (should trigger)
 -- @expect MATCH
+```
+
+**Java** (`.java`):
+```java
+// @rule GAUSSDB-SET-001
+// @desc Java string concat UPDATE SET 3+ columns
+// @expect MATCH
+```
+
+**iBatis XML** (`.xml`):
+```xml
+<!-- @rule GAUSSDB-SET-001 -->
+<!-- @desc iBatis mapper UPDATE SET 3+ columns -->
+<!-- @expect MATCH -->
+```
+
+| Annotation | Required | Values |
+|---|---|---|
+| `@rule` | Yes | Rule ID (e.g., `GAUSSDB-SET-001`) |
+| `@expect` | Yes | `MATCH` (positive) or `NO_MATCH` (negative) |
+| `@desc` | Yes | Human-readable description of the scenario |
+| `@dialect` | No | Override dialect (default: inferred from directory) |
 UPDATE employees e
 SET (e.salary, e.dept, e.title) = (
     SELECT s.salary, s.dept, s.title

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- @rule GAUSSDB-SET-001 -->
+<!-- @desc iBatis mapper UPDATE SET 3+ columns from subquery -->
+<!-- @expect MATCH -->
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.EmployeeMapper">
+
+    <update id="batchUpdateEmployee">
+        UPDATE employees SET (salary, dept, title) = (
+            SELECT salary, dept, title
+            FROM new_data
+            WHERE id = #{employeeId}
+        )
+        WHERE status = #{status}
+    </update>
+
+    <update id="safeUpdate">
+        UPDATE employees SET salary = #{salary}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

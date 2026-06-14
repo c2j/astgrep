@@ -16,7 +16,7 @@ PASS=0
 FAIL=0
 
 TMPFILE=$(mktemp)
-find "$SCRIPT_DIR" -name "*.sql" | sort > "$TMPFILE"
+find "$SCRIPT_DIR" \( -name "*.sql" -o -name "*.java" -o -name "*.xml" \) | sort > "$TMPFILE"
 
 while IFS= read -r sql_file; do
     [[ -z "$sql_file" ]] && continue
@@ -28,9 +28,9 @@ while IFS= read -r sql_file; do
         continue
     fi
 
-    RULE_ID=$(grep -m1 "@rule" "$sql_file" 2>/dev/null | sed 's/.*@rule *//' | tr -d '[:space:]')
-    EXPECT=$(grep -m1 "@expect" "$sql_file" 2>/dev/null | sed 's/.*@expect *//' | tr -d '[:space:]')
-    DESC=$(grep -m1 "@desc" "$sql_file" 2>/dev/null | sed 's/.*@desc *//')
+    RULE_ID=$(grep -m1 "@rule" "$sql_file" 2>/dev/null | sed 's/.*@rule[[:space:]]*//' | sed 's/[[:space:]].*//' | tr -d '[:space:]')
+    EXPECT=$(grep -m1 "@expect" "$sql_file" 2>/dev/null | sed 's/.*@expect[[:space:]]*//' | sed 's/[[:space:]].*//' | tr -d '[:space:]')
+    DESC=$(grep -m1 "@desc" "$sql_file" 2>/dev/null | sed 's/.*@desc[[:space:]]*//' | sed 's/ *-->.*//' | sed 's/\*\/.*//')
 
     if [[ -z "$RULE_ID" ]] || [[ -z "$EXPECT" ]]; then
         continue
@@ -53,8 +53,33 @@ while IFS= read -r sql_file; do
         continue
     fi
 
-    OUTPUT=$($ASTGREP --dialect "$CLI_DIALECT" --rules "$RULES_DIR/" "$sql_file" 2>/dev/null || true)
+    # Determine how to process based on file extension
+    EXT="${sql_file##*.}"
+
+    if [[ "$EXT" == "sql" ]]; then
+        ANALYSIS_FILE="$sql_file"
+    elif [[ "$EXT" == "java" ]]; then
+        # Extract SQL from Java string literals (concatenated with +)
+        EXTRACTED=$(mktemp /tmp/astgrep_extract_XXXXXX.sql)
+        grep -oE '"[^"]*"' "$sql_file" | tr -d '"' | tr -s ' ' > "$EXTRACTED"
+        ANALYSIS_FILE="$EXTRACTED"
+    elif [[ "$EXT" == "xml" ]]; then
+        # Extract complete SQL blocks from iBatis mapper XML tags
+        EXTRACTED=$(mktemp /tmp/astgrep_extract_XXXXXX.sql)
+        sed -n '/<update/,/<\/update>/p; /<select/,/<\/select>/p; /<insert/,/<\/insert>/p; /<delete/,/<\/delete>/p' "$sql_file" \
+            | sed 's/<[^>]*>//g; s/#{[^}]*}/?/g; s/\${[^}]*}/?/g; /^$/d' > "$EXTRACTED"
+        ANALYSIS_FILE="$EXTRACTED"
+    else
+        continue
+    fi
+
+    OUTPUT=$($ASTGREP --dialect "$CLI_DIALECT" --rules "$RULES_DIR/" "$ANALYSIS_FILE" 2>/dev/null || true)
     FINDING_COUNT=$(echo "$OUTPUT" | grep "\"rule_id\": \"$RULE_ID\"" | wc -l | tr -d ' ')
+
+    # Cleanup extracted temp file
+    if [[ "$EXT" != "sql" ]]; then
+        rm -f "$ANALYSIS_FILE"
+    fi
 
     if [[ "$EXPECT" == "MATCH" ]]; then
         if [[ "$FINDING_COUNT" -gt 0 ]]; then
