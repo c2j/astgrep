@@ -2,6 +2,7 @@
 //!
 //! This crate provides language-specific parsers and adapters.
 
+pub mod adapter;
 pub mod adapters;
 pub mod base_adapter;
 pub mod bash;
@@ -17,6 +18,7 @@ pub mod sql;
 pub mod tree_sitter_parser;
 pub mod xml;
 
+pub use adapter::*;
 pub use adapters::*;
 pub use dialect::{dispatch, DialectParseError, SqlDialectParser};
 pub use registry::*;
