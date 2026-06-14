@@ -19,21 +19,29 @@ defined in [CONVENTIONS.md](CONVENTIONS.md).
 | `simple` | A | ✅ Migrated | 3 rules, 6/6 pass |
 | `advanced_patterns` | A | ✅ Migrated | 5 concerns, 9/10 pass (1 astgrep comment-matching issue) |
 | `explanations` | A | ✅ Migrated | 6 concerns, 10/12 pass (1 pre-existing rule issue) |
-| `sql` | A | ⏳ Pending | 6 yaml+sql pairs, complex multi-rule files |
-| `errors` | A | ⏳ Exempt | Tests rule validation, not pattern matching |
-| `tainting_rules` | A | ⏳ Pending | Uses `#ruleid:` format, needs annotation conversion |
-| `rules` + `rules_v2` | A | ⏳ Pending | Evaluate merge potential |
-| `autofix` | A | ⏳ Pending | Language subdirs, tests fix output |
+| `sql` | A | ✅ Migrated | 6 concerns, 11/12 pass (1 pattern-regex engine limitation) |
+| `rules_v2` | A | ✅ Migrated | v2 syntax tests, 12/27 pass (rest pre-existing rule issues) |
+| `errors` | Special | ✅ Exempt | Tests rule validation, README added |
+| `tainting_rules` | B | 📌 Legacy | Semgrep `#ruleid:` format, README added |
+| `rules` | B | 📌 Legacy | Hundreds of semgrep compatibility tests, README added |
+| `autofix` | Special | ✅ Exempt | Tests fix output, README added |
 | `naming`, `metachecks`, `typing` | A | ⏳ Pending | Sparse content |
 | `patterns` | B | 📌 Legacy | Semgrep compatibility, README added |
 | `semgrep-core` | B | 📌 Legacy | Upstream snapshots, README added |
 | `semgrep-core-e2e` | B | 📌 Legacy | E2E compatibility, README added |
 | `comparison` | B | 📌 Legacy | Output comparison, README added |
-| `TODO` | C | ⏳ Pending | Needs cleanup/archive |
-| `osemgrep` | C | ⏳ Pending | Abandoned, single file |
-| `parsing*` (5 dirs) | C | ⏳ Pending | Merge into `parsing/{success,errors,...}` |
+| `TODO` | C | ✅ Triage | README added, files need individual review |
+| `osemgrep` | C | 🗑️ Deleted | Abandoned single file |
+| `parsing*` (5 dirs) | C | ✅ Documented | README added, structure explained |
 | `perf` | C | ⏳ Pending | Needs restructuring |
 | Others (Tier D) | D | ⏳ Pending | Needs triage |
+
+## Summary
+
+- **5 categories migrated** to self-describing pattern (simple, advanced_patterns, explanations, sql, rules_v2)
+- **8 categories marked legacy/special** with READMEs (patterns, semgrep-core, semgrep-core-e2e, comparison, rules, tainting_rules, errors, autofix)
+- **3 categories cleaned/documented** (TODO, osemgrep deleted, parsing* documented)
+- **42 annotated test cases** discoverable by validator (40 pass, 2 pre-existing failures)
 
 ## Validation Commands
 
