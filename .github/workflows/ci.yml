@@ -40,6 +40,11 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --exclude astgrep-web --exclude astgrep-gui 2>&1
 
+      - name: Validate test annotations
+        run: |
+          python3 tests/scripts/validate_annotations.py --dry-run
+          python3 tests/scripts/validate_annotations.py || echo "::warning::Annotation validation failures detected (expected during migration period)"
+
       - name: Build release
         run: cargo build --release --workspace --exclude astgrep-web --exclude astgrep-gui
 
