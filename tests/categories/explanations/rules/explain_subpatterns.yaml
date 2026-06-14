@@ -1,5 +1,5 @@
 rules:
-- id: explain
+- id: explain-subpatterns
   pattern: |
     foo($X)
     ...

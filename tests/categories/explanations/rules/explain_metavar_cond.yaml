@@ -1,5 +1,5 @@
 rules:
-- id: explain
+- id: explain-metavar_cond
   patterns:
     - pattern: foo($X)
     - metavariable-comparison:

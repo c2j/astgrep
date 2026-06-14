@@ -1,3 +1,7 @@
+# @rule explain-taint
+# @desc taint explanation feature test
+# @expect MATCH
+
 def foo():
     a = source()
     b = a

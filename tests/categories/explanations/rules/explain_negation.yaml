@@ -1,8 +1,8 @@
 rules:
-- id: explain
+- id: explain-negation
   patterns:
-    - pattern: foo($Y, $X, $Z)
-    - focus-metavariable: $X
+    - pattern: bar()
+    - pattern-not-inside: foo(...)
   message: found it
   languages: [python]
   severity: WARNING

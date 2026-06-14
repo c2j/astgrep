@@ -1,5 +1,5 @@
 rules:
-- id: explain
+- id: explain-taint
   mode: taint
   pattern-sources:
     - pattern: source(...)

@@ -1,5 +1,5 @@
 rules:
-- id: explain
+- id: explain-basic
   patterns:
     - pattern-inside: foo(...)
     - pattern: bar()
