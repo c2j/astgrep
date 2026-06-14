@@ -194,9 +194,22 @@ fn analyze_with_rule_engine(
     let mut all_findings_core: Vec<astgrep_core::Finding> = Vec::new();
 
     if let Some(parser) = parser_opt {
-        let ast = parser.parse(source_code, Path::new(file_path))?;
-
-        let ast = try_tree_sitter_ast(source_code, language).unwrap_or(ast);
+        // For non-Standard SQL dialects (GaussDB/OpenGauss/etc.), route through
+        // the dialect dispatcher (ogsql-parser) instead of the default tree-sitter path.
+        let ast = if language == Language::Sql {
+            match config.sql_dialect {
+                Some(dialect) if dialect != astgrep_core::SqlDialect::Standard => {
+                    let dialect_parser = astgrep_parser::dialect::dispatch(dialect);
+                    dialect_parser.parse(source_code, Path::new(file_path))?
+                }
+                _ => {
+                    let default_ast = parser.parse(source_code, Path::new(file_path))?;
+                    try_tree_sitter_ast(source_code, language).unwrap_or(default_ast)
+                }
+            }
+        } else {
+            parser.parse(source_code, Path::new(file_path))?
+        };
 
         // 3) Execute rules with unified context
         let mut context = RuleContext::new(

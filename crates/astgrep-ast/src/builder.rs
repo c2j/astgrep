@@ -335,6 +335,11 @@ impl AstBuilder {
         UniversalNode::new(NodeType::DeleteStatement)
     }
 
+    /// Create a MERGE statement
+    pub fn merge_statement() -> UniversalNode {
+        UniversalNode::new(NodeType::MergeStatement)
+    }
+
     /// Create a CREATE statement
     pub fn create_statement(object_type: &str) -> UniversalNode {
         UniversalNode::new(NodeType::CreateStatement)
@@ -359,6 +364,21 @@ impl AstBuilder {
     /// Create a CREATE SEQUENCE statement
     pub fn create_sequence_statement() -> UniversalNode {
         UniversalNode::new(NodeType::CreateSequenceStatement)
+    }
+
+    /// Create a CREATE FUNCTION statement
+    pub fn create_function_statement() -> UniversalNode {
+        UniversalNode::new(NodeType::CreateFunctionStatement)
+    }
+
+    /// Create a CREATE PROCEDURE statement
+    pub fn create_procedure_statement() -> UniversalNode {
+        UniversalNode::new(NodeType::CreateProcedureStatement)
+    }
+
+    /// Create a CREATE PACKAGE statement
+    pub fn create_package_statement() -> UniversalNode {
+        UniversalNode::new(NodeType::CreatePackageStatement)
     }
 
     /// Create a DROP statement
