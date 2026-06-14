@@ -1,5 +1,5 @@
 //! Semgrep compatibility tests for Phase 1
-//! 
+//!
 //! Tests for:
 //! - pattern-all support
 //! - pattern-any support
@@ -24,7 +24,7 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.id, "test-pattern-all");
@@ -47,7 +47,7 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.id, "test-pattern-any");
@@ -71,12 +71,12 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.id, "test-fix-regex");
     assert!(rule.fix_regex.is_some());
-    
+
     let fix_regex = rule.fix_regex.as_ref().unwrap();
     assert_eq!(fix_regex.regex, r#"password\s*=\s*"[^"]*""#);
     assert_eq!(fix_regex.replacement, "password = \"***\"");
@@ -102,12 +102,12 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.id, "test-paths");
     assert!(rule.paths.is_some());
-    
+
     let paths = rule.paths.as_ref().unwrap();
     assert_eq!(paths.includes.len(), 2);
     assert_eq!(paths.excludes.len(), 1);
@@ -144,14 +144,17 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.id, "sql-injection-combined");
     assert!(rule.fix.is_some());
     assert!(rule.fix_regex.is_some());
     assert!(rule.paths.is_some());
-    assert_eq!(rule.metadata.get("cwe").and_then(|v| v.as_str()), Some("CWE-89"));
+    assert_eq!(
+        rule.metadata.get("cwe").and_then(|v| v.as_str()),
+        Some("CWE-89")
+    );
 }
 
 #[test]
@@ -171,7 +174,7 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.patterns.len(), 1);
@@ -195,7 +198,7 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.patterns.len(), 1);
@@ -217,7 +220,7 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert_eq!(rule.id, "old-style-rule");
@@ -243,11 +246,11 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert!(rule.paths.is_some());
-    
+
     let paths = rule.paths.as_ref().unwrap();
     assert_eq!(paths.includes.len(), 0);
     assert_eq!(paths.excludes.len(), 0);
@@ -270,13 +273,12 @@ rules:
 
     let parser = RuleParser::new();
     let rules = parser.parse_yaml(yaml).expect("Failed to parse YAML");
-    
+
     assert_eq!(rules.len(), 1);
     let rule = &rules[0];
     assert!(rule.fix_regex.is_some());
-    
+
     let fix_regex = rule.fix_regex.as_ref().unwrap();
     assert_eq!(fix_regex.regex, r#"eval\(([^)]*)\)"#);
     assert_eq!(fix_regex.replacement, "safeEval($1)");
 }
-

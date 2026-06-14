@@ -5,7 +5,7 @@
 
 use astgrep_core::Language;
 use astgrep_parser::LanguageParserRegistry;
-use astgrep_rules::{RuleEngine, RuleParser, RuleContext};
+use astgrep_rules::{RuleContext, RuleEngine, RuleParser};
 use std::path::PathBuf;
 
 fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
@@ -16,6 +16,7 @@ fn make_context(file_name: &str, lang: Language, source: &str) -> RuleContext {
         custom_data: std::collections::HashMap::new(),
         enable_constant_propagation: true,
         sql_stmt_boundary: None,
+        sql_dialect: None,
     }
 }
 
@@ -42,13 +43,16 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 SELECT * FROM users WHERE id = 1;
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("query.sql"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("query.sql"), source)
         .expect("parse sql");
     let ctx = make_context("query.sql", Language::Sql, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
@@ -83,13 +87,20 @@ WHERE uo.order_count > 5
 ORDER BY uo.order_count DESC;
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("complex.sql"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("complex.sql"), source)
         .expect("parse complex sql");
 
     assert_eq!(ast.node_type(), "program", "SQL AST root should be program");
-    assert!(ast.child_count() > 0, "Complex SQL should produce non-empty AST");
+    assert!(
+        ast.child_count() > 0,
+        "Complex SQL should produce non-empty AST"
+    );
 
-    println!("Complex SQL parsed successfully with {} top-level children", ast.child_count());
+    println!(
+        "Complex SQL parsed successfully with {} top-level children",
+        ast.child_count()
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -106,10 +117,15 @@ UPDATE users SET last_login = NOW() WHERE id = 1;
 INSERT INTO audit_log (action, user_id) VALUES ('login', 1);
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("multi_stmt.sql"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("multi_stmt.sql"), source)
         .expect("parse multi-statement sql");
 
-    assert_eq!(ast.node_type(), "program", "Multi-statement SQL should parse as program");
+    assert_eq!(
+        ast.node_type(),
+        "program",
+        "Multi-statement SQL should parse as program"
+    );
     let children_count = ast.child_count();
     assert!(
         children_count >= 1,
@@ -117,7 +133,10 @@ INSERT INTO audit_log (action, user_id) VALUES ('login', 1);
         children_count
     );
 
-    println!("Multi-statement SQL parsed with {} top-level children", children_count);
+    println!(
+        "Multi-statement SQL parsed with {} top-level children",
+        children_count
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +155,8 @@ WHERE category = 'electronics'
   AND active = true;
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("roundtrip.sql"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("roundtrip.sql"), source)
         .expect("parse sql");
 
     let recovered = ast.text().unwrap_or("");
@@ -149,7 +169,10 @@ WHERE category = 'electronics'
         "AST text() should preserve literal values"
     );
 
-    println!("Round-trip preserved text length: {} chars", recovered.len());
+    println!(
+        "Round-trip preserved text length: {} chars",
+        recovered.len()
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -175,13 +198,16 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 DROP TABLE temp_users;
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("ddl.sql"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("ddl.sql"), source)
         .expect("parse sql");
     let ctx = make_context("ddl.sql", Language::Sql, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
@@ -212,18 +238,24 @@ rules:
 "#;
 
     let parsed = rule_parser.parse_yaml(rules).expect("parse rules");
-    for r in parsed { let _ = rule_engine.add_rule(r); }
+    for r in parsed {
+        let _ = rule_engine.add_rule(r);
+    }
 
     let source = r#"
 SELECT id, name FROM users WHERE name = '' UNION SELECT username, password FROM admins --';
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("union_inj.sql"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("union_inj.sql"), source)
         .expect("parse sql");
     let ctx = make_context("union_inj.sql", Language::Sql, source);
     let findings = rule_engine.analyze(&*ast, &ctx).expect("analyze");
 
-    assert!(findings.len() <= 10, "UNION injection pipeline completed successfully");
+    assert!(
+        findings.len() <= 10,
+        "UNION injection pipeline completed successfully"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,7 +274,10 @@ SELECT * FROM WHERE id = 1
 
     match result {
         Ok(ast) => {
-            println!("Malformed SQL parsed with recovery: root = {}", ast.node_type());
+            println!(
+                "Malformed SQL parsed with recovery: root = {}",
+                ast.node_type()
+            );
         }
         Err(e) => {
             println!("Malformed SQL rejected with error: {}", e);
@@ -266,11 +301,22 @@ BEGIN
 END;
 "#;
 
-    let ast = parser_registry.parse_file(&PathBuf::from("proc.sql"), source)
+    let ast = parser_registry
+        .parse_file(&PathBuf::from("proc.sql"), source)
         .expect("parse stored procedure");
 
-    assert_eq!(ast.node_type(), "program", "Stored procedure should parse as program");
-    assert!(ast.child_count() > 0, "Stored procedure should produce AST children");
+    assert_eq!(
+        ast.node_type(),
+        "program",
+        "Stored procedure should parse as program"
+    );
+    assert!(
+        ast.child_count() > 0,
+        "Stored procedure should produce AST children"
+    );
 
-    println!("Stored procedure parsed with {} top-level children", ast.child_count());
+    println!(
+        "Stored procedure parsed with {} top-level children",
+        ast.child_count()
+    );
 }

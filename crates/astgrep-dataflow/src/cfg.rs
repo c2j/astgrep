@@ -77,7 +77,9 @@ impl CfgBuilder {
             if terminated {
                 break;
             }
-            let Some(child) = parent.child(i) else { continue };
+            let Some(child) = parent.child(i) else {
+                continue;
+            };
             let child_id = self.add_node(child);
 
             if let Some(p) = prev {
@@ -106,32 +108,41 @@ impl CfgBuilder {
         self.build_cfg_with_term(node, node_id).map(|(id, _)| id)
     }
 
-    fn build_cfg_with_term(&mut self, node: &dyn AstNode, node_id: NodeId) -> Result<(NodeId, bool)> {
+    fn build_cfg_with_term(
+        &mut self,
+        node: &dyn AstNode,
+        node_id: NodeId,
+    ) -> Result<(NodeId, bool)> {
         let kind = ts_kind(node);
         let ty = node.node_type();
 
         let (exit, is_terminal) = match kind.as_str() {
-            "return_statement" | "return" => {
-                (node_id, true)
-            }
-            "throw_statement" | "throw" => {
-                (node_id, true)
-            }
+            "return_statement" | "return" => (node_id, true),
+            "throw_statement" | "throw" => (node_id, true),
             _ => {
                 let id = match kind.as_str() {
                     "if_statement" | "if" => self.handle_if(node, node_id)?,
-                    "switch_statement" | "switch_expression" => self.handle_switch(node, node_id)?,
-                    "try_statement" | "try_with_resources_statement" => self.handle_try(node, node_id)?,
+                    "switch_statement" | "switch_expression" => {
+                        self.handle_switch(node, node_id)?
+                    }
+                    "try_statement" | "try_with_resources_statement" => {
+                        self.handle_try(node, node_id)?
+                    }
                     "lambda_expression" | "arrow_function" => self.handle_lambda(node, node_id)?,
-                    "while_statement" | "for_statement" | "enhanced_for_statement"
-                    | "do_statement" | "while" | "for" | "do" => self.handle_loop(node, node_id)?,
+                    "while_statement"
+                    | "for_statement"
+                    | "enhanced_for_statement"
+                    | "do_statement"
+                    | "while"
+                    | "for"
+                    | "do" => self.handle_loop(node, node_id)?,
                     "block" | "block_statement" | "program" | "source_file"
                     | "compilation_unit" => self.build_children(node, node_id)?,
                     _ => match ty {
-                        "function_declaration" | "function_definition"
-                        | "method_declaration" | "FunctionDeclaration" => {
-                            self.handle_function(node, node_id)?
-                        }
+                        "function_declaration"
+                        | "function_definition"
+                        | "method_declaration"
+                        | "FunctionDeclaration" => self.handle_function(node, node_id)?,
                         _ => self.build_children(node, node_id)?,
                     },
                 };
@@ -433,7 +444,9 @@ impl CfgBuilder {
                             if let Some(ctext) = child.text() {
                                 for cid in self.graph.node_ids() {
                                     if let Some(n) = self.graph.get_node(cid) {
-                                        if n.node_type == "identifier" && n.text.as_deref() == Some(ctext) {
+                                        if n.node_type == "identifier"
+                                            && n.text.as_deref() == Some(ctext)
+                                        {
                                             df_targets.push((parent_id, cid));
                                             break;
                                         }
@@ -452,7 +465,9 @@ impl CfgBuilder {
                             if let Some(ctext) = child.text() {
                                 for cid in self.graph.node_ids() {
                                     if let Some(n) = self.graph.get_node(cid) {
-                                        if n.node_type == child.node_type() && n.text.as_deref() == Some(ctext) {
+                                        if n.node_type == child.node_type()
+                                            && n.text.as_deref() == Some(ctext)
+                                        {
                                             df_targets.push((cid, parent_id));
                                             break;
                                         }
@@ -468,7 +483,9 @@ impl CfgBuilder {
                         if let Some(ctext) = child.text() {
                             for cid in self.graph.node_ids() {
                                 if let Some(n) = self.graph.get_node(cid) {
-                                    if n.node_type == child.node_type() && n.text.as_deref() == Some(ctext) {
+                                    if n.node_type == child.node_type()
+                                        && n.text.as_deref() == Some(ctext)
+                                    {
                                         df_targets.push((cid, parent_id));
                                         break;
                                     }
@@ -561,14 +578,16 @@ mod tests {
             Box::new(Self {
                 kind: self.kind.clone(),
                 text: self.text.clone(),
-                children: self.children.iter().map(|c| {
-                    MockNode {
+                children: self
+                    .children
+                    .iter()
+                    .map(|c| MockNode {
                         kind: c.kind.clone(),
                         text: c.text.clone(),
                         children: vec![],
                         attrs: c.attrs.clone(),
-                    }
-                }).collect(),
+                    })
+                    .collect(),
                 attrs: self.attrs.clone(),
             })
         }
@@ -591,8 +610,7 @@ mod tests {
         let alt = MockNode::new("block", "{ y = 2; }")
             .with_children(vec![MockNode::new("expression_statement", "y = 2")]);
 
-        let root = MockNode::new("if_statement", "if")
-            .with_children(vec![cond, cons, alt]);
+        let root = MockNode::new("if_statement", "if").with_children(vec![cond, cons, alt]);
 
         let graph = CfgBuilder::new().build(&root).unwrap();
         // Should have created a join node and edges from both branches.
@@ -607,8 +625,8 @@ mod tests {
         let catch_clause = MockNode::new("catch_clause", "catch (Exception e)")
             .with_children(vec![MockNode::new("block", "{ handle(); }")]);
 
-        let root = MockNode::new("try_statement", "try")
-            .with_children(vec![try_block, catch_clause]);
+        let root =
+            MockNode::new("try_statement", "try").with_children(vec![try_block, catch_clause]);
 
         let graph = CfgBuilder::new().build(&root).unwrap();
         assert!(graph.node_count() > 2);
@@ -619,8 +637,7 @@ mod tests {
     #[test]
     fn test_cfg_builder_return_terminates() {
         let ret = MockNode::new("return_statement", "return 42");
-        let root = MockNode::new("block", "{ return 42; }")
-            .with_children(vec![ret]);
+        let root = MockNode::new("block", "{ return 42; }").with_children(vec![ret]);
 
         let graph = CfgBuilder::new().build(&root).unwrap();
         assert!(graph.node_count() > 0);

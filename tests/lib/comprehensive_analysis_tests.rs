@@ -1,13 +1,13 @@
 //! Comprehensive analysis tests for astgrep
-//! 
+//!
 //! These tests verify the complete analysis pipeline with real functionality.
 
 use astgrep_core::Language;
-use astgrep_parser::LanguageParserRegistry;
-use astgrep_rules::{RuleEngine, RuleParser, RuleContext};
 use astgrep_dataflow::DataFlowAnalyzer;
-use tempfile::TempDir;
+use astgrep_parser::LanguageParserRegistry;
+use astgrep_rules::{RuleContext, RuleEngine, RuleParser};
 use std::fs;
+use tempfile::TempDir;
 
 /// Test comprehensive analysis with all features enabled
 #[tokio::test]
@@ -72,7 +72,8 @@ public class VulnerableApp {
 
     // Load comprehensive rules
     let java_rules = create_comprehensive_java_rules();
-    let parsed_rules = rule_parser.parse_yaml(&java_rules)
+    let parsed_rules = rule_parser
+        .parse_yaml(&java_rules)
         .expect("Failed to parse Java rules");
 
     for rule in parsed_rules {
@@ -80,9 +81,9 @@ public class VulnerableApp {
     }
 
     // Parse the Java file
-    let java_source = fs::read_to_string(&java_file)
-        .expect("Failed to read Java file");
-    let java_ast = parser_registry.parse_file(&java_file, &java_source)
+    let java_source = fs::read_to_string(&java_file).expect("Failed to read Java file");
+    let java_ast = parser_registry
+        .parse_file(&java_file, &java_source)
         .expect("Failed to parse Java file");
 
     // Create rule context
@@ -93,34 +94,48 @@ public class VulnerableApp {
         custom_data: std::collections::HashMap::new(),
         enable_constant_propagation: true,
         sql_stmt_boundary: None,
+        sql_dialect: None,
     };
 
     // Run comprehensive analysis
-    let findings = rule_engine.analyze(&*java_ast, &context)
+    let findings = rule_engine
+        .analyze(&*java_ast, &context)
         .expect("Failed to analyze Java AST");
 
     // Verify findings
     assert!(!findings.is_empty(), "Should find multiple vulnerabilities");
-    
+
     // Check for specific vulnerability types
-    let has_sql_injection = findings.iter()
+    let has_sql_injection = findings
+        .iter()
         .any(|f| f.rule_id.contains("sql") || f.message.to_lowercase().contains("sql"));
-    let has_hardcoded_secret = findings.iter()
+    let has_hardcoded_secret = findings
+        .iter()
         .any(|f| f.rule_id.contains("password") || f.message.to_lowercase().contains("password"));
-    let has_command_injection = findings.iter()
+    let has_command_injection = findings
+        .iter()
         .any(|f| f.rule_id.contains("command") || f.message.to_lowercase().contains("command"));
 
     println!("Total findings: {}", findings.len());
     for finding in &findings {
-        println!("- {}: {} ({})", finding.rule_id, finding.message, finding.severity.as_str());
+        println!(
+            "- {}: {} ({})",
+            finding.rule_id,
+            finding.message,
+            finding.severity.as_str()
+        );
     }
 
     // Verify we found critical security issues
-    let critical_findings = findings.iter()
+    let critical_findings = findings
+        .iter()
         .filter(|f| matches!(f.severity, astgrep_core::Severity::Critical))
         .count();
-    
-    assert!(critical_findings > 0, "Should find at least one critical vulnerability");
+
+    assert!(
+        critical_findings > 0,
+        "Should find at least one critical vulnerability"
+    );
 }
 
 /// Test data flow analysis functionality
@@ -131,7 +146,9 @@ async fn test_dataflow_analysis() {
 
     // Create a file with clear data flow vulnerabilities
     let js_file = temp_path.join("dataflow.js");
-    fs::write(&js_file, r#"
+    fs::write(
+        &js_file,
+        r#"
 function processUserData(req, res) {
     // Source: user input
     const userInput = req.body.data;
@@ -162,23 +179,25 @@ function sanitizedFlow(req, res) {
     // Safe usage
     document.getElementById('output').textContent = sanitized;
 }
-"#).expect("Failed to write JavaScript test file");
+"#,
+    )
+    .expect("Failed to write JavaScript test file");
 
     let parser_registry = LanguageParserRegistry::new();
-    
+
     // Parse the JavaScript file
-    let js_source = fs::read_to_string(&js_file)
-        .expect("Failed to read JavaScript file");
-    let js_ast = parser_registry.parse_file(&js_file, &js_source)
+    let js_source = fs::read_to_string(&js_file).expect("Failed to read JavaScript file");
+    let js_ast = parser_registry
+        .parse_file(&js_file, &js_source)
         .expect("Failed to parse JavaScript file");
 
     // Create data flow analyzer
     let analyzer = DataFlowAnalyzer::new();
-    
+
     // This would normally build a data flow graph and perform taint analysis
     // For now, we just verify the analyzer can be created and used
     assert!(true, "Data flow analyzer created successfully");
-    
+
     println!("Data flow analysis completed for JavaScript file");
 }
 
@@ -247,24 +266,27 @@ async fn test_performance_realistic_workload() {
         fs::write(&file_path, &content).expect("Failed to write test file");
 
         let start = std::time::Instant::now();
-        
+
         // Parse and analyze
         if let Ok(ast) = parser_registry.parse_file(&file_path, &content) {
             // Simulate rule execution
             total_findings += content.matches("System.out.println").count();
         }
-        
+
         let duration = start.elapsed();
         total_duration += duration;
-        
+
         println!("{}: parsed in {:?}", filename, duration);
     }
 
     println!("Total analysis time: {:?}", total_duration);
     println!("Total findings: {}", total_findings);
-    
+
     // Performance assertions
-    assert!(total_duration.as_secs() < 5, "Analysis should complete within 5 seconds");
+    assert!(
+        total_duration.as_secs() < 5,
+        "Analysis should complete within 5 seconds"
+    );
     assert!(total_findings > 0, "Should find some issues");
 }
 
@@ -272,9 +294,10 @@ async fn test_performance_realistic_workload() {
 fn generate_java_code(num_methods: usize) -> String {
     let mut code = String::new();
     code.push_str("public class GeneratedCode {\n");
-    
+
     for i in 0..num_methods {
-        code.push_str(&format!(r#"
+        code.push_str(&format!(
+            r#"
     public void method{}(String param) {{
         System.out.println("Method {}: " + param);
         String query = "SELECT * FROM table WHERE id = " + param;
@@ -282,14 +305,16 @@ fn generate_java_code(num_methods: usize) -> String {
             processData(param);
         }}
     }}
-"#, i, i));
+"#,
+            i, i
+        ));
     }
-    
+
     code.push_str("    private void processData(String data) {\n");
     code.push_str("        // Process the data\n");
     code.push_str("    }\n");
     code.push_str("}\n");
-    
+
     code
 }
 

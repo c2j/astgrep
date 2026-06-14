@@ -424,9 +424,9 @@ impl EnhancedTaintTracker {
 mod tests {
     use super::*;
     use crate::graph::{DataFlowGraph, DataFlowNode, EdgeType};
+    use crate::sanitizers::{Sanitizer, SanitizerType};
     use crate::sinks::{Sink, SinkType};
     use crate::sources::{Source, SourceType};
-    use crate::sanitizers::{Sanitizer, SanitizerType};
 
     #[test]
     fn test_enhanced_taint_tracker_new() {
@@ -465,14 +465,30 @@ mod tests {
         let mut tracker = EnhancedTaintTracker::new();
         let mut graph = DataFlowGraph::new();
 
-        let source_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("request.getParameter".to_string()));
-        let sink_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("executeQuery".to_string()));
+        let source_node = graph.add_node(
+            DataFlowNode::new("call_expression".to_string())
+                .with_text("request.getParameter".to_string()),
+        );
+        let sink_node = graph.add_node(
+            DataFlowNode::new("call_expression".to_string()).with_text("executeQuery".to_string()),
+        );
         graph.add_edge(source_node, sink_node, EdgeType::DataFlow);
 
-        let source = Source::new(source_node, SourceType::UserInput, "HTTP request parameter".to_string());
-        let sink = Sink::new(sink_node, SinkType::SqlExecution, "SQL_INJECTION".to_string(), "SQL query execution".to_string());
+        let source = Source::new(
+            source_node,
+            SourceType::UserInput,
+            "HTTP request parameter".to_string(),
+        );
+        let sink = Sink::new(
+            sink_node,
+            SinkType::SqlExecution,
+            "SQL_INJECTION".to_string(),
+            "SQL query execution".to_string(),
+        );
 
-        let flows = tracker.analyze_taint(&graph, &[source], &[sink], &[]).unwrap();
+        let flows = tracker
+            .analyze_taint(&graph, &[source], &[sink], &[])
+            .unwrap();
         assert_eq!(flows.len(), 1);
         assert_eq!(flows[0].confidence, 90);
     }
@@ -482,19 +498,41 @@ mod tests {
         let mut tracker = EnhancedTaintTracker::new();
         let mut graph = DataFlowGraph::new();
 
-        let source_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("request.getParameter".to_string()));
-        let sanitizer_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("htmlEncode".to_string()));
-        let sink_node = graph.add_node(DataFlowNode::new("call_expression".to_string()).with_text("innerHTML".to_string()));
+        let source_node = graph.add_node(
+            DataFlowNode::new("call_expression".to_string())
+                .with_text("request.getParameter".to_string()),
+        );
+        let sanitizer_node = graph.add_node(
+            DataFlowNode::new("call_expression".to_string()).with_text("htmlEncode".to_string()),
+        );
+        let sink_node = graph.add_node(
+            DataFlowNode::new("call_expression".to_string()).with_text("innerHTML".to_string()),
+        );
         graph.add_edge(source_node, sanitizer_node, EdgeType::DataFlow);
         graph.add_edge(sanitizer_node, sink_node, EdgeType::DataFlow);
 
-        let source = Source::new(source_node, SourceType::UserInput, "HTTP request parameter".to_string());
-        let sink = Sink::new(sink_node, SinkType::HtmlOutput, "XSS".to_string(), "HTML output".to_string());
-        let sanitizer = Sanitizer::new(sanitizer_node, SanitizerType::HtmlEncoding, "HTML encoder".to_string())
-            .with_effectiveness(0.9)
-            .with_vulnerability_types(vec!["XSS".to_string()]);
+        let source = Source::new(
+            source_node,
+            SourceType::UserInput,
+            "HTTP request parameter".to_string(),
+        );
+        let sink = Sink::new(
+            sink_node,
+            SinkType::HtmlOutput,
+            "XSS".to_string(),
+            "HTML output".to_string(),
+        );
+        let sanitizer = Sanitizer::new(
+            sanitizer_node,
+            SanitizerType::HtmlEncoding,
+            "HTML encoder".to_string(),
+        )
+        .with_effectiveness(0.9)
+        .with_vulnerability_types(vec!["XSS".to_string()]);
 
-        let flows = tracker.analyze_taint(&graph, &[source], &[sink], &[sanitizer]).unwrap();
+        let flows = tracker
+            .analyze_taint(&graph, &[source], &[sink], &[sanitizer])
+            .unwrap();
         assert_eq!(flows.len(), 1);
         assert!(flows[0].confidence < 100);
         assert_eq!(flows[0].sanitizers_bypassed.len(), 1);

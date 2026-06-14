@@ -747,7 +747,10 @@ mod tests {
             "function_declaration"
         );
 
-        assert_eq!(NodeType::parse_name("identifier"), Some(NodeType::Identifier));
+        assert_eq!(
+            NodeType::parse_name("identifier"),
+            Some(NodeType::Identifier)
+        );
         assert_eq!(
             NodeType::parse_name("binary_expression"),
             Some(NodeType::BinaryExpression)
@@ -996,7 +999,10 @@ mod tests {
     #[test]
     fn test_node_type_display() {
         assert_eq!(format!("{}", NodeType::Identifier), "identifier");
-        assert_eq!(format!("{}", NodeType::BinaryExpression), "binary_expression");
+        assert_eq!(
+            format!("{}", NodeType::BinaryExpression),
+            "binary_expression"
+        );
     }
 
     #[test]
@@ -1113,7 +1119,11 @@ mod tests {
             .add_child(UniversalNode::new(NodeType::Identifier))
             .add_child(UniversalNode::new(NodeType::Literal))
             .add_child(UniversalNode::new(NodeType::Comment));
-        let types: Vec<_> = root.children.iter().map(|c| c.node_type().to_string()).collect();
+        let types: Vec<_> = root
+            .children
+            .iter()
+            .map(|c| c.node_type().to_string())
+            .collect();
         assert_eq!(types, vec!["identifier", "literal", "comment"]);
     }
 
@@ -1203,25 +1213,55 @@ mod tests {
 
         assert_eq!(node.get_attribute("modifier"), Some(&"public".to_string()));
         assert_eq!(node.get_attribute("parent"), Some(&"BaseClass".to_string()));
-        assert_eq!(node.get_attribute("interfaces"), Some(&"Serializable,Cloneable".to_string()));
-        assert_eq!(node.get_attribute("specifiers"), Some(&"foo,bar".to_string()));
+        assert_eq!(
+            node.get_attribute("interfaces"),
+            Some(&"Serializable,Cloneable".to_string())
+        );
+        assert_eq!(
+            node.get_attribute("specifiers"),
+            Some(&"foo,bar".to_string())
+        );
         assert_eq!(node.get_attribute("namespace"), Some(&"ns".to_string()));
-        assert_eq!(node.get_attribute("default"), Some(&"default_export".to_string()));
+        assert_eq!(
+            node.get_attribute("default"),
+            Some(&"default_export".to_string())
+        );
         assert_eq!(node.get_attribute("wildcard"), Some(&"true".to_string()));
         assert_eq!(node.get_attribute("original"), Some(&"orig".to_string()));
         assert_eq!(node.get_attribute("alias"), Some(&"ali".to_string()));
         assert_eq!(node.get_attribute("module"), Some(&"mod".to_string()));
-        assert_eq!(node.get_attribute("decorator"), Some(&"@Override".to_string()));
+        assert_eq!(
+            node.get_attribute("decorator"),
+            Some(&"@Override".to_string())
+        );
         assert_eq!(node.get_attribute("parameters"), Some(&"a,b".to_string()));
-        assert_eq!(node.get_attribute("columns"), Some(&"col1,col2".to_string()));
+        assert_eq!(
+            node.get_attribute("columns"),
+            Some(&"col1,col2".to_string())
+        );
         assert_eq!(node.get_attribute("table"), Some(&"users".to_string()));
         assert_eq!(node.get_attribute("where"), Some(&"id = 1".to_string()));
-        assert_eq!(node.get_attribute("assignments"), Some(&"x = 1,y = 2".to_string()));
-        assert_eq!(node.get_attribute("column_definitions"), Some(&"id INT,name VARCHAR".to_string()));
-        assert_eq!(node.get_attribute("sequence_name"), Some(&"seq".to_string()));
-        assert_eq!(node.get_attribute("arguments"), Some(&"arg1,arg2".to_string()));
+        assert_eq!(
+            node.get_attribute("assignments"),
+            Some(&"x = 1,y = 2".to_string())
+        );
+        assert_eq!(
+            node.get_attribute("column_definitions"),
+            Some(&"id INT,name VARCHAR".to_string())
+        );
+        assert_eq!(
+            node.get_attribute("sequence_name"),
+            Some(&"seq".to_string())
+        );
+        assert_eq!(
+            node.get_attribute("arguments"),
+            Some(&"arg1,arg2".to_string())
+        );
         assert_eq!(node.get_attribute("pipe"), Some(&"true".to_string()));
-        assert_eq!(node.get_attribute("redirection"), Some(&"false".to_string()));
+        assert_eq!(
+            node.get_attribute("redirection"),
+            Some(&"false".to_string())
+        );
         assert_eq!(node.get_attribute("value"), Some(&"42".to_string()));
     }
 
@@ -1230,7 +1270,8 @@ mod tests {
         let mut node = UniversalNode::new(NodeType::Identifier);
         *node.node_type_mut() = NodeType::Literal;
         assert_eq!(node.node_type(), "literal");
-        node.children_mut().push(UniversalNode::new(NodeType::Comment));
+        node.children_mut()
+            .push(UniversalNode::new(NodeType::Comment));
         assert_eq!(node.child_count(), 1);
     }
 
@@ -1246,11 +1287,10 @@ mod tests {
 
     #[test]
     fn test_universal_node_add_children() {
-        let node = UniversalNode::new(NodeType::Program)
-            .add_children(vec![
-                UniversalNode::new(NodeType::Identifier),
-                UniversalNode::new(NodeType::Literal),
-            ]);
+        let node = UniversalNode::new(NodeType::Program).add_children(vec![
+            UniversalNode::new(NodeType::Identifier),
+            UniversalNode::new(NodeType::Literal),
+        ]);
         assert_eq!(node.child_count(), 2);
     }
 
@@ -1267,16 +1307,15 @@ mod tests {
 
     #[test]
     fn test_universal_node_with_literal_binary_unary_operators() {
-        let lit = UniversalNode::new(NodeType::Literal)
-            .with_literal(LiteralValue::Integer(7));
+        let lit = UniversalNode::new(NodeType::Literal).with_literal(LiteralValue::Integer(7));
         assert_eq!(lit.literal(), Some(&LiteralValue::Integer(7)));
 
         let bin = UniversalNode::new(NodeType::BinaryExpression)
             .with_binary_operator(BinaryOperator::Multiply);
         assert_eq!(bin.binary_operator, Some(BinaryOperator::Multiply));
 
-        let un = UniversalNode::new(NodeType::UnaryExpression)
-            .with_unary_operator(UnaryOperator::Not);
+        let un =
+            UniversalNode::new(NodeType::UnaryExpression).with_unary_operator(UnaryOperator::Not);
         assert_eq!(un.unary_operator, Some(UnaryOperator::Not));
     }
 

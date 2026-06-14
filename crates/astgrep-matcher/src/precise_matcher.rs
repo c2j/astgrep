@@ -589,9 +589,15 @@ mod tests {
         assert!(config.structural_matching);
         assert!(config.semantic_matching);
         assert!(config.type_aware_matching);
-        assert_eq!(config.max_depth, astgrep_core::constants::defaults::analysis::MAX_ANALYSIS_DEPTH);
+        assert_eq!(
+            config.max_depth,
+            astgrep_core::constants::defaults::analysis::MAX_ANALYSIS_DEPTH
+        );
         assert!(!config.allow_partial_matches);
-        assert_eq!(config.similarity_threshold, astgrep_core::constants::defaults::analysis::SIMILARITY_THRESHOLD as f32);
+        assert_eq!(
+            config.similarity_threshold,
+            astgrep_core::constants::defaults::analysis::SIMILARITY_THRESHOLD as f32
+        );
     }
 
     #[test]
@@ -736,7 +742,10 @@ mod tests {
     #[test]
     fn test_matched_value_variants() {
         let node_val = MatchedValue::Node(Box::new(TestNode::new("test")));
-        let nodes_val = MatchedValue::Nodes(vec![Box::new(TestNode::new("a")), Box::new(TestNode::new("b"))]);
+        let nodes_val = MatchedValue::Nodes(vec![
+            Box::new(TestNode::new("a")),
+            Box::new(TestNode::new("b")),
+        ]);
         let text_val = MatchedValue::Text("hello".to_string());
         let mut map = HashMap::new();
         map.insert("key".to_string(), MatchedValue::Text("value".to_string()));

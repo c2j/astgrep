@@ -2,7 +2,9 @@
 //!
 //! Tests for transformation tracking, taint merging, and context-aware analysis.
 
-use astgrep_dataflow::advanced_taint::{AdvancedTaintAnalyzer, AdvancedTaintState, TaintTransformation};
+use astgrep_dataflow::advanced_taint::{
+    AdvancedTaintAnalyzer, AdvancedTaintState, TaintTransformation,
+};
 use astgrep_dataflow::taint::TaintState;
 
 #[test]
@@ -340,4 +342,3 @@ fn test_combine_with_context_most_restrictive() {
     // Most restrictive should be the one with hashing (effectiveness 1.0)
     assert_eq!(combined.transformations.len(), 1);
 }
-

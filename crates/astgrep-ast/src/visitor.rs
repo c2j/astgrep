@@ -356,9 +356,13 @@ mod tests {
             }
         }
         let ast = create_test_ast();
-        let mut visitor = TestVisitor { visited: Vec::new() };
+        let mut visitor = TestVisitor {
+            visited: Vec::new(),
+        };
         visitor.visit(&ast).unwrap();
-        assert!(visitor.visited.contains(&"function_declaration".to_string()));
+        assert!(visitor
+            .visited
+            .contains(&"function_declaration".to_string()));
         assert!(visitor.visited.contains(&"identifier".to_string()));
         assert!(visitor.visited.contains(&"binary_expression".to_string()));
     }
@@ -557,14 +561,8 @@ mod tests {
     fn test_location_finder_multiline() {
         let ast = UniversalNode::new(NodeType::BlockStatement)
             .with_location(1, 1, 5, 2)
-            .add_child(
-                UniversalNode::new(NodeType::Identifier)
-                    .with_location(2, 5, 2, 10),
-            )
-            .add_child(
-                UniversalNode::new(NodeType::Literal)
-                    .with_location(4, 3, 4, 8),
-            );
+            .add_child(UniversalNode::new(NodeType::Identifier).with_location(2, 5, 2, 10))
+            .add_child(UniversalNode::new(NodeType::Literal).with_location(4, 3, 4, 8));
         let mut finder = LocationFinder::new(3, 1);
         finder.visit(&ast).unwrap();
         let found = finder.found_nodes();
@@ -693,8 +691,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_exact_start_boundary() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_location(5, 10, 5, 20);
+        let node = UniversalNode::new(NodeType::Identifier).with_location(5, 10, 5, 20);
         let mut finder = LocationFinder::new(5, 10);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 1);
@@ -702,8 +699,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_exact_end_boundary() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_location(5, 10, 5, 20);
+        let node = UniversalNode::new(NodeType::Identifier).with_location(5, 10, 5, 20);
         let mut finder = LocationFinder::new(5, 20);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 1);
@@ -711,8 +707,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_just_before_start_column() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_location(5, 10, 5, 20);
+        let node = UniversalNode::new(NodeType::Identifier).with_location(5, 10, 5, 20);
         let mut finder = LocationFinder::new(5, 9);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 0);
@@ -720,8 +715,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_just_after_end_column() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_location(5, 10, 5, 20);
+        let node = UniversalNode::new(NodeType::Identifier).with_location(5, 10, 5, 20);
         let mut finder = LocationFinder::new(5, 21);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 0);
@@ -729,8 +723,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_before_start_line() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_location(5, 10, 5, 20);
+        let node = UniversalNode::new(NodeType::Identifier).with_location(5, 10, 5, 20);
         let mut finder = LocationFinder::new(4, 15);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 0);
@@ -738,8 +731,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_after_end_line() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_location(5, 10, 5, 20);
+        let node = UniversalNode::new(NodeType::Identifier).with_location(5, 10, 5, 20);
         let mut finder = LocationFinder::new(6, 15);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 0);
@@ -747,8 +739,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_mid_range() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_location(5, 10, 5, 20);
+        let node = UniversalNode::new(NodeType::Identifier).with_location(5, 10, 5, 20);
         let mut finder = LocationFinder::new(5, 15);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 1);
@@ -756,8 +747,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_node_without_location() {
-        let node = UniversalNode::new(NodeType::Identifier)
-            .with_identifier("no_loc".to_string());
+        let node = UniversalNode::new(NodeType::Identifier).with_identifier("no_loc".to_string());
         let mut finder = LocationFinder::new(1, 1);
         finder.visit(&node).unwrap();
         assert_eq!(finder.found_nodes().len(), 0);
@@ -765,8 +755,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_nested_matches() {
-        let inner = UniversalNode::new(NodeType::Identifier)
-            .with_location(2, 4, 2, 8);
+        let inner = UniversalNode::new(NodeType::Identifier).with_location(2, 4, 2, 8);
         let outer = UniversalNode::new(NodeType::BlockStatement)
             .with_location(1, 1, 3, 2)
             .add_child(inner);
@@ -779,8 +768,7 @@ mod tests {
 
     #[test]
     fn test_location_finder_multiline_boundary() {
-        let node = UniversalNode::new(NodeType::FunctionDeclaration)
-            .with_location(10, 1, 20, 5);
+        let node = UniversalNode::new(NodeType::FunctionDeclaration).with_location(10, 1, 20, 5);
 
         let mut finder = LocationFinder::new(10, 1);
         finder.visit(&node).unwrap();
@@ -801,8 +789,7 @@ mod tests {
 
     #[test]
     fn test_visitor_leaf_node() {
-        let leaf = UniversalNode::new(NodeType::Literal)
-            .with_literal(LiteralValue::Integer(42));
+        let leaf = UniversalNode::new(NodeType::Literal).with_literal(LiteralValue::Integer(42));
         let mut counter = NodeCounter::new();
         counter.visit(&leaf).unwrap();
         let counts = counter.counts();
@@ -829,7 +816,9 @@ mod tests {
 
     #[test]
     fn test_dispatching_visitor_into_inner_preserves_state() {
-        struct CountingVisitor { count: usize }
+        struct CountingVisitor {
+            count: usize,
+        }
         impl AstVisitor for CountingVisitor {
             fn visit_node(&mut self, _node: &dyn AstNode) -> Result<()> {
                 self.count += 1;

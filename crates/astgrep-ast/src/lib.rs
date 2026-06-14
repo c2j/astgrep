@@ -184,7 +184,10 @@ mod tests {
             node_count: 100,
             custom_attributes: attrs,
         };
-        assert_eq!(metadata.custom_attributes.get("author"), Some(&"test".to_string()));
+        assert_eq!(
+            metadata.custom_attributes.get("author"),
+            Some(&"test".to_string())
+        );
     }
 
     #[test]

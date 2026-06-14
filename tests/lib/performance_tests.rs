@@ -1,22 +1,22 @@
 //! Performance tests for astgrep
-//! 
+//!
 //! These tests verify that the system performs within acceptable limits
 //! and can handle various load scenarios.
 
-use astgrep_core::{Language, constants::defaults};
-use astgrep_parser::LanguageParserRegistry;
+use astgrep_ast::{NodeType, UniversalNode};
+use astgrep_core::{constants::defaults, Language};
 use astgrep_matcher::AdvancedSemgrepMatcher;
-use astgrep_ast::{UniversalNode, NodeType};
-use std::time::{Duration, Instant};
+use astgrep_parser::LanguageParserRegistry;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Performance benchmarks and thresholds
 struct PerformanceBenchmarks {
-    max_parse_time_small: Duration,    // < 1KB files
-    max_parse_time_medium: Duration,   // 1KB - 10KB files  
-    max_parse_time_large: Duration,    // 10KB - 100KB files
-    max_memory_usage_mb: usize,        // Maximum memory usage
-    max_pattern_match_time: Duration,  // Pattern matching time
+    max_parse_time_small: Duration,   // < 1KB files
+    max_parse_time_medium: Duration,  // 1KB - 10KB files
+    max_parse_time_large: Duration,   // 10KB - 100KB files
+    max_memory_usage_mb: usize,       // Maximum memory usage
+    max_pattern_match_time: Duration, // Pattern matching time
 }
 
 impl Default for PerformanceBenchmarks {
@@ -45,14 +45,12 @@ public class Small {
     }
 }
 "#;
-    
+
     let start = Instant::now();
-    let result = parser_registry.parse_file(
-        &std::path::PathBuf::from("Small.java"), 
-        small_java_code
-    );
+    let result =
+        parser_registry.parse_file(&std::path::PathBuf::from("Small.java"), small_java_code);
     let small_duration = start.elapsed();
-    
+
     assert!(result.is_ok(), "Small file parsing should succeed");
     assert!(
         small_duration <= benchmarks.max_parse_time_small,
@@ -63,14 +61,12 @@ public class Small {
 
     // Test medium file (1KB - 10KB)
     let medium_java_code = generate_java_code(50); // ~5KB
-    
+
     let start = Instant::now();
-    let result = parser_registry.parse_file(
-        &std::path::PathBuf::from("Medium.java"),
-        &medium_java_code
-    );
+    let result =
+        parser_registry.parse_file(&std::path::PathBuf::from("Medium.java"), &medium_java_code);
     let medium_duration = start.elapsed();
-    
+
     assert!(result.is_ok(), "Medium file parsing should succeed");
     assert!(
         medium_duration <= benchmarks.max_parse_time_medium,
@@ -81,14 +77,12 @@ public class Small {
 
     // Test large file (10KB - 100KB)
     let large_java_code = generate_java_code(500); // ~50KB
-    
+
     let start = Instant::now();
-    let result = parser_registry.parse_file(
-        &std::path::PathBuf::from("Large.java"),
-        &large_java_code
-    );
+    let result =
+        parser_registry.parse_file(&std::path::PathBuf::from("Large.java"), &large_java_code);
     let large_duration = start.elapsed();
-    
+
     assert!(result.is_ok(), "Large file parsing should succeed");
     assert!(
         large_duration <= benchmarks.max_parse_time_large,
@@ -145,7 +139,7 @@ fn test_pattern_matching_performance() {
     let complex_duration = start.elapsed();
 
     assert!(result.is_ok(), "Complex pattern matching should succeed");
-    
+
     println!("Pattern matching performance:");
     println!("  Simple pattern: {:?}", simple_duration);
     println!("  Complex pattern: {:?}", complex_duration);
@@ -155,38 +149,37 @@ fn test_pattern_matching_performance() {
 #[test]
 fn test_memory_usage() {
     let benchmarks = PerformanceBenchmarks::default();
-    
+
     // Get initial memory usage
     let initial_memory = get_memory_usage_mb();
-    
+
     // Perform memory-intensive operations
     let parser_registry = LanguageParserRegistry::new();
     let mut asts = Vec::new();
-    
+
     // Parse multiple large files
     for i in 0..10 {
         let large_code = generate_java_code(200); // ~20KB each
         let filename = format!("Test{}.java", i);
-        
-        if let Ok(ast) = parser_registry.parse_file(
-            &std::path::PathBuf::from(filename),
-            &large_code
-        ) {
+
+        if let Ok(ast) =
+            parser_registry.parse_file(&std::path::PathBuf::from(filename), &large_code)
+        {
             asts.push(ast);
         }
     }
-    
+
     // Check memory usage after operations
     let peak_memory = get_memory_usage_mb();
     let memory_increase = peak_memory.saturating_sub(initial_memory);
-    
+
     assert!(
         memory_increase <= benchmarks.max_memory_usage_mb,
         "Memory usage increased by {}MB, expected <= {}MB",
         memory_increase,
         benchmarks.max_memory_usage_mb
     );
-    
+
     println!("Memory usage:");
     println!("  Initial: {}MB", initial_memory);
     println!("  Peak: {}MB", peak_memory);
@@ -204,28 +197,26 @@ fn test_concurrent_performance() {
     let files_per_thread = 5;
 
     let start = Instant::now();
-    
+
     let handles: Vec<_> = (0..num_threads)
         .map(|thread_id| {
             let parser_registry = Arc::clone(&parser_registry);
-            
+
             thread::spawn(move || {
                 let mut results = Vec::new();
-                
+
                 for file_id in 0..files_per_thread {
                     let code = generate_java_code(50);
                     let filename = format!("Thread{}File{}.java", thread_id, file_id);
-                    
+
                     let file_start = Instant::now();
-                    let result = parser_registry.parse_file(
-                        &std::path::PathBuf::from(filename),
-                        &code
-                    );
+                    let result =
+                        parser_registry.parse_file(&std::path::PathBuf::from(filename), &code);
                     let file_duration = file_start.elapsed();
-                    
+
                     results.push((result.is_ok(), file_duration));
                 }
-                
+
                 results
             })
         })
@@ -242,7 +233,8 @@ fn test_concurrent_performance() {
     let avg_parse_time: Duration = all_results
         .iter()
         .map(|(_, duration)| *duration)
-        .sum::<Duration>() / all_results.len() as u32;
+        .sum::<Duration>()
+        / all_results.len() as u32;
 
     assert_eq!(
         successful_parses,
@@ -254,7 +246,11 @@ fn test_concurrent_performance() {
     println!("  Total time: {:?}", total_duration);
     println!("  Files processed: {}", all_results.len());
     println!("  Average parse time: {:?}", avg_parse_time);
-    println!("  Successful parses: {}/{}", successful_parses, all_results.len());
+    println!(
+        "  Successful parses: {}/{}",
+        successful_parses,
+        all_results.len()
+    );
 }
 
 /// Test performance regression
@@ -262,7 +258,7 @@ fn test_concurrent_performance() {
 fn test_performance_regression() {
     // This test would compare current performance against baseline metrics
     // For now, we just ensure operations complete within reasonable time
-    
+
     let baseline_metrics = HashMap::from([
         ("small_file_parse_ms", 10u64),
         ("medium_file_parse_ms", 100u64),
@@ -271,13 +267,13 @@ fn test_performance_regression() {
     ]);
 
     let parser_registry = LanguageParserRegistry::new();
-    
+
     // Test small file parsing
     let small_code = generate_java_code(5);
     let start = Instant::now();
     let _ = parser_registry.parse_file(&std::path::PathBuf::from("test.java"), &small_code);
     let duration = start.elapsed();
-    
+
     let baseline = Duration::from_millis(baseline_metrics["small_file_parse_ms"]);
     assert!(
         duration <= baseline,
@@ -293,9 +289,10 @@ fn test_performance_regression() {
 fn generate_java_code(num_methods: usize) -> String {
     let mut code = String::new();
     code.push_str("public class GeneratedTest {\n");
-    
+
     for i in 0..num_methods {
-        code.push_str(&format!(r#"
+        code.push_str(&format!(
+            r#"
     public void method{}(String param{}) {{
         String query = "SELECT * FROM table WHERE id = " + param{};
         System.out.println("Executing method {}: " + query);
@@ -303,27 +300,29 @@ fn generate_java_code(num_methods: usize) -> String {
             processData(param{});
         }}
     }}
-"#, i, i, i, i, i, i));
+"#,
+            i, i, i, i, i, i
+        ));
     }
-    
+
     code.push_str("    private void processData(String data) {\n");
     code.push_str("        // Process the data\n");
     code.push_str("    }\n");
     code.push_str("}\n");
-    
+
     code
 }
 
 /// Create a complex AST structure for testing
 fn create_complex_ast(num_nodes: usize) -> UniversalNode {
     let mut root = UniversalNode::new(NodeType::Program);
-    
+
     for i in 0..num_nodes {
         let node = UniversalNode::new(NodeType::CallExpression)
             .with_text(format!("method{}(arg{})", i, i));
         root = root.add_child(node);
     }
-    
+
     root
 }
 
@@ -331,7 +330,7 @@ fn create_complex_ast(num_nodes: usize) -> UniversalNode {
 fn get_memory_usage_mb() -> usize {
     // This is a simplified implementation
     // In a real scenario, you would use a proper memory profiling library
-    
+
     // For now, return a mock value based on system info
     // In practice, you might use libraries like `sysinfo` or platform-specific APIs
     50 // Mock value

@@ -51,7 +51,6 @@ const CHAIN_SKIP_KINDS: &[&str] = &[
 /// Used by import resolution to detect when a pattern has a fully-qualified
 /// name and the target uses a short name imported from elsewhere.
 
-
 // ---------------------------------------------------------------------------
 // Binary-chain constants (Phase C)
 // ---------------------------------------------------------------------------
@@ -87,7 +86,10 @@ const QUALIFIED_NAME_KINDS: &[&str] = &[
 
 /// Operators that are associative (can be re-grouped arbitrarily).
 fn is_associative_operator(op: &str) -> bool {
-    matches!(op.trim(), "and" | "&&" | "or" | "||" | "+" | "*" | "&" | "|")
+    matches!(
+        op.trim(),
+        "and" | "&&" | "or" | "||" | "+" | "*" | "&" | "|"
+    )
 }
 
 fn is_commutative_operator(op: &str) -> bool {
@@ -286,9 +288,17 @@ fn get_single_block_child(block: &dyn AstNode) -> Option<&dyn AstNode> {
             if let Some(t) = c.text() {
                 let t = t.trim();
                 !t.is_empty()
-                    && t != "(" && t != ")" && t != "{" && t != "}"
-                    && t != "[" && t != "]" && t != ";" && t != ","
-                    && t != ":" && t != "." && t != "="
+                    && t != "("
+                    && t != ")"
+                    && t != "{"
+                    && t != "}"
+                    && t != "["
+                    && t != "]"
+                    && t != ";"
+                    && t != ","
+                    && t != ":"
+                    && t != "."
+                    && t != "="
             } else {
                 false
             }
@@ -379,18 +389,32 @@ fn try_flatten_pattern_binary(
         match c {
             PatternTree::Node { text: Some(t), .. } => {
                 let t = t.trim();
-                if t.is_empty() || t == "(" || t == ")" || t == "{" || t == "}"
-                    || t == "[" || t == "]" || t == ";" || t == "," || t == ":"
+                if t.is_empty()
+                    || t == "("
+                    || t == ")"
+                    || t == "{"
+                    || t == "}"
+                    || t == "["
+                    || t == "]"
+                    || t == ";"
+                    || t == ","
+                    || t == ":"
                 {
                     continue;
                 }
-                if t == op { continue; }
+                if t == op {
+                    continue;
+                }
                 flatten_pattern_operand(c, &op, &mut operands);
             }
             PatternTree::Node { text: None, .. } => {
                 flatten_pattern_operand(c, &op, &mut operands);
             }
-            PatternTree::Metavar { .. } | PatternTree::TypedMetavar { .. } | PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. } | PatternTree::DeepExpr(_) => {
+            PatternTree::Metavar { .. }
+            | PatternTree::TypedMetavar { .. }
+            | PatternTree::Ellipsis
+            | PatternTree::EllipsisMetavar { .. }
+            | PatternTree::DeepExpr(_) => {
                 operands.push(c.clone());
             }
         }
@@ -401,10 +425,17 @@ fn try_flatten_pattern_binary(
     Some((op, operands))
 }
 
-fn flatten_pattern_operand(pattern: &PatternTree, expected_op: &str, operands: &mut Vec<PatternTree>) {
+fn flatten_pattern_operand(
+    pattern: &PatternTree,
+    expected_op: &str,
+    operands: &mut Vec<PatternTree>,
+) {
     match pattern {
         PatternTree::Node {
-            kind, children, text, ..
+            kind,
+            children,
+            text,
+            ..
         } => {
             if is_binary_expression_kind(kind) {
                 // Try to flatten further
@@ -467,7 +498,10 @@ fn numeric_literals_equivalent(pat: &str, tgt: &str) -> bool {
             u64::from_str_radix(bin, 2).ok().map(|v| v as f64)
         } else if let Some(oct) = s.strip_prefix("0o").or_else(|| s.strip_prefix("0O")) {
             u64::from_str_radix(oct, 8).ok().map(|v| v as f64)
-        } else if s.starts_with("0") && s.len() > 1 && s.chars().nth(1).map_or(false, |c| c.is_ascii_digit()) {
+        } else if s.starts_with("0")
+            && s.len() > 1
+            && s.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+        {
             u64::from_str_radix(&s, 8).ok().map(|v| v as f64)
         } else {
             s.parse::<f64>().ok()
@@ -489,9 +523,16 @@ fn is_object_like_kind(kind: &str) -> bool {
 fn is_unordered_set_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "type_list" | "super_interfaces" | "extends_interfaces"
-            | "interface_type_list" | "exception_list" | "throws"
-            | "superclass" | "type_bound" | "implements" | "extends"
+        "type_list"
+            | "super_interfaces"
+            | "extends_interfaces"
+            | "interface_type_list"
+            | "exception_list"
+            | "throws"
+            | "superclass"
+            | "type_bound"
+            | "implements"
+            | "extends"
     )
 }
 
@@ -507,12 +548,17 @@ fn collection_delimiter(kind: &str) -> Option<&'static str> {
         | "struct_expression" | "struct_pattern" | "record" => Some("brace"),
 
         // Bracket-delimited collections: [ ]
-        "list" | "array" | "array_pattern" | "list_pattern"
-        | "list_comprehension" | "array_comprehension" => Some("bracket"),
+        "list"
+        | "array"
+        | "array_pattern"
+        | "list_pattern"
+        | "list_comprehension"
+        | "array_comprehension" => Some("bracket"),
 
         // Paren-delimited collections: ( )
-        "tuple" | "tuple_pattern" | "parenthesized_expression"
-        | "generator_expression" => Some("paren"),
+        "tuple" | "tuple_pattern" | "parenthesized_expression" | "generator_expression" => {
+            Some("paren")
+        }
 
         _ => None,
     }
@@ -521,15 +567,15 @@ fn collection_delimiter(kind: &str) -> Option<&'static str> {
 /// Check if a pattern node's children are ALL ellipsis (no concrete/metavar children).
 /// A pure-ellipsis pattern like `{ ... }` is a wildcard collection that should
 /// match any collection with the same delimiters.
- fn is_pure_ellipsis_pattern(children: &[PatternTree]) -> bool {
-     children.is_empty()
-         || children.iter().all(|c| {
-             matches!(
-                 c,
-                 PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }
-             )
-         })
- }
+fn is_pure_ellipsis_pattern(children: &[PatternTree]) -> bool {
+    children.is_empty()
+        || children.iter().all(|c| {
+            matches!(
+                c,
+                PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }
+            )
+        })
+}
 
 const WRAPPER_NODE_KINDS: &[&str] = &[
     "expression_statement",
@@ -540,7 +586,12 @@ const WRAPPER_NODE_KINDS: &[&str] = &[
 ];
 
 fn unwrap_single_child_wrapper(pattern: &PatternTree) -> Option<&PatternTree> {
-    if let PatternTree::Node { kind, children, text } = pattern {
+    if let PatternTree::Node {
+        kind,
+        children,
+        text,
+    } = pattern
+    {
         if text.is_none() && WRAPPER_NODE_KINDS.contains(&kind.as_str()) && children.len() == 1 {
             return Some(&children[0]);
         }
@@ -554,8 +605,14 @@ fn unwrap_single_child_wrapper(pattern: &PatternTree) -> Option<&PatternTree> {
 fn is_simple_metavar(tree: &PatternTree) -> bool {
     match tree {
         PatternTree::Metavar { .. } => true,
-        PatternTree::Node { kind, text, children } => {
-            if !children.is_empty() { return false; }
+        PatternTree::Node {
+            kind,
+            text,
+            children,
+        } => {
+            if !children.is_empty() {
+                return false;
+            }
             let t = text.as_deref().unwrap_or("").trim();
             t.starts_with("$") && !t.contains('.') && kind == "identifier"
         }
@@ -586,12 +643,21 @@ fn is_optional_collection(tree: &PatternTree) -> bool {
 }
 
 pub(crate) fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> bool {
-    let kind = target.get_attribute("ts_kind").unwrap_or(target.node_type());
-    let text = target.text().map(|t| t.trim().to_string()).unwrap_or_default();
+    let kind = target
+        .get_attribute("ts_kind")
+        .unwrap_or(target.node_type());
+    let text = target
+        .text()
+        .map(|t| t.trim().to_string())
+        .unwrap_or_default();
 
     match type_name {
         "int" | "integer" | "Integer" => {
-            if kind == "number" || kind == "number_literal" || kind == "integer" || kind == "integer_literal" {
+            if kind == "number"
+                || kind == "number_literal"
+                || kind == "integer"
+                || kind == "integer_literal"
+            {
                 return text.parse::<i64>().is_ok() || text.parse::<u64>().is_ok();
             }
             // Java boxing: Integer type identifier matches boxed/unboxed
@@ -604,14 +670,22 @@ pub(crate) fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> 
             false
         }
         "float" | "double" | "Float" | "Double" => {
-            if kind == "float" || kind == "float_literal" || kind == "number" || kind == "number_literal" {
+            if kind == "float"
+                || kind == "float_literal"
+                || kind == "number"
+                || kind == "number_literal"
+            {
                 return text.contains('.');
             }
             false
         }
         "number" => {
-            if kind == "number" || kind == "number_literal" || kind == "integer" || kind == "integer_literal"
-                || kind == "float" || kind == "float_literal"
+            if kind == "number"
+                || kind == "number_literal"
+                || kind == "integer"
+                || kind == "integer_literal"
+                || kind == "float"
+                || kind == "float_literal"
             {
                 return true;
             }
@@ -632,7 +706,9 @@ pub(crate) fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> 
                 return true;
             }
             // Java boxing: Boolean type identifier
-            if (type_name == "Boolean" || type_name == "boolean") && (kind == "type_identifier" || kind == "identifier") {
+            if (type_name == "Boolean" || type_name == "boolean")
+                && (kind == "type_identifier" || kind == "identifier")
+            {
                 return text == "Boolean" || text == "boolean";
             }
             false
@@ -640,11 +716,13 @@ pub(crate) fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> 
         _ => {
             // Class/type matching: (TypeName $X) should match expressions whose
             // declared type is TypeName (e.g., variable declarations, new expressions)
-            if kind == "type_identifier" || kind == "identifier" || kind == "scoped_type_identifier"
-                || kind == "generic_type" || kind == "user_defined_type"
+            if kind == "type_identifier"
+                || kind == "identifier"
+                || kind == "scoped_type_identifier"
+                || kind == "generic_type"
+                || kind == "user_defined_type"
             {
-                let matches_type = text == type_name
-                    || text.ends_with(&format!(".{}", type_name));
+                let matches_type = text == type_name || text.ends_with(&format!(".{}", type_name));
                 return matches_type;
             }
             // For new expressions: new TypeName(...) matches
@@ -663,8 +741,10 @@ pub(crate) fn matches_type_constraint(type_name: &str, target: &dyn AstNode) -> 
                 }
             }
             // For variable declarations with type annotation
-            if kind == "variable_declarator" || kind == "local_variable_declaration"
-                || kind == "declaration" || kind == "variable_declaration"
+            if kind == "variable_declarator"
+                || kind == "local_variable_declaration"
+                || kind == "declaration"
+                || kind == "variable_declaration"
             {
                 let children = filter_node_children(target);
                 for child in &children {
@@ -704,8 +784,7 @@ impl TreeMatcher {
     pub fn new() -> Self {
         Self {
             parser: Mutex::new(
-                PatternTreeParser::new()
-                    .unwrap_or_else(|_| PatternTreeParser::default()),
+                PatternTreeParser::new().unwrap_or_else(|_| PatternTreeParser::default()),
             ),
         }
     }
@@ -720,15 +799,15 @@ impl TreeMatcher {
         language: Language,
         root: &dyn AstNode,
     ) -> Vec<SemgrepMatchResult> {
-         let tree = match self.parser.lock() {
-             Ok(mut p) => match p.parse(pattern_str, language) {
-                 Ok(t) => t,
-                 Err(_) => {
-                     return Vec::new();
-                 }
-             },
-             Err(_) => return Vec::new(),
-         };
+        let tree = match self.parser.lock() {
+            Ok(mut p) => match p.parse(pattern_str, language) {
+                Ok(t) => t,
+                Err(_) => {
+                    return Vec::new();
+                }
+            },
+            Err(_) => return Vec::new(),
+        };
 
         let mut results = Vec::new();
         let mut ctx = MatchCtx::new();
@@ -820,16 +899,21 @@ impl MatchCtx {
     }
 
     /// Build an import map from the root AST node by scanning for import declarations.
-     fn build_import_map(&mut self, root: &dyn AstNode) {
-         let mut map = HashMap::new();
-         let mut wildcards = Vec::new();
-         Self::collect_imports(root, &mut map, &mut wildcards, root);
-         self.import_map = Some(map);
+    fn build_import_map(&mut self, root: &dyn AstNode) {
+        let mut map = HashMap::new();
+        let mut wildcards = Vec::new();
+        Self::collect_imports(root, &mut map, &mut wildcards, root);
+        self.import_map = Some(map);
         self.wildcard_imports = wildcards;
     }
 
     /// Recursively collect imports from AST nodes.
-    fn collect_imports(node: &dyn AstNode, map: &mut HashMap<String, String>, wildcards: &mut Vec<String>, root: &dyn AstNode) {
+    fn collect_imports(
+        node: &dyn AstNode,
+        map: &mut HashMap<String, String>,
+        wildcards: &mut Vec<String>,
+        root: &dyn AstNode,
+    ) {
         let kind = node.get_attribute("ts_kind").unwrap_or(node.node_type());
         match kind {
             "import_declaration" => {
@@ -852,7 +936,11 @@ impl MatchCtx {
 
     /// Extract Java import: import javax.crypto.Cipher; -> "Cipher" -> "javax.crypto.Cipher"
     /// Also handles wildcard: import A.B.*; -> adds "A.B" to wildcards
-    fn extract_java_import(node: &dyn AstNode, map: &mut HashMap<String, String>, wildcards: &mut Vec<String>) {
+    fn extract_java_import(
+        node: &dyn AstNode,
+        map: &mut HashMap<String, String>,
+        wildcards: &mut Vec<String>,
+    ) {
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
                 let ck = child.get_attribute("ts_kind").unwrap_or(child.node_type());
@@ -860,9 +948,15 @@ impl MatchCtx {
                     if let Some(text) = child.text() {
                         let text = text.trim().to_string();
                         let next_is_dot = i + 1 < node.child_count()
-                            && node.child(i + 1).and_then(|n| n.text()).map_or(false, |t| t.trim() == ".");
+                            && node
+                                .child(i + 1)
+                                .and_then(|n| n.text())
+                                .map_or(false, |t| t.trim() == ".");
                         let next2_is_star = i + 2 < node.child_count()
-                            && node.child(i + 2).and_then(|n| n.text()).map_or(false, |t| t.trim() == "*");
+                            && node
+                                .child(i + 2)
+                                .and_then(|n| n.text())
+                                .map_or(false, |t| t.trim() == "*");
                         let is_wildcard = text.ends_with(".*") || (next_is_dot && next2_is_star);
                         if is_wildcard {
                             let prefix = if text.ends_with(".*") {
@@ -906,7 +1000,10 @@ impl MatchCtx {
         if let Some(a) = alias {
             if let Some(text) = a.text() {
                 map.entry(text.trim().to_string()).or_insert_with(|| {
-                    dotted_name.and_then(|dn| dn.text()).map(|t| t.trim().to_string()).unwrap_or_default()
+                    dotted_name
+                        .and_then(|dn| dn.text())
+                        .map(|t| t.trim().to_string())
+                        .unwrap_or_default()
                 });
             }
         }
@@ -962,14 +1059,19 @@ impl MatchCtx {
         let mut parts = Vec::new();
         for child in children {
             match child {
-                PatternTree::Node { kind, text: Some(t), .. }
-                    if kind == "identifier" || kind == "property_identifier" || kind == "type_identifier" =>
+                PatternTree::Node {
+                    kind,
+                    text: Some(t),
+                    ..
+                } if kind == "identifier"
+                    || kind == "property_identifier"
+                    || kind == "type_identifier" =>
                 {
                     parts.push(t.clone());
                 }
-                PatternTree::Node { kind, children: c2, .. }
-                    if QUALIFIED_NAME_KINDS.contains(&kind.as_str()) =>
-                {
+                PatternTree::Node {
+                    kind, children: c2, ..
+                } if QUALIFIED_NAME_KINDS.contains(&kind.as_str()) => {
                     if let Some(nested) = Self::qualified_name_from_children(c2) {
                         parts.push(nested);
                     }
@@ -977,7 +1079,11 @@ impl MatchCtx {
                 _ => {}
             }
         }
-        if parts.is_empty() { None } else { Some(parts.join(".")) }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join("."))
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1031,7 +1137,8 @@ impl MatchCtx {
             }
         }
 
-        let should_skip = skip_assoc_op.is_some() && is_binary && child_skip_op.as_deref() == skip_assoc_op;
+        let should_skip =
+            skip_assoc_op.is_some() && is_binary && child_skip_op.as_deref() == skip_assoc_op;
 
         if !should_skip {
             let snap = self.snapshot();
@@ -1090,8 +1197,11 @@ impl MatchCtx {
     fn collect_constants(&mut self, node: &dyn AstNode) {
         let kind = node.get_attribute("ts_kind").unwrap_or(node.node_type());
         // Only collect from lexical_declaration, variable_declaration
-        if kind == "lexical_declaration" || kind == "variable_declaration"
-            || kind == "local_variable_declaration" || kind == "declaration" {
+        if kind == "lexical_declaration"
+            || kind == "variable_declaration"
+            || kind == "local_variable_declaration"
+            || kind == "declaration"
+        {
             let children = filter_node_children(node);
             if children.len() >= 2 {
                 // First child might be the keyword (var/let/const), second is the declarator
@@ -1121,12 +1231,14 @@ impl MatchCtx {
                     if let Some(name) = children[0].text() {
                         let name = name.trim().to_string();
                         let name = name.strip_prefix("this.").unwrap_or(&name).to_string();
-                        let value = children.get(1)
+                        let value = children
+                            .get(1)
                             .and_then(|c| c.text())
                             .map(|t| t.trim().to_string())
                             .unwrap_or_default();
                         let depth = self.control_flow_depth;
-                        let entry = self.must_candidates
+                        let entry = self
+                            .must_candidates
                             .entry(depth)
                             .or_insert_with(HashMap::new)
                             .entry(name.clone())
@@ -1330,7 +1442,9 @@ impl MatchCtx {
                 let pt = pt.trim();
 
                 // Generic type stripping: pattern "Foo" vs target "Foo<T>"
-                let target_kind_str = target.get_attribute("ts_kind").unwrap_or(target.node_type());
+                let target_kind_str = target
+                    .get_attribute("ts_kind")
+                    .unwrap_or(target.node_type());
                 if target_kind_str == "generic_type" {
                     if let Some(angle_pos) = tt.find('<') {
                         let base = tt[..angle_pos].trim();
@@ -1380,7 +1494,8 @@ impl MatchCtx {
                     return true;
                 }
 
-                let ws_norm = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+                let ws_norm =
+                    |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
                 if ws_norm(stripped_pt) == ws_norm(stripped_tt) {
                     return true;
                 }
@@ -1401,19 +1516,32 @@ impl MatchCtx {
             .unwrap_or(target.node_type());
         let mut kind_match = pattern_kind == target_kind
             || pattern_kind == "_"
-            || (pattern_kind.contains('_') && target_kind.contains('_')
+            || (pattern_kind.contains('_')
+                && target_kind.contains('_')
                 && pattern_kind.split('_').any(|p| target_kind.contains(p)))
             || (is_chain_kind(pattern_kind) && is_chain_kind(target_kind))
-            || (pattern_kind == "arrow_function" && matches!(target_kind, "function_expression" | "function_declaration"))
-            || (matches!(pattern_kind, "function_expression" | "function_declaration") && target_kind == "arrow_function")
-            || (pattern_kind == "identifier" && matches!(target_kind, "typed_parameter" | "optional_parameter" | "default_parameter"))
-            || (matches!(pattern_kind, "typed_parameter" | "optional_parameter" | "default_parameter") && target_kind == "identifier")
+            || (pattern_kind == "arrow_function"
+                && matches!(target_kind, "function_expression" | "function_declaration"))
+            || (matches!(pattern_kind, "function_expression" | "function_declaration")
+                && target_kind == "arrow_function")
+            || (pattern_kind == "identifier"
+                && matches!(
+                    target_kind,
+                    "typed_parameter" | "optional_parameter" | "default_parameter"
+                ))
+            || (matches!(
+                pattern_kind,
+                "typed_parameter" | "optional_parameter" | "default_parameter"
+            ) && target_kind == "identifier")
             || (pattern_kind == "record_declaration" && matches!(target_kind, "class_declaration"))
             || (pattern_kind == "class_declaration" && matches!(target_kind, "record_declaration"))
-            || (pattern_kind == "annotation_type_declaration" && matches!(target_kind, "interface_declaration"))
-            || (pattern_kind == "interface_declaration" && matches!(target_kind, "annotation_type_declaration"));
+            || (pattern_kind == "annotation_type_declaration"
+                && matches!(target_kind, "interface_declaration"))
+            || (pattern_kind == "interface_declaration"
+                && matches!(target_kind, "annotation_type_declaration"));
 
-        if !kind_match && pattern_kind == "parenthesized_expression" && pattern_children.len() == 1 {
+        if !kind_match && pattern_kind == "parenthesized_expression" && pattern_children.len() == 1
+        {
             if matches!(pattern_children[0], PatternTree::TypedMetavar { .. }) {
                 return self.match_tree(&pattern_children[0], target);
             }
@@ -1426,13 +1554,17 @@ impl MatchCtx {
         // because the qualified-name pattern has children (parts of the name)
         // that would fail against the simple-name target's empty children.
         if QUALIFIED_NAME_KINDS.contains(&pattern_kind)
-            && (matches!(target_kind, "identifier" | "type_identifier" | "property_identifier")
-                || QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()))
+            && (matches!(
+                target_kind,
+                "identifier" | "type_identifier" | "property_identifier"
+            ) || QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()))
         {
             if let Some(ref pattern_qn) = Self::qualified_name_from_children(pattern_children) {
                 // Case 1: Simple target identifier — check named import + wildcard
-                if matches!(target_kind, "identifier" | "type_identifier" | "property_identifier")
-                {
+                if matches!(
+                    target_kind,
+                    "identifier" | "type_identifier" | "property_identifier"
+                ) {
                     if let Some(target_text) = target.text() {
                         let target_text = target_text.trim();
                         // Named import: target_text → imported full name
@@ -1463,12 +1595,24 @@ impl MatchCtx {
                         let target_qn = target_text.trim();
                         let mut sorted_wc: Vec<&String> = self.wildcard_imports.iter().collect();
                         sorted_wc.sort_by_key(|w| -(w.len() as isize));
-                        eprintln!("[CASE2] pattern_qn={} target_qn={} wildcards={:?}", pattern_qn, target_qn, sorted_wc);
+                        eprintln!(
+                            "[CASE2] pattern_qn={} target_qn={} wildcards={:?}",
+                            pattern_qn, target_qn, sorted_wc
+                        );
                         for wc in &sorted_wc {
                             let prefix = format!("{}.", wc);
-                            eprintln!("[CASE2 try] wc={} prefix={} strip={:?}", wc, prefix, pattern_qn.strip_prefix(&prefix));
+                            eprintln!(
+                                "[CASE2 try] wc={} prefix={} strip={:?}",
+                                wc,
+                                prefix,
+                                pattern_qn.strip_prefix(&prefix)
+                            );
                             if let Some(remaining) = pattern_qn.strip_prefix(&prefix) {
-                                eprintln!("[CASE2 result] remaining={} match={}", remaining, remaining == target_qn);
+                                eprintln!(
+                                    "[CASE2 result] remaining={} match={}",
+                                    remaining,
+                                    remaining == target_qn
+                                );
                                 return remaining == target_qn;
                             }
                         }
@@ -1479,26 +1623,49 @@ impl MatchCtx {
 
         if !kind_match && !pattern_children.is_empty() {
             if pattern_kind == "assignment_expression"
-                && matches!(target_kind,
-                    "local_variable_declaration" | "variable_declaration" | "field_declaration"
-                    | "public_field_definition" | "field_definition"
-                    | "property_definition" | "public_field_definition"
-                    | "abstract_field_declaration" | "field_signature")
+                && matches!(
+                    target_kind,
+                    "local_variable_declaration"
+                        | "variable_declaration"
+                        | "field_declaration"
+                        | "public_field_definition"
+                        | "field_definition"
+                        | "property_definition"
+                        | "public_field_definition"
+                        | "abstract_field_declaration"
+                        | "field_signature"
+                )
             {
-                let vd_children: Vec<&dyn AstNode> = if matches!(target_kind,
-                    "public_field_definition" | "field_definition" | "property_definition"
-                    | "abstract_field_declaration" | "field_signature")
-                {
+                let vd_children: Vec<&dyn AstNode> = if matches!(
+                    target_kind,
+                    "public_field_definition"
+                        | "field_definition"
+                        | "property_definition"
+                        | "abstract_field_declaration"
+                        | "field_signature"
+                ) {
                     (0..target.child_count())
                         .filter_map(|i| target.child(i))
                         .filter(|c| {
                             if let Some(t) = c.text() {
                                 let t = t.trim();
-                                !t.is_empty() && t != "=" && t != "(" && t != ")"
-                                    && t != ";" && t != "," && t != ":" && t != "."
-                                    && t != "{" && t != "}" && t != "[" && t != "]"
-                                    && t != "!" && t != "?"
-                            } else { false }
+                                !t.is_empty()
+                                    && t != "="
+                                    && t != "("
+                                    && t != ")"
+                                    && t != ";"
+                                    && t != ","
+                                    && t != ":"
+                                    && t != "."
+                                    && t != "{"
+                                    && t != "}"
+                                    && t != "["
+                                    && t != "]"
+                                    && t != "!"
+                                    && t != "?"
+                            } else {
+                                false
+                            }
                         })
                         .collect()
                 } else {
@@ -1514,10 +1681,21 @@ impl MatchCtx {
                                 .filter(|c| {
                                     if let Some(t) = c.text() {
                                         let t = t.trim();
-                                        !t.is_empty() && t != "=" && t != "(" && t != ")"
-                                            && t != ";" && t != "," && t != ":" && t != "."
-                                            && t != "{" && t != "}" && t != "[" && t != "]"
-                                    } else { false }
+                                        !t.is_empty()
+                                            && t != "="
+                                            && t != "("
+                                            && t != ")"
+                                            && t != ";"
+                                            && t != ","
+                                            && t != ":"
+                                            && t != "."
+                                            && t != "{"
+                                            && t != "}"
+                                            && t != "["
+                                            && t != "]"
+                                    } else {
+                                        false
+                                    }
                                 })
                                 .collect::<Vec<_>>()
                         })
@@ -1537,9 +1715,10 @@ impl MatchCtx {
             // (e.g. `{ ... }` parsed as `set`) should match any collection with
             // the same delimiters (e.g. `dictionary`, `object`).
             if is_pure_ellipsis_pattern(pattern_children) {
-                if let (Some(pd), Some(td)) =
-                    (collection_delimiter(pattern_kind), collection_delimiter(&target_kind))
-                {
+                if let (Some(pd), Some(td)) = (
+                    collection_delimiter(pattern_kind),
+                    collection_delimiter(&target_kind),
+                ) {
                     if pd == td {
                         kind_match = true;
                     }
@@ -1555,8 +1734,12 @@ impl MatchCtx {
             .filter_map(|i| target.child(i))
             .filter(|c| {
                 let kind = c.get_attribute("ts_kind").unwrap_or(c.node_type());
-                if kind == "comment" || kind == "line_comment" || kind == "block_comment"
-                    || kind == "type_annotation" || kind == "optional_type" || kind == "type_arguments"
+                if kind == "comment"
+                    || kind == "line_comment"
+                    || kind == "block_comment"
+                    || kind == "type_annotation"
+                    || kind == "optional_type"
+                    || kind == "type_arguments"
                 {
                     return false;
                 }
@@ -1592,9 +1775,9 @@ impl MatchCtx {
             .get_attribute("ts_kind")
             .unwrap_or(target.node_type());
         if is_chain_kind(pattern_kind) && is_chain_kind(&target_kind_str) {
-            let has_chain_child_with_ellipsis = pattern_children.iter().any(|c| {
-                is_pattern_chain_node(c) && pattern_contains_ellipsis(c)
-            });
+            let has_chain_child_with_ellipsis = pattern_children
+                .iter()
+                .any(|c| is_pattern_chain_node(c) && pattern_contains_ellipsis(c));
             let has_any_ellipsis = pattern_contains_ellipsis(&PatternTree::Node {
                 kind: pattern_kind.to_string(),
                 children: pattern_children.to_vec(),
@@ -1604,9 +1787,12 @@ impl MatchCtx {
                 let flat_pattern = flatten_pattern_chain(pattern_kind, pattern_children);
                 let flat_target = flatten_node_chain(target);
 
-                let has_flat_ellipsis = flat_pattern
-                    .iter()
-                    .any(|p| matches!(p, PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }));
+                let has_flat_ellipsis = flat_pattern.iter().any(|p| {
+                    matches!(
+                        p,
+                        PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }
+                    )
+                });
 
                 let snap = self.snapshot();
                 let matched = if has_flat_ellipsis {
@@ -1628,7 +1814,8 @@ impl MatchCtx {
             if let Some((tgt_op, tgt_operands)) = flatten_binary_node(target) {
                 if pat_op == tgt_op {
                     let snap = self.snapshot();
-                    let assoc_result = self.match_associative_operands(&pat_operands, &tgt_operands, &pat_op);
+                    let assoc_result =
+                        self.match_associative_operands(&pat_operands, &tgt_operands, &pat_op);
                     if assoc_result {
                         return true;
                     }
@@ -1643,8 +1830,7 @@ impl MatchCtx {
         let needs_unordered = is_object_like_kind(&target_kind_str)
             || is_unordered_set_kind(&target_kind_str)
             || is_unordered_set_kind(pattern_kind);
-        if needs_unordered && pattern_children.len() <= target_children.len()
-        {
+        if needs_unordered && pattern_children.len() <= target_children.len() {
             let snap = self.snapshot();
             if self.match_unordered_children(pattern_children, &target_children) {
                 return true;
@@ -1653,9 +1839,7 @@ impl MatchCtx {
         }
 
         // Catch clause optional binding: catch($ERR) {} should match catch {}
-        if pattern_children.len() > target_children.len()
-            && (pattern_kind.contains("catch"))
-        {
+        if pattern_children.len() > target_children.len() && (pattern_kind.contains("catch")) {
             let filtered: Vec<PatternTree> = pattern_children
                 .iter()
                 .filter(|p| !is_simple_metavar(p))
@@ -1664,11 +1848,17 @@ impl MatchCtx {
             if filtered.len() <= target_children.len() {
                 let snap = self.snapshot();
                 let result = if filtered.iter().any(|p| {
-                    matches!(p, PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. })
+                    matches!(
+                        p,
+                        PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }
+                    )
                 }) {
                     self.match_children_with_ellipsis(&filtered, &target_children)
                 } else {
-                    self.match_children_exact_ref(&filtered.iter().collect::<Vec<_>>(), &target_children)
+                    self.match_children_exact_ref(
+                        &filtered.iter().collect::<Vec<_>>(),
+                        &target_children,
+                    )
                 };
                 if result {
                     return true;
@@ -1693,15 +1883,22 @@ impl MatchCtx {
                         if let Some(fqn) = Self::qualified_name_from_children(children) {
                             for t in target_children.iter() {
                                 let tk = t.get_attribute("ts_kind").unwrap_or(t.node_type());
-                                if matches!(tk, "identifier" | "type_identifier" | "property_identifier") {
+                                if matches!(
+                                    tk,
+                                    "identifier" | "type_identifier" | "property_identifier"
+                                ) {
                                     if let Some(tt) = t.text() {
                                         let tt = tt.trim();
                                         if let Some(imported) = self.resolve_import(tt) {
                                             let prefix = format!("{}.", fqn);
-                                            if imported == fqn.as_str() || imported.starts_with(&prefix) {
+                                            if imported == fqn.as_str()
+                                                || imported.starts_with(&prefix)
+                                            {
                                                 resolved += 1;
                                                 if pi + 1 < pattern_children.len() {
-                                                    if let PatternTree::Node { kind: nk, .. } = &pattern_children[pi + 1] {
+                                                    if let PatternTree::Node { kind: nk, .. } =
+                                                        &pattern_children[pi + 1]
+                                                    {
                                                         if nk == "identifier" {
                                                             resolved += 1;
                                                         }
@@ -1716,7 +1913,9 @@ impl MatchCtx {
                                             if full == fqn || full.starts_with(&prefix) {
                                                 resolved += 1;
                                                 if pi + 1 < pattern_children.len() {
-                                                    if let PatternTree::Node { kind: nk, .. } = &pattern_children[pi + 1] {
+                                                    if let PatternTree::Node { kind: nk, .. } =
+                                                        &pattern_children[pi + 1]
+                                                    {
                                                         if nk == "identifier" {
                                                             resolved += 1;
                                                         }
@@ -1737,9 +1936,12 @@ impl MatchCtx {
             }
         }
 
-        let has_ellipsis = pattern_children
-            .iter()
-            .any(|p| matches!(p, PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }));
+        let has_ellipsis = pattern_children.iter().any(|p| {
+            matches!(
+                p,
+                PatternTree::Ellipsis | PatternTree::EllipsisMetavar { .. }
+            )
+        });
 
         if has_ellipsis {
             self.match_children_with_ellipsis(pattern_children, &target_children)
@@ -1772,17 +1974,21 @@ impl MatchCtx {
                             let mut was_resolved = false;
                             for (ti, t) in target_children.iter().enumerate() {
                                 let tk = t.get_attribute("ts_kind").unwrap_or(t.node_type());
-                                if matches!(tk, "identifier" | "type_identifier" | "property_identifier") {
+                                if matches!(
+                                    tk,
+                                    "identifier" | "type_identifier" | "property_identifier"
+                                ) {
                                     if let Some(tt) = t.text() {
                                         let tt = tt.trim();
-                                        let resolved = self.resolve_import(tt).map_or(false, |imp| {
-                                            let prefix = format!("{}.", fqn);
-                                            imp == fqn.as_str() || imp.starts_with(&prefix)
-                                        }) || self.wildcard_imports.iter().any(|wc| {
-                                            let full = format!("{}.{}", wc, tt);
-                                            let prefix = format!("{}.", fqn);
-                                            full == fqn || full.starts_with(&prefix)
-                                        });
+                                        let resolved =
+                                            self.resolve_import(tt).map_or(false, |imp| {
+                                                let prefix = format!("{}.", fqn);
+                                                imp == fqn.as_str() || imp.starts_with(&prefix)
+                                            }) || self.wildcard_imports.iter().any(|wc| {
+                                                let full = format!("{}.{}", wc, tt);
+                                                let prefix = format!("{}.", fqn);
+                                                full == fqn || full.starts_with(&prefix)
+                                            });
                                         if resolved {
                                             matched_target_indices.insert(ti);
                                             skip_next = pi + 1 < pattern_children.len()
@@ -1831,11 +2037,7 @@ impl MatchCtx {
     /// Exact child-sequence matching (no ellipsis).
     /// Handles transparent block unwrapping: statement_block with a single
     /// child is treated as equivalent to the bare statement.
-    fn match_children_exact(
-        &mut self,
-        patterns: &[PatternTree],
-        targets: &[&dyn AstNode],
-    ) -> bool {
+    fn match_children_exact(&mut self, patterns: &[PatternTree], targets: &[&dyn AstNode]) -> bool {
         if patterns.len() != targets.len() {
             return false;
         }
@@ -1903,7 +2105,10 @@ impl MatchCtx {
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
                 let child_kind = child.get_attribute("ts_kind").unwrap_or(child.node_type());
-                if child_kind == "comment" || child_kind == "line_comment" || child_kind == "block_comment" {
+                if child_kind == "comment"
+                    || child_kind == "line_comment"
+                    || child_kind == "block_comment"
+                {
                     continue;
                 }
                 let snap = self.snapshot();
@@ -2134,7 +2339,9 @@ impl MatchCtx {
                     for i in 0..targets.len() {
                         let snap = self.snapshot();
                         if self.match_tree(first, targets[i]) {
-                            let remaining: Vec<&dyn AstNode> = targets.iter().enumerate()
+                            let remaining: Vec<&dyn AstNode> = targets
+                                .iter()
+                                .enumerate()
                                 .filter(|(j, _)| *j != i)
                                 .map(|(_, t)| *t)
                                 .collect();
@@ -2269,10 +2476,8 @@ fn deduplicate_matches(matches: &mut Vec<SemgrepMatchResult>) {
     for read in 0..matches.len() {
         if keep[read] {
             if write != read {
-                let placeholder = SemgrepMatchResult::new(
-                    matches[read].node.clone_node(),
-                    HashMap::new(),
-                );
+                let placeholder =
+                    SemgrepMatchResult::new(matches[read].node.clone_node(), HashMap::new());
                 let m = std::mem::replace(&mut matches[read], placeholder);
                 matches[write] = m;
             }

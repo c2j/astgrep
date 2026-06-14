@@ -195,10 +195,7 @@ impl SourceDetector {
 
     /// Add a custom source pattern
     pub fn add_pattern(&mut self, node_type: String, pattern: SourcePattern) {
-        self.patterns
-            .entry(node_type)
-            .or_default()
-            .push(pattern);
+        self.patterns.entry(node_type).or_default().push(pattern);
     }
 
     /// Load default source patterns

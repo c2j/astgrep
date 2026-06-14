@@ -2,7 +2,7 @@
 //!
 //! Tests for verifying that VS Code integration features work correctly.
 
-use astgrep_cli::vscode_integration::{VsCodeDiagnostic, VsCodeConfig, VsCodeExtension};
+use astgrep_cli::vscode_integration::{VsCodeConfig, VsCodeDiagnostic, VsCodeExtension};
 
 #[test]
 fn test_vscode_diagnostic_new() {
@@ -82,7 +82,7 @@ fn test_vscode_extension_new() {
 fn test_vscode_extension_with_config() {
     let mut config = VsCodeConfig::default();
     config.enabled = false;
-    
+
     let ext = VsCodeExtension::with_config(config);
     assert!(!ext.get_config().enabled);
 }
@@ -106,7 +106,7 @@ fn test_vscode_extension_add_diagnostic() {
 #[test]
 fn test_vscode_extension_add_multiple_diagnostics() {
     let mut ext = VsCodeExtension::new();
-    
+
     for i in 0..5 {
         let diag = VsCodeDiagnostic::new(
             "test.java".to_string(),
@@ -135,7 +135,7 @@ fn test_vscode_extension_get_diagnostics() {
     );
 
     ext.add_diagnostic(diag);
-    
+
     let diags = ext.get_diagnostics("test.java");
     assert!(diags.is_some());
     assert_eq!(diags.unwrap().len(), 1);
@@ -163,7 +163,7 @@ fn test_vscode_extension_clear_diagnostics() {
 #[test]
 fn test_vscode_extension_clear_all_diagnostics() {
     let mut ext = VsCodeExtension::new();
-    
+
     for i in 0..3 {
         let diag = VsCodeDiagnostic::new(
             format!("test{}.java", i),
@@ -195,7 +195,7 @@ fn test_vscode_extension_should_analyze_file() {
 fn test_vscode_extension_should_analyze_file_disabled() {
     let mut config = VsCodeConfig::default();
     config.enabled = false;
-    
+
     let ext = VsCodeExtension::with_config(config);
     assert!(!ext.should_analyze_file("test.java"));
 }
@@ -210,7 +210,7 @@ fn test_vscode_extension_is_rule_enabled() {
 fn test_vscode_extension_is_rule_disabled() {
     let mut config = VsCodeConfig::default();
     config.disabled_rules = vec!["sql_injection".to_string()];
-    
+
     let ext = VsCodeExtension::with_config(config);
     assert!(!ext.is_rule_enabled("sql_injection"));
     assert!(ext.is_rule_enabled("other_rule"));
@@ -220,7 +220,7 @@ fn test_vscode_extension_is_rule_disabled() {
 fn test_vscode_extension_is_rule_enabled_whitelist() {
     let mut config = VsCodeConfig::default();
     config.enabled_rules = vec!["sql_injection".to_string(), "xss".to_string()];
-    
+
     let ext = VsCodeExtension::with_config(config);
     assert!(ext.is_rule_enabled("sql_injection"));
     assert!(ext.is_rule_enabled("xss"));
@@ -230,7 +230,7 @@ fn test_vscode_extension_is_rule_enabled_whitelist() {
 #[test]
 fn test_vscode_extension_diagnostic_count_for_file() {
     let mut ext = VsCodeExtension::new();
-    
+
     for i in 0..3 {
         let diag = VsCodeDiagnostic::new(
             "test.java".to_string(),
@@ -250,7 +250,7 @@ fn test_vscode_extension_diagnostic_count_for_file() {
 #[test]
 fn test_vscode_extension_get_all_diagnostics() {
     let mut ext = VsCodeExtension::new();
-    
+
     let diag1 = VsCodeDiagnostic::new(
         "test1.java".to_string(),
         10,
@@ -259,7 +259,7 @@ fn test_vscode_extension_get_all_diagnostics() {
         "error".to_string(),
         "rule1".to_string(),
     );
-    
+
     let diag2 = VsCodeDiagnostic::new(
         "test2.java".to_string(),
         20,
@@ -271,7 +271,7 @@ fn test_vscode_extension_get_all_diagnostics() {
 
     ext.add_diagnostic(diag1);
     ext.add_diagnostic(diag2);
-    
+
     let all = ext.get_all_diagnostics();
     assert_eq!(all.len(), 2);
 }
@@ -280,10 +280,10 @@ fn test_vscode_extension_get_all_diagnostics() {
 fn test_vscode_extension_update_config() {
     let mut ext = VsCodeExtension::new();
     assert!(ext.get_config().enabled);
-    
+
     let mut new_config = VsCodeConfig::default();
     new_config.enabled = false;
-    
+
     ext.update_config(new_config);
     assert!(!ext.get_config().enabled);
 }
@@ -305,7 +305,7 @@ fn test_vscode_diagnostic_severity_levels() {
         "error".to_string(),
         "rule1".to_string(),
     );
-    
+
     let warning_diag = VsCodeDiagnostic::new(
         "test.java".to_string(),
         0,
@@ -314,7 +314,7 @@ fn test_vscode_diagnostic_severity_levels() {
         "warning".to_string(),
         "rule1".to_string(),
     );
-    
+
     let info_diag = VsCodeDiagnostic::new(
         "test.java".to_string(),
         0,
@@ -323,7 +323,7 @@ fn test_vscode_diagnostic_severity_levels() {
         "information".to_string(),
         "rule1".to_string(),
     );
-    
+
     let hint_diag = VsCodeDiagnostic::new(
         "test.java".to_string(),
         0,
@@ -338,4 +338,3 @@ fn test_vscode_diagnostic_severity_levels() {
     assert_eq!(info_diag.to_vscode_format()["severity"], 3);
     assert_eq!(hint_diag.to_vscode_format()["severity"], 4);
 }
-

@@ -257,10 +257,7 @@ impl SanitizerDetector {
 
     /// Add a custom sanitizer pattern
     pub fn add_pattern(&mut self, node_type: String, pattern: SanitizerPattern) {
-        self.patterns
-            .entry(node_type)
-            .or_default()
-            .push(pattern);
+        self.patterns.entry(node_type).or_default().push(pattern);
     }
 
     /// Load default sanitizer patterns

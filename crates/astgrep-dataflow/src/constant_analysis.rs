@@ -311,7 +311,10 @@ mod tests {
     #[test]
     fn test_constant_analyzer_get_sensitive_constants() {
         let mut analyzer = ConstantAnalyzer::new();
-        analyzer.register_constant("password".to_string(), ConstantValue::String("secret123".to_string()));
+        analyzer.register_constant(
+            "password".to_string(),
+            ConstantValue::String("secret123".to_string()),
+        );
         analyzer.register_constant("x".to_string(), ConstantValue::Integer(42));
 
         let sensitive = analyzer.get_sensitive_constants();
@@ -323,7 +326,10 @@ mod tests {
     fn test_constant_analyzer_add_sensitive_pattern() {
         let mut analyzer = ConstantAnalyzer::new();
         analyzer.add_sensitive_pattern("api_secret".to_string());
-        analyzer.register_constant("my_api_secret".to_string(), ConstantValue::String("key".to_string()));
+        analyzer.register_constant(
+            "my_api_secret".to_string(),
+            ConstantValue::String("key".to_string()),
+        );
 
         assert!(analyzer.is_sensitive("my_api_secret"));
     }
