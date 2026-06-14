@@ -1,3 +1,7 @@
+# @rule new-syntax
+# @desc new_syntax v2 syntax test
+# @expect MATCH
+
 
 def bar():
     foo(1, 2, 4)

@@ -1,3 +1,7 @@
+// @rule generic-entropy-assignment
+# @desc metavar_analysis v2 syntax test
+// @expect MATCH
+
 class Foo{
     public string getSomeString(){
         //ruleid: generic-entropy-assignment

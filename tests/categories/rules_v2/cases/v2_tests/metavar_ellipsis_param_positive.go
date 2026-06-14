@@ -1,3 +1,7 @@
+// @rule metavar_ellipsis_param
+# @desc metavar_ellipsis_param v2 syntax test
+// @expect MATCH
+
 
 // ruleid: metavar_ellipsis_param
 func foo(int) { }

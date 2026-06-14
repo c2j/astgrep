@@ -1,3 +1,7 @@
+# @rule anywhere-global
+# @desc anywhere_global v2 syntax test
+# @expect MATCH
+
 MAKE_BAR_INSECURE = True
 
 def foo():

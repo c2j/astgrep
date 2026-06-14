@@ -1,3 +1,7 @@
+# @rule du-same-file
+# @desc anywhere_metavar v2 syntax test
+# @expect MATCH
+
 def foo():
     # ruleid: du-same-file
     foo()

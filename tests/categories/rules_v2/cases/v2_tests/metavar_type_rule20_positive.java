@@ -1,3 +1,7 @@
+// @rule no-string-eqeq
+# @desc metavar_type_rule20 v2 syntax test
+// @expect MATCH
+
 public class Example {
     public int foo(String a, int b) {
         // ruleid: no-string-eqeq

@@ -1,3 +1,7 @@
+// @rule keyword-any-order
+# @desc keyword_any_order v2 syntax test
+// @expect MATCH
+
 public class test {
     // ruleid: keyword-any-order
     private static final int a;

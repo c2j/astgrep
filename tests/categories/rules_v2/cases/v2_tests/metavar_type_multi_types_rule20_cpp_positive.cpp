@@ -1,3 +1,7 @@
+// @rule match-multiple-metavar-type-rule20
+# @desc metavar_type_multi_types_rule20_cpp v2 syntax test
+// @expect MATCH
+
 #include <fstream>
 
 using namespace std;

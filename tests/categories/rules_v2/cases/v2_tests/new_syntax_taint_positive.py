@@ -1,3 +1,7 @@
+# @rule new-syntax-taint
+# @desc new_syntax_taint v2 syntax test
+# @expect MATCH
+
 
 x = tainted1
 # ruleid: new-syntax-taint

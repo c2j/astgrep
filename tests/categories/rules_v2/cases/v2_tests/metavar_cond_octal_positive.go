@@ -1,3 +1,7 @@
+// @rule rule_template_id
+# @desc metavar_cond_octal v2 syntax test
+// @expect MATCH
+
 package Foo
 
 func foo() {

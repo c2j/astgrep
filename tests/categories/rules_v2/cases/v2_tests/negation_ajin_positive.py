@@ -1,3 +1,7 @@
+# @rule rule_template_id
+# @desc negation_ajin v2 syntax test
+# @expect MATCH
+
 import os
 #ruleid: rule_template_id
 x = os.environ

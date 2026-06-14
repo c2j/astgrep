@@ -1,3 +1,7 @@
+// @rule legacy-io
+# @desc anywhere_include v2 syntax test
+// @expect MATCH
+
 #include "legacy-io-header.h"
 
 int main(int argc, char **argv) {

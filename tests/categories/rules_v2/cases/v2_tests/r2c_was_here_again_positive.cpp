@@ -1,3 +1,7 @@
+// @rule here
+# @desc r2c_was_here_again v2 syntax test
+// @expect MATCH
+
 class A {
     void main() {
 	// ruleid: here
