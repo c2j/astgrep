@@ -1,4 +1,126 @@
-# 文档一：必须遵循的规则（Mandatory）
+# 贡献指南 (Contributing Guide)
+
+本指南面向 astgrep 项目的合作开发者，涵盖开发环境搭建、贡献流程、项目架构、编码规范、测试约定和扩展指南。
+
+---
+
+## 目录
+
+1. 开发环境搭建
+2. 贡献流程
+3. 项目架构
+4. 编码规范（必循规则）
+5. 测试约定
+6. 扩展指南
+7. 提交规范
+
+---
+
+## 1. 开发环境搭建 (Development Setup)
+
+### 前置要求
+
+- Rust 1.70+ (stable)
+- Cargo
+- Python 3.8+ (for test annotation validation)
+- Git
+
+### 克隆与构建
+
+```bash
+git clone https://github.com/c2j/astgrep.git
+cd astgrep
+cargo build
+```
+
+### 安装 Pre-commit Hooks
+
+```bash
+lefthook install
+```
+
+Pre-commit hooks enforce:
+
+- 代码格式化 (rustfmt)
+- Clippy 检查
+
+Pre-push hooks run:
+
+- 全量测试 (cargo test)
+- 依赖审计
+
+### 验证构建
+
+```bash
+cargo build          # 构建所有 crate
+cargo test           # 运行所有测试
+cargo clippy         # Lint 检查
+cargo fmt --check    # 格式检查
+```
+
+---
+
+## 2. 贡献流程 (Contribution Workflow)
+
+### 提交 Pull Request
+
+1. Fork 仓库
+2. 创建特性分支: `git checkout -b feature/your-feature`
+3. 编写代码并添加测试
+4. 确保所有检查通过:
+
+   ```bash
+   cargo fmt
+   cargo clippy
+   cargo test
+   python3 tests/scripts/validate_annotations.py --dry-run
+   ```
+
+5. 提交更改（遵循提交规范，见第7节）
+6. 创建 Pull Request，描述变更和测试方式
+
+### Code Review 要点
+
+- 所有 `pub` API 必须有文档注释
+- 禁止 `unwrap()` 在非测试代码中使用
+- 禁止用 `as` 做不安全转换
+- 新功能必须有测试
+- 规则测试必须使用 @rule/@expect/@desc 注解格式
+
+---
+
+## 3. 项目架构 (Project Architecture)
+
+astgrep 使用 Cargo Workspace 组织，共 10 个 crate:
+
+| Crate | 职责 |
+|-------|------|
+| astgrep-core | 核心类型（Language 枚举、AstNode trait）、错误类型、配置 |
+| astgrep-ast | UniversalNode 通用 AST、visitor、builder |
+| astgrep-parser | Tree-sitter 语言适配器 + SQL 方言分发器 |
+| astgrep-matcher | 模式匹配引擎（字面量、元变量、结构化匹配） |
+| astgrep-dataflow | 污点分析、数据流、调用图、常量传播 |
+| astgrep-rules | YAML 规则解析、验证、执行引擎 |
+| astgrep-cli | 命令行界面（analyze, validate, list, init, info 等） |
+| astgrep-web | Axum REST API 服务器 + Web Playground |
+| astgrep-gui | egui 桌面应用 |
+| test-utils | 测试工具（MockAstNode, MockParser） |
+
+### 依赖方向
+
+core <- ast <- parser <- matcher <- dataflow <- rules <- cli/web/gui
+
+### 关键约定
+
+- **禁止反向依赖**: core 层零外部 IO 依赖
+- **workspace deps**: 依赖统一在根 Cargo.toml [workspace.dependencies] 定义，crate 内用 `workspace = true`
+- **重导出**: crate 根使用 `pub use module::*` 模式，导入前检查 lib.rs
+- **SQL 解析**: 使用 tree-sitter-sequel（NOT tree-sitter-sql）
+- **单个 .rs 文件**: 不超过 600 行，理想 400 行以内
+
+---
+
+## 4. 编码规范（必循规则）(Mandatory Coding Standards)
 
 > **底线要求。不遵守这些规则将直接影响代码安全、可维护性、团队协作效率或生产稳定性。必须在 Code Review 和 CI 中强制检查。**
 
@@ -152,7 +274,138 @@
 | **M-SEC-02** | 代码中禁止出现非法 Unicode 字符（如双向覆盖字符）。 | G.SEC.01 |
 
 ---
+
 ## 使用建议
 
 1. **文档一（必须遵循）**应直接写入团队的 `CONTRIBUTING.md`，并在 CI 中配置对应的检查工具（`rustfmt`、`clippy`、`cargo-deny`、`cargo-semver-checks` 等）。
 2. 文档应**每半年评审一次**，根据项目演进和 Rust 生态发展进行更新。
+
+---
+
+## 5. 测试约定 (Testing Conventions)
+
+### 自描述测试用例 (Self-Describing Test Cases)
+
+测试用例位于 `tests/categories/{category}/`，使用注解格式:
+
+#### 必需注解（文件头前 30 行）:
+
+- `@rule`: 规则 ID，如 `JAVA-SQLI-001`
+- `@expect`: 期望结果 `MATCH` 或 `NO_MATCH`
+- `@desc`: 人类可读的场景描述
+- `@dialect` (可选): SQL 方言覆盖
+
+#### 注释语法（因语言而异）:
+
+- SQL: `-- @rule GAUSSDB-001`
+- Java/JS/C++/Rust: `// @rule JAVA-SQLI-001`
+- Python/Ruby/Bash: `# @rule PY-EVAL-001`
+- XML/HTML: `<!-- @rule XML-XPATH-001 -->`
+
+#### 规则 ID 命名:
+
+`{LANG}-{CATEGORY}-{NNN}`，如 `JAVA-SQLI-001`, `JS-XSS-003`, `GAUSSDB-TYPE-001`
+
+#### 目录结构:
+
+```
+tests/categories/{category}/
+├── rules/           # 规则 YAML 文件
+└── cases/{concern}/ # 测试用例源文件
+    ├── {RULE_ID}_{scenario}.{ext}      # 正例 (MATCH)
+    └── {RULE_ID}_{scenario}.neg.{ext}  # 反例 (NO_MATCH)
+```
+
+#### 验证注解:
+
+```bash
+python3 tests/scripts/validate_annotations.py                 # 验证全部
+python3 tests/scripts/validate_annotations.py --category gaussdb  # 按类别
+python3 tests/scripts/validate_annotations.py --dry-run       # 仅列出用例
+```
+
+### 运行测试
+
+```bash
+cargo test                          # 所有测试
+cargo test -p astgrep-core          # 单个 crate
+cargo test test_name -- --nocapture # 单个测试带输出
+```
+
+### 旧格式豁免
+
+以下目录使用旧格式（`// MATCH:` / `// ERROR:`），不强制 @rule/@expect/@desc:
+
+- tests/categories/patterns/
+- tests/categories/semgrep-core/
+- tests/categories/comparison/
+- tests/categories/semgrep-core-e2e/
+
+---
+
+## 6. 扩展指南 (Extension Guide)
+
+### 添加新语言
+
+1. 在 `crates/astgrep-core/src/types.rs` 添加 Language 枚举变体
+2. 在 `crates/astgrep-parser/src/{lang}.rs` 创建解析器
+3. 更新 `Language::extensions()` 和 `Language::from_str()`
+4. 更新解析器注册表
+5. 添加测试用例
+
+### 添加新 SQL 方言
+
+1. 在 `crates/astgrep-core/src/types.rs` 添加 SqlDialect 枚举变体
+2. 在 `crates/astgrep-parser/src/adapter/{name}/mod.rs` 创建适配器
+3. 在 `crates/astgrep-parser/src/dialect/{name}.rs` 创建方言解析器
+4. 在 `crates/astgrep-parser/src/dialect/mod.rs` 的 `dispatch()` 中注册
+5. 在方言 `parse()` 中调用 `.with_text(source)` 启用元变量支持
+6. 编写带 `dialects: [{name}]` 的规则
+
+### 添加新规则
+
+在 `tests/categories/rules/{category}/` 下创建 YAML 文件:
+
+```yaml
+rules:
+  - id: {LANG}-{CATEGORY}-{NUM}
+    name: "规则名称"
+    languages: [java]
+    patterns:
+      - pattern: "..."
+    message: "问题描述"
+    severity: WARNING
+    confidence: HIGH
+```
+
+然后在 `cases/{concern}/` 下添加带 @rule/@expect/@desc 注解的测试用例。
+
+---
+
+## 7. 提交规范 (Commit Conventions)
+
+使用约定式提交:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+类型:
+
+- `feat`: 新功能
+- `fix`: Bug 修复
+- `docs`: 文档变更
+- `test`: 测试相关
+- `refactor`: 重构
+- `chore`: 构建/工具变更
+- `ci`: CI 配置
+
+示例:
+
+```
+feat(sql): add PolarDB-MySQL dialect via sqlparser-rs
+fix(matcher): enable metavariable patterns for ogsql dialect
+docs(sql): Phase 5 dialect documentation
+```
