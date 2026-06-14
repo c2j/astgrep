@@ -13,6 +13,7 @@ mod ddl;
 mod dml;
 mod expr;
 mod features;
+pub mod validator;
 
 use astgrep_ast::UniversalNode;
 

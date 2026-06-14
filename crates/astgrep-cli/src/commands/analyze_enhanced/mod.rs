@@ -134,7 +134,36 @@ fn analyze_file_simple(
             stats.rules_executed = rules_count;
         }
     } else {
-        // No rules specified - no findings
+        // No rules specified - no findings from rules
+    }
+
+    // Run ogsql-parser semantic validators for GaussDB/OpenGauss — independent of rule files.
+    if language == Language::Sql {
+        if let Some(dialect) = config.sql_dialect {
+            if matches!(
+                dialect,
+                astgrep_core::SqlDialect::GaussDB | astgrep_core::SqlDialect::OpenGauss
+            ) {
+                let validation_findings =
+                    astgrep_parser::adapter::ogsql::validator::validate_gaussdb_sql(&source_code);
+                for vf in validation_findings {
+                    findings.push(Finding {
+                        rule_id: vf.rule_id.to_string(),
+                        message: vf.message,
+                        severity: crate::output::analysis::Severity::Error,
+                        confidence: crate::output::analysis::Confidence::High,
+                        location: crate::output::analysis::Location {
+                            file: file_path.clone(),
+                            start_line: vf.line,
+                            start_column: vf.column,
+                            end_line: vf.line,
+                            end_column: vf.column,
+                        },
+                        fix: None,
+                    });
+                }
+            }
+        }
     }
 
     Ok(())
