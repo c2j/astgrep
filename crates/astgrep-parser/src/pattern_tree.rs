@@ -567,9 +567,13 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                         }
                         if k < chars.len() && chars[k] == ')' {
                             // (TYPE $NAME) → TypedMetavar
+                            let placeholder_type: String = type_name
+                                .chars()
+                                .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+                                .collect();
                             let placeholder = format!(
                                 "{}{}{}_t_{}{}",
-                                MG_PREFIX, name, MG_SUFFIX, type_name, MG_SUFFIX
+                                MG_PREFIX, name, MG_SUFFIX, placeholder_type, MG_SUFFIX
                             );
                             meta_map.insert(
                                 placeholder.clone(),
@@ -633,9 +637,13 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                     }
                     if k > type_start {
                         let type_name: String = chars[type_start..k].iter().collect();
+                        let placeholder_type: String = type_name
+                            .chars()
+                            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+                            .collect();
                         let placeholder = format!(
                             "{}{}{}_t_{}{}",
-                            MG_PREFIX, name, MG_SUFFIX, type_name, MG_SUFFIX
+                            MG_PREFIX, name, MG_SUFFIX, placeholder_type, MG_SUFFIX
                         );
                         meta_map.insert(
                             placeholder.clone(),
