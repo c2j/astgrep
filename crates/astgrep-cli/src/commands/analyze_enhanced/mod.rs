@@ -140,8 +140,12 @@ fn analyze_file_simple(
     // Run ogsql-parser semantic validators for GaussDB/OpenGauss — independent of rule files.
     if language == Language::Sql {
         if let Some(dialect) = config.sql_dialect {
-            if matches!(dialect, astgrep_core::SqlDialect::GaussDB | astgrep_core::SqlDialect::OpenGauss) {
-                let validation_findings = astgrep_parser::adapter::ogsql::validator::validate_gaussdb_sql(&source_code);
+            if matches!(
+                dialect,
+                astgrep_core::SqlDialect::GaussDB | astgrep_core::SqlDialect::OpenGauss
+            ) {
+                let validation_findings =
+                    astgrep_parser::adapter::ogsql::validator::validate_gaussdb_sql(&source_code);
                 for vf in validation_findings {
                     findings.push(Finding {
                         rule_id: vf.rule_id.to_string(),

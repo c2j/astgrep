@@ -70,7 +70,9 @@ impl SqlDialectParser for GaussDBDialect {
                 reason: e.to_string(),
             }
         })?;
-        Ok(Box::new(wrap_statements(nodes)))
+        Ok(Box::new(
+            wrap_statements(nodes).with_text(source.to_string()),
+        ))
     }
 
     fn supports_file(&self, file_path: &Path) -> bool {

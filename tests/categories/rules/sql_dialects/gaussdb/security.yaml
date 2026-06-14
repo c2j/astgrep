@@ -25,3 +25,33 @@ rules:
     confidence: HIGH
     metadata:
       category: performance
+
+  - id: GAUSSDB-SEC-002
+    name: "UPDATE 缺少 WHERE 子句"
+    description: "不带 WHERE 的 UPDATE 会更新全表数据，可能导致数据丢失"
+    languages: [sql]
+    dialects: [gaussdb, opengauss, standard]
+    patterns:
+      - pattern: "UPDATE $T SET $S"
+      - pattern-not: "UPDATE $T SET $S WHERE $W"
+    message: "UPDATE 语句缺少 WHERE 子句，将更新全表数据"
+    severity: WARNING
+    confidence: HIGH
+    metadata:
+      category: security
+      cwe: "CWE-1106"
+
+  - id: GAUSSDB-SEC-003
+    name: "DELETE 缺少 WHERE 子句"
+    description: "不带 WHERE 的 DELETE 会清空全表数据，极其危险"
+    languages: [sql]
+    dialects: [gaussdb, opengauss, standard]
+    patterns:
+      - pattern: "DELETE FROM $T"
+      - pattern-not: "DELETE FROM $T WHERE $W"
+    message: "DELETE 语句缺少 WHERE 子句，将删除全表数据"
+    severity: ERROR
+    confidence: HIGH
+    metadata:
+      category: security
+      cwe: "CWE-1106"
