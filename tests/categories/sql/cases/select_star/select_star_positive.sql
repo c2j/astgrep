@@ -1,5 +1,7 @@
--- SELECT * Usage Test Cases
--- This file contains examples of SELECT * usage and best practices
+-- @rule select-star-001
+-- @desc select_star security test cases
+-- @expect MATCH
+
 
 -- ============================================================================
 -- 1. Basic SELECT * Issues

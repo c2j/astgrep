@@ -1,5 +1,7 @@
--- Missing WHERE Clause Test Cases
--- This file contains examples of dangerous UPDATE/DELETE without WHERE clauses
+-- @rule missing-where-001
+-- @desc missing_where security test cases
+-- @expect MATCH
+
 
 -- ============================================================================
 -- 1. DELETE without WHERE

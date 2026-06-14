@@ -1,5 +1,7 @@
--- Privilege Escalation Test Cases
--- This file contains examples of excessive privilege grants and security issues
+-- @rule privilege-escalation-001
+-- @desc privilege_escalation security test cases
+-- @expect MATCH
+
 
 -- ============================================================================
 -- 1. GRANT ALL PRIVILEGES

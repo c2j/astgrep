@@ -1,5 +1,7 @@
--- Information Disclosure Test Cases
--- This file contains examples of information gathering queries
+-- @rule information-disclosure-001
+-- @desc information_disclosure security test cases
+-- @expect MATCH
+
 
 -- ============================================================================
 -- 1. System Information Functions

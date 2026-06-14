@@ -1,5 +1,7 @@
--- SQL Injection Vulnerability Test Cases
--- This file contains examples of SQL injection vulnerabilities and safe alternatives
+-- @rule sql-injection-001
+-- @desc sql_injection security test cases
+-- @expect MATCH
+
 
 -- ============================================================================
 -- 1. Basic String Concatenation Injection

@@ -1,5 +1,7 @@
--- Weak Encryption Test Cases
--- This file contains examples of weak cryptographic algorithms in SQL
+-- @rule weak-encryption-001
+-- @desc weak_encryption security test cases
+-- @expect MATCH
+
 
 -- ============================================================================
 -- 1. MD5 Hashing
