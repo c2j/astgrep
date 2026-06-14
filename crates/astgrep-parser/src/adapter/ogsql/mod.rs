@@ -4,11 +4,14 @@
 //! openGauss/GaussDB (537 commits, 1646 unit tests, 1409 openGauss regression
 //! tests passing).
 //!
-//! Phase 2.1 (this file): scaffolding + SELECT POC. Full DML/DDL mapping is
-//! split into sibling files (dml.rs, ddl.rs, features.rs) in Tasks 2.2–2.4 to
-//! comply with M-ARCH-03 (file size ≤ 600 lines).
+//! Phase 2.2: DML statements (SELECT/INSERT/UPDATE/DELETE/MERGE) are mapped in
+//! sibling files `dml.rs` and `expr.rs`. Other statement variants return
+//! `UnsupportedStatement` and will be handled in Phase 2.3–2.4.
 
-use astgrep_ast::{AstBuilder, UniversalNode};
+mod dml;
+mod expr;
+
+use astgrep_ast::UniversalNode;
 
 /// Error type for ogsql → UniversalNode conversion.
 ///
@@ -70,22 +73,27 @@ impl OgsqlAdapter {
         stmt: &ogsql_parser::ast::Statement,
     ) -> Result<UniversalNode, OgsqlAdapterError> {
         match stmt {
-            ogsql_parser::ast::Statement::Select(ref spanned) => {
-                // Spanned<T> implements Deref<Target = T>, so we can pass
-                // &SelectStatement directly to convert_select.
-                Self::convert_select(spanned)
+            // DML: dispatched to dml.rs (Spanned<T> auto-derefs to T)
+            ogsql_parser::ast::Statement::Select(ref s) => dml::convert_select(s),
+            ogsql_parser::ast::Statement::Insert(ref s) => dml::convert_insert(s),
+            ogsql_parser::ast::Statement::Update(ref s) => dml::convert_update(s),
+            ogsql_parser::ast::Statement::Delete(ref s) => dml::convert_delete(s),
+            ogsql_parser::ast::Statement::Merge(ref s) => dml::convert_merge(s),
+            // Multi-table insert not yet supported
+            ogsql_parser::ast::Statement::InsertAll(_) => {
+                Err(OgsqlAdapterError::UnsupportedStatement {
+                    variant: "InsertAll",
+                })
             }
+            ogsql_parser::ast::Statement::InsertFirst(_) => {
+                Err(OgsqlAdapterError::UnsupportedStatement {
+                    variant: "InsertFirst",
+                })
+            }
+            // Everything else is unsupported (DDL, TCL, utility statements for Phase 2.3–2.4)
             other => {
-                // POC: map known variant names for visible error messages
-                // so we can track mapping work needed in Tasks 2.2–2.4.
-                #[allow(clippy::match_same_arms)]
                 let variant = match other {
-                    ogsql_parser::ast::Statement::Insert(_) => "Insert",
-                    ogsql_parser::ast::Statement::InsertAll(_) => "InsertAll",
-                    ogsql_parser::ast::Statement::InsertFirst(_) => "InsertFirst",
-                    ogsql_parser::ast::Statement::Update(_) => "Update",
-                    ogsql_parser::ast::Statement::Delete(_) => "Delete",
-                    ogsql_parser::ast::Statement::Merge(_) => "Merge",
+                    ogsql_parser::ast::Statement::Replace(_) => "Replace",
                     ogsql_parser::ast::Statement::CreateTable(_) => "CreateTable",
                     ogsql_parser::ast::Statement::CreateTableAs(_) => "CreateTableAs",
                     ogsql_parser::ast::Statement::CreateIndex(_) => "CreateIndex",
@@ -103,24 +111,11 @@ impl OgsqlAdapter {
                     ogsql_parser::ast::Statement::Truncate(_) => "Truncate",
                     ogsql_parser::ast::Statement::Copy(_) => "Copy",
                     ogsql_parser::ast::Statement::Explain(_) => "Explain",
-                    // PredictBy is not a Statement variant; use the actual name.
                     _ => "Other",
                 };
                 Err(OgsqlAdapterError::UnsupportedStatement { variant })
             }
         }
-    }
-
-    fn convert_select(
-        select: &ogsql_parser::ast::SelectStatement,
-    ) -> Result<UniversalNode, OgsqlAdapterError> {
-        // POC: minimal conversion — just wrap in a SelectStatement node.
-        // Full field mapping (columns, from, where, group_by, etc.) is Task 2.2.
-        //
-        // Use Debug formatting to capture the structure for inspection.
-        let debug_repr = format!("{select:#?}");
-        let node = AstBuilder::select_statement().with_text(debug_repr);
-        Ok(node)
     }
 }
 
@@ -140,10 +135,10 @@ mod tests {
             "select_statement",
             "expected select_statement node"
         );
-        // Should have text from the debug representation
+        // Should have tables attribute (not just debug text)
         assert!(
-            nodes[0].text().is_some(),
-            "expected text on the select node"
+            nodes[0].get_attribute("tables").is_some(),
+            "expected tables attribute on select node"
         );
     }
 
@@ -158,18 +153,12 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_returns_unsupported() {
+    fn test_insert_now_supported() {
         let result = OgsqlAdapter::parse_to_universal("INSERT INTO t VALUES (1)");
-        assert!(
-            result.is_err(),
-            "expected error for unsupported Insert, got: {result:?}"
-        );
-        match result.unwrap_err() {
-            OgsqlAdapterError::UnsupportedStatement { variant } => {
-                assert_eq!(variant, "Insert");
-            }
-            other => panic!("expected UnsupportedStatement, got: {other:?}"),
-        }
+        assert!(result.is_ok(), "expected ok for Insert, got: {result:?}");
+        let nodes = result.unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].node_type(), "insert_statement");
     }
 
     #[test]
@@ -193,18 +182,45 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_returns_unsupported() {
+    fn test_merge_now_supported() {
         let result = OgsqlAdapter::parse_to_universal(
             "MERGE INTO t USING s ON t.id = s.id \
              WHEN MATCHED THEN UPDATE SET t.x = s.x",
         );
-        assert!(
-            result.is_err(),
-            "expected error for unsupported Merge, got: {result:?}"
+        assert!(result.is_ok(), "expected ok for Merge, got: {result:?}");
+        let nodes = result.unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].node_type(), "merge_statement");
+    }
+
+    #[test]
+    fn test_update_now_supported() {
+        let result = OgsqlAdapter::parse_to_universal("UPDATE t SET x = 1");
+        assert!(result.is_ok(), "expected ok for Update, got: {result:?}");
+        let nodes = result.unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].node_type(), "update_statement");
+    }
+
+    #[test]
+    fn test_delete_now_supported() {
+        let result = OgsqlAdapter::parse_to_universal("DELETE FROM t");
+        assert!(result.is_ok(), "expected ok for Delete, got: {result:?}");
+        let nodes = result.unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].node_type(), "delete_statement");
+    }
+
+    #[test]
+    fn test_insert_all_still_unsupported() {
+        // Multi-table INSERT is not yet supported
+        let result = OgsqlAdapter::parse_to_universal(
+            "INSERT ALL INTO t1 VALUES (1) INTO t2 VALUES (2) SELECT * FROM dual",
         );
+        assert!(result.is_err(), "expected error for InsertAll");
         match result.unwrap_err() {
             OgsqlAdapterError::UnsupportedStatement { variant } => {
-                assert_eq!(variant, "Merge");
+                assert_eq!(variant, "InsertAll");
             }
             other => panic!("expected UnsupportedStatement, got: {other:?}"),
         }

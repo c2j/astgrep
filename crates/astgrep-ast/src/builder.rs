@@ -335,6 +335,11 @@ impl AstBuilder {
         UniversalNode::new(NodeType::DeleteStatement)
     }
 
+    /// Create a MERGE statement
+    pub fn merge_statement() -> UniversalNode {
+        UniversalNode::new(NodeType::MergeStatement)
+    }
+
     /// Create a CREATE statement
     pub fn create_statement(object_type: &str) -> UniversalNode {
         UniversalNode::new(NodeType::CreateStatement)
