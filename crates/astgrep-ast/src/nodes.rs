@@ -97,6 +97,11 @@ pub enum NodeType {
     DropStatement,
     AlterStatement,
 
+    // GaussDB-specific syntax nodes
+    PredictStatement,
+    TimecapsuleStatement,
+    ShrinkStatement,
+
     // Bash-specific nodes
     Shebang,
     ExportStatement,
@@ -174,6 +179,9 @@ impl NodeType {
             NodeType::CreatePackageStatement => "create_package_statement",
             NodeType::DropStatement => "drop_statement",
             NodeType::AlterStatement => "alter_statement",
+            NodeType::PredictStatement => "predict_statement",
+            NodeType::TimecapsuleStatement => "timecapsule_statement",
+            NodeType::ShrinkStatement => "shrink_statement",
             NodeType::Shebang => "shebang",
             NodeType::ExportStatement => "export_statement",
             NodeType::SourceStatement => "source_statement",

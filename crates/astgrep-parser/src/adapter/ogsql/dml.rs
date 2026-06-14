@@ -55,6 +55,9 @@ pub fn convert_select(
         node = node.with_metadata("has_having".into(), "true".into());
     }
 
+    // Attach plan hints from `/*+ ... */` comments
+    let node = super::features::add_plan_hints(node, &select.hints);
+
     Ok(node)
 }
 
@@ -129,6 +132,9 @@ pub fn convert_insert(
     if insert.with.is_some() {
         node = node.with_metadata("has_cte".into(), "true".into());
     }
+
+    // Attach plan hints from `/*+ ... */` comments
+    let node = super::features::add_plan_hints(node, &insert.hints);
 
     Ok(node)
 }

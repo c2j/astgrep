@@ -12,6 +12,7 @@
 mod ddl;
 mod dml;
 mod expr;
+mod features;
 
 use astgrep_ast::UniversalNode;
 
@@ -71,6 +72,14 @@ impl OgsqlAdapter {
         statements.iter().map(Self::convert_statement).collect()
     }
 
+    /// Convert a single ogsql statement to UniversalNode.
+    /// Public for use by submodule tests (features.rs, dml.rs, ddl.rs).
+    pub fn convert_statement_for_test(
+        stmt: &ogsql_parser::ast::Statement,
+    ) -> Result<UniversalNode, OgsqlAdapterError> {
+        Self::convert_statement(stmt)
+    }
+
     fn convert_statement(
         stmt: &ogsql_parser::ast::Statement,
     ) -> Result<UniversalNode, OgsqlAdapterError> {
@@ -107,6 +116,11 @@ impl OgsqlAdapter {
             ogsql_parser::ast::Statement::CreatePackage(ref s) => ddl::convert_create_package(s),
             ogsql_parser::ast::Statement::Drop(ref s) => ddl::convert_drop(s),
             ogsql_parser::ast::Statement::AlterTable(ref s) => ddl::convert_alter_table(s),
+
+            // GaussDB-specific features (Phase 2.4)
+            ogsql_parser::ast::Statement::PredictBy(ref s) => features::convert_predict_by(s),
+            ogsql_parser::ast::Statement::TimeCapsule(ref s) => features::convert_timecapsule(s),
+            ogsql_parser::ast::Statement::Shrink(ref s) => features::convert_shrink(s),
 
             // Still unsupported (TCL, utility statements, remaining DDL for Phase 2.4)
             other => {
