@@ -45,7 +45,7 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 | SQL dialect rules | `tests/categories/rules/sql_dialects/{gaussdb,polardb_mysql}/` | Dialect-specific YAML rules |
 | Error types | `crates/astgrep-core/src/error.rs` | `AnalysisError` enum with thiserror |
 | Config | `crates/astgrep-core/src/config.rs` | AnalysisConfig, SQL statement boundary toggle |
-| Test cases | `tests/categories/patterns/{lang}/` | .sgrep + target file pairs, `// MATCH:` / `// ERROR:` annotations |
+| Test cases | `tests/categories/{category}/cases/{concern}/` | `@rule`/`@expect`/`@desc` annotations; see `tests/CONVENTIONS.md`. Legacy semgrep-core tests in `patterns/` use `// MATCH:` format |
 
 ## Commands
 
@@ -71,7 +71,7 @@ cargo run -- analyze --format sarif -o results.sarif  # SARIF output
 - **Re-exports** at crate root: `pub use module::*` pattern used heavily — check `lib.rs` before importing from submodules
 - **Tree-sitter version**: 0.25 for most grammars, 0.23.5 for Java, 0.3.11 for sequel (SQL)
 - **Release profile**: LTO=true, codegen-units=1, panic=abort — benchmark before merging perf-sensitive changes
-- **Test infrastructure**: Tests follow semgrep-core format — `.sgrep` pattern files + target source files with `// MATCH:` / `// ERROR:` inline annotations
+- **Test infrastructure**: Rule-driven categories follow self-describing pattern in `tests/CONVENTIONS.md` (`@rule`/`@expect`/`@desc` annotations + `rules/`+`cases/` layout). Validate with `python3 tests/scripts/validate_annotations.py`. Legacy semgrep-core tests in `patterns/`, `semgrep-core/` use `// MATCH:` / `// ERROR:` format — see `tests/README.md`.
 - **SQL statement boundary**: Configurable via CLI `--sql-statement-boundary` flag or YAML `options.sql_statement_boundary`
 - **Pre-commit hooks**: Run `lefthook install` after cloning. Hooks enforce fmt + clippy on commit, full test + audit on push.
 - **No CI/CD** pipeline yet — manual validation via `cargo test`
@@ -88,7 +88,7 @@ cargo run -- analyze --format sarif -o results.sarif  # SARIF output
 - Do NOT use `tree-sitter-sql` — use `tree-sitter-sequel` for SQL parsing
 - Do NOT add dependencies directly to crate Cargo.toml — add to workspace deps first, then `workspace = true`
 - Do NOT modify `Language` enum without also updating parser registry + `Language::extensions()` + `Language::from_str()`
-- Do NOT write tests without `// MATCH:` or `// ERROR:` annotations in target files
+- Do NOT write tests without annotations — use `@rule`/`@expect`/`@desc` for rule-driven tests (see `tests/CONVENTIONS.md`), or `// MATCH:` / `// ERROR:` for semgrep-core legacy tests
 - Do NOT use `as any`, `unwrap()` in non-test code
 - Do NOT suppress warnings with `#[allow(...)]` without a comment explaining why
 
