@@ -3,6 +3,7 @@
 use ogsql_parser::{validate_merge_semantics, MergeSemanticErrorKind, Parser};
 
 /// A validation finding from ogsql-parser's semantic analyzers.
+#[non_exhaustive]
 pub struct GaussDBValidationFinding {
     pub rule_id: &'static str,
     pub message: String,
@@ -30,14 +31,14 @@ pub fn validate_gaussdb_sql(sql: &str) -> Vec<GaussDBValidationFinding> {
             let (rule_id, msg) = match err.kind {
                 MergeSemanticErrorKind::DeleteNotSupported => (
                     "GAUSSDB-MERGE-001",
-                    "GaussDB 不支持 MERGE INTO ... WHEN MATCHED THEN DELETE",
+                    "GaussDB does not support MERGE INTO ... WHEN MATCHED THEN DELETE",
                 ),
                 MergeSemanticErrorKind::OnColumnUpdated => (
                     "GAUSSDB-MERGE-002",
-                    "MERGE INTO 的 ON 子句中引用的列不能被 UPDATE 修改",
+                    "Columns referenced in MERGE INTO ON clause cannot be modified by UPDATE",
                 ),
                 MergeSemanticErrorKind::DualTableNotSupported => {
-                    ("GAUSSDB-MERGE-003", "GaussDB 的 MERGE INTO 不支持 DUAL 表")
+                    ("GAUSSDB-MERGE-003", "GaussDB MERGE INTO does not support DUAL table")
                 }
             };
             let message = match err.detail {

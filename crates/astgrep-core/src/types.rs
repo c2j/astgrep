@@ -233,15 +233,16 @@ impl Default for AnalysisConfig {
 #[non_exhaustive]
 pub enum SqlDialect {
     /// 通用 SQL（tree-sitter-sequel）
+    #[serde(alias = "sql")]
     Standard,
     /// 华为 GaussDB 集中式
-    #[serde(rename = "gaussdb")]
+    #[serde(rename = "gaussdb", alias = "gauss")]
     GaussDB,
     /// 开源 OpenGauss（默认集中式，可切换分布式）
-    #[serde(rename = "opengauss")]
+    #[serde(rename = "opengauss", alias = "og")]
     OpenGauss,
     /// 阿里 PolarDB MySQL 兼容版
-    #[serde(rename = "polardb-mysql")]
+    #[serde(rename = "polardb-mysql", alias = "polardb")]
     PolarDBMySQL,
 }
 

@@ -5,6 +5,7 @@ A high-performance, multi-language static code analysis tool for security vulner
 ## Features
 
 - **Multi-language Support**: Java, JavaScript, Python, SQL, Bash
+- **Multi-dialect SQL**: GaussDB, OpenGauss, PolarDB-MySQL, Standard SQL — parsed through dialect-specific dispatch
 - **Security-focused**: Detects injection vulnerabilities, XSS, authentication issues, and more
 - **High Performance**: Built in Rust for speed and memory safety
 - **Flexible Rules**: YAML-based declarative rule definitions
@@ -33,6 +34,12 @@ cargo install --path .
 ```bash
 # Analyze current directory
 astgrep analyze
+
+# Analyze with GaussDB SQL dialect
+astgrep analyze --dialect gaussdb --rules rules/gaussdb/ *.sql
+
+# Analyze with PolarDB-MySQL dialect
+astgrep analyze --dialect polardb-mysql --rules rules/polardb/ *.sql
 
 # Analyze specific files/directories
 astgrep analyze src/ tests/

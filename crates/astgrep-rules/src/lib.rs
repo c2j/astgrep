@@ -232,13 +232,19 @@ impl Default for RuleEngine {
 /// which handles type constraint extraction and post-filtering.
 fn pattern_has_typed_metavar(pattern: &crate::types::Pattern) -> bool {
     use crate::types::PatternType;
-    let pattern_str = match &pattern.pattern_type {
-        PatternType::Simple(s) => s.as_str(),
-        _ => return false,
-    };
-    // Same regex as in executor/core/mod.rs::preprocess_typed_metavariables
-    let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)");
-    re.map(|r| r.is_match(pattern_str)).unwrap_or(false)
+    match &pattern.pattern_type {
+        PatternType::Simple(s) => {
+            let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)");
+            re.map(|r| r.is_match(s)).unwrap_or(false)
+        }
+        PatternType::Either(patterns)
+        | PatternType::All(patterns)
+        | PatternType::Any(patterns) => patterns.iter().any(pattern_has_typed_metavar),
+        PatternType::Inside(pattern)
+        | PatternType::NotInside(pattern)
+        | PatternType::Not(pattern) => pattern_has_typed_metavar(pattern),
+        PatternType::Regex(_) | PatternType::NotRegex(_) => false,
+    }
 }
 
 #[cfg(test)]

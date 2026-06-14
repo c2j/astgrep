@@ -1155,13 +1155,7 @@ impl AdvancedRuleExecutor {
                             if env.is_tainted(normalized) {
                                 (true, normalized.to_string())
                             } else {
-                                // Check if any tainted var appears in sink text
-                                let found = env
-                                    .tainted_vars()
-                                    .iter()
-                                    .find(|tv| contains_var_reference(&sink_text, tv))
-                                    .cloned();
-                                (found.is_some(), found.unwrap_or_default())
+                                (false, String::new())
                             }
                         } else {
                             let found = env

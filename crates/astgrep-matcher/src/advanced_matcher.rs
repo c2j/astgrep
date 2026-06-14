@@ -161,7 +161,9 @@ impl AdvancedSemgrepMatcher {
         }
 
         let mut matches = Vec::new();
-        let _ = self.find_matches_recursive(pattern, root, &mut matches, 0);
+        if let Err(e) = self.find_matches_recursive(pattern, root, &mut matches, 0) {
+            tracing::debug!(error = ?e, "recursive matcher error, falling back to tree/text matchers");
+        }
 
         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
             if let Some(lang) = self.language_hint {
@@ -187,7 +189,9 @@ impl AdvancedSemgrepMatcher {
                         && self.pattern_has_fqn(&pattern_str))
                 {
                     let mut text_matches = Vec::new();
-                    let _ = self.find_matches_recursive(pattern, root, &mut text_matches, 0);
+                    if let Err(e) = self.find_matches_recursive(pattern, root, &mut text_matches, 0) {
+                        tracing::debug!(error = ?e, "text-based recursive matcher error");
+                    }
                     for r in text_matches {
                         let is_new = !matches
                             .iter()
@@ -570,14 +574,18 @@ impl AdvancedSemgrepMatcher {
         if let Some(node_loc) = node.location() {
             if let PatternType::Simple(inside_str) = &inner_pattern.pattern_type {
                 let inside_matches = self.get_inside_pattern_matches(inside_str)?;
-                for (match_loc, bindings) in &inside_matches {
+                'outer: for (match_loc, bindings) in &inside_matches {
                     if self.location_contains(match_loc, &node_loc) {
                         for (var_name, value) in bindings {
                             let normalized_name =
                                 var_name.strip_prefix('$').unwrap_or(var_name).to_string();
-                            let _ = self
+                            match self
                                 .metavar_manager
-                                .bind(normalized_name, value.clone(), node);
+                                .bind(normalized_name, value.clone(), node)
+                            {
+                                Ok(true) => {}
+                                _ => continue 'outer,
+                            }
                         }
                         return Ok(true);
                     }
@@ -655,22 +663,7 @@ impl AdvancedSemgrepMatcher {
     ) -> bool {
         let (os, oc, oe, oec) = *outer;
         let (is, ic, ie, iec) = *inner;
-        if os < is {
-            return true;
-        }
-        if os > is {
-            return false;
-        }
-        if oc <= ic {
-            if oe > ie {
-                return true;
-            }
-            if oe < ie {
-                return false;
-            }
-            return oec >= iec;
-        }
-        false
+        (os, oc) <= (is, ic) && (oe, oec) >= (ie, iec)
     }
 
     fn check_ancestor_contains(
