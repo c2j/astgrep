@@ -8,6 +8,7 @@
 
 pub mod gaussdb;
 pub mod opengauss;
+pub mod polardb_mysql;
 
 use astgrep_ast::{NodeType, UniversalNode};
 use astgrep_core::{LanguageParser, SqlDialect};
@@ -75,9 +76,7 @@ pub fn dispatch(dialect: SqlDialect) -> Box<dyn SqlDialectParser> {
         SqlDialect::Standard => Box::new(StandardDialectParser::new()),
         SqlDialect::GaussDB => Box::new(gaussdb::GaussDBDialect::new()),
         SqlDialect::OpenGauss => Box::new(opengauss::OpenGaussDialect::new()),
-        SqlDialect::PolarDBMySQL => {
-            Box::new(StubDialectParser::new(SqlDialect::PolarDBMySQL, "Phase 4"))
-        }
+        SqlDialect::PolarDBMySQL => Box::new(polardb_mysql::PolarDBMySQLDialect::new()),
         _ => Box::new(StubDialectParser::new(dialect, "TBD")),
     }
 }
@@ -245,20 +244,15 @@ mod tests {
     }
 
     #[test]
-    fn test_dispatch_polardb_returns_stub_with_phase4_message() {
+    fn test_dispatch_polardb_returns_real_parser() {
         let parser = dispatch(SqlDialect::PolarDBMySQL);
         assert_eq!(parser.dialect(), SqlDialect::PolarDBMySQL);
         let result = parser.parse("SELECT 1", Path::new("test.sql"));
-        match result {
-            Err(DialectParseError::NotYetImplemented {
-                dialect,
-                planned_phase,
-            }) => {
-                assert_eq!(dialect, SqlDialect::PolarDBMySQL);
-                assert_eq!(planned_phase, "Phase 4");
-            }
-            _ => panic!("expected NotYetImplemented, got unexpected result"),
-        }
+        assert!(
+            result.is_ok(),
+            "PolarDB should parse SELECT: {:?}",
+            result.err()
+        );
     }
 
     #[test]
