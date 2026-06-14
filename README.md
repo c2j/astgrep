@@ -5,7 +5,7 @@ A high-performance, multi-language static code analysis tool for security vulner
 ## Features
 
 - **Multi-language Support**: Java, JavaScript, Python, SQL, Bash
-- **Multi-dialect SQL**: GaussDB, OpenGauss, PolarDB-MySQL, Standard SQL — each with dedicated parser
+- **Multi-dialect SQL**: GaussDB, OpenGauss, PolarDB-MySQL, Standard SQL — parsed through dialect-specific dispatch
 - **Security-focused**: Detects injection vulnerabilities, XSS, authentication issues, and more
 - **High Performance**: Built in Rust for speed and memory safety
 - **Flexible Rules**: YAML-based declarative rule definitions

@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_stub_parser_supports_sql_files() {
-        let parser = dispatch(SqlDialect::GaussDB);
+        let parser = StubDialectParser::new(SqlDialect::Standard, "TBD");
         assert!(parser.supports_file(Path::new("query.sql")));
         assert!(!parser.supports_file(Path::new("code.java")));
     }

@@ -1,6 +1,6 @@
 //! PolarDB-MySQL dialect parser — delegates to SqlparserAdapter.
 
-use crate::adapter::sqlparser::SqlparserAdapter;
+use crate::adapter::sqlparser::{SqlparserAdapter, SqlparserAdapterError};
 use crate::dialect::{wrap_statements, DialectParseError, SqlDialectParser};
 use astgrep_core::{AstNode, SqlDialect};
 use std::path::Path;
@@ -35,11 +35,20 @@ impl SqlDialectParser for PolarDBMySQLDialect {
     ) -> Result<Box<dyn AstNode>, DialectParseError> {
         let node = match SqlparserAdapter::parse_to_universal(source) {
             Ok(nodes) => wrap_statements(nodes),
-            Err(_) => {
-                // sqlparser-rs cannot parse PolarDB-specific syntax (GLOBAL INDEX,
-                // DBPARTITION, etc.). Fall back to a bare Program node with source
-                // text so literal/text-based pattern matching still works.
+            Err(SqlparserAdapterError::UnsupportedStatement(_)) => {
                 astgrep_ast::UniversalNode::new(astgrep_ast::NodeType::Program)
+            }
+            Err(SqlparserAdapterError::Parse(reason)) => {
+                return Err(DialectParseError::ParseFailed {
+                    dialect: SqlDialect::PolarDBMySQL,
+                    reason,
+                });
+            }
+            Err(_) => {
+                return Err(DialectParseError::ParseFailed {
+                    dialect: SqlDialect::PolarDBMySQL,
+                    reason: "unknown sqlparser error".to_string(),
+                });
             }
         };
         let node = node.with_text(source.to_string());

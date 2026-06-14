@@ -541,7 +541,7 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
         // Check for typed metavar syntax: (TYPE $NAME)
         if chars[i] == '(' {
             let mut j = i + 1;
-            while j < chars.len() && chars[j] == ' ' {
+            while j < chars.len() && chars[j].is_whitespace() {
                 j += 1;
             }
             let type_start = j;
@@ -552,7 +552,7 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
             }
             if j > type_start {
                 let type_name: String = chars[type_start..j].iter().collect();
-                while j < chars.len() && chars[j] == ' ' {
+                while j < chars.len() && chars[j].is_whitespace() {
                     j += 1;
                 }
                 if j < chars.len() && chars[j] == '$' {
@@ -562,7 +562,7 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                     }
                     if k > j + 1 {
                         let name: String = chars[j + 1..k].iter().collect();
-                        while k < chars.len() && chars[k] == ' ' {
+                        while k < chars.len() && chars[k].is_whitespace() {
                             k += 1;
                         }
                         if k < chars.len() && chars[k] == ')' {
@@ -622,7 +622,7 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                 if j < chars.len() && chars[j] == ':' {
                     let mut k = j + 1;
                     // skip whitespace after colon
-                    while k < chars.len() && chars[k] == ' ' {
+                    while k < chars.len() && chars[k].is_whitespace() {
                         k += 1;
                     }
                     let type_start = k;

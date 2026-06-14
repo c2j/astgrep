@@ -261,7 +261,7 @@ fn convert_literal(lit: &ogsql_parser::Literal) -> UniversalNode {
         Literal::NationalString(s) => AstBuilder::sql_expression(&format!("N'{}'", s)),
         Literal::DollarString { tag, body } => {
             let tag_str = tag.as_deref().unwrap_or("");
-            AstBuilder::sql_expression(&format!("${}${}$", tag_str, body))
+            AstBuilder::sql_expression(&format!("${}${}${}$", tag_str, body, tag_str))
                 .with_metadata("dollar_tag".into(), tag_str.to_string())
         }
         Literal::Boolean(b) => AstBuilder::boolean_literal(*b),

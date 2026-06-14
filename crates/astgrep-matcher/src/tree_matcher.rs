@@ -1595,25 +1595,12 @@ impl MatchCtx {
                         let target_qn = target_text.trim();
                         let mut sorted_wc: Vec<&String> = self.wildcard_imports.iter().collect();
                         sorted_wc.sort_by_key(|w| -(w.len() as isize));
-                        eprintln!(
-                            "[CASE2] pattern_qn={} target_qn={} wildcards={:?}",
-                            pattern_qn, target_qn, sorted_wc
-                        );
                         for wc in &sorted_wc {
                             let prefix = format!("{}.", wc);
-                            eprintln!(
-                                "[CASE2 try] wc={} prefix={} strip={:?}",
-                                wc,
-                                prefix,
-                                pattern_qn.strip_prefix(&prefix)
-                            );
                             if let Some(remaining) = pattern_qn.strip_prefix(&prefix) {
-                                eprintln!(
-                                    "[CASE2 result] remaining={} match={}",
-                                    remaining,
-                                    remaining == target_qn
-                                );
-                                return remaining == target_qn;
+                                if remaining == target_qn {
+                                    return true;
+                                }
                             }
                         }
                     }
