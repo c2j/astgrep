@@ -1,9 +1,6 @@
--- @rule GAUSSDB-SET-001
--- @desc iBatis mapper with stored procedure call (CALL) wrapping 3-col SET subquery
--- @expect MATCH
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- @rule GAUSSDB-SET-001 -->
-<!-- @desc iBatis mapper: UPDATE SET 3 columns in dynamic SQL -->
+<!-- @desc iBatis mapper: UPDATE SET 3 columns with aggregate subquery + dynamic if -->
 <!-- @expect MATCH -->
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
