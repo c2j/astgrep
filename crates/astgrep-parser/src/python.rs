@@ -336,7 +336,6 @@ impl LanguageParser for PythonParser {
             }
         }
 
-
         let context = AdapterContext::new(
             file_path.to_string_lossy().to_string(),
             source.to_string(),

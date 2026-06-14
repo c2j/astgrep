@@ -3,8 +3,8 @@
 //! These tests verify that the parser handles arbitrary input gracefully
 //! (never panics, always returns Ok or Err).
 
-use astgrep_parser::LanguageParserRegistry;
 use astgrep_core::Language;
+use astgrep_parser::LanguageParserRegistry;
 use proptest::prelude::*;
 use std::path::Path;
 

@@ -57,7 +57,13 @@ impl TaintEnv {
     }
 
     /// Mark a variable as tainted and associate a label with it
-    pub fn taint_with_label(&mut self, var: &str, source_line: usize, source_idx: usize, label: Option<&str>) {
+    pub fn taint_with_label(
+        &mut self,
+        var: &str,
+        source_line: usize,
+        source_idx: usize,
+        label: Option<&str>,
+    ) {
         self.taint(var, source_line, source_idx);
         if let Some(lbl) = label {
             self.labels
@@ -144,14 +150,11 @@ impl TaintEnv {
     pub fn merge(&mut self, other: &TaintEnv) {
         for (var, other_state) in &other.state {
             if other_state.tainted {
-                let entry = self
-                    .state
-                    .entry(var.clone())
-                    .or_insert(TaintState {
-                        tainted: false,
-                        source_lines: HashSet::new(),
-                        source_idx: None,
-                    });
+                let entry = self.state.entry(var.clone()).or_insert(TaintState {
+                    tainted: false,
+                    source_lines: HashSet::new(),
+                    source_idx: None,
+                });
                 entry.tainted = true;
                 for line in &other_state.source_lines {
                     entry.source_lines.insert(*line);
@@ -233,11 +236,17 @@ impl TaintEnv {
     }
 
     pub fn add_label(&mut self, var: &str, label: String) {
-        self.labels.entry(var.to_string()).or_default().insert(label);
+        self.labels
+            .entry(var.to_string())
+            .or_default()
+            .insert(label);
     }
 
     pub fn add_global_label(&mut self, label: String) {
-        self.labels.entry("__global__".to_string()).or_default().insert(label);
+        self.labels
+            .entry("__global__".to_string())
+            .or_default()
+            .insert(label);
     }
 
     pub fn get_all_labels(&self) -> HashSet<String> {
@@ -277,7 +286,11 @@ pub fn find_assignment_eq(text: &str) -> Option<usize> {
     for (i, &b) in bytes.iter().enumerate() {
         if b == b'=' {
             let prev = if i > 0 { bytes[i - 1] } else { b' ' };
-            let next = if i + 1 < bytes.len() { bytes[i + 1] } else { b' ' };
+            let next = if i + 1 < bytes.len() {
+                bytes[i + 1]
+            } else {
+                b' '
+            };
             if prev != b'=' && prev != b'!' && prev != b'<' && prev != b'>' && next != b'=' {
                 return Some(i);
             }
@@ -307,16 +320,14 @@ pub fn contains_var_reference(expr: &str, var: &str) -> bool {
         return false;
     }
     for (pos, _) in expr.match_indices(var) {
-        let before_ok = pos == 0
-            || {
-                let c = expr.as_bytes()[pos - 1];
-                !c.is_ascii_alphanumeric() && c != b'_'
-            };
-        let after_ok = pos + var.len() >= expr.len()
-            || {
-                let c = expr.as_bytes()[pos + var.len()];
-                !c.is_ascii_alphanumeric() && c != b'_'
-            };
+        let before_ok = pos == 0 || {
+            let c = expr.as_bytes()[pos - 1];
+            !c.is_ascii_alphanumeric() && c != b'_'
+        };
+        let after_ok = pos + var.len() >= expr.len() || {
+            let c = expr.as_bytes()[pos + var.len()];
+            !c.is_ascii_alphanumeric() && c != b'_'
+        };
         if before_ok && after_ok {
             return true;
         }
@@ -555,11 +566,26 @@ mod tests {
     #[test]
     fn test_extract_field_path() {
         assert_eq!(extract_field_path("x"), ("x".to_string(), None));
-        assert_eq!(extract_field_path("x.a"), ("x".to_string(), Some("a".to_string())));
-        assert_eq!(extract_field_path("x.a.b"), ("x".to_string(), Some("a.b".to_string())));
-        assert_eq!(extract_field_path("x.c[i]"), ("x".to_string(), Some("c".to_string())));
-        assert_eq!(extract_field_path("x.c[i].d"), ("x".to_string(), Some("c.d".to_string())));
-        assert_eq!(extract_field_path("this.x.a"), ("x".to_string(), Some("a".to_string())));
+        assert_eq!(
+            extract_field_path("x.a"),
+            ("x".to_string(), Some("a".to_string()))
+        );
+        assert_eq!(
+            extract_field_path("x.a.b"),
+            ("x".to_string(), Some("a.b".to_string()))
+        );
+        assert_eq!(
+            extract_field_path("x.c[i]"),
+            ("x".to_string(), Some("c".to_string()))
+        );
+        assert_eq!(
+            extract_field_path("x.c[i].d"),
+            ("x".to_string(), Some("c.d".to_string()))
+        );
+        assert_eq!(
+            extract_field_path("this.x.a"),
+            ("x".to_string(), Some("a".to_string()))
+        );
     }
 
     #[test]
@@ -601,7 +627,13 @@ mod tests {
 
     #[test]
     fn test_extract_field_path_bracket_normalization() {
-        assert_eq!(extract_field_path("x.data[idx]"), ("x".to_string(), Some("data".to_string())));
-        assert_eq!(extract_field_path("x.data[0].name"), ("x".to_string(), Some("data.name".to_string())));
+        assert_eq!(
+            extract_field_path("x.data[idx]"),
+            ("x".to_string(), Some("data".to_string()))
+        );
+        assert_eq!(
+            extract_field_path("x.data[0].name"),
+            ("x".to_string(), Some("data.name".to_string()))
+        );
     }
 }

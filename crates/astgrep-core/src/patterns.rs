@@ -531,7 +531,10 @@ mod tests {
     #[test]
     fn test_semgrep_pattern_simple() {
         let pattern = SemgrepPattern::simple("$X + $Y".to_string());
-        assert_eq!(pattern.get_pattern_string().map(|s| s.as_str()), Some("$X + $Y"));
+        assert_eq!(
+            pattern.get_pattern_string().map(|s| s.as_str()),
+            Some("$X + $Y")
+        );
         assert!(pattern.conditions.is_empty());
         assert!(pattern.focus.is_none());
         assert!(pattern.metavariable_pattern.is_none());
@@ -565,7 +568,10 @@ mod tests {
     #[test]
     fn test_semgrep_pattern_regex() {
         let pattern = SemgrepPattern::regex("foo.*bar".to_string());
-        assert_eq!(pattern.get_pattern_string().map(|s| s.as_str()), Some("foo.*bar"));
+        assert_eq!(
+            pattern.get_pattern_string().map(|s| s.as_str()),
+            Some("foo.*bar")
+        );
     }
 
     #[test]
@@ -587,16 +593,17 @@ mod tests {
     #[test]
     fn test_semgrep_pattern_with_metavariable_pattern() {
         let mv = MetavariablePattern::new("$X".to_string());
-        let pattern = SemgrepPattern::simple("$X".to_string())
-            .with_metavariable_pattern(mv);
+        let pattern = SemgrepPattern::simple("$X".to_string()).with_metavariable_pattern(mv);
         assert!(pattern.metavariable_pattern.is_some());
-        assert_eq!(pattern.metavariable_pattern.as_ref().unwrap().metavariable, "$X");
+        assert_eq!(
+            pattern.metavariable_pattern.as_ref().unwrap().metavariable,
+            "$X"
+        );
     }
 
     #[test]
     fn test_semgrep_pattern_with_focus() {
-        let pattern = SemgrepPattern::simple("$X".to_string())
-            .with_focus("$X".to_string());
+        let pattern = SemgrepPattern::simple("$X".to_string()).with_focus("$X".to_string());
         assert_eq!(pattern.focus, Some(vec!["$X".to_string()]));
     }
 
@@ -604,7 +611,10 @@ mod tests {
     fn test_semgrep_pattern_with_focus_metavariables() {
         let pattern = SemgrepPattern::simple("$X".to_string())
             .with_focus_metavariables(vec!["$X".to_string(), "$Y".to_string()]);
-        assert_eq!(pattern.focus, Some(vec!["$X".to_string(), "$Y".to_string()]));
+        assert_eq!(
+            pattern.focus,
+            Some(vec!["$X".to_string(), "$Y".to_string()])
+        );
     }
 
     #[test]
@@ -620,7 +630,10 @@ mod tests {
 
     #[test]
     fn test_metavariable_pattern_with_patterns() {
-        let mv = MetavariablePattern::with_patterns("$VAR".to_string(), vec!["a".to_string(), "b".to_string()]);
+        let mv = MetavariablePattern::with_patterns(
+            "$VAR".to_string(),
+            vec!["a".to_string(), "b".to_string()],
+        );
         assert_eq!(mv.metavariable, "$VAR");
         assert_eq!(mv.patterns.len(), 2);
     }
@@ -641,7 +654,8 @@ mod tests {
 
     #[test]
     fn test_metavariable_pattern_with_type_constraint() {
-        let mv = MetavariablePattern::new("$VAR".to_string()).with_type_constraint("String".to_string());
+        let mv =
+            MetavariablePattern::new("$VAR".to_string()).with_type_constraint("String".to_string());
         assert_eq!(mv.type_constraint, Some("String".to_string()));
     }
 
@@ -730,7 +744,10 @@ mod tests {
 
     #[test]
     fn test_condition_metavariable_regex() {
-        let cond = Condition::MetavariableRegex(MetavariableRegex::new("$X".to_string(), ".*".to_string()));
+        let cond = Condition::MetavariableRegex(MetavariableRegex::new(
+            "$X".to_string(),
+            ".*".to_string(),
+        ));
         assert!(matches!(cond, Condition::MetavariableRegex(_)));
     }
 
@@ -746,7 +763,10 @@ mod tests {
 
     #[test]
     fn test_condition_metavariable_name() {
-        let cond = Condition::MetavariableName(MetavariableName::new("$X".to_string(), "foo_.*".to_string()));
+        let cond = Condition::MetavariableName(MetavariableName::new(
+            "$X".to_string(),
+            "foo_.*".to_string(),
+        ));
         assert!(matches!(cond, Condition::MetavariableName(_)));
     }
 
@@ -757,13 +777,19 @@ mod tests {
             type_analysis: None,
             complexity: None,
         };
-        let cond = Condition::MetavariableAnalysis(MetavariableAnalysisCondition::new("$X".to_string(), analysis));
+        let cond = Condition::MetavariableAnalysis(MetavariableAnalysisCondition::new(
+            "$X".to_string(),
+            analysis,
+        ));
         assert!(matches!(cond, Condition::MetavariableAnalysis(_)));
     }
 
     #[test]
     fn test_condition_metavariable_type() {
-        let cond = Condition::MetavariableType(MetavariableType::new("$X".to_string(), "String".to_string()));
+        let cond = Condition::MetavariableType(MetavariableType::new(
+            "$X".to_string(),
+            "String".to_string(),
+        ));
         assert!(matches!(cond, Condition::MetavariableType(_)));
     }
 
@@ -794,7 +820,11 @@ mod tests {
 
     #[test]
     fn test_metavariable_comparison_new() {
-        let mvc = MetavariableComparison::new("$X".to_string(), ComparisonOperator::Contains, "foo".to_string());
+        let mvc = MetavariableComparison::new(
+            "$X".to_string(),
+            ComparisonOperator::Contains,
+            "foo".to_string(),
+        );
         assert_eq!(mvc.metavariable, "$X");
         assert!(matches!(mvc.operator, ComparisonOperator::Contains));
         assert_eq!(mvc.value, "foo");
@@ -884,12 +914,24 @@ mod tests {
         use crate::AstNode;
         struct DummyNode;
         impl AstNode for DummyNode {
-            fn node_type(&self) -> &str { "dummy" }
-            fn child_count(&self) -> usize { 0 }
-            fn child(&self, _index: usize) -> Option<&dyn AstNode> { None }
-            fn location(&self) -> Option<(usize, usize, usize, usize)> { None }
-            fn text(&self) -> Option<&str> { None }
-            fn clone_node(&self) -> Box<dyn AstNode> { Box::new(DummyNode) }
+            fn node_type(&self) -> &str {
+                "dummy"
+            }
+            fn child_count(&self) -> usize {
+                0
+            }
+            fn child(&self, _index: usize) -> Option<&dyn AstNode> {
+                None
+            }
+            fn location(&self) -> Option<(usize, usize, usize, usize)> {
+                None
+            }
+            fn text(&self) -> Option<&str> {
+                None
+            }
+            fn clone_node(&self) -> Box<dyn AstNode> {
+                Box::new(DummyNode)
+            }
         }
 
         let node: Box<dyn AstNode> = Box::new(DummyNode);
@@ -904,12 +946,24 @@ mod tests {
         use crate::AstNode;
         struct DummyNode;
         impl AstNode for DummyNode {
-            fn node_type(&self) -> &str { "dummy" }
-            fn child_count(&self) -> usize { 0 }
-            fn child(&self, _index: usize) -> Option<&dyn AstNode> { None }
-            fn location(&self) -> Option<(usize, usize, usize, usize)> { None }
-            fn text(&self) -> Option<&str> { None }
-            fn clone_node(&self) -> Box<dyn AstNode> { Box::new(DummyNode) }
+            fn node_type(&self) -> &str {
+                "dummy"
+            }
+            fn child_count(&self) -> usize {
+                0
+            }
+            fn child(&self, _index: usize) -> Option<&dyn AstNode> {
+                None
+            }
+            fn location(&self) -> Option<(usize, usize, usize, usize)> {
+                None
+            }
+            fn text(&self) -> Option<&str> {
+                None
+            }
+            fn clone_node(&self) -> Box<dyn AstNode> {
+                Box::new(DummyNode)
+            }
         }
 
         let node: Box<dyn AstNode> = Box::new(DummyNode);
@@ -923,12 +977,24 @@ mod tests {
         use crate::AstNode;
         struct DummyNode;
         impl AstNode for DummyNode {
-            fn node_type(&self) -> &str { "dummy" }
-            fn child_count(&self) -> usize { 0 }
-            fn child(&self, _index: usize) -> Option<&dyn AstNode> { None }
-            fn location(&self) -> Option<(usize, usize, usize, usize)> { None }
-            fn text(&self) -> Option<&str> { None }
-            fn clone_node(&self) -> Box<dyn AstNode> { Box::new(DummyNode) }
+            fn node_type(&self) -> &str {
+                "dummy"
+            }
+            fn child_count(&self) -> usize {
+                0
+            }
+            fn child(&self, _index: usize) -> Option<&dyn AstNode> {
+                None
+            }
+            fn location(&self) -> Option<(usize, usize, usize, usize)> {
+                None
+            }
+            fn text(&self) -> Option<&str> {
+                None
+            }
+            fn clone_node(&self) -> Box<dyn AstNode> {
+                Box::new(DummyNode)
+            }
         }
 
         let node: Box<dyn AstNode> = Box::new(DummyNode);

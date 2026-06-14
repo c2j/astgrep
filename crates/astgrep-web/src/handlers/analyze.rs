@@ -19,8 +19,8 @@ use crate::{
     WebConfig, WebError, WebResult,
 };
 use astgrep_core::{Confidence, Finding as CoreFinding, Language, Severity};
-use serde_yaml::Value;
 use astgrep_rules::{RuleContext, RuleEngine};
+use serde_yaml::Value;
 
 /// Analyze code snippet
 pub async fn analyze_code(
@@ -655,12 +655,19 @@ async fn perform_code_analysis(
             .filter(|r| {
                 r.metadata
                     .get("preprocess")
-                    .map(|v| v.as_str().map(|s| s.eq_ignore_ascii_case("embedded-sql")).unwrap_or(false))
+                    .map(|v| {
+                        v.as_str()
+                            .map(|s| s.eq_ignore_ascii_case("embedded-sql"))
+                            .unwrap_or(false)
+                    })
                     .unwrap_or(false)
             })
             .filter(|r| {
                 if let Some(from) = r.metadata.get("preprocess.from") {
-                    let from_l = from.as_str().map(|s| s.to_ascii_lowercase()).unwrap_or_default();
+                    let from_l = from
+                        .as_str()
+                        .map(|s| s.to_ascii_lowercase())
+                        .unwrap_or_default();
                     (language == Language::Java && from_l.contains("java"))
                         || (language == Language::Xml && from_l.contains("xml"))
                 } else {
@@ -702,8 +709,10 @@ async fn perform_code_analysis(
                                         Value::String("embedded-sql".to_string()),
                                     );
                                     if let Some(ref c) = sn.context {
-                                        f.metadata
-                                            .insert("embedded_context".to_string(), Value::String(c.clone()));
+                                        f.metadata.insert(
+                                            "embedded_context".to_string(),
+                                            Value::String(c.clone()),
+                                        );
                                     }
                                     findings.push(f);
                                 }
@@ -753,7 +762,12 @@ async fn perform_code_analysis(
             metadata: Some(
                 f.metadata
                     .into_iter()
-                    .map(|(k, v)| (k, serde_json::Value::String(v.as_str().unwrap_or_default().to_string())))
+                    .map(|(k, v)| {
+                        (
+                            k,
+                            serde_json::Value::String(v.as_str().unwrap_or_default().to_string()),
+                        )
+                    })
                     .collect(),
             ),
             metavariable_bindings: None, // Will be populated by dataflow analysis
@@ -831,10 +845,9 @@ fn parse_language(language_str: &str) -> WebResult<Language> {
         "python" | "py" => Ok(Language::Python),
         "sql" => Ok(Language::Sql),
         "bash" | "sh" => Ok(Language::Bash),
-        "php" | "csharp" | "c#" | "cs" | "c" | "ruby" | "rb" | "kotlin" | "kt" | "swift" => Err(WebError::bad_request(&format!(
-            "Language not yet supported: {}",
-            language_str
-        ))),
+        "php" | "csharp" | "c#" | "cs" | "c" | "ruby" | "rb" | "kotlin" | "kt" | "swift" => Err(
+            WebError::bad_request(&format!("Language not yet supported: {}", language_str)),
+        ),
         "xml" => Ok(Language::Xml),
         _ => Err(WebError::bad_request(&format!(
             "Unsupported language: {}",
@@ -1221,7 +1234,10 @@ async fn perform_dataflow_analysis(
                 ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
-                    meta.insert("analysis_type".to_string(), Value::String("dataflow".to_string()));
+                    meta.insert(
+                        "analysis_type".to_string(),
+                        Value::String("dataflow".to_string()),
+                    );
                     meta.insert(
                         "vulnerability_type".to_string(),
                         Value::String("sql_injection".to_string()),
@@ -1250,8 +1266,14 @@ async fn perform_dataflow_analysis(
                 ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
-                    meta.insert("analysis_type".to_string(), Value::String("dataflow".to_string()));
-                    meta.insert("vulnerability_type".to_string(), Value::String("xss".to_string()));
+                    meta.insert(
+                        "analysis_type".to_string(),
+                        Value::String("dataflow".to_string()),
+                    );
+                    meta.insert(
+                        "vulnerability_type".to_string(),
+                        Value::String("xss".to_string()),
+                    );
                     meta
                 },
             };
@@ -1293,7 +1315,10 @@ async fn perform_security_analysis(
                 ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
-                    meta.insert("analysis_type".to_string(), Value::String("security".to_string()));
+                    meta.insert(
+                        "analysis_type".to_string(),
+                        Value::String("security".to_string()),
+                    );
                     meta.insert("category".to_string(), Value::String("secrets".to_string()));
                     meta
                 },
@@ -1317,8 +1342,14 @@ async fn perform_security_analysis(
                 ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
-                    meta.insert("analysis_type".to_string(), Value::String("security".to_string()));
-                    meta.insert("category".to_string(), Value::String("code_injection".to_string()));
+                    meta.insert(
+                        "analysis_type".to_string(),
+                        Value::String("security".to_string()),
+                    );
+                    meta.insert(
+                        "category".to_string(),
+                        Value::String("code_injection".to_string()),
+                    );
                     meta
                 },
             });
@@ -1357,8 +1388,14 @@ async fn perform_performance_analysis(
                 ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
-                    meta.insert("analysis_type".to_string(), Value::String("performance".to_string()));
-                    meta.insert("impact".to_string(), Value::String("memory_cpu".to_string()));
+                    meta.insert(
+                        "analysis_type".to_string(),
+                        Value::String("performance".to_string()),
+                    );
+                    meta.insert(
+                        "impact".to_string(),
+                        Value::String("memory_cpu".to_string()),
+                    );
                     meta
                 },
             });
@@ -1381,7 +1418,10 @@ async fn perform_performance_analysis(
                 ),
                 metadata: {
                     let mut meta = std::collections::HashMap::new();
-                    meta.insert("analysis_type".to_string(), Value::String("performance".to_string()));
+                    meta.insert(
+                        "analysis_type".to_string(),
+                        Value::String("performance".to_string()),
+                    );
                     meta.insert("impact".to_string(), Value::String("rendering".to_string()));
                     meta
                 },
@@ -1725,7 +1765,10 @@ rules:
         let config = WebConfig::default();
         let results = perform_code_analysis(&request, &config).await.unwrap();
 
-        assert!(results.findings.len() >= 0, "Analysis completed without error");
+        assert!(
+            results.findings.len() >= 0,
+            "Analysis completed without error"
+        );
         assert_eq!(results.summary.files_analyzed, 1);
         assert!(results.metrics.is_some());
     }

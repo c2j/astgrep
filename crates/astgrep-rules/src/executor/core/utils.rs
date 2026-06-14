@@ -256,8 +256,8 @@ impl AdvancedRuleExecutor {
                                 if let Some(colon_pos) = var_name.find(':') {
                                     var_name = var_name[..colon_pos].trim().to_string();
                                 } else if parts[parts.len() - 2].ends_with(':') {
-                                    var_name = parts[parts.len() - 2]
-                                        .trim_end_matches(':').to_string();
+                                    var_name =
+                                        parts[parts.len() - 2].trim_end_matches(':').to_string();
                                 }
                             }
                             let var_name = var_name.trim_end_matches(';').trim().to_string();

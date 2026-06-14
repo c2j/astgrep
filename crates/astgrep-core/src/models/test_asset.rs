@@ -243,11 +243,9 @@ impl TestAsset {
     }
 
     pub fn get_file_size(&self) -> Option<u64> {
-        self.metadata.file_size.or_else(|| {
-            std::fs::metadata(&self.current_path)
-                .ok()
-                .map(|m| m.len())
-        })
+        self.metadata
+            .file_size
+            .or_else(|| std::fs::metadata(&self.current_path).ok().map(|m| m.len()))
     }
 
     pub fn is_executable(&self) -> bool {

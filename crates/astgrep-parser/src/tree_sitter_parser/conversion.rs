@@ -315,12 +315,8 @@ impl TreeSitterParser {
             | "marker_annotation"
             | "normal_annotation"
             | "single_element_annotation" => NodeType::Decorator,
-            "generic_type"
-            | "type_arguments"
-            | "type_parameters"
-            | "wildcard"
-            | "super_wildcard"
-            | "extends_wildcard" => NodeType::ExpressionStatement,
+            "generic_type" | "type_arguments" | "type_parameters" | "wildcard"
+            | "super_wildcard" | "extends_wildcard" => NodeType::ExpressionStatement,
             "array_creation_expression" => NodeType::ArrayExpression,
             "cast_expression" => NodeType::UnaryExpression,
             "instanceof_expression" => NodeType::BinaryExpression,

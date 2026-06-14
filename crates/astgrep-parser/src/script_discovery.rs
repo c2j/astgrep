@@ -758,10 +758,7 @@ mod tests {
         assert_eq!(discovered.name, "test_script.sh");
         assert!(discovered.executable);
         assert_eq!(discovered.shebang, Some("/bin/bash".to_string()));
-        assert!(matches!(
-            discovered.script_type,
-            ScriptType::Runner
-        ));
+        assert!(matches!(discovered.script_type, ScriptType::Runner));
 
         Ok(())
     }

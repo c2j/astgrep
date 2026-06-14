@@ -195,7 +195,7 @@ impl RuleExecutionEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use astgrep_core::{AstNode, Language, Severity, Confidence};
+    use astgrep_core::{AstNode, Confidence, Language, Severity};
 
     #[derive(Clone)]
     struct MockAstNode {
@@ -260,11 +260,7 @@ mod tests {
     }
 
     fn create_test_context(source: &str) -> RuleContext {
-        RuleContext::new(
-            "test.java".to_string(),
-            Language::Java,
-            source.to_string(),
-        )
+        RuleContext::new("test.java".to_string(), Language::Java, source.to_string())
     }
 
     #[test]
