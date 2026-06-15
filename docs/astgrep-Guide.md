@@ -14,6 +14,7 @@
 - [最佳实践](#最佳实践)
 
 - [嵌入式 SQL 预处理器](#嵌入式-sql-预处理器)
+- [SQL 方言规则](#sql-方言规则)
 
 ---
 
@@ -518,6 +519,87 @@ astgrep analyze --language java --config rules.yaml path/to/Dao.java
 - MyBatis 动态 SQL（`<if>/<where>/<trim>/<foreach>/<choose>`）目前做弱归一化，适合结构性匹配；可逐步加入“骨架级展开”
 - 支持来源可扩展：除 `java`、`xml` 外，未来可加入 `kotlin`、`scala`、`typescript` 等
 - 行列精度：当前定位至片段起始行，后续可结合片段内偏移提高精度
+
+
+## SQL 方言规则
+
+astgrep 支持多方言 SQL 分析（GaussDB、OpenGauss、PolarDB-MySQL、标准 SQL）。你可以通过 `dialects:` 字段让规则仅在特定方言下触发。
+
+### 方言对照表
+
+| 方言 | `--dialect` 值 | 解析器 |
+|------|---------------|--------|
+| 标准 SQL | `standard`（默认） | tree-sitter-sequel |
+| GaussDB | `gaussdb` | ogsql-parser |
+| OpenGauss | `opengauss` | ogsql-parser |
+| PolarDB-MySQL | `polardb-mysql` | sqlparser-rs |
+
+### 在规则中声明方言
+
+使用 `dialects:` 字段指定规则适用的方言列表：
+
+```yaml
+rules:
+  - id: gaussdb-no-on-conflict
+    name: "GaussDB 不支持 ON CONFLICT"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]    # 仅在 GaussDB/OpenGauss 方言下触发
+    patterns:
+      - pattern: "ON CONFLICT"
+    message: "GaussDB/OpenGauss 不支持 ON CONFLICT，请使用 MERGE INTO 替代"
+    severity: ERROR
+```
+
+**关键点：**
+- 未声明 `dialects:` 的规则适用于**所有方言**（向后兼容）
+- 声明了 `dialects:` 的规则仅在列出的方言下触发
+- `languages: [sql]` 保持不变，方言过滤通过 `dialects:` 字段实现
+
+### 配合 CLI 使用
+
+规则中的 `dialects:` 字段需要与 CLI 的 `--dialect` 标志配合使用：
+
+```bash
+# 用 GaussDB 方言分析，gaussdb-no-on-conflict 规则会触发
+astgrep analyze --dialect gaussdb --rules rules.yaml *.sql
+
+# 用标准 SQL 方言分析，gaussdb-no-on-conflict 规则不会触发
+astgrep analyze --rules rules.yaml *.sql
+```
+
+### 三种模式类型
+
+SQL 方言规则支持三种模式：
+
+**字面量模式**（文本匹配，所有解析器通用）：
+```yaml
+patterns:
+  - pattern: "VARCHAR2"
+```
+
+**元变量模式**（结构化匹配，经 tree-sitter）：
+```yaml
+patterns:
+  - pattern: "SELECT * FROM $TABLE"
+```
+
+**否定模式**（检测子句缺失）：
+```yaml
+patterns:
+  - pattern: "UPDATE $T SET $S"
+  - pattern-not: "UPDATE $T SET $S WHERE $W"
+```
+
+### GaussDB 专属特性检测
+
+GaussDB 方言支持检测以下专有语法：
+- `PREDICT BY`（AI 预测）
+- `TIMECAPSULE`（闪回查询）
+- `SHRINK TABLE/INDEX`（空间回收）
+- Plan Hints（`/*+ tablescan(t1) */`）
+- MERGE 语义校验（内置校验器，无需规则文件）
+
+详细的方言支持和规则列表请参考 [SQL 方言支持](sql-dialects.md)。
 
 
 ## Semgrep 兼容性

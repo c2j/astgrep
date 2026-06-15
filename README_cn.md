@@ -4,15 +4,21 @@
 
 ## 特性
 
-- **多语言支持**: Java、JavaScript、Python、SQL、Bash、PHP、C、C#、Ruby、Kotlin、Swift
+- **多语言支持**: Java、JavaScript、Python、SQL、Bash、XML 完全支持
+- **多方言 SQL 支持**: GaussDB、OpenGauss、PolarDB-MySQL、标准 SQL —— 每种方言使用专用解析器
+  - GaussDB / OpenGauss: `ogsql-parser`
+  - PolarDB-MySQL: `sqlparser-rs`
+  - 标准 SQL: `tree-sitter-sequel`
+- **嵌入式 SQL 预处理器**: 从 Java 源码（注解/字符串）和 MyBatis XML 中抽取 SQL，用 SQL 语义规则匹配，无需编写复杂的宿主语言模式
 - **安全导向**: 检测注入漏洞、XSS、身份验证问题等安全问题
 - **高性能**: 使用 Rust 构建，速度快且内存安全
-- **灵活的规则**: 基于 YAML 的声明式规则定义
-- **多种输出格式**: JSON、YAML、SARIF、文本、XML
+- **灵活的规则**: 基于 YAML 的声明式规则定义，支持元变量、条件和数据流追踪
+- **多种输出格式**: JSON、SARIF、Text、HTML、Markdown、Semgrep 兼容格式
 - **并行处理**: 多线程分析，适用于大型代码库
 - **可扩展**: 模块化架构，易于添加新语言和规则
 - **污点分析**: 高级数据流和污点分析能力
-- **图形界面**: 提供 GUI 和 Web 界面
+- **Web Playground**: 通过 `astgrep-web` 提供基于浏览器的交互式规则测试（REST API + Playground 界面）
+- **桌面 GUI**: 使用 egui 构建的跨平台桌面应用，支持交互式分析
 
 ## 快速开始
 
@@ -54,11 +60,23 @@ astgrep validate rules/*.yml
 # 列出支持的语言
 astgrep languages
 
-# 初始化配置文件
-astgrep init --output astgrep.toml
+# GaussDB 兼容性扫描
+astgrep analyze --dialect gaussdb --rules tests/categories/rules/sql_dialects/gaussdb/ *.sql
 
-# 查看语言信息
-astgrep info --language java
+# OpenGauss 分析
+astgrep analyze --dialect opengauss --rules tests/categories/rules/sql_dialects/gaussdb/ *.sql
+
+# PolarDB-MySQL 分析
+astgrep analyze --dialect polardb-mysql --rules tests/categories/rules/sql_dialects/polardb_mysql/ *.sql
+
+# 列出可用规则
+astgrep list --language java --detailed
+
+# 初始化配置文件
+astgrep init --template security --output astgrep.toml
+
+# 查看支持的语言和扩展名
+astgrep info --extensions
 ```
 
 ## 可用工具
@@ -79,8 +97,8 @@ astgrep 提供了多个工具来满足不同的使用场景：
 ./target/release/astgrep-cli --version
 ```
 
-### 3. Web 服务 (astgrep-web)
-提供 RESTful API 接口，可以集成到 CI/CD 流程中。
+### 3. Web 服务 (astgrep-web-server)
+REST API（默认端口 8080）+ 浏览器 Playground（`/playground`），用于交互式规则测试。
 
 ```bash
 # 启动 Web 服务（默认端口 8080）
@@ -91,7 +109,7 @@ astgrep 提供了多个工具来满足不同的使用场景：
 ```
 
 ### 4. GUI 应用 (astgrep-gui)
-图形化界面，提供交互式的代码分析体验。
+交互式规则编辑器，内置文档页。
 
 ```bash
 ./target/release/astgrep-gui
@@ -99,24 +117,82 @@ astgrep 提供了多个工具来满足不同的使用场景：
 
 ## 架构
 
-项目组织为多个 crate：
+项目组织为 Cargo Workspace，包含 10 个 crate：
 
-- `astgrep-core`: 核心类型、trait 和错误处理
-- `astgrep-ast`: 通用 AST 定义和操作
-- `astgrep-rules`: 规则解析、验证和执行引擎
-- `astgrep-parser`: 语言解析器和适配器
-- `astgrep-matcher`: 模式匹配引擎
-- `astgrep-dataflow`: 数据流和污点分析
-- `astgrep-cli`: 命令行界面
-- `astgrep-web`: Web 服务接口
-- `astgrep-gui`: 图形用户界面
+- `astgrep-core`: 核心类型、`Language` 枚举、错误处理和配置
+- `astgrep-ast`: 通用 AST 定义（UniversalNode）、visitor、builder
+- `astgrep-parser`: 语言解析器和适配器，以及 SQL 方言分发器
+- `astgrep-matcher`: 模式匹配引擎（字面量、元变量、结构匹配）
+- `astgrep-dataflow`: 数据流、污点分析、调用图和常量传播
+- `astgrep-rules`: YAML 规则解析、验证和执行引擎
+- `astgrep-cli`: 命令行界面，包含 14 个命令
+- `astgrep-web`: Axum REST API 服务器和 Web Playground
+- `astgrep-gui`: egui 桌面 Playground
+- `test-utils`: 测试工具（MockAstNode、MockParser 等）
+
+## SQL 方言支持
+
+astgrep 支持四种 SQL 方言，通过 `--dialect` 标志选择：
+
+| 方言 | `--dialect` 值 | 解析器 | 覆盖范围 |
+|------|----------------|--------|----------|
+| 标准 SQL | `standard`（默认） | tree-sitter-sequel 0.3.11 | 通用 SQL（ANSI） |
+| GaussDB | `gaussdb` | ogsql-parser v0.6.20 | 完整 DML/DDL + PREDICT BY / TIMECAPSULE / SHRINK / Plan Hints |
+| OpenGauss | `opengauss` | ogsql-parser v0.6.20 | 与 GaussDB 共享实现 |
+| PolarDB-MySQL | `polardb-mysql` | sqlparser-rs v0.62（MySqlDialect） | MySQL DML/DDL + PolarDB 关键字检测 |
+
+### 使用 `--dialect` 标志
+
+```bash
+# GaussDB 兼容性扫描
+astgrep analyze --dialect gaussdb --rules tests/categories/rules/sql_dialects/gaussdb/ *.sql
+
+# OpenGauss
+astgrep analyze --dialect opengauss --rules tests/categories/rules/sql_dialects/gaussdb/ *.sql
+
+# PolarDB-MySQL
+astgrep analyze --dialect polardb-mysql --rules tests/categories/rules/sql_dialects/polardb_mysql/ *.sql
+
+# 标准 SQL（默认，向后兼容）
+astgrep analyze *.sql
+```
+
+### 方言感知规则
+
+规则可以通过 `dialects:` 字段声明适用的方言。未声明 `dialects:` 的规则适用于所有方言（向后兼容）。
+
+```yaml
+rules:
+  - id: gaussdb-no-on-conflict
+    name: "GaussDB 不支持 ON CONFLICT"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "ON CONFLICT"
+    message: "请使用 MERGE INTO 替代"
+    severity: ERROR
+```
+
+### 内置规则库
+
+- **GaussDB / OpenGauss**: 14 条专用规则（11 条 YAML 规则 + 3 条内置 MERGE 语义校验器），覆盖类型兼容、存储、AI 特性、安全、性能等场景
+- **PolarDB-MySQL**: 6 条专用规则，覆盖兼容性和安全场景
+- **GaussDB 专有特性**: PREDICT BY、TIMECAPSULE、SHRINK、Plan Hints
+
+更多细节请参考 [docs/sql-dialects.md](docs/sql-dialects.md)。
 
 ## 开发
 
 ### 前置要求
 
-- Rust 1.70+ 
+- Rust 1.70+
 - Cargo
+
+克隆后安装 pre-commit 钩子：
+
+```bash
+lefthook install
+```
 
 ### 构建
 
@@ -161,6 +237,9 @@ cargo test --lib
 
 # 运行所有目标的测试
 cargo test --all-targets
+
+# 验证测试注解
+python3 tests/scripts/validate_annotations.py
 ```
 
 ## 规则格式
@@ -275,39 +354,29 @@ disabled_categories = ["style", "experimental"]
 
 | 语言 | 扩展名 | AST 支持 | 污点分析 |
 |------|--------|----------|----------|
-| Java | .java | ✅ | ✅ |
-| JavaScript | .js, .jsx | ✅ | ✅ |
-| Python | .py | ✅ | ✅ |
-| SQL | .sql | ✅ | ✅ |
-| Bash | .sh | ✅ | ✅ |
-| PHP | .php | ✅ | ✅ |
-| C | .c, .h | ✅ | ✅ |
-| C# | .cs | ✅ | ✅ |
-| Ruby | .rb | 🚧 | 🚧 |
-| Kotlin | .kt | 🚧 | 🚧 |
-| Swift | .swift | 🚧 | 🚧 |
+| Java | .java | 完全支持 | 完全支持 |
+| JavaScript | .js, .jsx | 完全支持 | 完全支持 |
+| Python | .py | 完全支持 | 完全支持 |
+| SQL | .sql | 完全支持 | 完全支持 |
+| Bash | .sh, .bash | 完全支持 | 完全支持 |
+| XML | .xml, .xsd, .xsl | 完全支持 | — |
+
+此外，PHP、C、C#、Ruby、Kotlin、Swift 的解析器适配器已经存在，但这些语言尚未完全集成到 `Language` 枚举中。
 
 ## 输出格式
 
 astgrep 支持多种输出格式：
 
 - **JSON**: 结构化的 JSON 输出
-- **YAML**: 人类可读的 YAML 格式
 - **SARIF**: 静态分析结果交换格式（SARIF 2.1.0）
 - **Text**: 简洁的文本格式
-- **XML**: XML 格式输出
+- **HTML**: HTML 格式报告
+- **Markdown**: Markdown 格式报告
+- **Semgrep 兼容格式**: 与 Semgrep 兼容的输出
 
 ## 贡献
 
-欢迎贡献！请遵循以下步骤：
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 编写代码并添加测试
-4. 确保所有测试通过 (`cargo test`)
-5. 提交更改 (`git commit -m 'Add amazing feature'`)
-6. 推送到分支 (`git push origin feature/amazing-feature`)
-7. 创建 Pull Request
+详细贡献指南请参考 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
 
 ## 许可证
 
@@ -315,11 +384,24 @@ astgrep 支持多种输出格式：
 
 ## 路线图
 
+详细路线图请参考 [docs/ROADMAP.md](docs/ROADMAP.md)。
+
+### 当前重点
+
+1. **代码库健康** — 修复编译错误，减少警告，添加 CI/CD
+2. **架构重构** — 拆分过大的文件
+3. **Semgrep 兼容性** — 完成剩余兼容性修复
+4. **测试基础设施** — 完成测试目录重组
+
+### 里程碑
+
 - [x] 多语言 AST 实现
 - [x] 基础模式匹配
 - [x] 数据流和污点分析
 - [x] GUI 界面
 - [x] Web 服务接口
+- [x] 多方言 SQL 支持（GaussDB/OpenGauss/PolarDB-MySQL）
+- [x] 嵌入式 SQL 预处理器
 - [ ] 高级模式匹配（元变量）
 - [ ] IDE 集成（VS Code、IntelliJ）
 - [ ] CI/CD 流水线集成
@@ -332,8 +414,10 @@ astgrep 支持多种输出格式：
 
 ## 相关资源
 
+- [用户指南](docs/User-Guide.md)
+- [开发者指南](docs/DeveloperGuide.md)
 - [规则编写指南](docs/astgrep-Guide.md)
-- [项目状态](docs/v1/PROJECT_STATUS.md)
-- [快速参考](docs/v1/QUICK_REFERENCE.md)
-- [Semgrep 兼容性](docs/v1/SEMGREP_COMPATIBILITY_ASSESSMENT.md)
-
+- [SQL 方言支持](docs/sql-dialects.md)
+- [贡献指南](docs/CONTRIBUTING.md)
+- [路线图](docs/ROADMAP.md)
+- [历史文档归档](docs/archive/) — v1/v1.1/v1.2/v1.3 版本的实现报告与设计记录
