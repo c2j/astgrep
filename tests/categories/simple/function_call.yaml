@@ -1,6 +1,0 @@
-rules:
-- id: test-function-call
-  pattern: eval(...)
-  message: Found eval function call
-  severity: ERROR
-  languages: [javascript]

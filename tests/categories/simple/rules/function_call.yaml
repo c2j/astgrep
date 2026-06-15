@@ -1,0 +1,7 @@
+rules:
+- id: SIMPLE-FN-001
+  name: "eval() function call"
+  pattern: eval(...)
+  message: Found eval function call
+  severity: ERROR
+  languages: [javascript]

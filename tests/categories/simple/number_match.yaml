@@ -1,6 +1,0 @@
-rules:
-- id: test-number-match
-  pattern: "42"
-  message: Found the answer to everything
-  severity: WARNING
-  languages: [python]

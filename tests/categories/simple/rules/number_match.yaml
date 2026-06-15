@@ -1,0 +1,7 @@
+rules:
+- id: SIMPLE-NUM-001
+  name: "Number literal 42"
+  pattern: "42"
+  message: Found the answer to everything
+  severity: WARNING
+  languages: [python]

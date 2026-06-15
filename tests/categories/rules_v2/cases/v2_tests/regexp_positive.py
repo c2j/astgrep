@@ -1,0 +1,13 @@
+# @rule rule_template_id
+# @desc regexp v2 syntax test
+# @expect MATCH
+
+def test():
+    #ruleid: rule_template_id
+    foo("128.0.0.1")
+
+    foo("this is not an IP")
+
+    foo("neither this")
+
+    # this is an IP but in comment foo("128.0.0.1")

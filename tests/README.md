@@ -3,6 +3,12 @@ semgrep-core tests
 This folder contains mostly tests related to the semgrep-core program.
 For the (py)semgrep tests see the cli/tests/ folder instead.
 
+> **Note:** For new rule-driven test categories, see
+> [CONVENTIONS.md](CONVENTIONS.md) for the `@rule`/`@expect`/`@desc`
+> annotation standard. The `// MATCH:` / `// ERROR:` format documented
+> below applies only to legacy semgrep-core compatibility tests in
+> `patterns/`, `semgrep-core/`, and related directories.
+
 Running the tests
 --
 
