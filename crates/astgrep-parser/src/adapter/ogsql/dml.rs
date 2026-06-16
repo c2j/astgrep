@@ -2,7 +2,7 @@
 //!
 //! Maps SELECT, INSERT, UPDATE, DELETE, MERGE statements for static analysis.
 //! Focuses on what rules care about: table names, WHERE conditions, column refs,
-//! key syntactic features (VALUES, SET, ON CONFLICT, RETURNING).
+//! key syntactic features (VALUES, SET, ON DUPLICATE KEY UPDATE, RETURNING).
 
 use super::expr;
 use super::OgsqlAdapterError;
@@ -67,7 +67,7 @@ pub fn convert_select(
 /// - `table` attribute: target table name
 /// - `columns` attribute: comma-separated column list (if explicit)
 /// - Source (VALUES/Select) as children
-/// - Metadata: `on_conflict`, `has_returning`, `bulk_collect`
+/// - Metadata: `on_duplicate_key`, `has_returning`, `bulk_collect`
 pub fn convert_insert(
     insert: &ogsql_parser::InsertStatement,
 ) -> Result<UniversalNode, OgsqlAdapterError> {
@@ -476,9 +476,12 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_on_conflict() {
-        let node = parse_to_node("INSERT INTO t VALUES (1) ON CONFLICT DO NOTHING");
-        assert_eq!(node.get_attribute("on_conflict"), Some(&"true".to_string()));
+    fn test_insert_on_duplicate_key() {
+        let node = parse_to_node("INSERT INTO t VALUES (1) ON DUPLICATE KEY UPDATE x=1");
+        assert_eq!(
+            node.get_attribute("on_duplicate_key"),
+            Some(&"true".to_string())
+        );
     }
 
     // ── UPDATE tests ──
