@@ -24,8 +24,15 @@ glob.workspace = true
 walkdir.workspace = true
 sha2.workspace = true
 tracing.workspace = true
-ogsql-parser.workspace = true
-sqlparser.workspace = true
+# ogsql-parser - hand-written recursive descent SQL parser for openGauss/GaussDB
+# License: MIT OR Apache-2.0 (compatible with astgrep MIT)
+# Maturity: 537 commits, 1646 unit tests, 1409 openGauss regression tests
+# M-DEP-01: pinned to tag for reproducible builds
+# v0.8.0: ObjectName is now Vec<Ident> (was Vec<String>); Ident carries quote_style
+ogsql-parser = { git = "https://github.com/c2j/ogsql-parser", tag = "v0.8.0" }
+# sqlparser-rs (Apache DataFusion) for PolarDB-MySQL dialect (Phase 4)
+# License: Apache-2.0
+sqlparser = "0.62"
 
 [dev-dependencies]
 tempfile = "3.8"
