@@ -260,6 +260,19 @@ impl AdvancedRuleExecutor {
             // If no Inside/NotInside found, fall through to normal path below.
         }
 
+        // For All patterns without Inside/NotInside constraints, execute each
+        // sub-pattern independently and combine findings (union semantics).
+        if let PatternType::All(sub_patterns) = &pattern.pattern_type {
+            let mut all_findings = Vec::new();
+            for sub in sub_patterns {
+                let sub_findings = self.execute_pattern_analysis(
+                    rule, sub, ast, dataflow_analysis, file_path,
+                )?;
+                all_findings.extend(sub_findings);
+            }
+            return Ok(all_findings);
+        }
+
         // Preprocess pattern to handle typed metavariable syntax like "($TYPE $VAR).method()"
         let (processed_pattern, type_constraints) = self.preprocess_typed_metavariables(pattern);
 
