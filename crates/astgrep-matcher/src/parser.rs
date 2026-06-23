@@ -95,8 +95,14 @@ impl PatternParser {
             current_pos += 1;
 
             match ch {
-                // Skip whitespace
-                ' ' | '\t' | '\n' | '\r' => continue,
+                // Skip inline whitespace but NOT newlines — multiline patterns must be
+                // distinguishable from space-separated single-line patterns
+                ' ' | '\t' | '\r' => continue,
+                // Newline becomes its own literal token so multiline structure is preserved
+                '\n' => {
+                    tokens.push(Token::Literal("\n".to_string()));
+                    continue;
+                }
 
                 // Metavariable
                 '$' => {
@@ -642,6 +648,53 @@ enum Token {
     RightParen,
     Pipe,
     Wildcard,
+}
+
+#[cfg(test)]
+mod tests_multiline_tokenize {
+    use super::*;
+
+    #[test]
+    fn test_multiline_pattern_preserves_structure() {
+        let parser = PatternParser::new();
+        // A multiline pattern should tokenize differently than single-line
+        let multiline_tokens = parser.tokenize("foo\nbar").unwrap();
+        let singleline_tokens = parser.tokenize("foo bar").unwrap();
+        // They should NOT be identical — newline must be distinguished from space
+        assert_ne!(
+            format!("{:?}", multiline_tokens),
+            format!("{:?}", singleline_tokens),
+            "multiline pattern \\n should not be identical to space-separated"
+        );
+    }
+
+    #[test]
+    fn test_newline_char_becomes_literal_token() {
+        let parser = PatternParser::new();
+        let tokens = parser.tokenize("foo\nbar").unwrap();
+        // The \n should appear as its own literal token between foo and bar
+        assert_eq!(tokens.len(), 3, "should have 3 tokens: foo, \\n, bar");
+        assert_eq!(tokens[0], Token::Literal("foo".to_string()));
+        assert_eq!(tokens[1], Token::Literal("\n".to_string()));
+        assert_eq!(tokens[2], Token::Literal("bar".to_string()));
+    }
+
+    #[test]
+    fn test_parse_multiline_pattern() {
+        let parser = PatternParser::new();
+        // A multiline pattern should parse without error
+        let result = parser.parse("foo\nbar");
+        assert!(result.is_ok(), "multiline pattern should parse: {:?}", result);
+        let pattern = result.unwrap();
+        assert_eq!(
+            format!("{:?}", pattern),
+            format!("{:?}", ParsedPattern::Sequence(vec![
+                ParsedPattern::Literal("foo".to_string()),
+                ParsedPattern::Literal("\n".to_string()),
+                ParsedPattern::Literal("bar".to_string()),
+            ]))
+        );
+    }
 }
 
 #[cfg(test)]
