@@ -698,8 +698,31 @@ impl RuleExecutionEngine {
                 };
 
                 // Try to evaluate the comparison expression
-                // Supported: $VAR.length() > N, $VAR.length() >= N, etc.
-                let comparison_expr = &comp.value;
+                // Supported: lines($VAR) > N, $VAR.length() > N, etc.
+                let comparison_expr = match &comp.operator {
+                    astgrep_core::ComparisonOperator::PythonExpression(ref expr) => expr.as_str(),
+                    _ => comp.value.as_str(),
+                };
+                if comparison_expr.contains("lines(") {
+                    let line_count = content.lines().count() as i64;
+                    for op_str in &["!=", "==", ">=", "<=", ">", "<"] {
+                        if let Some(pos) = comparison_expr.find(op_str) {
+                            let right = comparison_expr[pos + op_str.len()..].trim();
+                            if let Ok(threshold) = right.parse::<i64>() {
+                                let passes = match *op_str {
+                                    "==" => line_count == threshold,
+                                    "!=" => line_count != threshold,
+                                    ">" => line_count > threshold,
+                                    "<" => line_count < threshold,
+                                    ">=" => line_count >= threshold,
+                                    "<=" => line_count <= threshold,
+                                    _ => return true,
+                                };
+                                return passes;
+                            }
+                        }
+                    }
+                }
                 if comparison_expr.contains("length()") {
                     let content_len = content.len() as i64;
                     let threshold = comparison_expr
@@ -708,20 +731,20 @@ impl RuleExecutionEngine {
                         .collect::<String>()
                         .parse::<i64>()
                         .unwrap_or(0);
-                    let passes = match comp.operator {
-                        astgrep_core::ComparisonOperator::GreaterThan => {
-                            content_len > threshold
+                    for op_str in &[">=", "<=", "==", "!=", ">", "<"] {
+                        if comparison_expr.contains(op_str) {
+                            let passes = match *op_str {
+                                ">" => content_len > threshold,
+                                "<" => content_len < threshold,
+                                "==" => content_len == threshold,
+                                "!=" => content_len != threshold,
+                                ">=" => content_len >= threshold,
+                                "<=" => content_len <= threshold,
+                                _ => return true,
+                            };
+                            return passes;
                         }
-                        astgrep_core::ComparisonOperator::LessThan => content_len < threshold,
-                        astgrep_core::ComparisonOperator::Equals => {
-                            content_len == threshold
-                        }
-                        astgrep_core::ComparisonOperator::NotEquals => {
-                            content_len != threshold
-                        }
-                        _ => return true,
-                    };
-                    return passes;
+                    }
                 }
 
                 // For other comparison types, we can't evaluate textually

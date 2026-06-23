@@ -1049,7 +1049,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_taint_mode_ignores_negative_balance_check() {
         use crate::types::RuleMode;
         let validator = RuleValidator::new();
