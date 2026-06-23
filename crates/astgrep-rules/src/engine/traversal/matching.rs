@@ -259,9 +259,9 @@ pub(crate) fn semgrep_pattern_to_regex(pattern: &str) -> String {
             continue;
         }
 
-        // Handle newlines in pattern → match any whitespace/blank lines
+        // Handle newlines in pattern → match actual newlines with optional surrounding whitespace
         if chars[i] == '\n' {
-            result.push_str("\\s*");
+            result.push_str("\\s*\\n\\s*");
             i += 1;
             continue;
         }
@@ -302,6 +302,47 @@ fn calculate_line_col(source: &str, offset: usize) -> (usize, usize) {
     }
 
     (line, col)
+}
+
+#[cfg(test)]
+mod tests_multiline_newline {
+    use super::*;
+
+    #[test]
+    fn test_newline_should_match_actual_newline() {
+        let regex_str = semgrep_pattern_to_regex("foo\nbar");
+        let re = regex::Regex::new(&regex_str).unwrap();
+        assert!(
+            re.is_match("foo\nbar"),
+            "pattern with \\n should match actual newline"
+        );
+    }
+
+    #[test]
+    fn test_newline_should_not_match_same_line_spaces() {
+        let regex_str = semgrep_pattern_to_regex("foo\nbar");
+        let re = regex::Regex::new(&regex_str).unwrap();
+        // This is the FP bug: \n converted to \s* matches spaces on the same line
+        assert!(
+            !re.is_match("foo    bar"),
+            "pattern with \\n should NOT match same-line spaces"
+        );
+    }
+
+    #[test]
+    fn test_newline_should_match_with_surrounding_whitespace() {
+        let regex_str = semgrep_pattern_to_regex("foo\nbar");
+        let re = regex::Regex::new(&regex_str).unwrap();
+        // \n should also match \r\n and surrounding whitespace
+        assert!(
+            re.is_match("foo \n bar"),
+            "pattern with \\n should match newline with surrounding spaces"
+        );
+        assert!(
+            re.is_match("foo\r\nbar"),
+            "pattern with \\n should match CRLF"
+        );
+    }
 }
 
 #[cfg(test)]
