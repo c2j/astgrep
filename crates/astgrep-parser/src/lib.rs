@@ -113,6 +113,7 @@ impl LanguageParserRegistry {
         self.register_parser(Language::Python, Box::new(python::PythonParser::new()));
         self.register_parser(Language::Sql, Box::new(sql::SqlParser::new()));
         self.register_parser(Language::Bash, Box::new(bash::BashParser::new()));
+        self.register_parser(Language::Text, Box::new(text::TextParser::new()));
     }
 
     #[cfg(test)]

@@ -566,6 +566,7 @@ fn build_enhanced_analysis_config(
             Language::Python,
             Language::Sql,
             Language::Bash,
+            Language::Text,
         ]
     } else {
         let mut parsed = Vec::new();
@@ -669,6 +670,7 @@ fn build_analysis_config(
             Language::Python,
             Language::Sql,
             Language::Bash,
+            Language::Text,
         ]
     } else {
         let mut parsed = Vec::new();
@@ -744,7 +746,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.target_paths, vec![PathBuf::from(".")]);
-        assert_eq!(config.languages.len(), 5);
+        assert_eq!(config.languages.len(), 6);
         assert_eq!(config.output_format, OutputFormat::Json);
         assert!(config.parallel);
         assert!(config.max_threads.is_none());

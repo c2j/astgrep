@@ -147,12 +147,7 @@ impl ParserFactory {
             Language::Sql => Ok(Box::new(crate::sql::SqlParser::new())),
             Language::Bash => Ok(Box::new(crate::bash::BashParser::new())),
             Language::Xml => Ok(Box::new(crate::xml::XmlParser::new())),
-            Language::Text => {
-                // TextParser will be registered in Task D3
-                Err(astgrep_core::AnalysisError::unsupported_language(
-                    "Text parser not yet registered".to_string(),
-                ))
-            }
+            Language::Text => Ok(Box::new(crate::text::TextParser::new())),
         }
     }
 
