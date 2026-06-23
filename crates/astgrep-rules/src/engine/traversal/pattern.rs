@@ -164,38 +164,7 @@ impl RuleExecutionEngine {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
-        // Also use advanced (tree) matcher for code-like patterns that need structural matching
-        let looks_like_code = pattern_str.contains("{")
-            || pattern_str.contains("class ")
-            || pattern_str.contains("function ")
-            || pattern_str.contains("def ")
-            || pattern_str.contains("if ")
-            || pattern_str.contains("for ")
-            || pattern_str.contains("while ")
-            || pattern_str.contains("try ")
-            || pattern_str.contains("catch ")
-            || pattern_str.contains("import ")
-            || pattern_str.contains("from ")
-            || pattern_str.contains("implements ")
-            || pattern_str.contains("extends ")
-            || pattern_str.contains("interface ")
-            || pattern_str.contains("record ")
-            || pattern_str.contains("@interface ")
-            || pattern_str.contains("public ")
-            || pattern_str.contains("private ")
-            || pattern_str.contains("protected ")
-            || pattern_str.contains("return ")
-            || pattern_str.contains("throw ")
-            // Multi-statement patterns (semicolons on multiple lines)
-            || (pattern_str.contains(';') && pattern_str.contains('\n'))
-            // Variable/object declarations
-            || pattern_str.starts_with("var ")
-            || pattern_str.starts_with("let ")
-            || pattern_str.starts_with("const ")
-            || pattern_str.contains("new ")
-            // Annotations
-            || pattern_str.contains("@");
-        if looks_like_code {
+        if Self::pattern_needs_ast_matching(pattern_str) {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
@@ -291,6 +260,37 @@ impl RuleExecutionEngine {
         }
 
         Ok(text_findings)
+    }
+
+    fn pattern_needs_ast_matching(pattern_str: &str) -> bool {
+        pattern_str.contains('{')
+            || pattern_str.contains("class ")
+            || pattern_str.contains("function ")
+            || pattern_str.contains("def ")
+            || pattern_str.contains("if ")
+            || pattern_str.contains("for ")
+            || pattern_str.contains("while ")
+            || pattern_str.contains("try ")
+            || pattern_str.contains("catch ")
+            || pattern_str.contains("import ")
+            || pattern_str.contains("from ")
+            || pattern_str.contains("implements ")
+            || pattern_str.contains("extends ")
+            || pattern_str.contains("interface ")
+            || pattern_str.contains("record ")
+            || pattern_str.contains("@interface ")
+            || pattern_str.contains("public ")
+            || pattern_str.contains("private ")
+            || pattern_str.contains("protected ")
+            || pattern_str.contains("return ")
+            || pattern_str.contains("throw ")
+            || (pattern_str.contains(';') && pattern_str.contains('\n'))
+            || pattern_str.starts_with("var ")
+            || pattern_str.starts_with("let ")
+            || pattern_str.starts_with("const ")
+            || pattern_str.contains("new ")
+            || pattern_str.contains('@')
+            || (pattern_str.contains('(') && pattern_str.contains(')') && pattern_str.contains('$'))
     }
 
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
@@ -421,6 +421,24 @@ impl RuleExecutionEngine {
         let mut negative_set: std::collections::HashSet<(usize, usize)> =
             std::collections::HashSet::new();
         let mut can_use_text = true;
+
+        // Structural pattern detection: if any positive sub-pattern requires AST-level
+        // structural matching (braces, call syntax with metavars, language keywords),
+        // skip text matching entirely and delegate to AdvancedRuleExecutor.
+        // The text matcher converts $VAR to flat regex which produces false positives
+        // on structural patterns like "$TYPE $METHOD(...) { $...BODY }".
+        for sub in subs {
+            if let PatternType::Simple(ref s) = sub.pattern_type {
+                if Self::pattern_needs_ast_matching(s) {
+                    can_use_text = false;
+                    debug!(
+                        "All pattern sub-pattern '{}' needs AST matching, delegating to AdvancedRuleExecutor",
+                        s
+                    );
+                    break;
+                }
+            }
+        }
 
         for sub in subs {
             match &sub.pattern_type {

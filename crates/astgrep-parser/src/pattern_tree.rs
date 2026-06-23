@@ -243,7 +243,6 @@ impl PatternTreeParser {
         match language {
             Language::Java => {
                 let trimmed = pattern.trim_start();
-                // Annotations need to be before a declaration, not inside a method body
                 if trimmed.starts_with('@') {
                     format!("class __Wrap__ {{ {} void __m__() {{}} }}", pattern)
                 } else if trimmed.starts_with("interface")
@@ -252,7 +251,8 @@ impl PatternTreeParser {
                     || trimmed.starts_with("record")
                     || trimmed.starts_with("@interface")
                 {
-                    // Top-level declarations must be at class body level, not inside a method
+                    format!("class __Wrap__ {{ {} }}", pattern)
+                } else if Self::looks_like_java_method_decl(pattern) {
                     format!("class __Wrap__ {{ {} }}", pattern)
                 } else {
                     format!("class __Wrap__ {{ void m() {{ {} }} }}", pattern)
@@ -280,6 +280,34 @@ impl PatternTreeParser {
             }
             _ => pattern.to_string(),
         }
+    }
+
+    fn looks_like_java_method_decl(pattern: &str) -> bool {
+        if !pattern.contains('(') || !pattern.contains('{') {
+            return false;
+        }
+        let trimmed = pattern.trim_start();
+        !matches!(trimmed.split_whitespace().next(), Some(first) if matches!(
+            first,
+            "if" | "for" | "while" | "switch" | "try" | "catch"
+                | "finally" | "do" | "return" | "throw" | "new" | "assert"
+        ))
+    }
+
+    fn is_wrapper_decl(node: &Node, source: &str) -> bool {
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                let ck = child.kind();
+                if matches!(ck, "identifier" | "property_identifier" | "type_identifier") {
+                    let text = &source[child.start_byte()..child.end_byte()];
+                    let t = text.trim();
+                    if t.starts_with("__wrap") || t == "__m__" || t == "__m" {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// Find the first meaningful (non-wrapper) AST node.
@@ -317,13 +345,13 @@ impl PatternTreeParser {
                 kind,
                 "class_declaration"
                     | "class_body"
-                    | "method_declaration"
-                    | "function_definition"
                     | "block"
                     | "statement_block"
                     | "body"
                     | "compound_statement"
-            ) {
+            ) || (matches!(kind, "method_declaration" | "function_definition")
+                && Self::is_wrapper_decl(&current, source))
+            {
                 // Check for annotation/decorator/modifier nodes first — don't dive past them
                 for i in 0..current.child_count() {
                     if let Some(child) = current.child(i) {
