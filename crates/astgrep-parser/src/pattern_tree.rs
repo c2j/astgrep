@@ -267,7 +267,17 @@ impl PatternTreeParser {
                     format!("def __wrap__():\n    {}", pattern)
                 }
             }
-            Language::Bash => pattern.to_string(),
+            Language::Bash => {
+                let trimmed = pattern.trim_start();
+                // If the pattern already looks like a complete script (has shebang),
+                // pass through as-is.
+                if trimmed.starts_with("#!") {
+                    pattern.to_string()
+                } else {
+                    // Wrap in a function body so incomplete fragments parse correctly.
+                    format!("__wrap__() {{\n{}\n}}", pattern)
+                }
+            }
             _ => pattern.to_string(),
         }
     }
@@ -308,6 +318,7 @@ impl PatternTreeParser {
                 "class_declaration"
                     | "class_body"
                     | "method_declaration"
+                    | "function_definition"
                     | "block"
                     | "statement_block"
                     | "body"
@@ -915,5 +926,36 @@ mod tests {
             .parse("func(($VAL: boolean))", Language::JavaScript)
             .unwrap();
         assert!(tree.has_wildcards());
+    }
+
+    #[test]
+    fn test_bash_fragment_gets_wrapped() {
+        let result = PatternTreeParser::wrap_in_context_static("echo hello", Language::Bash);
+        assert!(result.contains("__wrap__()"), "fragment should be wrapped in function");
+        assert!(result.contains("echo hello"));
+    }
+
+    #[test]
+    fn test_bash_shebang_passes_through() {
+        let pattern = "#!/bin/bash\necho hello";
+        let result = PatternTreeParser::wrap_in_context_static(pattern, Language::Bash);
+        // Should NOT double-wrap
+        assert_eq!(result, pattern, "shebang pattern should pass through unchanged");
+    }
+
+    #[test]
+    fn test_bash_parse_simple_command() {
+        let mut parser = PatternTreeParser::new().unwrap();
+        let tree = parser.parse("echo hello", Language::Bash).unwrap();
+        // Should parse successfully
+        assert!(tree.has_wildcards() == false, "simple command should have no wildcards");
+    }
+
+    #[test]
+    fn test_bash_parse_metavar() {
+        let mut parser = PatternTreeParser::new().unwrap();
+        let tree = parser.parse("echo $X", Language::Bash).unwrap();
+        // Should parse with metavariable
+        assert!(tree.has_wildcards(), "pattern with $X should have wildcards");
     }
 }
