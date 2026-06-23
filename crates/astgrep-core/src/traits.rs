@@ -31,6 +31,7 @@ pub trait LanguageParser: Send + Sync {
             Language::Sql => &["sql", "ddl", "dml"],
             Language::Bash => &["sh", "bash", "zsh"],
             Language::Xml => &["xml", "xsd", "xsl", "xslt", "svg", "pom"],
+            Language::Text => &["txt", "md", "log", "rst"],
         }
     }
 

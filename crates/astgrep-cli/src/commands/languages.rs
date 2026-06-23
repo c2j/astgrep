@@ -40,6 +40,9 @@ fn get_language_description(language: Language) -> &'static str {
         Language::Xml => {
             "XML - extensible markup language for data representation and configuration"
         }
+        Language::Text => {
+            "Text - plain text files for commit conventions and regex-based pattern matching"
+        }
     }
 }
 

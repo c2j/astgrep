@@ -59,6 +59,11 @@ impl BaseAdapter {
                     "pom".to_string(),
                 ],
             ),
+            Language::Text => (
+                "Text Adapter",
+                "Adapter for parsing plain text files",
+                vec!["txt".to_string(), "md".to_string(), "log".to_string(), "rst".to_string()],
+            ),
         };
 
         Self {
@@ -122,6 +127,9 @@ impl BaseAdapter {
             }
             Language::Xml => {
                 self.parse_xml_style(source, &mut root)?;
+            }
+            Language::Text => {
+                // Text is handled by TextParser directly, not via base adapter
             }
         }
 

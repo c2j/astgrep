@@ -15,6 +15,7 @@ pub enum Language {
     Sql,
     Bash,
     Xml,
+    Text,
 }
 
 impl Language {
@@ -27,6 +28,7 @@ impl Language {
             Language::Sql => &[".sql", ".ddl", ".dml"],
             Language::Bash => &[".sh", ".bash", ".zsh"],
             Language::Xml => &[".xml", ".xsd", ".xsl", ".xslt", ".svg", ".pom"],
+            Language::Text => &[".txt", ".md", ".log", ".rst"],
         }
     }
 
@@ -39,6 +41,7 @@ impl Language {
             Language::Sql => "sql",
             Language::Bash => "bash",
             Language::Xml => "xml",
+            Language::Text => "text",
         }
     }
 
@@ -51,6 +54,7 @@ impl Language {
             "sql" => Some(Language::Sql),
             "bash" | "shell" | "sh" => Some(Language::Bash),
             "xml" => Some(Language::Xml),
+            "text" | "txt" | "plaintext" => Some(Language::Text),
             _ => None,
         }
     }
@@ -439,7 +443,7 @@ mod tests {
         let config = AnalysisConfig::default();
         assert_eq!(config.target_paths, vec![PathBuf::from(".")]);
         assert!(!config.exclude_patterns.is_empty());
-        assert_eq!(config.languages.len(), 6);
+        assert_eq!(config.languages.len(), 7);
         assert!(config.parallel);
         assert_eq!(config.output_format, OutputFormat::Json);
     }
@@ -532,5 +536,26 @@ mod tests {
     fn test_analysis_config_default_sql_dialect() {
         let config = AnalysisConfig::default();
         assert_eq!(config.sql_dialect, None);
+    }
+
+    // === Text language tests ===
+
+    #[test]
+    fn test_text_language_extensions() {
+        assert_eq!(Language::Text.extensions(), &[".txt", ".md", ".log", ".rst"]);
+    }
+
+    #[test]
+    fn test_text_language_from_extension() {
+        assert_eq!(Language::from_extension(".txt"), Some(Language::Text));
+        assert_eq!(Language::from_extension("txt"), Some(Language::Text));
+        assert_eq!(Language::from_extension(".md"), Some(Language::Text));
+    }
+
+    #[test]
+    fn test_text_language_parse_name() {
+        assert_eq!(Language::parse_name("text"), Some(Language::Text));
+        assert_eq!(Language::parse_name("txt"), Some(Language::Text));
+        assert_eq!(Language::Text.as_str(), "text");
     }
 }
