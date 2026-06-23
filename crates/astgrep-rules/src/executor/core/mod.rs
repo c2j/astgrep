@@ -394,10 +394,10 @@ impl AdvancedRuleExecutor {
         Ok(findings)
     }
 
-    /// Handle `PatternType::All` that contains `Inside` / `NotInside` constraints.
+    /// Handle `PatternType::All` that contains `Inside` / `NotInside` / `Not` constraints.
     ///
-    /// Returns `Some(findings)` if Inside/NotInside sub-patterns were present and processed,
-    /// or `None` if no spatial constraints were found (caller should fall through to normal path).
+    /// Returns `Some(findings)` if Inside/NotInside/Not sub-patterns were present and processed,
+    /// or `None` if no spatial or negative constraints were found (caller should fall through to normal path).
     fn execute_all_with_inside_constraints(
         &mut self,
         rule: &Rule,
@@ -421,7 +421,7 @@ impl AdvancedRuleExecutor {
             }
         }
 
-        if inside_patterns.is_empty() && not_inside_patterns.is_empty() {
+        if inside_patterns.is_empty() && not_inside_patterns.is_empty() && negative_patterns.is_empty() {
             return Ok(None);
         }
 

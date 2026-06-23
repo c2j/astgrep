@@ -479,8 +479,14 @@ impl RuleExecutionEngine {
             union.into_iter().collect()
         };
 
-        // Remove spans matched by negative patterns
-        all_spans.retain(|span| !negative_set.contains(span));
+        // Remove spans overlapping with negative patterns
+        if !negative_set.is_empty() {
+            all_spans.retain(|span| {
+                let (s1, e1) = *span;
+                // Two byte ranges overlap if s1 < e2 && s2 < e1
+                !negative_set.iter().any(|(s2, e2)| s1 < *e2 && *s2 < e1)
+            });
+        }
 
         // Apply metavariable conditions from the parent All pattern.
         // A condition on metavariable $X only applies to spans from patterns

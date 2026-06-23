@@ -1,0 +1,9 @@
+rules:
+  - id: BASH-NOT-001
+    name: Pattern-Not Overlap Test
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [bash]
+    patterns:
+      - pattern: "echo $MSG"
+      - pattern-not: "hello"
