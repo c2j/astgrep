@@ -35,6 +35,7 @@ fn test_complete_rule_execution() {
         enabled: true,
         mode: astgrep_rules::RuleMode::Search,
         sql_stmt_boundary: None,
+        dialects: None,
     };
 
     // Execute rule
@@ -85,6 +86,7 @@ fn test_basic_rule_execution() {
         enabled: true,
         mode: astgrep_rules::RuleMode::Search,
         sql_stmt_boundary: None,
+        dialects: None,
     };
 
     // Execute rule
@@ -133,6 +135,7 @@ fn test_rule_validation() {
         enabled: true,
         mode: astgrep_rules::RuleMode::Search,
         sql_stmt_boundary: None,
+        dialects: None,
     };
 
     let result = validator.validate_rule(&valid_rule);
@@ -176,6 +179,7 @@ fn test_rule_engine_configuration() {
         enabled: true,
         mode: astgrep_rules::RuleMode::Search,
         sql_stmt_boundary: None,
+        dialects: None,
     };
 
     engine.add_rule(rule).unwrap();
@@ -219,6 +223,7 @@ fn test_simple_performance() {
         enabled: true,
         mode: astgrep_rules::RuleMode::Search,
         sql_stmt_boundary: None,
+        dialects: None,
     };
 
     // Execute rule and measure time
@@ -272,6 +277,7 @@ fn test_error_handling() {
         enabled: true,
         mode: astgrep_rules::RuleMode::Search,
         sql_stmt_boundary: None,
+        dialects: None,
     };
 
     // Try to add invalid rule (should fail validation)
@@ -316,6 +322,7 @@ fn test_multiple_rules() {
             enabled: true,
             mode: astgrep_rules::RuleMode::Search,
             sql_stmt_boundary: None,
+            dialects: None,
         };
         engine.add_rule(rule).unwrap();
     }

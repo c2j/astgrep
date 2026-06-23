@@ -44,6 +44,7 @@ impl RuleValidator {
         self.validate_dataflow(rule)?;
         self.validate_metadata(rule)?;
         self.validate_consistency(rule)?;
+        self.validate_text_language_patterns(rule)?;
 
         // Run custom validators
         for (name, validator) in &self.custom_validators {
@@ -449,6 +450,58 @@ impl RuleValidator {
         Ok(())
     }
 
+    /// Validate Text language rules: only allow pattern-regex and literal patterns
+    /// (no metavariables or ellipsis, which require tree-sitter-based structural matching)
+    fn validate_text_language_patterns(&self, rule: &Rule) -> Result<()> {
+        if !rule.languages.contains(&astgrep_core::Language::Text) {
+            return Ok(());
+        }
+
+        for (index, pattern) in rule.patterns.iter().enumerate() {
+            if pattern.metavariable_pattern.is_some() {
+                return Err(AnalysisError::rule_validation_error(format!(
+                    "Pattern {}: metavariable-pattern not supported for 'text' language. Use 'pattern-regex' instead.",
+                    index
+                )));
+            }
+
+            if !pattern.conditions.is_empty() {
+                return Err(AnalysisError::rule_validation_error(format!(
+                    "Pattern {}: conditions not supported for 'text' language. Use 'pattern-regex' instead.",
+                    index
+                )));
+            }
+
+            // Only reject metavariables/ellipsis in Simple patterns (not Regex,
+            // where $ and ... are valid regex syntax)
+            if matches!(pattern.pattern_type, PatternType::Simple(_)) {
+                if let Some(pattern_str) = pattern.get_pattern_string() {
+                    if pattern_str.contains("...") {
+                        return Err(AnalysisError::rule_validation_error(format!(
+                            "Pattern {}: ellipsis '...' not supported for 'text' language. Use 'pattern-regex' instead.",
+                            index
+                        )));
+                    }
+
+                    if pattern_str.contains('$') {
+                        return Err(AnalysisError::rule_validation_error(format!(
+                            "Pattern {}: metavariables not supported for 'text' language. Use 'pattern-regex' instead.",
+                            index
+                        )));
+                    }
+                }
+            }
+        }
+
+        if rule.dataflow.is_some() {
+            return Err(AnalysisError::rule_validation_error(
+                "Dataflow analysis not supported for 'text' language. Use 'pattern-regex' instead.",
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Validate rule internal consistency
     fn validate_consistency(&self, rule: &Rule) -> Result<()> {
         // This validation is already done in validate_patterns
@@ -670,5 +723,124 @@ mod tests {
         .add_pattern(Pattern::regex("WITH\\s+\\w+\\s+AS\\s*\\(".to_string()));
 
         assert!(validator.validate_rule(&rule).is_ok());
+    }
+
+    fn create_text_rule() -> Rule {
+        Rule::new(
+            "text-rule".to_string(),
+            "Text Rule".to_string(),
+            "A rule for text files".to_string(),
+            Severity::Warning,
+            Confidence::Medium,
+            vec![Language::Text],
+        )
+    }
+
+    #[test]
+    fn test_text_rule_regex_pattern_valid() {
+        let validator = RuleValidator::new();
+        let rule = create_text_rule()
+            .add_pattern(Pattern::regex("^fix.*$".to_string()));
+        assert!(validator.validate_rule(&rule).is_ok(),
+            "pattern-regex should be valid for text language");
+    }
+
+    #[test]
+    fn test_text_rule_literal_pattern_valid() {
+        let validator = RuleValidator::new();
+        let rule = create_text_rule()
+            .add_pattern(Pattern::simple("literal text match".to_string()));
+        assert!(validator.validate_rule(&rule).is_ok(),
+            "literal pattern without metavariables should be valid for text language");
+    }
+
+    #[test]
+    fn test_text_rule_metavariable_rejected() {
+        let validator = RuleValidator::new();
+        let rule = create_text_rule()
+            .add_pattern(Pattern::simple("$VAR".to_string()));
+        let result = validator.validate_rule(&rule);
+        assert!(result.is_err(), "metavariables should be rejected for text language");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("metavariable"), "error should mention metavariables: {}", err);
+    }
+
+    #[test]
+    fn test_text_rule_ellipsis_rejected() {
+        let validator = RuleValidator::new();
+        let rule = create_text_rule()
+            .add_pattern(Pattern::simple("...".to_string()));
+        let result = validator.validate_rule(&rule);
+        assert!(result.is_err(), "ellipsis should be rejected for text language");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("ellipsis"), "error should mention ellipsis: {}", err);
+    }
+
+    #[test]
+    fn test_text_rule_dataflow_rejected() {
+        let validator = RuleValidator::new();
+        let mut rule = create_text_rule()
+            .add_pattern(Pattern::regex("test".to_string()));
+        rule.dataflow = Some(DataFlowSpec::from_strings(
+            vec!["source".to_string()],
+            vec!["sink".to_string()],
+        ));
+        let err = validator.validate_rule(&rule).unwrap_err().to_string();
+        assert!(err.to_lowercase().contains("dataflow"), "error should mention dataflow: {}", err);
+    }
+
+    #[test]
+    fn test_text_rule_metavariable_pattern_rejected() {
+        let validator = RuleValidator::new();
+        let pattern = Pattern::simple("dummy".to_string());
+        let rule = create_text_rule()
+            .add_pattern(Pattern {
+                pattern_type: pattern.pattern_type,
+                metavariable_pattern: Some(MetavariablePattern::new(
+                    "$VAR".to_string(),
+                    vec!["pattern".to_string()],
+                )),
+                conditions: Vec::new(),
+                focus: None,
+            });
+        let result = validator.validate_rule(&rule);
+        assert!(result.is_err(), "metavariable-pattern should be rejected for text language");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("metavariable-pattern"), "error should mention metavariable-pattern: {}", err);
+    }
+
+    #[test]
+    fn test_text_rule_conditions_rejected() {
+        let validator = RuleValidator::new();
+        let condition = Condition::MetavariableRegex(MetavariableRegex {
+            metavariable: "$X".to_string(),
+            regex: "test".to_string(),
+        });
+        let pattern = Pattern::simple("dummy".to_string());
+        let rule = create_text_rule()
+            .add_pattern(Pattern {
+                pattern_type: pattern.pattern_type,
+                metavariable_pattern: None,
+                conditions: vec![condition],
+                focus: None,
+            });
+        let result = validator.validate_rule(&rule);
+        assert!(result.is_err(), "conditions should be rejected for text language");
+    }
+
+    #[test]
+    fn test_non_text_rule_metavariables_still_valid() {
+        let validator = RuleValidator::new();
+        let rule = Rule::new(
+            "java-rule".to_string(),
+            "Java Rule".to_string(),
+            "A rule for Java".to_string(),
+            Severity::Error,
+            Confidence::High,
+            vec![Language::Java],
+        )
+        .add_pattern(Pattern::simple("System.out.println($MSG)".to_string()));
+        assert!(validator.validate_rule(&rule).is_ok(),
+            "metavariables should still be valid for non-text languages");
     }
 }
