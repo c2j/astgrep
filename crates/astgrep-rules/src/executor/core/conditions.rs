@@ -1331,6 +1331,40 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        // Handle lines() function: lines($VAR) > N, lines($...STMTS) >= N, etc.
+        // MUST be checked BEFORE the generic comparison loop to avoid
+        // lexicographic string-comparison fallback.
+        if expr.contains("lines(") {
+            for op in &["!=", "==", ">=", "<=", ">", "<"] {
+                if let Some(pos) = expr.find(op) {
+                    let left = expr[..pos].trim();
+                    let right = expr[pos + op.len()..].trim();
+                    // Extract metavariable name from lines($VAR) or lines($...VAR)
+                    if let Some(inner) = left.strip_prefix("lines(").and_then(|s| s.strip_suffix(")")) {
+                        let _metavar = inner.trim();
+                        // `value` parameter already holds the bound text for the metavariable
+                        let line_count = value.lines().count();
+                        if let Ok(threshold) = right.parse::<usize>() {
+                            let result = match *op {
+                                "==" => line_count == threshold,
+                                "!=" => line_count != threshold,
+                                ">" => line_count > threshold,
+                                "<" => line_count < threshold,
+                                ">=" => line_count >= threshold,
+                                "<=" => line_count <= threshold,
+                                _ => false,
+                            };
+                            tracing::debug!(
+                                "lines(): {} lines vs threshold {}, op '{}', result={}",
+                                line_count, threshold, op, result
+                            );
+                            return Ok(result);
+                        }
+                    }
+                }
+            }
+        }
+
         for op in &["!=", "==", ">=", "<=", ">", "<"] {
             if let Some(pos) = expr.find(op) {
                 let left = expr[..pos].trim();
