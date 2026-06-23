@@ -22,6 +22,23 @@ mod taint;
 mod taint_env;
 mod utils;
 
+fn byte_to_line_col(source: &str, byte_offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    for (i, ch) in source.char_indices() {
+        if i >= byte_offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
 pub struct AdvancedRuleExecutor {
     pattern_matcher: AdvancedSemgrepMatcher,
     dataflow_analyzer: DataFlowAnalyzer,
@@ -224,6 +241,30 @@ impl AdvancedRuleExecutor {
         file_path: Option<&Path>,
     ) -> Result<Vec<Finding>> {
         let mut findings = Vec::new();
+
+        if let PatternType::Regex(ref regex_str) = &pattern.pattern_type {
+            let full_source = ast.text().unwrap_or("").to_string();
+            if let Ok(re) = regex::Regex::new(regex_str) {
+                for mat in re.find_iter(&full_source) {
+                    let (sl, sc) = byte_to_line_col(&full_source, mat.start());
+                    let (el, ec) = byte_to_line_col(&full_source, mat.end());
+                    findings.push(Finding::new(
+                        rule.id.clone(),
+                        rule.description.clone(),
+                        rule.severity,
+                        rule.confidence,
+                        Location {
+                            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                            start_line: sl,
+                            start_column: sc,
+                            end_line: el,
+                            end_column: ec,
+                        },
+                    ));
+                }
+            }
+            return Ok(findings);
+        }
 
         // Handle Either patterns by recursively processing each alternative
         // so each inner pattern's conditions are checked
