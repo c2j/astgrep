@@ -235,6 +235,7 @@ pub mod utils {
             Language::Sql => SQL_KEYWORDS.contains(&text.to_uppercase().as_str()),
             Language::Bash => BASH_KEYWORDS.contains(&text),
             Language::Xml => false, // XML doesn't have keywords in the traditional sense
+            Language::Text => false, // Text has no keywords
         }
     }
 

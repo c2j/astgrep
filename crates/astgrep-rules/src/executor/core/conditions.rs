@@ -1331,6 +1331,40 @@ impl AdvancedRuleExecutor {
             }
         }
 
+        // Handle lines() function: lines($VAR) > N, lines($...STMTS) >= N, etc.
+        // MUST be checked BEFORE the generic comparison loop to avoid
+        // lexicographic string-comparison fallback.
+        if expr.contains("lines(") {
+            for op in &["!=", "==", ">=", "<=", ">", "<"] {
+                if let Some(pos) = expr.find(op) {
+                    let left = expr[..pos].trim();
+                    let right = expr[pos + op.len()..].trim();
+                    // Extract metavariable name from lines($VAR) or lines($...VAR)
+                    if let Some(inner) = left.strip_prefix("lines(").and_then(|s| s.strip_suffix(")")) {
+                        let _metavar = inner.trim();
+                        // `value` parameter already holds the bound text for the metavariable
+                        let line_count = value.lines().count();
+                        if let Ok(threshold) = right.parse::<usize>() {
+                            let result = match *op {
+                                "==" => line_count == threshold,
+                                "!=" => line_count != threshold,
+                                ">" => line_count > threshold,
+                                "<" => line_count < threshold,
+                                ">=" => line_count >= threshold,
+                                "<=" => line_count <= threshold,
+                                _ => false,
+                            };
+                            tracing::debug!(
+                                "lines(): {} lines vs threshold {}, op '{}', result={}",
+                                line_count, threshold, op, result
+                            );
+                            return Ok(result);
+                        }
+                    }
+                }
+            }
+        }
+
         for op in &["!=", "==", ">=", "<=", ">", "<"] {
             if let Some(pos) = expr.find(op) {
                 let left = expr[..pos].trim();
@@ -1543,5 +1577,60 @@ impl AdvancedRuleExecutor {
         }
         let re = regex::Regex::new(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$").ok();
         re.is_some_and(|r| r.is_match(trimmed))
+    }
+}
+
+#[cfg(test)]
+mod tests_lines_function {
+    use super::*;
+
+    #[test]
+    fn test_lines_short_code_should_not_exceed_80() {
+        // "String name = \"test\";" has 1 line → lines() > 80 should be FALSE
+        // Currently returns TRUE (the bug) due to string comparison
+        let executor = AdvancedRuleExecutor::new();
+        let bindings = std::collections::HashMap::new();
+        let result = executor
+            .evaluate_python_expression(
+                "String name = \"test\";",
+                "lines($...STMTS) > 80",
+                &bindings,
+            )
+            .unwrap();
+        assert!(!result, "1 line of code should NOT exceed 80 lines");
+    }
+
+    #[test]
+    fn test_lines_long_code_should_exceed_80() {
+        // 100-line code → lines() > 80 should be TRUE
+        let long_code = (0..100)
+            .map(|i| format!("    int x{} = 0;", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let executor = AdvancedRuleExecutor::new();
+        let bindings = std::collections::HashMap::new();
+        let result = executor
+            .evaluate_python_expression(&long_code, "lines($...STMTS) > 80", &bindings)
+            .unwrap();
+        assert!(result, "100 lines of code should exceed 80 lines");
+    }
+
+    #[test]
+    fn test_lines_boundary_exactly_80() {
+        // Exactly 80 lines → lines() > 80 should be FALSE (boundary)
+        let eighty_lines = (0..80)
+            .map(|i| format!("    int x{} = 0;", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let executor = AdvancedRuleExecutor::new();
+        let bindings = std::collections::HashMap::new();
+        let result = executor
+            .evaluate_python_expression(
+                &eighty_lines,
+                "lines($...STMTS) > 80",
+                &bindings,
+            )
+            .unwrap();
+        assert!(!result, "exactly 80 lines should NOT exceed 80");
     }
 }

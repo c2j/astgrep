@@ -201,6 +201,7 @@ pub mod languages {
         Language::Sql,
         Language::Bash,
         Language::Xml,
+        Language::Text,
     ];
 
     /// Default languages for analysis

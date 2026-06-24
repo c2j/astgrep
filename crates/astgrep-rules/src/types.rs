@@ -197,6 +197,23 @@ pub enum PatternType {
     Any(Vec<Pattern>),
 }
 
+impl PatternType {
+    /// Human-readable label for the pattern type (used in error messages).
+    pub fn label(&self) -> &'static str {
+        match self {
+            PatternType::Simple(_) => "pattern",
+            PatternType::Regex(_) => "pattern-regex",
+            PatternType::Either(_) => "pattern-either",
+            PatternType::Inside(_) => "pattern-inside",
+            PatternType::NotInside(_) => "pattern-not-inside",
+            PatternType::Not(_) => "pattern-not",
+            PatternType::NotRegex(_) => "pattern-not-regex",
+            PatternType::All(_) => "pattern-all",
+            PatternType::Any(_) => "pattern-any",
+        }
+    }
+}
+
 impl Pattern {
     /// Create a simple pattern
     pub fn simple(pattern: String) -> Self {

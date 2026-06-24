@@ -15,6 +15,7 @@ pub mod python;
 pub mod registry;
 pub mod script_discovery;
 pub mod sql;
+pub mod text;
 pub mod tree_sitter_parser;
 pub mod xml;
 
@@ -79,6 +80,7 @@ impl LanguageParserRegistry {
                 "py" | "pyw" => Ok(Language::Python),
                 "sql" | "ddl" | "dml" => Ok(Language::Sql),
                 "sh" | "bash" | "zsh" => Ok(Language::Bash),
+                "txt" | "md" | "log" | "rst" => Ok(Language::Text),
                 _ => Err(astgrep_core::AnalysisError::unsupported_language(format!(
                     "Unsupported file extension: {}",
                     extension
@@ -111,6 +113,7 @@ impl LanguageParserRegistry {
         self.register_parser(Language::Python, Box::new(python::PythonParser::new()));
         self.register_parser(Language::Sql, Box::new(sql::SqlParser::new()));
         self.register_parser(Language::Bash, Box::new(bash::BashParser::new()));
+        self.register_parser(Language::Text, Box::new(text::TextParser::new()));
     }
 
     #[cfg(test)]
@@ -163,6 +166,7 @@ mod tests {
                     Language::Sql => matches!(ext, "sql" | "ddl" | "dml"),
                     Language::Bash => matches!(ext, "sh" | "bash" | "zsh"),
                     Language::Xml => ext == "xml",
+                    Language::Text => matches!(ext, "txt" | "md" | "log" | "rst"),
                 }
             } else {
                 false

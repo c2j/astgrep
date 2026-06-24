@@ -147,6 +147,7 @@ impl ParserFactory {
             Language::Sql => Ok(Box::new(crate::sql::SqlParser::new())),
             Language::Bash => Ok(Box::new(crate::bash::BashParser::new())),
             Language::Xml => Ok(Box::new(crate::xml::XmlParser::new())),
+            Language::Text => Ok(Box::new(crate::text::TextParser::new())),
         }
     }
 
@@ -196,6 +197,12 @@ impl ParserFactory {
             Language::Xml => ParserConfig {
                 timeout_ms: Some(parser::DEFAULT_TIMEOUT_MS),
                 max_file_size: Some(parser::DEFAULT_MAX_FILE_SIZE),
+                enable_recovery: true,
+                strict_mode: false,
+            },
+            Language::Text => ParserConfig {
+                timeout_ms: Some(5000),
+                max_file_size: Some(10 * 1024 * 1024),
                 enable_recovery: true,
                 strict_mode: false,
             },

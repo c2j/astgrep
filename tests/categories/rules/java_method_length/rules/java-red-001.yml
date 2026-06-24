@@ -1,0 +1,14 @@
+rules:
+  - id: JAVA-RED-001
+    name: method_length_limits
+    severity: WARNING
+    confidence: MEDIUM
+    languages: [java]
+    description: >
+      Flags methods whose body exceeds 80 lines by counting
+      lines in the captured $...STMTS metavariable.
+    patterns:
+      - pattern: "$...STMTS"
+      - metavariable-comparison:
+          metavariable: "$...STMTS"
+          comparison: "lines($...STMTS) > 80"

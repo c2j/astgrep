@@ -17,6 +17,7 @@ fn extension_for_lang(lang: Language) -> &'static str {
         Language::Sql => "sql",
         Language::Bash => "sh",
         Language::Xml => "xml",
+        Language::Text => "txt",
     }
 }
 
@@ -31,6 +32,7 @@ proptest! {
             Language::Python,
             Language::Sql,
             Language::Bash,
+            Language::Text,
         ]),
         input in ".*"
     ) {

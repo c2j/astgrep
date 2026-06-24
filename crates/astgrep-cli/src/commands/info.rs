@@ -116,6 +116,9 @@ fn show_language_info(lang_str: &str) -> Result<()> {
         Language::Sql => show_sql_info(),
         Language::Bash => show_bash_info(),
         Language::Xml => println!("XML support is basic"),
+        Language::Text => {
+            println!("Text support uses pattern-regex matching (no tree-sitter)")
+        }
     }
 
     Ok(())
@@ -134,6 +137,10 @@ fn get_language_details(language: &Language) -> (Vec<&'static str>, &'static str
         Language::Xml => (
             vec![".xml", ".xsd", ".xsl", ".xslt", ".svg", ".pom"],
             "Extensible Markup Language for data representation",
+        ),
+        Language::Text => (
+            vec![".txt", ".md", ".log", ".rst"],
+            "Plain text for commit conventions and regex-based rules",
         ),
     }
 }
