@@ -1127,6 +1127,7 @@ impl CrGuiApp {
             astgrep_core::Language::Sql => "sql",
             astgrep_core::Language::Bash => "sh",
             astgrep_core::Language::Xml => "xml",
+            astgrep_core::Language::Text => "txt",
         };
         let file_path = PathBuf::from(format!("test_file.{}", file_extension));
         let ast = self
@@ -1313,6 +1314,7 @@ impl CrGuiApp {
             astgrep_core::Language::Sql => "sql",
             astgrep_core::Language::Bash => "sh",
             astgrep_core::Language::Xml => "xml",
+            astgrep_core::Language::Text => "txt",
         };
         let file_path = PathBuf::from(format!("test_file.{}", file_extension));
         let parser_registry = LanguageParserRegistry::new();

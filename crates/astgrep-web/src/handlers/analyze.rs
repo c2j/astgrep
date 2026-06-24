@@ -872,6 +872,7 @@ async fn load_default_rules_for_language(
         Language::Sql => "sql",
         Language::Bash => "bash",
         Language::Xml => "xml",
+        Language::Text => "text",
     };
 
     let rules_path = config
@@ -1013,6 +1014,7 @@ rules:
     message: "Review XML structure and comments"
 "#
         .to_string(),
+        Language::Text => "rules: []\n".to_string(),
     }
 }
 
