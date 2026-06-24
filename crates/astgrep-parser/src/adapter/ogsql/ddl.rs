@@ -306,7 +306,6 @@ fn data_type_to_string(dt: &ogsql_parser::DataType) -> String {
         DataType::Varbit(_) => "VARBIT",
         DataType::Array(inner) => return format!("{}[]", data_type_to_string(inner)),
         DataType::Custom(name, _) => return name.join("."),
-        _ => return format!("{:?}", dt),
     }
     .to_string()
 }

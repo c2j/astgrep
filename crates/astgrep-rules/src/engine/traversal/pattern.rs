@@ -154,44 +154,17 @@ impl RuleExecutionEngine {
         let needs_constant_prop =
             (has_literal || has_paren_literal) && rule.has_constant_propagation();
 
-        let has_semgrep_syntax = pattern_str.contains("...") || pattern_str.contains('$');
+        // Note: Previously, patterns with semgrep metavariables ($VAR, ...) were
+        // routed to the advanced (AST) executor, but the text matcher now handles
+        // them correctly via semgrep_pattern_to_regex conversion.
+        // Only route to advanced executor if there are actual conditions or
+        // constant propagation needs.
 
-        if requires_advanced || needs_constant_prop || has_semgrep_syntax {
+        if requires_advanced || needs_constant_prop {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
-        // Also use advanced (tree) matcher for code-like patterns that need structural matching
-        let looks_like_code = pattern_str.contains("{")
-            || pattern_str.contains("class ")
-            || pattern_str.contains("function ")
-            || pattern_str.contains("def ")
-            || pattern_str.contains("if ")
-            || pattern_str.contains("for ")
-            || pattern_str.contains("while ")
-            || pattern_str.contains("try ")
-            || pattern_str.contains("catch ")
-            || pattern_str.contains("import ")
-            || pattern_str.contains("from ")
-            || pattern_str.contains("implements ")
-            || pattern_str.contains("extends ")
-            || pattern_str.contains("interface ")
-            || pattern_str.contains("record ")
-            || pattern_str.contains("@interface ")
-            || pattern_str.contains("public ")
-            || pattern_str.contains("private ")
-            || pattern_str.contains("protected ")
-            || pattern_str.contains("return ")
-            || pattern_str.contains("throw ")
-            // Multi-statement patterns (semicolons on multiple lines)
-            || (pattern_str.contains(';') && pattern_str.contains('\n'))
-            // Variable/object declarations
-            || pattern_str.starts_with("var ")
-            || pattern_str.starts_with("let ")
-            || pattern_str.starts_with("const ")
-            || pattern_str.contains("new ")
-            // Annotations
-            || pattern_str.contains("@");
-        if looks_like_code {
+        if Self::pattern_needs_ast_matching(pattern_str) {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
@@ -289,6 +262,37 @@ impl RuleExecutionEngine {
         Ok(text_findings)
     }
 
+    fn pattern_needs_ast_matching(pattern_str: &str) -> bool {
+        pattern_str.contains('{')
+            || pattern_str.contains("class ")
+            || pattern_str.contains("function ")
+            || pattern_str.contains("def ")
+            || pattern_str.contains("if ")
+            || pattern_str.contains("for ")
+            || pattern_str.contains("while ")
+            || pattern_str.contains("try ")
+            || pattern_str.contains("catch ")
+            || pattern_str.contains("import ")
+            || pattern_str.contains("from ")
+            || pattern_str.contains("implements ")
+            || pattern_str.contains("extends ")
+            || pattern_str.contains("interface ")
+            || pattern_str.contains("record ")
+            || pattern_str.contains("@interface ")
+            || pattern_str.contains("public ")
+            || pattern_str.contains("private ")
+            || pattern_str.contains("protected ")
+            || pattern_str.contains("return ")
+            || pattern_str.contains("throw ")
+            || (pattern_str.contains(';') && pattern_str.contains('\n'))
+            || pattern_str.starts_with("var ")
+            || pattern_str.starts_with("let ")
+            || pattern_str.starts_with("const ")
+            || pattern_str.contains("new ")
+            || pattern_str.contains('@')
+            || (pattern_str.contains('(') && pattern_str.contains(')') && pattern_str.contains('$'))
+    }
+
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
     fn execute_advanced_pattern(
         &self,
@@ -318,6 +322,80 @@ impl RuleExecutionEngine {
         Ok(result.findings)
     }
 
+    /// Collect text match spans for a single pattern, recursing into
+    /// Either/Any sub-patterns. Returns None if the pattern type is too complex
+    /// for text-level matching.
+    fn collect_spans_for_pattern(
+        &self,
+        pat: &Pattern,
+        source: &str,
+        language: Language,
+    ) -> Option<Vec<(usize, usize)>> {
+        if !pat.conditions.is_empty() {
+            return None;
+        }
+        match &pat.pattern_type {
+            PatternType::Simple(s) => {
+                Some(self.find_pattern_spans_in_source(s, source, language, false))
+            }
+            PatternType::Either(alternatives) => {
+                let mut union: std::collections::HashSet<(usize, usize)> =
+                    std::collections::HashSet::new();
+                for alt in alternatives {
+                    if let Some(spans) = self.collect_spans_for_pattern(alt, source, language) {
+                        for span in spans {
+                            union.insert(span);
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                Some(union.into_iter().collect())
+            }
+            PatternType::Any(alternatives) => {
+                let mut union: std::collections::HashSet<(usize, usize)> =
+                    std::collections::HashSet::new();
+                for alt in alternatives {
+                    if let Some(spans) = self.collect_spans_for_pattern(alt, source, language) {
+                        for span in spans {
+                            union.insert(span);
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                Some(union.into_iter().collect())
+            }
+            PatternType::Not(inner) => {
+                self.collect_spans_for_pattern(inner, source, language)
+            }
+            PatternType::Regex(re) => {
+                let mut spans = Vec::new();
+                if let Ok(regex) = regex::Regex::new(re) {
+                    for m in regex.find_iter(source) {
+                        spans.push((m.start(), m.end()));
+                    }
+                }
+                Some(spans)
+            }
+            PatternType::All(subs) => {
+                let mut union: std::collections::HashSet<(usize, usize)> =
+                    std::collections::HashSet::new();
+                for sub in subs {
+                    if let Some(spans) = self.collect_spans_for_pattern(sub, source, language) {
+                        union.extend(spans);
+                    } else {
+                        return None;
+                    }
+                }
+                Some(union.into_iter().collect())
+            }
+            PatternType::NotRegex(_)
+            | PatternType::Inside(_)
+            | PatternType::NotInside(_) => None,
+        }
+    }
+
     /// Execute pattern-all matching
     fn execute_all_pattern(
         &self,
@@ -327,28 +405,422 @@ impl RuleExecutionEngine {
         context: &RuleContext,
         _ast: &dyn AstNode,
     ) -> Result<Vec<Finding>> {
-        use crate::executor::AdvancedRuleExecutor;
+        // Try text-based matching for decomposable sub-patterns.
+        // This handles SQL-in-string patterns and other text-level matches
+        // that the AST-based AdvancedRuleExecutor cannot match.
+        // Fall back to the advanced executor if the All pattern or any
+        // sub-pattern has conditions, or if sub-patterns use Inside/NotInside.
 
-        // Use AdvancedRuleExecutor for proper AST-based matching
-        debug!("Pattern has {} sub-patterns and {} conditions, using AdvancedRuleExecutor for All pattern", subs.len(), pattern.conditions.len());
-        let mut advanced_executor = AdvancedRuleExecutor::new();
+        // Check if the parent All pattern itself has conditions (e.g., metavariable-condition).
+        // We try to evaluate conditions textually; only fall back to AdvancedRuleExecutor
+        // if conditions can't be evaluated on text matches.
+        let has_conditions = !pattern.conditions.is_empty();
 
-        // Create a rule with the combined pattern
-        let mut single_pattern_rule = rule.clone();
-        single_pattern_rule.patterns = vec![pattern.clone()];
+        // Collect positive (must match) and negative (must NOT match) spans
+        let mut positive_sets: Vec<std::collections::HashSet<(usize, usize)>> = Vec::new();
+        let mut negative_set: std::collections::HashSet<(usize, usize)> =
+            std::collections::HashSet::new();
+        let mut can_use_text = true;
 
-        // Execute using advanced executor
-        let file_path = std::path::Path::new(&context.file_path);
-        let result = advanced_executor.execute_comprehensive_analysis(
-            &[single_pattern_rule],
-            _ast,
-            context.language,
-            Some(file_path),
-            true,
-            context.sql_dialect,
-        )?;
+        // Structural pattern detection: if any positive sub-pattern requires AST-level
+        // structural matching (braces, call syntax with metavars, language keywords),
+        // skip text matching entirely and delegate to AdvancedRuleExecutor.
+        // The text matcher converts $VAR to flat regex which produces false positives
+        // on structural patterns like "$TYPE $METHOD(...) { $...BODY }".
+        for sub in subs {
+            if let PatternType::Simple(ref s) = sub.pattern_type {
+                if Self::pattern_needs_ast_matching(s) {
+                    can_use_text = false;
+                    debug!(
+                        "All pattern sub-pattern '{}' needs AST matching, delegating to AdvancedRuleExecutor",
+                        s
+                    );
+                    break;
+                }
+            }
+        }
 
-        Ok(result.findings)
+        for sub in subs {
+            match &sub.pattern_type {
+                PatternType::Not(inner) => {
+                    if let Some(spans) = self.collect_spans_for_pattern(inner, &context.source_code, context.language) {
+                        for span in spans {
+                            negative_set.insert(span);
+                        }
+                    } else {
+                        can_use_text = false;
+                        break;
+                    }
+                }
+                PatternType::NotRegex(_) | PatternType::NotInside(_) => {
+                    can_use_text = false;
+                    break;
+                }
+                _ => {
+                    if let Some(spans) = self.collect_spans_for_pattern(sub, &context.source_code, context.language) {
+                        let set: std::collections::HashSet<(usize, usize)> =
+                            spans.into_iter().collect();
+                        positive_sets.push(set);
+                    } else {
+                        can_use_text = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !can_use_text {
+            debug!("Pattern has complex sub-patterns, using AdvancedRuleExecutor for All pattern");
+            use crate::executor::AdvancedRuleExecutor;
+            let mut advanced_executor = AdvancedRuleExecutor::new();
+            let mut single_pattern_rule = rule.clone();
+            single_pattern_rule.patterns = vec![pattern.clone()];
+            let file_path = std::path::Path::new(&context.file_path);
+            let result = advanced_executor.execute_comprehensive_analysis(
+                &[single_pattern_rule],
+                _ast,
+                context.language,
+                Some(file_path),
+                true,
+                context.sql_dialect,
+            )?;
+            return Ok(result.findings);
+        }
+
+        // Union all positive sets: report findings from ANY positive pattern.
+        let mut all_spans: Vec<(usize, usize)> = {
+            let mut union: std::collections::HashSet<(usize, usize)> =
+                std::collections::HashSet::new();
+            for set in &positive_sets {
+                union.extend(set.iter().copied());
+            }
+            union.into_iter().collect()
+        };
+
+        // Remove spans overlapping with negative patterns
+        if !negative_set.is_empty() {
+            all_spans.retain(|span| {
+                let (s1, e1) = *span;
+                // Two byte ranges overlap if s1 < e2 && s2 < e1
+                !negative_set.iter().any(|(s2, e2)| s1 < *e2 && *s2 < e1)
+            });
+        }
+
+        // Apply metavariable conditions from the parent All pattern.
+        // A condition on metavariable $X only applies to spans from patterns
+        // that actually reference $X. Spans from other patterns pass through
+        // unconditionally.
+        if has_conditions {
+            // Collect the set of metavariables referenced in all conditions
+            let mut condition_metavars: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for condition in &pattern.conditions {
+                match condition {
+                    Condition::MetavariableComparison(c) => {
+                        condition_metavars.insert(c.metavariable.clone());
+                    }
+                    Condition::MetavariableRegex(c) => {
+                        condition_metavars.insert(c.metavariable.clone());
+                    }
+                    _ => {}
+                }
+            }
+            // For each condition metavariable, find which sub-patterns define it
+            let mut meta_to_pattern_indices: std::collections::HashMap<String, Vec<usize>> =
+                std::collections::HashMap::new();
+            for mv in &condition_metavars {
+                for (i, sub) in subs.iter().enumerate() {
+                    if Self::pattern_references_metavar(sub, mv) {
+                        meta_to_pattern_indices.entry(mv.clone()).or_default().push(i);
+                    }
+                }
+            }
+            // Union spans from ALL patterns first
+            let mut combined_spans: Vec<(usize, usize)> = Vec::new();
+            for set in &positive_sets {
+                combined_spans.extend(set.iter().copied());
+            }
+            // Remove negatives
+            combined_spans.retain(|span| !negative_set.contains(span));
+            // Now apply conditions: a span from a pattern that defines a condition
+            // metavariable must satisfy that condition
+            let mut filtered = Vec::new();
+            for span in &combined_spans {
+                let matched_text = &context.source_code[span.0..span.1.min(context.source_code.len())];
+                let mut passes = true;
+                for condition in &pattern.conditions {
+                    let meta_var = match condition {
+                        Condition::MetavariableComparison(c) => Some(&c.metavariable),
+                        Condition::MetavariableRegex(c) => Some(&c.metavariable),
+                        _ => None,
+                    };
+                    let Some(mv) = meta_var else { continue; };
+                    // Check if this span came from a pattern that defines mv
+                    if let Some(indices) = meta_to_pattern_indices.get(mv) {
+                        // We don't know exactly which sub-pattern produced this span.
+                        // Conservative: if ANY pattern that defines mv COULD have
+                        // produced it, check the condition.
+                        let affects_this_span = indices.iter().any(|&idx| {
+                            if idx < positive_sets.len() {
+                                positive_sets[idx].contains(span)
+                            } else {
+                                false
+                            }
+                        });
+                        if affects_this_span {
+                            if !self.evaluate_condition_textually(condition, matched_text, subs) {
+                                passes = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if passes {
+                    filtered.push(*span);
+                }
+            }
+            all_spans = filtered;
+        }
+
+        // Convert spans to findings
+        let mut findings = Vec::new();
+        let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+        for (start_byte, end_byte) in all_spans {
+            if !seen.insert((start_byte, end_byte)) {
+                continue;
+            }
+            let (start_line, start_col) =
+                Self::byte_index_to_line_col(&context.source_code, start_byte);
+            let (end_line, end_col) =
+                Self::byte_index_to_line_col(&context.source_code, end_byte);
+            let location = astgrep_core::Location::new(
+                std::path::PathBuf::from(&context.file_path),
+                start_line,
+                start_col,
+                end_line,
+                end_col,
+            );
+            let matched_text =
+                &context.source_code[start_byte..end_byte.min(context.source_code.len())];
+            let mut finding = astgrep_core::Finding::new(
+                rule.id.clone(),
+                if !rule.description.is_empty() {
+                    rule.description.clone()
+                } else {
+                    format!("Match: {}", matched_text)
+                },
+                rule.severity,
+                rule.confidence,
+                location,
+            );
+            finding = finding.with_metadata("pattern".to_string(), context.source_code.clone());
+            if let Some(ref fix) = rule.fix {
+                finding = finding.with_fix(fix.clone());
+            }
+            findings.push(finding);
+        }
+
+        Ok(findings)
+    }
+
+    /// Try to evaluate a metavariable condition on a text-matched span.
+    /// Returns true if the condition passes or if it can't be evaluated
+    /// (caller falls back to AdvancedRuleExecutor).
+    /// Returns true if the condition passes or if it can't be evaluated
+    /// (caller falls back to AdvancedRuleExecutor).
+    fn evaluate_condition_textually(
+        &self,
+        condition: &Condition,
+        matched_text: &str,
+        sub_patterns: &[Pattern],
+    ) -> bool {
+        match condition {
+            Condition::MetavariableComparison(comp) => {
+                let meta_var = &comp.metavariable;
+
+                // Find the pattern that defines this metavariable (as a Simple pattern)
+                let defining_pattern = sub_patterns.iter().find(|p| {
+                    if let PatternType::Simple(s) = &p.pattern_type {
+                        s.contains(meta_var.as_str())
+                    } else if let PatternType::Either(alternatives) = &p.pattern_type {
+                        alternatives.iter().any(|alt| {
+                            if let PatternType::Simple(s) = &alt.pattern_type {
+                                s.contains(meta_var.as_str())
+                            } else {
+                                false
+                            }
+                        })
+                    } else {
+                        false
+                    }
+                });
+
+                let Some(dp) = defining_pattern else {
+                    // Metavariable not found in any sub-pattern - skip condition
+                    return true;
+                };
+
+                let pattern_str = match &dp.pattern_type {
+                    PatternType::Simple(s) => Some(s.as_str()),
+                    _ => None,
+                };
+                let Some(pat_str) = pattern_str else {
+                    return true;
+                };
+
+                // Extract the metavariable value from the matched text.
+                // The heuristic: if the pattern contains `"$METAVAR"`, then
+                // the metavariable matches content between quotes.
+                // Extract by finding the first/last quote in the match.
+                let meta_value = if pat_str.contains(&format!("\"{}", meta_var)) {
+                    // Find content between innermost quotes in the matched text
+                    if let Some(first_quote) = matched_text.find('"') {
+                        if let Some(last_quote) = matched_text.rfind('"') {
+                            if last_quote > first_quote {
+                                Some(&matched_text[first_quote + 1..last_quote])
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    // Fallback: the metavariable matches the entire text
+                    Some(matched_text)
+                };
+
+                let Some(content) = meta_value else {
+                    // Can't extract metavariable value - skip this span
+                    return false;
+                };
+
+                // Try to evaluate the comparison expression
+                // Supported: lines($VAR) > N, $VAR.length() > N, etc.
+                let comparison_expr = match &comp.operator {
+                    astgrep_core::ComparisonOperator::PythonExpression(ref expr) => expr.as_str(),
+                    _ => comp.value.as_str(),
+                };
+                if comparison_expr.contains("lines(") {
+                    let line_count = content.lines().count() as i64;
+                    for op_str in &["!=", "==", ">=", "<=", ">", "<"] {
+                        if let Some(pos) = comparison_expr.find(op_str) {
+                            let right = comparison_expr[pos + op_str.len()..].trim();
+                            if let Ok(threshold) = right.parse::<i64>() {
+                                let passes = match *op_str {
+                                    "==" => line_count == threshold,
+                                    "!=" => line_count != threshold,
+                                    ">" => line_count > threshold,
+                                    "<" => line_count < threshold,
+                                    ">=" => line_count >= threshold,
+                                    "<=" => line_count <= threshold,
+                                    _ => return true,
+                                };
+                                return passes;
+                            }
+                        }
+                    }
+                }
+                if comparison_expr.contains("length()") {
+                    let content_len = content.len() as i64;
+                    let threshold = comparison_expr
+                        .chars()
+                        .filter(|c| c.is_ascii_digit())
+                        .collect::<String>()
+                        .parse::<i64>()
+                        .unwrap_or(0);
+                    for op_str in &[">=", "<=", "==", "!=", ">", "<"] {
+                        if comparison_expr.contains(op_str) {
+                            let passes = match *op_str {
+                                ">" => content_len > threshold,
+                                "<" => content_len < threshold,
+                                "==" => content_len == threshold,
+                                "!=" => content_len != threshold,
+                                ">=" => content_len >= threshold,
+                                "<=" => content_len <= threshold,
+                                _ => return true,
+                            };
+                            return passes;
+                        }
+                    }
+                }
+
+                // For other comparison types, we can't evaluate textually
+                true
+            }
+            Condition::MetavariableRegex(mr) => {
+                // Check if the metavariable content matches a regex
+                let meta_var = &mr.metavariable;
+                let defining_pattern = sub_patterns.iter().find(|p| {
+                    if let PatternType::Simple(s) = &p.pattern_type {
+                        s.contains(meta_var.as_str())
+                    } else {
+                        false
+                    }
+                });
+                let Some(dp) = defining_pattern else {
+                    return true;
+                };
+                let pattern_str = match &dp.pattern_type {
+                    PatternType::Simple(s) => Some(s.as_str()),
+                    _ => None,
+                };
+                let Some(pat_str) = pattern_str else {
+                    return true;
+                };
+                let meta_value = if pat_str.contains(&format!("\"{}", meta_var)) {
+                    if let Some(first_quote) = matched_text.find('"') {
+                        if let Some(last_quote) = matched_text.rfind('"') {
+                            if last_quote > first_quote {
+                                Some(&matched_text[first_quote + 1..last_quote])
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    Some(matched_text)
+                };
+                if let Some(content) = meta_value {
+                    if let Ok(re) = regex::Regex::new(&mr.regex) {
+                        return re.is_match(content);
+                    }
+                }
+                true // Can't evaluate - pass through
+            }
+            _ => {
+                // Other condition types (MetavariablePattern, etc.) can't be
+                // evaluated textually
+                true
+            }
+        }
+    }
+
+    /// Check if a pattern (or its sub-patterns for Either/All) references a given metavariable.
+    fn pattern_references_metavar(pat: &Pattern, metavar: &str) -> bool {
+        match &pat.pattern_type {
+            PatternType::Simple(s) => s.contains(metavar),
+            PatternType::Regex(r) => r.contains(metavar),
+            PatternType::Either(alternatives) => alternatives
+                .iter()
+                .any(|alt| Self::pattern_references_metavar(alt, metavar)),
+            PatternType::Any(alternatives) => alternatives
+                .iter()
+                .any(|alt| Self::pattern_references_metavar(alt, metavar)),
+            PatternType::All(subs) => subs
+                .iter()
+                .any(|sub| Self::pattern_references_metavar(sub, metavar)),
+            PatternType::Not(inner) => Self::pattern_references_metavar(inner, metavar),
+            PatternType::Inside(inner) => Self::pattern_references_metavar(inner, metavar),
+            PatternType::NotInside(inner) => Self::pattern_references_metavar(inner, metavar),
+            PatternType::NotRegex(_) => false,
+        }
     }
 
     /// Execute pattern-either matching
@@ -455,7 +927,7 @@ impl RuleExecutionEngine {
     }
 
     /// Execute simple sub-pattern for Either pattern
-    fn execute_simple_subpattern(
+        fn execute_simple_subpattern(
         &self,
         pattern_str: &str,
         rule: &Rule,

@@ -247,5 +247,6 @@ pub fn get_basic_security_patterns(language: Language) -> Vec<BasicPattern> {
             fix: Some("Validate and sanitize input".to_string()),
         }],
         Language::Xml => vec![],
+        Language::Text => vec![],
     }
 }

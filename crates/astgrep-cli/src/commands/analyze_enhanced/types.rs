@@ -47,6 +47,7 @@ pub fn determine_language(file_path: &PathBuf) -> anyhow::Result<Language> {
             "sql" => Ok(Language::Sql),
             "sh" | "bash" => Ok(Language::Bash),
             "xml" | "xsd" | "xsl" | "xslt" | "svg" | "pom" => Ok(Language::Xml),
+            "txt" | "md" | "log" | "rst" => Ok(Language::Text),
             _ => Err(anyhow::anyhow!("Unsupported file extension: {}", ext_str)),
         }
     } else {

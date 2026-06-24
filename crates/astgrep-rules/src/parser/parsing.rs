@@ -540,7 +540,9 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableComparison(metavar_comp));
                     }
-                    continue;
+                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                        continue;
+                    }
                 }
 
                 // Check if this is a semgrep-internal-metavariable-name (not a pattern, but a condition)
@@ -557,7 +559,9 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableName(metavar_name));
                     }
-                    continue;
+                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                        continue;
+                    }
                 }
 
                 // Check if this is a metavariable-type (not a pattern, but a condition)
@@ -569,7 +573,9 @@ impl RuleParser {
                             self.parse_metavariable_type(metavar_type_value, index, pattern_index)?;
                         conditions.push(Condition::MetavariableType(metavar_type));
                     }
-                    continue;
+                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                        continue;
+                    }
                 }
 
                 // Check if this is a metavariable-regex (not a pattern, but a condition)
@@ -584,7 +590,9 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableRegex(metavar_regex));
                     }
-                    continue;
+                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                        continue;
+                    }
                 }
 
                 // Check if this is a metavariable-pattern (not a pattern, but a condition)
@@ -600,7 +608,9 @@ impl RuleParser {
                         conditions.push(Condition::MetavariablePattern(metavar_pattern));
                         conditions.extend(nested);
                     }
-                    continue;
+                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                        continue;
+                    }
                 }
 
                 // Check if this is a metavariable-analysis (not a pattern, but a condition)
@@ -615,7 +625,9 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableAnalysis(metavar_analysis));
                     }
-                    continue;
+                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                        continue;
+                    }
                 }
             }
 

@@ -87,6 +87,7 @@ cargo run -- analyze --format sarif -o results.sarif  # SARIF output
 
 - Do NOT use `tree-sitter-sql` — use `tree-sitter-sequel` for SQL parsing
 - Do NOT add dependencies directly to crate Cargo.toml — add to workspace deps first, then `workspace = true`
+- EXCEPTION: non-crates.io external deps (git sources like `ogsql-parser`) MUST be declared explicitly in the consuming crate, NOT via `workspace = true` — otherwise the crate cannot be consumed as a path dependency from another workspace (see issue #21)
 - Do NOT modify `Language` enum without also updating parser registry + `Language::extensions()` + `Language::from_str()`
 - Do NOT write tests without annotations — use `@rule`/`@expect`/`@desc` for rule-driven tests (see `tests/CONVENTIONS.md`), or `// MATCH:` / `// ERROR:` for semgrep-core legacy tests
 - Do NOT use `as any`, `unwrap()` in non-test code

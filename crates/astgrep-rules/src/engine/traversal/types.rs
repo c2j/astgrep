@@ -68,23 +68,32 @@ impl RuleExecutionEngine {
         ctx.sql_stmt_boundary.unwrap_or(false)
     }
 
-    /// Find pattern spans in source code
+    /// Find pattern spans in source code using semgrep-aware regex conversion.
+    /// This handles metavariables ($VAR, $...NAME) and ellipsis (...) correctly,
+    /// converting them into appropriate regex patterns for text-based matching.
     pub(crate) fn find_pattern_spans_in_source(
         &self,
         pattern: &str,
         source: &str,
-        _language: astgrep_core::Language,
+        language: astgrep_core::Language,
         sql_stmt_boundary: bool,
     ) -> Vec<(usize, usize)> {
         use regex::Regex;
 
         let mut spans = Vec::new();
 
-        // Escape special regex characters but keep the pattern as literal
-        let escaped = regex::escape(pattern);
+        // Use semgrep-aware regex conversion instead of plain regex::escape,
+        // so metavariables ($VAR) and wildcards (...) are matched semantically
+        let regex_str = super::matching::semgrep_pattern_to_regex(pattern);
+        let is_multiline = pattern.contains('\n');
+        let final_regex = if is_multiline {
+            format!("(?s){}", regex_str)
+        } else {
+            regex_str
+        };
 
         // Try to compile as regex
-        match Regex::new(&escaped) {
+        match Regex::new(&final_regex) {
             Ok(re) => {
                 if sql_stmt_boundary {
                     // For SQL, split by statements and match within each
