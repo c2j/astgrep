@@ -37,7 +37,7 @@ pub fn convert_expr(expr: &ogsql_parser::Expr) -> UniversalNode {
     match expr {
         Expr::Literal(lit) => convert_literal(lit),
         Expr::ColumnRef(name) => {
-            // ObjectName is Vec<String> — join with "."
+            // ObjectName is Vec<Ident> — join with "."
             let joined = name.join(".");
             AstBuilder::identifier(&joined)
         }
@@ -364,7 +364,8 @@ fn add_table_name_to_node(node: &mut UniversalNode, table_ref: &ogsql_parser::Ta
         }
         TableRef::FunctionCall { name, alias, .. } => {
             let fn_name = name.join(".");
-            append_attribute(node, "tables", alias.as_ref().unwrap_or(&fn_name));
+            let display: &str = alias.as_ref().map_or(&fn_name, |a| a.as_str());
+            append_attribute(node, "tables", display);
         }
     }
 }

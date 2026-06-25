@@ -2,7 +2,7 @@
 //!
 //! Maps SELECT, INSERT, UPDATE, DELETE, MERGE statements for static analysis.
 //! Focuses on what rules care about: table names, WHERE conditions, column refs,
-//! key syntactic features (VALUES, SET, ON DUPLICATE KEY UPDATE, RETURNING).
+//! key syntactic features (VALUES, SET, ON CONFLICT, RETURNING).
 
 use super::expr;
 use super::OgsqlAdapterError;
@@ -67,7 +67,7 @@ pub fn convert_select(
 /// - `table` attribute: target table name
 /// - `columns` attribute: comma-separated column list (if explicit)
 /// - Source (VALUES/Select) as children
-/// - Metadata: `on_duplicate_key`, `has_returning`, `bulk_collect`
+/// - Metadata: `on_conflict`, `has_returning`, `bulk_collect`
 pub fn convert_insert(
     insert: &ogsql_parser::InsertStatement,
 ) -> Result<UniversalNode, OgsqlAdapterError> {
@@ -305,7 +305,8 @@ fn add_table_ref(node: &mut UniversalNode, table_ref: &ogsql_parser::TableRef) {
         }
         TableRef::FunctionCall { name, alias, .. } => {
             let fn_name = name.join(".");
-            append_attr(node, "tables", alias.as_ref().unwrap_or(&fn_name));
+            let display: &str = alias.as_ref().map_or(&fn_name, |a| a.as_str());
+            append_attr(node, "tables", display);
         }
     }
 }
@@ -316,12 +317,12 @@ fn add_target_ref(node: &mut UniversalNode, attr: &str, table_ref: &ogsql_parser
     match table_ref {
         TableRef::Table { name, alias, .. } => {
             let joined = name.join(".");
-            let display = alias.as_ref().unwrap_or(&joined);
-            node.attributes.insert(attr.to_string(), display.clone());
+            let display: String = alias.as_ref().map_or(joined, |a| a.to_string());
+            node.attributes.insert(attr.to_string(), display);
         }
         TableRef::Subquery { alias, .. } => {
             if let Some(a) = alias {
-                node.attributes.insert(attr.to_string(), a.clone());
+                node.attributes.insert(attr.to_string(), a.to_string());
             }
         }
         _ => {
@@ -477,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_insert_on_duplicate_key() {
-        let node = parse_to_node("INSERT INTO t VALUES (1) ON DUPLICATE KEY UPDATE x=1");
+        let node = parse_to_node("INSERT INTO t VALUES (1) ON DUPLICATE KEY UPDATE id = 1");
         assert_eq!(
             node.get_attribute("on_duplicate_key"),
             Some(&"true".to_string())
