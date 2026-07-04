@@ -37,9 +37,6 @@ pub fn validate_gaussdb_sql(sql: &str) -> Vec<GaussDBValidationFinding> {
                     "GAUSSDB-MERGE-002",
                     "Columns referenced in MERGE INTO ON clause cannot be modified by UPDATE",
                 ),
-                MergeSemanticErrorKind::DualTableNotSupported => {
-                    ("GAUSSDB-MERGE-003", "GaussDB MERGE INTO does not support DUAL table")
-                }
             };
             let message = match err.detail {
                 Some(d) => format!("{}: {}", msg, d),

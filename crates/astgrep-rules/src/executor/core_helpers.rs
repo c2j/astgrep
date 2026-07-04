@@ -4,7 +4,7 @@
 //! to improve code organization and maintainability.
 
 use astgrep_core::SemgrepMatchResult;
-use regex::Regex;
+use fancy_regex::Regex;
 use std::collections::HashMap;
 
 // ============================================================================
@@ -106,7 +106,7 @@ pub fn build_import_map(full_source: &str) -> HashMap<String, String> {
     // Parse import statements like "import org.foo.Foo;" or "import org.foo.*;"
     let import_pattern = Regex::new(r"import\s+([\w.]+)(?:\.\*)?;").unwrap();
 
-    for captures in import_pattern.captures_iter(full_source) {
+    for captures in import_pattern.captures_iter(full_source).filter_map(|c| c.ok()) {
         if let Some(import_match) = captures.get(1) {
             let import_path = import_match.as_str();
 
@@ -153,9 +153,9 @@ pub fn extract_type_info(
 ) -> Option<String> {
     // Pattern 1: Method parameter declarations like "String varName" or "Type varName"
     // Matches: "Type varName" followed by comma, closing paren, or space
-    let param_pattern = format!(r"(\w+)\s+{}\s*[,)]", regex::escape(var_name));
+    let param_pattern = format!(r"(\w+)\s+{}\s*[,)]", fancy_regex::escape(var_name));
     if let Ok(regex) = Regex::new(&param_pattern) {
-        if let Some(captures) = regex.captures(full_source) {
+        if let Some(captures) = regex.captures(full_source).ok().flatten() {
             if let Some(type_match) = captures.get(1) {
                 let simple_type = type_match.as_str().to_string();
                 return resolve_type_with_imports(&simple_type, import_map);
@@ -164,9 +164,9 @@ pub fn extract_type_info(
     }
 
     // Pattern 2: Variable declarations like "Type varName = ...;" or "Type varName;"
-    let var_pattern = format!(r"(\w+)\s+{}\s*=[^;]*;", regex::escape(var_name));
+    let var_pattern = format!(r"(\w+)\s+{}\s*=[^;]*;", fancy_regex::escape(var_name));
     if let Ok(regex) = Regex::new(&var_pattern) {
-        if let Some(captures) = regex.captures(full_source) {
+        if let Some(captures) = regex.captures(full_source).ok().flatten() {
             if let Some(type_match) = captures.get(1) {
                 let simple_type = type_match.as_str().to_string();
                 return resolve_type_with_imports(&simple_type, import_map);
@@ -177,10 +177,10 @@ pub fn extract_type_info(
     // Pattern 3: Field declarations like "private Type varName = ...;" or "private Type varName;"
     let field_pattern = format!(
         r"(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?(\w+)\s+{}\s*=[^;]*;",
-        regex::escape(var_name)
+fancy_regex::escape(var_name)
     );
     if let Ok(regex) = Regex::new(&field_pattern) {
-        if let Some(captures) = regex.captures(full_source) {
+        if let Some(captures) = regex.captures(full_source).ok().flatten() {
             if let Some(type_match) = captures.get(1) {
                 let simple_type = type_match.as_str().to_string();
                 return resolve_type_with_imports(&simple_type, import_map);
@@ -208,7 +208,7 @@ pub fn find_method_name_by_line(source_text: &str, line_num: usize) -> Option<St
             r"(?:public|protected|private)?\s*(?:static\s+)?(?:\w+(?:<[^>]+>)?)\s+(\w+)\s*\(",
         )
         .unwrap();
-        if let Some(captures) = method_pattern.captures(line) {
+        if let Some(captures) = method_pattern.captures(line).ok().flatten() {
             if let Some(method_name) = captures.get(1) {
                 let name = method_name.as_str();
                 // Filter out keywords
@@ -242,11 +242,11 @@ pub fn extract_method_body(source_text: &str, method_name: &str) -> Option<Strin
     // Find the method declaration
     let pattern = format!(
         r"(?:public|protected|private)?\s*(?:static\s+)?(?:\w+(?:<[^>]+>)?)\s+{}\s*\([^)]*\)\s*(?:throws\s+[\w,\s]+)?\s*\{{",
-        regex::escape(method_name)
+        fancy_regex::escape(method_name)
     );
     let regex = Regex::new(&pattern).ok()?;
 
-    if let Some(m) = regex.find(source_text) {
+    if let Some(m) = regex.find(source_text).ok().flatten() {
         let start = m.end();
 
         // Find matching closing brace

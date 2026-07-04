@@ -71,11 +71,11 @@ impl RuleExecutionEngine {
         context: &RuleContext,
         findings: &mut Vec<Finding>,
     ) -> Result<()> {
-        use regex::Regex;
+        use fancy_regex::Regex;
 
         match Regex::new(regex_str) {
             Ok(re) => {
-                for m in re.find_iter(&context.source_code) {
+                for m in re.find_iter(&context.source_code).filter_map(|m| m.ok()) {
                     let (start_line, start_col) =
                         Self::byte_index_to_line_col(&context.source_code, m.start());
                     let (end_line, end_col) =
@@ -159,6 +159,12 @@ impl RuleExecutionEngine {
         // them correctly via semgrep_pattern_to_regex conversion.
         // Only route to advanced executor if there are actual conditions or
         // constant propagation needs.
+
+        // Patterns with metadata binding syntax ($VAR@attr) must route through
+        // TreeMatcher, as text matching cannot bind to metadata attributes.
+        if pattern_str.contains('@') {
+            return self.execute_advanced_pattern(pattern, rule, context, _ast);
+        }
 
         if requires_advanced || needs_constant_prop {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
@@ -371,8 +377,8 @@ impl RuleExecutionEngine {
             }
             PatternType::Regex(re) => {
                 let mut spans = Vec::new();
-                if let Ok(regex) = regex::Regex::new(re) {
-                    for m in regex.find_iter(source) {
+                if let Ok(regex) = fancy_regex::Regex::new(re) {
+                    for m in regex.find_iter(source).filter_map(|m| m.ok()) {
                         spans.push((m.start(), m.end()));
                     }
                 }
@@ -487,7 +493,14 @@ impl RuleExecutionEngine {
             return Ok(result.findings);
         }
 
-        // Union all positive sets: report findings from ANY positive pattern.
+        // AND logic: ALL positive patterns must match for the rule to fire.
+        // If any positive pattern yields zero matches, the All constraint fails.
+        if positive_sets.iter().any(|s| s.is_empty()) {
+            return Ok(Vec::new());
+        }
+
+        // Union all positive sets for reporting: report findings from all
+        // matching patterns (since AND requires each pattern to match somewhere).
         let mut all_spans: Vec<(usize, usize)> = {
             let mut union: std::collections::HashSet<(usize, usize)> =
                 std::collections::HashSet::new();
@@ -788,8 +801,8 @@ impl RuleExecutionEngine {
                     Some(matched_text)
                 };
                 if let Some(content) = meta_value {
-                    if let Ok(re) = regex::Regex::new(&mr.regex) {
-                        return re.is_match(content);
+                    if let Ok(re) = fancy_regex::Regex::new(&mr.regex) {
+                        return re.is_match(content).unwrap_or(false);
                     }
                 }
                 true // Can't evaluate - pass through
@@ -883,10 +896,10 @@ impl RuleExecutionEngine {
         findings: &mut Vec<astgrep_core::Finding>,
         seen: &mut std::collections::HashSet<(usize, usize)>,
     ) -> Result<()> {
-        use regex::Regex;
+        use fancy_regex::Regex;
 
-        if let Ok(re) = Regex::new(regex_str) {
-            for m in re.find_iter(&context.source_code) {
+        if let Ok(re) = fancy_regex::Regex::new(regex_str) {
+            for m in re.find_iter(&context.source_code).filter_map(|m| m.ok()) {
                 let start_byte = m.start();
                 let end_byte = m.end();
                 if !seen.insert((start_byte, end_byte)) {

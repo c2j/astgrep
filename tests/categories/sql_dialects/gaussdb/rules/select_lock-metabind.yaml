@@ -1,0 +1,17 @@
+# select_lock-metabind.yaml — metadata-based metavariable binding test
+rules:
+  - id: metabind-into-vars
+    name: "Metadata bind: SELECT INTO variable ($VAR@into_vars)"
+    description: >
+      Tests that $VAR@into_vars binds to the select_statement's into_vars metadata,
+      and that the binding is unified across the entire pattern.
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: |
+          SELECT cnt INTO $VAR@into_vars FROM t WHERE id = 1 FOR UPDATE
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: test
+      note: "Demonstrates $VAR@attr metadata binding syntax"

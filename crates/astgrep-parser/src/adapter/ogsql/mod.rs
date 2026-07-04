@@ -13,6 +13,7 @@ mod ddl;
 mod dml;
 mod expr;
 mod features;
+mod pl;
 pub mod validator;
 
 use astgrep_ast::UniversalNode;
@@ -81,7 +82,7 @@ impl OgsqlAdapter {
         Self::convert_statement(stmt)
     }
 
-    fn convert_statement(
+    pub(super) fn convert_statement(
         stmt: &ogsql_parser::ast::Statement,
     ) -> Result<UniversalNode, OgsqlAdapterError> {
         match stmt {
@@ -122,6 +123,10 @@ impl OgsqlAdapter {
             ogsql_parser::ast::Statement::PredictBy(ref s) => features::convert_predict_by(s),
             ogsql_parser::ast::Statement::TimeCapsule(ref s) => features::convert_timecapsule(s),
             ogsql_parser::ast::Statement::Shrink(ref s) => features::convert_shrink(s),
+
+            // PL/pgSQL blocks (Phase 2.5)
+            ogsql_parser::ast::Statement::AnonyBlock(ref s) => pl::convert_anony_block(s),
+            ogsql_parser::ast::Statement::Do(ref s) => pl::convert_do_block(s),
 
             // Still unsupported (TCL, utility statements, remaining DDL for Phase 2.4)
             other => {

@@ -56,7 +56,88 @@ pub fn convert_select(
     }
 
     // Attach plan hints from `/*+ ... */` comments
-    let node = super::features::add_plan_hints(node, &select.hints);
+    let hint_strings: Vec<String> = select.hints.iter().map(|h| h.name.clone()).collect();
+    let mut node = super::features::add_plan_hints(node, &hint_strings);
+
+    // SELECT ... INTO var1, var2 — variable assignment targets
+    if let Some(ref into_targets) = select.into_targets {
+        let var_names: Vec<String> = into_targets
+            .iter()
+            .filter_map(|t| match t {
+                ogsql_parser::ast::SelectTarget::Expr(_, Some(alias)) => {
+                    Some(alias.to_string())
+                }
+                ogsql_parser::ast::SelectTarget::Expr(expr, None) => {
+                    if let ogsql_parser::ast::Expr::ColumnRef(name) = expr {
+                        Some(name.join("."))
+                    } else if let ogsql_parser::ast::Expr::PlVariable(name) = expr {
+                        Some(name.join("."))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            })
+            .collect();
+        if !var_names.is_empty() {
+            node = node
+                .with_metadata("has_into".into(), "true".into())
+                .with_metadata("into_vars".into(), var_names.join(","));
+            for v in &var_names {
+                node = node.add_child(
+                    AstBuilder::sql_expression("INTO_TARGET")
+                        .with_metadata("target_var".into(), v.clone()),
+                );
+            }
+        }
+    }
+
+    // FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY SHARE
+    if let Some(ref lock) = select.lock_clause {
+        let (lock_type, nowait, skip_locked, wait) = match lock {
+            ogsql_parser::ast::LockClause::Update {
+                nowait,
+                skip_locked,
+                wait,
+                ..
+            } => ("Update", *nowait, *skip_locked, wait.is_some()),
+            ogsql_parser::ast::LockClause::Share {
+                nowait,
+                skip_locked,
+                wait,
+                ..
+            } => ("Share", *nowait, *skip_locked, wait.is_some()),
+            ogsql_parser::ast::LockClause::NoKeyUpdate {
+                nowait,
+                skip_locked,
+                wait,
+                ..
+            } => ("NoKeyUpdate", *nowait, *skip_locked, wait.is_some()),
+            ogsql_parser::ast::LockClause::KeyShare {
+                nowait,
+                skip_locked,
+                wait,
+                ..
+            } => ("KeyShare", *nowait, *skip_locked, wait.is_some()),
+        };
+        node = node
+            .with_metadata("has_lock".into(), "true".into())
+            .with_metadata("lock_type".into(), lock_type.into());
+        if nowait {
+            node = node.with_metadata("lock_nowait".into(), "true".into());
+        }
+        if skip_locked {
+            node = node.with_metadata("lock_skip_locked".into(), "true".into());
+        }
+        if wait {
+            node = node.with_metadata("lock_wait".into(), "true".into());
+        }
+    }
+
+    // BULK COLLECT
+    if select.bulk_collect {
+        node = node.with_metadata("bulk_collect".into(), "true".into());
+    }
 
     Ok(node)
 }
@@ -134,7 +215,8 @@ pub fn convert_insert(
     }
 
     // Attach plan hints from `/*+ ... */` comments
-    let node = super::features::add_plan_hints(node, &insert.hints);
+    let hint_strings: Vec<String> = insert.hints.iter().map(|h| h.name.clone()).collect();
+    let node = super::features::add_plan_hints(node, &hint_strings);
 
     Ok(node)
 }
@@ -598,5 +680,66 @@ mod tests {
             .filter(|c| c.get_attribute("action").is_some())
             .collect();
         assert_eq!(when_nodes.len(), 2, "expected 2 WHEN clauses");
+    }
+
+    // ── SELECT INTO / FOR UPDATE tests ──
+
+    #[test]
+    fn test_select_into_for_update_metadata() {
+        let node = parse_to_node(
+            "SELECT cnt FROM accounts WHERE id = 1 FOR UPDATE",
+        );
+        // lock_clause works standalone
+        assert_eq!(node.get_attribute("has_lock"), Some(&"true".to_string()));
+        assert_eq!(
+            node.get_attribute("lock_type"),
+            Some(&"Update".to_string())
+        );
+        // into_targets only populated in PL/pgSQL context (tested in pl.rs after Phase B)
+    }
+
+    #[test]
+    fn test_select_without_lock() {
+        let node = parse_to_node("SELECT cnt FROM accounts WHERE id = 1");
+        assert!(node.get_attribute("has_lock").is_none());
+    }
+
+    #[test]
+    fn test_select_for_update_without_into() {
+        let node = parse_to_node("SELECT cnt FROM accounts WHERE id = 1 FOR UPDATE");
+        assert!(node.get_attribute("has_into").is_none());
+        assert_eq!(node.get_attribute("has_lock"), Some(&"true".to_string()));
+    }
+
+    #[test]
+    fn test_select_for_update_nowait_metadata() {
+        let node = parse_to_node("SELECT cnt FROM t FOR UPDATE NOWAIT");
+        assert_eq!(node.get_attribute("has_lock"), Some(&"true".to_string()));
+        assert_eq!(
+            node.get_attribute("lock_nowait"),
+            Some(&"true".to_string())
+        );
+    }
+
+    #[test]
+    fn test_select_for_share_metadata() {
+        let node = parse_to_node("SELECT cnt FROM t FOR SHARE");
+        assert_eq!(
+            node.get_attribute("lock_type"),
+            Some(&"Share".to_string())
+        );
+    }
+
+    #[test]
+    fn test_select_bulk_collect_metadata() {
+        let node = parse_to_node(
+            "SELECT cnt BULK COLLECT INTO v FROM t FOR UPDATE",
+        );
+        assert_eq!(
+            node.get_attribute("bulk_collect"),
+            Some(&"true".to_string())
+        );
+        assert_eq!(node.get_attribute("has_into"), Some(&"true".to_string()));
+        assert_eq!(node.get_attribute("has_lock"), Some(&"true".to_string()));
     }
 }

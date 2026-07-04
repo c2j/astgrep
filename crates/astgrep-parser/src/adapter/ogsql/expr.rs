@@ -215,7 +215,7 @@ pub fn convert_expr(expr: &ogsql_parser::Expr) -> UniversalNode {
         }
         Expr::Prior(inner) => AstBuilder::sql_expression("PRIOR").add_child(convert_expr(inner)),
         Expr::Default => AstBuilder::sql_expression("DEFAULT"),
-        Expr::SpecialFunction { name, args } => {
+        Expr::SpecialFunction { name, args, .. } => {
             let callee = AstBuilder::identifier(name);
             let arg_nodes: Vec<UniversalNode> = args.iter().map(convert_expr).collect();
             AstBuilder::call_expression(callee, arg_nodes)

@@ -1,0 +1,13 @@
+rules:
+  - id: plsql-read-modify-write
+    name: "RMW pattern detection via TreeMatcher"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: |
+          SELECT $COL INTO $VAR FROM $TABLE WHERE $COND FOR UPDATE;
+          $VAR := $VAR + 1;
+          UPDATE $TABLE SET $COL = $VAR WHERE $COND;
+    severity: INFO
+    metadata:
+      category: concurrency

@@ -215,6 +215,8 @@ fn convert_package_item(item: &ogsql_parser::ast::PackageItem) -> UniversalNode 
         }
         PackageItem::Variable(_) => AstBuilder::sql_expression("PACKAGE_VARIABLE"),
         PackageItem::Type(_) => AstBuilder::sql_expression("PACKAGE_TYPE"),
+        PackageItem::Cursor(c) => AstBuilder::sql_expression("PACKAGE_CURSOR")
+            .with_metadata("name".into(), c.name.clone()),
         PackageItem::Raw(text) => AstBuilder::sql_expression("PACKAGE_RAW").with_metadata(
             "text".into(),
             if text.len() > 80 {

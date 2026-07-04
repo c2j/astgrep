@@ -1,0 +1,195 @@
+rules:
+  # =========================================================================
+  # GAUSSDB-LOCK-001: 基础 FOR UPDATE / FOR SHARE 等行锁子句检测（必须通过）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-001
+    name: "GaussDB DML 行锁子句检测"
+    description: >
+      检测 GaussDB SQL 中 DML 语句的行锁定子句：
+      FOR UPDATE / FOR SHARE / FOR NO KEY UPDATE / FOR KEY SHARE。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern-regex: "FOR\\s+(UPDATE|SHARE|NO\\s+KEY\\s+UPDATE|KEY\\s+SHARE)"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: concurrency
+
+  # =========================================================================
+  # GAUSSDB-LOCK-002: SELECT INTO 同时存在 FOR UPDATE（同语句 AND 逻辑）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-002
+    name: "GaussDB SELECT INTO 变量且带行锁检测"
+    description: >
+      检测同一 SELECT 语句中同时包含 INTO 变量赋值和行锁子句。
+      使用单一正则确保 AND 逻辑（INTO 和 FOR UPDATE 必须在同一文本范围内出现）。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern-regex: "(?s)INTO\\s+\\w+.*FOR\\s+(UPDATE|SHARE|NO\\s+KEY\\s+UPDATE|KEY\\s+SHARE)"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: concurrency
+
+  # =========================================================================
+  # GAUSSDB-LOCK-003: 单语句 SELECT INTO + FOR UPDATE 有序匹配
+  # =========================================================================
+  - id: GAUSSDB-LOCK-003
+    name: "GaussDB SELECT ... INTO ... FROM ... FOR UPDATE 结构化检测"
+    description: >
+      检测完整的 SELECT ... INTO ... FROM ... FOR UPDATE 语句结构，
+      要求 INTO 在 FOR UPDATE 之前，FROM 在两者之间。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern-regex: "(?s)SELECT\\s+.*\\s+INTO\\s+\\w+\\s+FROM\\s+\\w+.*FOR\\s+UPDATE"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: concurrency
+
+  # =========================================================================
+  # GAUSSDB-LOCK-004: 跨语句完整流程（实验性——当前引擎可能不支持）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-004
+    name: "GaussDB 读锁→修改→写回完整流程检测"
+    description: >
+      实验性规则：检测 SELECT...INTO...FOR UPDATE → := → UPDATE 完整并发控制流程。
+      需要跨越多个 SQL 语句匹配，当前引擎可能不支持跨语句模式匹配。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    options:
+      sql_statement_boundary: false
+    patterns:
+      - pattern-regex: "(?s)SELECT\\s+\\w+\\s+INTO\\s+(\\w+)\\s+FROM\\s+(\\w+)\\s+.*FOR\\s+UPDATE.*\\1\\s*:=\\s*\\1.*UPDATE\\s+\\2\\s+SET.*\\1"
+    severity: INFO
+    confidence: LOW
+    metadata:
+      category: concurrency
+      experimental: true
+      note: "CROSS-STATEMENT: may fail due to parser/sql_statement_boundary limitations"
+
+  # =========================================================================
+  # GAUSSDB-LOCK-005: 跨语句简化版（实验性）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-005
+    name: "GaussDB SELECT FOR UPDATE 后跟 UPDATE 简化检测"
+    description: >
+      实验性简化规则：文本中存在 SELECT...INTO...FOR UPDATE 且存在 UPDATE...SET。
+      不验证变量名或表名一致性，仅检测两个模式在同一文件中出现。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    options:
+      sql_statement_boundary: false
+    patterns:
+      - pattern-regex: "(?s)SELECT\\s+\\w+\\s+INTO\\s+\\w+\\s+FROM\\s+\\w+.*FOR\\s+UPDATE.*UPDATE\\s+\\w+\\s+SET"
+    severity: INFO
+    confidence: LOW
+    metadata:
+      category: concurrency
+      experimental: true
+      note: "CROSS-STATEMENT: single regex AND logic; requires SELECT+FOR UPDATE then UPDATE in same source"
+
+  # =========================================================================
+  # GAUSSDB-LOCK-006: 缺失 FOR UPDATE 反模式（实验性——当前引擎可能不支持）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-006
+    name: "GaussDB SELECT INTO 缺失行锁检测"
+    description: >
+      实验性反模式规则：检测 SELECT INTO 变量后跟 UPDATE 但缺少 FOR UPDATE，
+      可能导致丢失更新（lost update）的并发问题。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    options:
+      sql_statement_boundary: false
+    patterns:
+      - pattern-regex: "(?s)SELECT\\s+\\w+\\s+INTO\\s+\\w+\\s+FROM\\s+\\w+.*UPDATE\\s+\\w+\\s+SET"
+    severity: WARNING
+    confidence: LOW
+    metadata:
+      category: concurrency
+      experimental: true
+      note: "LIMITATION: Rust regex crate lacks lookahead; cannot exclude FOR UPDATE. Matches SELECT INTO + UPDATE pattern regardless of lock clause."
+
+  # =========================================================================
+  # GAUSSDB-LOCK-007: FOR UPDATE NOWAIT / SKIP LOCKED 变体
+  # =========================================================================
+  - id: GAUSSDB-LOCK-007
+    name: "GaussDB 行锁等待策略检测"
+    description: >
+      检测 FOR UPDATE 的特定等待策略变体：
+      NOWAIT（立即返回）、SKIP LOCKED（跳过已锁行）、WAIT n（限时等待）。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern-regex: "FOR\\s+UPDATE\\s+(NOWAIT|SKIP\\s+LOCKED|WAIT\\s+\\d+)"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: concurrency
+
+  # =========================================================================
+  # GAUSSDB-LOCK-008: BULK COLLECT INTO 且带 FOR UPDATE（同语句 AND 逻辑）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-008
+    name: "GaussDB 批量锁定检测"
+    description: >
+      检测 SELECT ... BULK COLLECT INTO ... FOR UPDATE 模式。
+      批量获取并锁定多行数据，在高并发场景中影响锁粒度。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern-regex: "(?s)BULK\\s+COLLECT\\s+INTO.*FOR\\s+(UPDATE|SHARE|NO\\s+KEY\\s+UPDATE|KEY\\s+SHARE)"
+    severity: INFO
+    confidence: HIGH
+    metadata:
+      category: concurrency
+
+  # =========================================================================
+  # GAUSSDB-LOCK-009: 三语句共存检测（DO 块内 SELECT FOR UPDATE + := + UPDATE）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-009
+    name: "GaussDB DO块内 SELECT FOR UPDATE -> 修改 -> UPDATE 共存检测"
+    description: >
+      检测 DO 块或匿名块内同时存在以下三个语句：
+        SELECT ... INTO ... FOR UPDATE（行锁定读取）
+        := 赋值（变量修改）
+        UPDATE ... SET（写回）
+      不验证变量名或表名一致性（Rust regex 不支持反向引用），仅检测三语句共存。
+      在 sql_statement_boundary: false 下跨分号匹配。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    options:
+      sql_statement_boundary: false
+    patterns:
+      - pattern-regex: "(?s)SELECT\\s+\\w+\\s+INTO\\s+\\w+\\s+FROM\\s+\\w+.*FOR\\s+UPDATE"
+      - pattern-regex: "(?s)\\w+\\s*:=\\s*\\w+"
+      - pattern-regex: "(?s)UPDATE\\s+\\w+\\s+SET"
+    severity: INFO
+    confidence: MEDIUM
+    metadata:
+      category: concurrency
+
+  # =========================================================================
+  # GAUSSDB-LOCK-010: 三语句变量名统一检测（使用反向引用）
+  # =========================================================================
+  - id: GAUSSDB-LOCK-010
+    name: "GaussDB SELECT FOR UPDATE -> := -> UPDATE 变量统一检测"
+    description: >
+      检测 DO 块内 SELECT INTO var FOR UPDATE -> var := var + expr -> UPDATE SET var
+      的完整并发控制流程，并通过反向引用验证 SELECT INTO 和 UPDATE SET 使用同一变量名。
+      需要 fancy-regex 引擎支持（反向引用）。
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    options:
+      sql_statement_boundary: false
+    patterns:
+      - pattern-regex: "(?s)SELECT\\s+\\w+\\s+INTO\\s+(\\w+)\\s+FROM\\s+(\\w+)\\s+.*FOR\\s+UPDATE.*\\1\\s*:=\\s*\\1.*UPDATE\\s+\\2\\s+SET.*\\1"
+    severity: INFO
+    confidence: MEDIUM
+    metadata:
+      category: concurrency
+      experimental: true
+      note: "Uses regex backreference (\\1, \\2) for variable/table name unification"

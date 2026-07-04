@@ -81,6 +81,7 @@ console = "0.15"
 
 # Parsing and regex
 regex = "1.10"
+fancy-regex = "0.14"
 tree-sitter = "0.25"
 tree-sitter-highlight = "0.25"
 tree-sitter-python = "0.25"

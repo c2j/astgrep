@@ -211,6 +211,7 @@ fn flatten_pattern_chain(kind: &str, children: &[PatternTree]) -> Vec<PatternTre
             kind: kind.to_string(),
             children: children.to_vec(),
             text: None,
+        constraints: Vec::new(),
         }];
     }
 
@@ -589,8 +590,8 @@ fn unwrap_single_child_wrapper(pattern: &PatternTree) -> Option<&PatternTree> {
     if let PatternTree::Node {
         kind,
         children,
-        text,
-    } = pattern
+        text, ..
+            } = pattern
     {
         if text.is_none() && WRAPPER_NODE_KINDS.contains(&kind.as_str()) && children.len() == 1 {
             return Some(&children[0]);
@@ -609,6 +610,7 @@ fn is_simple_metavar(tree: &PatternTree) -> bool {
             kind,
             text,
             children,
+            ..
         } => {
             if !children.is_empty() {
                 return false;
@@ -812,6 +814,10 @@ impl TreeMatcher {
         let mut results = Vec::new();
         let mut ctx = MatchCtx::new();
         ctx.build_import_map(root);
+        // Pass literal constraints from ogsql pattern to enforcement
+        if let PatternTree::Node { ref constraints, .. } = &tree {
+            ctx.constraints = constraints.clone();
+        }
         ctx.find_recursive(&tree, root, &mut results, None);
 
         deduplicate_matches(&mut results);
@@ -843,6 +849,8 @@ struct MatchCtx {
     /// (depth → (variable → (value, count))). When count >= 2,
     /// both/all branches set the same value → definitely assigned.
     must_candidates: HashMap<usize, HashMap<String, (String, u32)>>,
+    /// Literal attribute constraints (key, expected_value) from ogsql patterns.
+    constraints: Vec<(String, String)>,
 }
 
 impl MatchCtx {
@@ -854,6 +862,7 @@ impl MatchCtx {
             import_map: None,
             wildcard_imports: Vec::new(),
             must_candidates: HashMap::new(),
+            constraints: Vec::new(),
         }
     }
 
@@ -1360,7 +1369,7 @@ impl MatchCtx {
         match pattern {
             PatternTree::Ellipsis => true,
 
-            PatternTree::Metavar { name } => {
+            PatternTree::Metavar { name, .. } => {
                 if name == "_" {
                     let kind = target.node_type();
                     if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
@@ -1424,7 +1433,7 @@ impl MatchCtx {
             PatternTree::Node {
                 kind,
                 children,
-                text,
+                text, ..
             } => self.match_node(kind, children, text, target),
         }
     }
@@ -1769,7 +1778,8 @@ impl MatchCtx {
                 kind: pattern_kind.to_string(),
                 children: pattern_children.to_vec(),
                 text: None,
-            });
+            constraints: Vec::new(),
+        });
             if has_chain_child_with_ellipsis || (has_any_ellipsis && is_chain_kind(pattern_kind)) {
                 let flat_pattern = flatten_pattern_chain(pattern_kind, pattern_children);
                 let flat_target = flatten_node_chain(target);
@@ -1808,6 +1818,20 @@ impl MatchCtx {
                     }
                     self.restore(snap);
                 }
+            }
+        }
+
+        // Wildcard kind "_" with metavar children — bind each in target subtree.
+        if pattern_kind == "_" && !pattern_children.is_empty() {
+            if pattern_children.iter().all(|c| matches!(c, PatternTree::Metavar { .. })) {
+                let snap = self.snapshot();
+                for mv in pattern_children {
+                    if !self.bind_metavar_in_subtree(mv, target) { self.restore(snap); return false; }
+                }
+                if !self.constraints.is_empty() && !self.enforce_constraints_in_subtree(target) {
+                    self.restore(snap); return false;
+                }
+                return true;
             }
         }
 
@@ -2009,6 +2033,42 @@ impl MatchCtx {
         } else {
             self.match_children_exact(pattern_children, &target_children)
         }
+    }
+
+
+    fn enforce_constraints_in_subtree(&self, target: &dyn AstNode) -> bool {
+        for (key, expected) in &self.constraints {
+            if !Self::find_constraint(key, expected, target) { return false; }
+        }
+        true
+    }
+
+    fn find_constraint(key: &str, expected: &str, target: &dyn AstNode) -> bool {
+        if let Some(val) = target.get_attribute(key) {
+            if val == expected { return true; }
+        }
+        for i in 0..target.child_count() {
+            if let Some(child) = target.child(i) {
+                if Self::find_constraint(key, expected, child) { return true; }
+            }
+        }
+        false
+    }
+
+    fn bind_metavar_in_subtree(&mut self, mv: &PatternTree, target: &dyn AstNode) -> bool {
+        if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
+            if let Some(val) = target.get_attribute(attr) {
+                return self.try_bind(name, val);
+            }
+        }
+        for i in 0..target.child_count() {
+            if let Some(child) = target.child(i) {
+                if self.bind_metavar_in_subtree(mv, child) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 
@@ -2286,7 +2346,7 @@ impl MatchCtx {
                 false
             }
 
-            PatternTree::Metavar { name } => {
+            PatternTree::Metavar { name, .. } => {
                 // Metavar consumes 1..N operands
                 for consume in 1..=targets.len() {
                     let combined = join_operand_texts(&targets[..consume], operator);
@@ -2508,6 +2568,7 @@ mod tests {
             kind: "identifier".to_string(),
             children: vec![],
             text: Some("foo".to_string()),
+            constraints: Vec::new(),
         };
 
         let target = AstBuilder::identifier("foo").with_text("foo".to_string());
@@ -2521,6 +2582,7 @@ mod tests {
             kind: "identifier".to_string(),
             children: vec![],
             text: Some("foo".to_string()),
+            constraints: Vec::new(),
         };
 
         let target = AstBuilder::identifier("bar").with_text("bar".to_string());
@@ -2532,6 +2594,7 @@ mod tests {
     fn test_match_metavar_binds() {
         let pattern = PatternTree::Metavar {
             name: "X".to_string(),
+            bind_attr: None,
         };
 
         let target = AstBuilder::identifier("hello").with_text("hello".to_string());
@@ -2544,6 +2607,7 @@ mod tests {
     fn test_match_metavar_consistency() {
         let pattern = PatternTree::Metavar {
             name: "X".to_string(),
+            bind_attr: None,
         };
 
         let target1 = AstBuilder::identifier("a").with_text("a".to_string());
@@ -2565,15 +2629,18 @@ mod tests {
                     kind: "identifier".to_string(),
                     children: vec![],
                     text: Some("foo".to_string()),
+                    constraints: Vec::new(),
                 },
                 PatternTree::Ellipsis,
                 PatternTree::Node {
                     kind: "identifier".to_string(),
                     children: vec![],
                     text: Some("bar".to_string()),
+                    constraints: Vec::new(),
                 },
             ],
             text: None,
+        constraints: Vec::new(),
         };
 
         // Target: foo(x, y, z, bar) — simulated as a node with children

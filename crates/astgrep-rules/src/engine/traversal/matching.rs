@@ -3,7 +3,7 @@
 //! This module provides functions for finding pattern matches in source code.
 
 use astgrep_core::{Confidence, Finding, Location, Result, Severity};
-use regex::Regex;
+use fancy_regex::Regex;
 use std::path::PathBuf;
 
 /// Find pattern matches in source code
@@ -17,11 +17,11 @@ pub fn find_pattern_matches(
     // Simple pattern matching using regex
     // This is a simplified implementation - in a real implementation,
     // you would use the AST-based matcher
-    let escaped_pattern = regex::escape(pattern);
+    let escaped_pattern = fancy_regex::escape(pattern);
     let pattern_regex = Regex::new(&escaped_pattern).ok();
 
     if let Some(regex) = pattern_regex {
-        for mat in regex.find_iter(source) {
+        for mat in regex.find_iter(source).filter_map(|m| m.ok()) {
             let start = mat.start();
             let end = mat.end();
 
@@ -99,7 +99,7 @@ pub(crate) fn find_pattern_spans_in_source(
     _language: astgrep_core::Language,
     sql_stmt_boundary: bool,
 ) -> Vec<(usize, usize)> {
-    use regex::Regex;
+    use fancy_regex::Regex;
 
     let mut spans = Vec::new();
 
@@ -141,12 +141,12 @@ pub(crate) fn find_pattern_spans_in_source(
         Ok(re) => {
             if sql_stmt_boundary {
                 for stmt in source.split(';') {
-                    for mat in re.find_iter(stmt) {
+                    for mat in re.find_iter(stmt).filter_map(|m| m.ok()) {
                         spans.push((mat.start(), mat.end()));
                     }
                 }
             } else {
-                for mat in re.find_iter(source) {
+                for mat in re.find_iter(source).filter_map(|m| m.ok()) {
                     spans.push((mat.start(), mat.end()));
                 }
             }
@@ -311,9 +311,9 @@ mod tests_multiline_newline {
     #[test]
     fn test_newline_should_match_actual_newline() {
         let regex_str = semgrep_pattern_to_regex("foo\nbar");
-        let re = regex::Regex::new(&regex_str).unwrap();
+        let re = fancy_regex::Regex::new(&regex_str).unwrap();
         assert!(
-            re.is_match("foo\nbar"),
+            re.is_match("foo\nbar").unwrap(),
             "pattern with \\n should match actual newline"
         );
     }
@@ -321,10 +321,10 @@ mod tests_multiline_newline {
     #[test]
     fn test_newline_should_not_match_same_line_spaces() {
         let regex_str = semgrep_pattern_to_regex("foo\nbar");
-        let re = regex::Regex::new(&regex_str).unwrap();
+        let re = fancy_regex::Regex::new(&regex_str).unwrap();
         // This is the FP bug: \n converted to \s* matches spaces on the same line
         assert!(
-            !re.is_match("foo    bar"),
+            !re.is_match("foo    bar").unwrap(),
             "pattern with \\n should NOT match same-line spaces"
         );
     }
@@ -332,14 +332,14 @@ mod tests_multiline_newline {
     #[test]
     fn test_newline_should_match_with_surrounding_whitespace() {
         let regex_str = semgrep_pattern_to_regex("foo\nbar");
-        let re = regex::Regex::new(&regex_str).unwrap();
+        let re = fancy_regex::Regex::new(&regex_str).unwrap();
         // \n should also match \r\n and surrounding whitespace
         assert!(
-            re.is_match("foo \n bar"),
+            re.is_match("foo \n bar").unwrap(),
             "pattern with \\n should match newline with surrounding spaces"
         );
         assert!(
-            re.is_match("foo\r\nbar"),
+            re.is_match("foo\r\nbar").unwrap(),
             "pattern with \\n should match CRLF"
         );
     }

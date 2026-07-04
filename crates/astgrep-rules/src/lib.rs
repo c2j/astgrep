@@ -234,8 +234,8 @@ fn pattern_has_typed_metavar(pattern: &crate::types::Pattern) -> bool {
     use crate::types::PatternType;
     match &pattern.pattern_type {
         PatternType::Simple(s) => {
-            let re = regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)");
-            re.map(|r| r.is_match(s)).unwrap_or(false)
+            let re = fancy_regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)");
+            re.map(|r| r.is_match(s).unwrap_or(false)).unwrap_or(false)
         }
         PatternType::Either(patterns)
         | PatternType::All(patterns)

@@ -229,7 +229,7 @@ mod tests {
         // Verify hints are captured in the parsed statement
         if let ogsql_parser::ast::Statement::Select(ref s) = stmts[0] {
             assert!(!s.hints.is_empty(), "expected hints to be parsed");
-            assert!(s.hints[0].contains("tablescan"), "expected tablescan hint");
+            assert!(s.hints[0].name.contains("tablescan"), "expected tablescan hint");
         } else {
             panic!("expected Select statement");
         }
