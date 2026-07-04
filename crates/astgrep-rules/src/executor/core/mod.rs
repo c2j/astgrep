@@ -427,7 +427,7 @@ impl AdvancedRuleExecutor {
 
             if final_conditions_passed {
                 let finding =
-                    self.create_finding_from_match(rule, pattern, &match_result, file_path)?;
+                    self.create_finding_from_match(rule, pattern, &match_result, file_path, &full_source)?;
                 findings.push(finding);
             }
         }
@@ -812,15 +812,8 @@ impl AdvancedRuleExecutor {
         pattern: &Pattern,
         match_result: &SemgrepMatchResult,
         file_path: Option<&Path>,
+        full_source: &str,
     ) -> Result<Finding> {
-        let default_location = || Location {
-            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
-            start_line: 1,
-            start_column: 1,
-            end_line: 1,
-            end_column: 1,
-        };
-
         let node_location = match_result
             .node
             .location()
@@ -831,7 +824,40 @@ impl AdvancedRuleExecutor {
                 end_line,
                 end_column: end_col,
             })
-            .unwrap_or_else(default_location);
+            .unwrap_or_else(|| {
+                for binding in match_result.bindings.values() {
+                    if let Some((sl, sc, el, ec)) = binding.location {
+                        return Location {
+                            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                            start_line: sl,
+                            start_column: sc,
+                            end_line: el,
+                            end_column: ec,
+                        };
+                    }
+                }
+                if let Some(pattern_text) = pattern.get_pattern_string() {
+                    if let Some(pos) = full_source.find(pattern_text.as_str()) {
+                        let (sl, sc) = byte_to_line_col(full_source, pos);
+                        let end_pos = pos + pattern_text.len();
+                        let (el, ec) = byte_to_line_col(full_source, end_pos);
+                        return Location {
+                            file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                            start_line: sl,
+                            start_column: sc,
+                            end_line: el,
+                            end_column: ec,
+                        };
+                    }
+                }
+                Location {
+                    file: file_path.map(|p| p.to_path_buf()).unwrap_or_default(),
+                    start_line: 1,
+                    start_column: 1,
+                    end_line: 1,
+                    end_column: 1,
+                }
+            });
 
         // If focus-metavariable is set, relocate the finding to the metavar's position
         let location = if let Some(ref focus_vars) = pattern.focus {

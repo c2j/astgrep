@@ -174,11 +174,13 @@ impl OgsqlAdapter {
             // PL/pgSQL blocks (Phase 2.5)
             ogsql_parser::ast::Statement::AnonyBlock(ref s) => {
                 let span = s.span.clone();
-                pl::convert_anony_block(s).map(|node| apply_span(node, span))
+                pl::convert_anony_block(s, span.as_ref())
+                    .map(|node| apply_span(node, span))
             }
             ogsql_parser::ast::Statement::Do(ref s) => {
                 let span = s.span.clone();
-                pl::convert_do_block(s).map(|node| apply_span(node, span))
+                pl::convert_do_block(s, span.as_ref())
+                    .map(|node| apply_span(node, span))
             }
 
             // Still unsupported
