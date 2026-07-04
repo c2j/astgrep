@@ -308,6 +308,7 @@ impl PatternTreeParser {
         meta_map: &HashMap<String, PlaceholderKind>,
         out: &mut Vec<PatternTree>,
     ) {
+        let mut node_added: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
         // Check node's text
         if let Some(ref text) = node.text {
             let trimmed = text.trim().to_string();
@@ -326,28 +327,26 @@ impl PatternTreeParser {
                         None
                     };
                     let final_attr = bind_attr.clone().or(inferred);
-                    // Only include metavars with concrete bind_attr.
-                    // Bare $VAR binds to node.text() which varies across statements
-                    // and cannot be reliably unified.
                     if let Some(attr) = final_attr {
-                        out.push(PatternTree::Metavar {
-                            name: name.clone(),
-                            bind_attr: Some(attr),
-                        });
+                        if node_added.insert((name.clone(), attr.clone())) {
+                            out.push(PatternTree::Metavar {
+                                name: name.clone(),
+                                bind_attr: Some(attr),
+                            });
+                        }
                     }
                 }
             }
         }
-        // Check node's metadata attributes
+        // Check node's metadata attributes — push one entry per unique
+        // (name, bind_attr) on this node. Same-node dedup prevents
+        // text-path + metadata-path from producing duplicates for the
+        // same attribute, while allowing different nodes with the same
+        // (name, bind_attr) to each contribute an entry (enabling
+        // cross-statement metavar occurrence counting).
         for (key, value) in &node.attributes {
             if let Some(PlaceholderKind::Metavar { name, .. }) = meta_map.get(value) {
-                if !out.iter().any(|c| {
-                    if let PatternTree::Metavar { name: n, bind_attr: Some(a) } = c {
-                        n == name && a == key.as_str()
-                    } else {
-                        false
-                    }
-                }) {
+                if node_added.insert((name.clone(), key.clone())) {
                     out.push(PatternTree::Metavar {
                         name: name.clone(),
                         bind_attr: Some(key.clone()),

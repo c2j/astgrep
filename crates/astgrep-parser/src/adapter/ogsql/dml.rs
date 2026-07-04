@@ -240,7 +240,20 @@ pub fn convert_update(
 
     // SET assignments
     for assign in &update.assignments {
-        node = node.add_child(convert_update_assignment(assign));
+        let value_expr = expr::convert_expr(&assign.value);
+        let col_names: Vec<String> = assign.columns.iter().map(|c| c.join(".")).collect();
+        let col_str = col_names.join(", ");
+        let mut value_with_meta = value_expr;
+        if let Some(ref vt) = value_with_meta.text.clone() {
+            if !vt.is_empty() {
+                value_with_meta.attributes.insert("target_var".into(), vt.clone());
+            }
+        }
+        node = node.add_child(
+            AstBuilder::sql_expression("SET")
+                .add_child(value_with_meta)
+                .with_metadata("column".into(), col_str),
+        );
     }
 
     // Additional FROM tables (GaussDB-specific: UPDATE ... FROM ...)
