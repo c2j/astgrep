@@ -35,7 +35,7 @@ pub fn convert_do_block(
 
 // ── Block conversion ──
 
-fn convert_pl_block(
+pub(super) fn convert_pl_block(
     block: &PlBlock,
     node_type: NodeType,
 ) -> Result<UniversalNode, OgsqlAdapterError> {

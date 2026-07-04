@@ -2,7 +2,7 @@
 //! Maps CREATE TABLE/INDEX/VIEW/FUNCTION/PROCEDURE/PACKAGE, DROP, ALTER TABLE.
 
 use super::OgsqlAdapterError;
-use astgrep_ast::{AstBuilder, UniversalNode};
+use astgrep_ast::{AstBuilder, NodeType, UniversalNode};
 
 pub fn convert_create_table(
     stmt: &ogsql_parser::CreateTableStatement,
@@ -138,6 +138,10 @@ pub fn convert_create_function(
     if stmt.replace {
         n = n.with_metadata("or_replace".into(), "true".into());
     }
+    if let Some(ref block) = stmt.block {
+        use crate::adapter::ogsql::pl;
+        n = n.add_child(pl::convert_pl_block(block, NodeType::BlockStatement)?);
+    }
     Ok(n)
 }
 
@@ -166,6 +170,11 @@ pub fn convert_create_procedure(
     }
     if stmt.replace {
         n = n.with_metadata("or_replace".into(), "true".into());
+    }
+    // Add PL/pgSQL block body as child for TreeMatcher matching
+if let Some(ref block) = stmt.block {
+        use crate::adapter::ogsql::pl;
+        n = n.add_child(pl::convert_pl_block(block, NodeType::BlockStatement)?);
     }
     Ok(n)
 }
