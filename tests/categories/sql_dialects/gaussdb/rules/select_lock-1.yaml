@@ -1,6 +1,9 @@
 rules:
   - id: plsql-read-modify-write
     name: "GaussDB SELECT FOR UPDATE -> := -> UPDATE 变量统一检测"
+    description: >
+      语句块内通过 SELECT INTO var FOR UPDATE -> var := var + expr -> UPDATE SET var
+      自治事务获取序列号
     languages: [sql]
     dialects: [gaussdb, opengauss]
     patterns:
@@ -8,6 +11,7 @@ rules:
           SELECT $COL INTO $VAR FROM $TABLE WHERE $COND FOR UPDATE;
           $VAR := $VAR + 1;
           UPDATE $TABLE SET $COL = $VAR WHERE $COND;
+    message: "SELECT INTO var FOR UPDATE -> var := var + expr -> UPDATE SET var，GaussDB限制自治事务获取序列号"
     severity: INFO
     metadata:
       category: concurrency
