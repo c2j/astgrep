@@ -46,6 +46,18 @@ impl GaussDBDialect {
     pub fn mode(&self) -> GaussDBMode {
         self.mode
     }
+
+    /// Extract PL/pgSQL body from dollar-quoted string and parse as anonym block.
+    fn extract_and_parse_dollar_body(source: &str) -> Vec<astgrep_ast::UniversalNode> {
+        let start = match source.find("$$") { Some(s) => s, None => return vec![] };
+        let after_open = &source[start + 2..];
+        let end = match after_open.find("$$") { Some(e) => e, None => return vec![] };
+        let body = after_open[..end].trim();
+        if body.is_empty() { return vec![]; }
+        // Wrap body in DO block for ogsql-parser to handle PL/pgSQL syntax
+        let wrapped = format!("DO $$ {} END $$;", body);
+        OgsqlAdapter::parse_to_universal(&wrapped).unwrap_or_default()
+    }
 }
 
 impl Default for GaussDBDialect {
@@ -64,7 +76,7 @@ impl SqlDialectParser for GaussDBDialect {
         source: &str,
         _file_path: &Path,
     ) -> Result<Box<dyn AstNode>, DialectParseError> {
-        let nodes = OgsqlAdapter::parse_to_universal(source).or_else(|e| {
+        let mut nodes = OgsqlAdapter::parse_to_universal(source).or_else(|e| {
             // If direct parsing fails and the source contains PL/pgSQL syntax
             // (:= assignment), retry with DO block wrapping so ogsql-parser
             // can handle the procedural statements.
@@ -80,6 +92,14 @@ impl SqlDialectParser for GaussDBDialect {
                 reason: e.to_string(),
             }
         })?;
+
+        // Attach PL/pgSQL block bodies from dollar-quoted strings as child nodes
+        let body_nodes = Self::extract_and_parse_dollar_body(source);
+        if !body_nodes.is_empty() {
+            let root = nodes.get_mut(0).unwrap();
+            root.children.extend(body_nodes);
+        }
+
         Ok(Box::new(
             wrap_statements(nodes).with_text(source.to_string()),
         ))
