@@ -75,7 +75,22 @@ pub async fn run_enhanced(
         if let Some(ref bar) = pb {
             bar.set_message(file_path.display().to_string());
         }
-        analyze_file_simple(&file_path, &config, &mut all_findings, &mut analysis_stats)?;
+        match analyze_file_simple(&file_path, &config, &mut all_findings, &mut analysis_stats) {
+            Ok(()) => {}
+            Err(e) => {
+                let msg = e.to_string();
+                // Dialect/parser failures: skip this file, continue with others.
+                // IO errors and rule-loading failures still abort the whole run.
+                if msg.starts_with("parse failed for dialect")
+                    || msg.contains("parse failed")
+                {
+                    warn!("Skipping {}: {}", file_path.display(), msg);
+                    analysis_stats.parse_errors += 1;
+                } else {
+                    return Err(e);
+                }
+            }
+        }
         if let Some(ref bar) = pb {
             bar.inc(1);
         }
