@@ -1157,7 +1157,10 @@ impl MatchCtx {
                     .iter()
                     .map(|(k, v)| (k.clone(), MatchBinding::new(v.clone())))
                     .collect();
-                results.push(SemgrepMatchResult::new(node.clone_node(), bindings));
+                // Use the first non-wrapper child's location so the reported
+                // line points at actual code, not the outer block/comment.
+                let display_node = Self::first_meaningful_child(node);
+                results.push(SemgrepMatchResult::new(display_node.clone_node(), bindings));
                 self.restore(snap);
             } else {
                 self.restore(snap);
@@ -2078,6 +2081,30 @@ impl MatchCtx {
             }
         }
         true
+    }
+
+    /// Return the first non-wrapper child of `node`, falling back to `node`
+    /// if it has no meaningful children. This makes the reported location
+    /// point at the first actual statement inside a block.
+    fn first_meaningful_child(node: &dyn AstNode) -> &dyn AstNode {
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                let kind = child.get_attribute("ts_kind").unwrap_or(child.node_type());
+                if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
+                    continue;
+                }
+                if let Some(t) = child.text() {
+                    if t.trim().is_empty() {
+                        continue;
+                    }
+                }
+                let skip = ["DECLARE", "BEGIN", "END", "keyword_begin", "keyword_end"];
+                if !skip.contains(&kind) {
+                    return child;
+                }
+            }
+        }
+        node
     }
 
     fn collect_attr_values(attr: &str, target: &dyn AstNode, values: &mut Vec<String>) {
