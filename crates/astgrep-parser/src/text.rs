@@ -32,7 +32,10 @@ impl LanguageParser for TextParser {
     fn parse(&self, source: &str, file_path: &Path) -> Result<Box<dyn AstNode>> {
         let mut root = UniversalNode::new(NodeType::Program)
             .with_text(source.to_string())
-            .with_attribute("file_path".to_string(), file_path.to_string_lossy().to_string());
+            .with_attribute(
+                "file_path".to_string(),
+                file_path.to_string_lossy().to_string(),
+            );
 
         // Add each line as a child for line-level pattern matching
         for (line_idx, line) in source.lines().enumerate() {
@@ -65,7 +68,9 @@ mod tests {
     fn test_text_parser_root_contains_full_text() {
         let parser = TextParser::new();
         let source = "line one\nline two\nline three";
-        let node = parser.parse(source, std::path::Path::new("test.txt")).unwrap();
+        let node = parser
+            .parse(source, std::path::Path::new("test.txt"))
+            .unwrap();
         assert_eq!(node.text(), Some(source));
         assert_eq!(node.child_count(), 3);
     }
@@ -73,7 +78,9 @@ mod tests {
     #[test]
     fn test_text_parser_line_children() {
         let parser = TextParser::new();
-        let node = parser.parse("hello\nworld", std::path::Path::new("test.txt")).unwrap();
+        let node = parser
+            .parse("hello\nworld", std::path::Path::new("test.txt"))
+            .unwrap();
         assert_eq!(node.child(0).unwrap().text(), Some("hello"));
         assert_eq!(node.child(1).unwrap().text(), Some("world"));
     }

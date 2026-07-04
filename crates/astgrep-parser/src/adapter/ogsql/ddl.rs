@@ -172,7 +172,7 @@ pub fn convert_create_procedure(
         n = n.with_metadata("or_replace".into(), "true".into());
     }
     // Add PL/pgSQL block body as child for TreeMatcher matching
-if let Some(ref block) = stmt.block {
+    if let Some(ref block) = stmt.block {
         use crate::adapter::ogsql::pl;
         n = n.add_child(pl::convert_pl_block(block, NodeType::BlockStatement)?);
     }

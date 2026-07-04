@@ -54,7 +54,10 @@ impl OutputFormatter for TextFormatter {
                 if let Some(src_line) =
                     get_source_line(&finding.location.file, finding.location.start_line)
                 {
-                    output.push_str(&format!("   {} | {}\n", finding.location.start_line, src_line));
+                    output.push_str(&format!(
+                        "   {} | {}\n",
+                        finding.location.start_line, src_line
+                    ));
                     let indent = format!("   {} | ", finding.location.start_line);
                     let padding = " ".repeat(finding.location.start_column.saturating_sub(1));
                     output.push_str(&format!("{}{}^\n", indent, padding));

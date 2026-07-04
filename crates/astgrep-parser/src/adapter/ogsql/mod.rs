@@ -206,10 +206,7 @@ impl OgsqlAdapter {
 
 /// Apply ogsql-parser source span to a UniversalNode so match results
 /// report correct line/column numbers instead of default (1,1).
-fn apply_span(
-    node: UniversalNode,
-    span: Option<ogsql_parser::ast::SourceSpan>,
-) -> UniversalNode {
+fn apply_span(node: UniversalNode, span: Option<ogsql_parser::ast::SourceSpan>) -> UniversalNode {
     if let Some(s) = span {
         node.with_location(s.start.line, s.start.column, s.end.line, s.end.column)
     } else {

@@ -64,9 +64,7 @@ pub fn convert_select(
         let var_names: Vec<String> = into_targets
             .iter()
             .filter_map(|t| match t {
-                ogsql_parser::ast::SelectTarget::Expr(_, Some(alias)) => {
-                    Some(alias.to_string())
-                }
+                ogsql_parser::ast::SelectTarget::Expr(_, Some(alias)) => Some(alias.to_string()),
                 ogsql_parser::ast::SelectTarget::Expr(expr, None) => {
                     if let ogsql_parser::ast::Expr::ColumnRef(name) = expr {
                         Some(name.join("."))
@@ -246,7 +244,9 @@ pub fn convert_update(
         let mut value_with_meta = value_expr;
         if let Some(ref vt) = value_with_meta.text.clone() {
             if !vt.is_empty() {
-                value_with_meta.attributes.insert("target_var".into(), vt.clone());
+                value_with_meta
+                    .attributes
+                    .insert("target_var".into(), vt.clone());
             }
         }
         node = node.add_child(
@@ -699,15 +699,10 @@ mod tests {
 
     #[test]
     fn test_select_into_for_update_metadata() {
-        let node = parse_to_node(
-            "SELECT cnt FROM accounts WHERE id = 1 FOR UPDATE",
-        );
+        let node = parse_to_node("SELECT cnt FROM accounts WHERE id = 1 FOR UPDATE");
         // lock_clause works standalone
         assert_eq!(node.get_attribute("has_lock"), Some(&"true".to_string()));
-        assert_eq!(
-            node.get_attribute("lock_type"),
-            Some(&"Update".to_string())
-        );
+        assert_eq!(node.get_attribute("lock_type"), Some(&"Update".to_string()));
         // into_targets only populated in PL/pgSQL context (tested in pl.rs after Phase B)
     }
 
@@ -728,26 +723,18 @@ mod tests {
     fn test_select_for_update_nowait_metadata() {
         let node = parse_to_node("SELECT cnt FROM t FOR UPDATE NOWAIT");
         assert_eq!(node.get_attribute("has_lock"), Some(&"true".to_string()));
-        assert_eq!(
-            node.get_attribute("lock_nowait"),
-            Some(&"true".to_string())
-        );
+        assert_eq!(node.get_attribute("lock_nowait"), Some(&"true".to_string()));
     }
 
     #[test]
     fn test_select_for_share_metadata() {
         let node = parse_to_node("SELECT cnt FROM t FOR SHARE");
-        assert_eq!(
-            node.get_attribute("lock_type"),
-            Some(&"Share".to_string())
-        );
+        assert_eq!(node.get_attribute("lock_type"), Some(&"Share".to_string()));
     }
 
     #[test]
     fn test_select_bulk_collect_metadata() {
-        let node = parse_to_node(
-            "SELECT cnt BULK COLLECT INTO v FROM t FOR UPDATE",
-        );
+        let node = parse_to_node("SELECT cnt BULK COLLECT INTO v FROM t FOR UPDATE");
         assert_eq!(
             node.get_attribute("bulk_collect"),
             Some(&"true".to_string())

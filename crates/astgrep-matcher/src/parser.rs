@@ -684,15 +684,22 @@ mod tests_multiline_tokenize {
         let parser = PatternParser::new();
         // A multiline pattern should parse without error
         let result = parser.parse("foo\nbar");
-        assert!(result.is_ok(), "multiline pattern should parse: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "multiline pattern should parse: {:?}",
+            result
+        );
         let pattern = result.unwrap();
         assert_eq!(
             format!("{:?}", pattern),
-            format!("{:?}", ParsedPattern::Sequence(vec![
-                ParsedPattern::Literal("foo".to_string()),
-                ParsedPattern::Literal("\n".to_string()),
-                ParsedPattern::Literal("bar".to_string()),
-            ]))
+            format!(
+                "{:?}",
+                ParsedPattern::Sequence(vec![
+                    ParsedPattern::Literal("foo".to_string()),
+                    ParsedPattern::Literal("\n".to_string()),
+                    ParsedPattern::Literal("bar".to_string()),
+                ])
+            )
         );
     }
 }

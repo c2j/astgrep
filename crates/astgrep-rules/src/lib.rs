@@ -237,9 +237,9 @@ fn pattern_has_typed_metavar(pattern: &crate::types::Pattern) -> bool {
             let re = fancy_regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)");
             re.map(|r| r.is_match(s).unwrap_or(false)).unwrap_or(false)
         }
-        PatternType::Either(patterns)
-        | PatternType::All(patterns)
-        | PatternType::Any(patterns) => patterns.iter().any(pattern_has_typed_metavar),
+        PatternType::Either(patterns) | PatternType::All(patterns) | PatternType::Any(patterns) => {
+            patterns.iter().any(pattern_has_typed_metavar)
+        }
         PatternType::Inside(pattern)
         | PatternType::NotInside(pattern)
         | PatternType::Not(pattern) => pattern_has_typed_metavar(pattern),

@@ -542,7 +542,10 @@ mod tests {
 
     #[test]
     fn test_text_language_extensions() {
-        assert_eq!(Language::Text.extensions(), &[".txt", ".md", ".log", ".rst"]);
+        assert_eq!(
+            Language::Text.extensions(),
+            &[".txt", ".md", ".log", ".rst"]
+        );
     }
 
     #[test]

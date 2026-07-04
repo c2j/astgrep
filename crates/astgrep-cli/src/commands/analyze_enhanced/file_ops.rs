@@ -85,10 +85,7 @@ fn should_include_file(path: &PathBuf, config: &EnhancedAnalysisConfig) -> bool 
                     || ext_str == "pom"
             }
             astgrep_core::Language::Text => {
-                ext_str == "txt"
-                    || ext_str == "md"
-                    || ext_str == "log"
-                    || ext_str == "rst"
+                ext_str == "txt" || ext_str == "md" || ext_str == "log" || ext_str == "rst"
             }
         })
     } else {

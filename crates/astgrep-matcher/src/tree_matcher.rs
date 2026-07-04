@@ -211,7 +211,7 @@ fn flatten_pattern_chain(kind: &str, children: &[PatternTree]) -> Vec<PatternTre
             kind: kind.to_string(),
             children: children.to_vec(),
             text: None,
-        constraints: Vec::new(),
+            constraints: Vec::new(),
         }];
     }
 
@@ -590,8 +590,9 @@ fn unwrap_single_child_wrapper(pattern: &PatternTree) -> Option<&PatternTree> {
     if let PatternTree::Node {
         kind,
         children,
-        text, ..
-            } = pattern
+        text,
+        ..
+    } = pattern
     {
         if text.is_none() && WRAPPER_NODE_KINDS.contains(&kind.as_str()) && children.len() == 1 {
             return Some(&children[0]);
@@ -815,7 +816,10 @@ impl TreeMatcher {
         let mut ctx = MatchCtx::new();
         ctx.build_import_map(root);
         // Pass literal constraints from ogsql pattern to enforcement
-        if let PatternTree::Node { ref constraints, .. } = &tree {
+        if let PatternTree::Node {
+            ref constraints, ..
+        } = &tree
+        {
             ctx.constraints = constraints.clone();
         }
         ctx.find_recursive(&tree, root, &mut results, None);
@@ -1436,7 +1440,8 @@ impl MatchCtx {
             PatternTree::Node {
                 kind,
                 children,
-                text, ..
+                text,
+                ..
             } => self.match_node(kind, children, text, target),
         }
     }
@@ -1781,8 +1786,8 @@ impl MatchCtx {
                 kind: pattern_kind.to_string(),
                 children: pattern_children.to_vec(),
                 text: None,
-            constraints: Vec::new(),
-        });
+                constraints: Vec::new(),
+            });
             if has_chain_child_with_ellipsis || (has_any_ellipsis && is_chain_kind(pattern_kind)) {
                 let flat_pattern = flatten_pattern_chain(pattern_kind, pattern_children);
                 let flat_target = flatten_node_chain(target);
@@ -1826,16 +1831,24 @@ impl MatchCtx {
 
         // Wildcard kind "_" with metavar children — bind each in target subtree.
         if pattern_kind == "_" && !pattern_children.is_empty() {
-            if pattern_children.iter().all(|c| matches!(c, PatternTree::Metavar { .. })) {
+            if pattern_children
+                .iter()
+                .all(|c| matches!(c, PatternTree::Metavar { .. }))
+            {
                 let snap = self.snapshot();
                 for mv in pattern_children {
-                    if !self.bind_metavar_in_subtree(mv, target) { self.restore(snap); return false; }
+                    if !self.bind_metavar_in_subtree(mv, target) {
+                        self.restore(snap);
+                        return false;
+                    }
                 }
                 if !self.constraints.is_empty() && !self.enforce_constraints_in_subtree(target) {
-                    self.restore(snap); return false;
+                    self.restore(snap);
+                    return false;
                 }
                 if !self.verify_metavar_consistency(pattern_children, target) {
-                    self.restore(snap); return false;
+                    self.restore(snap);
+                    return false;
                 }
                 return true;
             }
@@ -2041,22 +2054,21 @@ impl MatchCtx {
         }
     }
 
-
     /// For each unique (metavar_name, bind_attr) pair in the metavar list,
     /// verify that the bound metavar value appears at least as many times in
     /// the target subtree as the metavar occurs in the pattern. This enforces
     /// cross-statement metavar unification without being tripped up by
     /// unrelated DML statements (e.g., UPDATE config_table after the RMW
     /// pattern in the same procedure).
-    fn verify_metavar_consistency(
-        &self,
-        metavars: &[PatternTree],
-        target: &dyn AstNode,
-    ) -> bool {
+    fn verify_metavar_consistency(&self, metavars: &[PatternTree], target: &dyn AstNode) -> bool {
         use std::collections::HashSet;
         let mut pairs_checked: HashSet<(&str, &str)> = HashSet::new();
         for mv in metavars {
-            if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
+            if let PatternTree::Metavar {
+                name,
+                bind_attr: Some(ref attr),
+            } = mv
+            {
                 let pair = (name.as_str(), attr.as_str());
                 if pairs_checked.insert(pair) {
                     let expected_count = metavars
@@ -2071,8 +2083,7 @@ impl MatchCtx {
                     Self::collect_attr_values(attr, target, &mut values);
 
                     if let Some(bound_value) = self.bindings.get(name) {
-                        let match_count =
-                            values.iter().filter(|v| *v == bound_value).count();
+                        let match_count = values.iter().filter(|v| *v == bound_value).count();
                         if match_count < expected_count {
                             return false;
                         }
@@ -2102,7 +2113,9 @@ impl MatchCtx {
                 if !skip.contains(&kind) {
                     // If child has default location but parent doesn't, keep
                     // using the parent (which carries ogSql span from Spanned<T>).
-                    if child.location() == Some((1, 1, 1, 1)) && node.location() != Some((1, 1, 1, 1)) {
+                    if child.location() == Some((1, 1, 1, 1))
+                        && node.location() != Some((1, 1, 1, 1))
+                    {
                         return node;
                     }
                     return child;
@@ -2125,25 +2138,35 @@ impl MatchCtx {
 
     fn enforce_constraints_in_subtree(&self, target: &dyn AstNode) -> bool {
         for (key, expected) in &self.constraints {
-            if !Self::find_constraint(key, expected, target) { return false; }
+            if !Self::find_constraint(key, expected, target) {
+                return false;
+            }
         }
         true
     }
 
     fn find_constraint(key: &str, expected: &str, target: &dyn AstNode) -> bool {
         if let Some(val) = target.get_attribute(key) {
-            if val == expected { return true; }
+            if val == expected {
+                return true;
+            }
         }
         for i in 0..target.child_count() {
             if let Some(child) = target.child(i) {
-                if Self::find_constraint(key, expected, child) { return true; }
+                if Self::find_constraint(key, expected, child) {
+                    return true;
+                }
             }
         }
         false
     }
 
     fn bind_metavar_in_subtree(&mut self, mv: &PatternTree, target: &dyn AstNode) -> bool {
-        if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
+        if let PatternTree::Metavar {
+            name,
+            bind_attr: Some(ref attr),
+        } = mv
+        {
             if let Some(val) = target.get_attribute(attr) {
                 return self.try_bind(name, val);
             }
@@ -2727,7 +2750,7 @@ mod tests {
                 },
             ],
             text: None,
-        constraints: Vec::new(),
+            constraints: Vec::new(),
         };
 
         // Target: foo(x, y, z, bar) — simulated as a node with children

@@ -28,8 +28,7 @@ pub fn convert_do_block(
         node = node.with_metadata("pl_block_type".into(), "do_block".into());
         Ok(node)
     } else {
-        Ok(AstBuilder::sql_expression("DO")
-            .with_metadata("code".into(), do_stmt.code.clone()))
+        Ok(AstBuilder::sql_expression("DO").with_metadata("code".into(), do_stmt.code.clone()))
     }
 }
 
@@ -60,9 +59,7 @@ pub(super) fn convert_pl_block(
 
 // ── Statement conversion ──
 
-fn convert_pl_statement(
-    stmt: &PlStatement,
-) -> Result<UniversalNode, OgsqlAdapterError> {
+fn convert_pl_statement(stmt: &PlStatement) -> Result<UniversalNode, OgsqlAdapterError> {
     match stmt {
         PlStatement::Assignment { target, expression } => {
             let target_str = extract_variable_name(target);
@@ -78,15 +75,11 @@ fn convert_pl_statement(
             super::OgsqlAdapter::convert_statement(statement)
         }
 
-        PlStatement::Perform { query, .. } => {
-            Ok(AstBuilder::sql_expression("perform_statement")
-                .with_metadata("query".into(), query.clone()))
-        }
+        PlStatement::Perform { query, .. } => Ok(AstBuilder::sql_expression("perform_statement")
+            .with_metadata("query".into(), query.clone())),
 
-        PlStatement::Execute(stmt) => {
-            Ok(AstBuilder::sql_expression("execute_statement")
-                .with_metadata("immediate".into(), stmt.immediate.to_string()))
-        }
+        PlStatement::Execute(stmt) => Ok(AstBuilder::sql_expression("execute_statement")
+            .with_metadata("immediate".into(), stmt.immediate.to_string())),
 
         PlStatement::Return { expression } => {
             let mut node = AstBuilder::sql_expression("return_statement");
@@ -115,23 +108,18 @@ fn convert_pl_statement(
 
 fn convert_pl_declaration(decl: &PlDeclaration) -> UniversalNode {
     match decl {
-        PlDeclaration::Variable(v) => {
-            UniversalNode::new(NodeType::VariableDeclaration)
-                .with_metadata("name".into(), v.name.clone())
-                .with_metadata("data_type".into(), pl_data_type_str(&v.data_type))
-        }
+        PlDeclaration::Variable(v) => UniversalNode::new(NodeType::VariableDeclaration)
+            .with_metadata("name".into(), v.name.clone())
+            .with_metadata("data_type".into(), pl_data_type_str(&v.data_type)),
         PlDeclaration::Cursor(c) => {
-            AstBuilder::sql_expression("CURSOR")
-                .with_metadata("name".into(), c.name.clone())
+            AstBuilder::sql_expression("CURSOR").with_metadata("name".into(), c.name.clone())
         }
         PlDeclaration::Record(r) => {
-            AstBuilder::sql_expression("RECORD")
-                .with_metadata("name".into(), r.name.clone())
+            AstBuilder::sql_expression("RECORD").with_metadata("name".into(), r.name.clone())
         }
         PlDeclaration::Type(_) => AstBuilder::sql_expression("TYPE_DECL"),
         PlDeclaration::Pragma { name, .. } => {
-            AstBuilder::sql_expression("PRAGMA")
-                .with_metadata("name".into(), name.clone())
+            AstBuilder::sql_expression("PRAGMA").with_metadata("name".into(), name.clone())
         }
         _ => AstBuilder::sql_expression("PL_DECL"),
     }
@@ -165,9 +153,7 @@ mod tests {
 
     #[test]
     fn test_anony_block_basic() {
-        let result = OgsqlAdapter::parse_to_universal(
-            "DECLARE v INTEGER; BEGIN v := 1; END;",
-        );
+        let result = OgsqlAdapter::parse_to_universal("DECLARE v INTEGER; BEGIN v := 1; END;");
         assert!(result.is_ok(), "expected ok, got: {result:?}");
         let nodes = result.unwrap();
         assert_eq!(nodes.len(), 1);
@@ -212,19 +198,25 @@ mod tests {
 
         // Check SELECT metadata populated (Phase A)
         assert_eq!(
-            select_child.get_attribute("has_lock").as_deref(), Some("true"),
+            select_child.get_attribute("has_lock").as_deref(),
+            Some("true"),
             "SELECT should have lock metadata"
         );
         assert_eq!(
-            select_child.get_attribute("lock_type").as_deref(), Some("Update"),
+            select_child.get_attribute("lock_type").as_deref(),
+            Some("Update"),
             "lock_type should be Update"
         );
         assert_eq!(
-            select_child.get_attribute("has_into").as_deref(), Some("true"),
+            select_child.get_attribute("has_into").as_deref(),
+            Some("true"),
             "SELECT INTO should have has_into in PL context"
         );
         assert!(
-            select_child.get_attribute("into_vars").unwrap().contains("v_cnt"),
+            select_child
+                .get_attribute("into_vars")
+                .unwrap()
+                .contains("v_cnt"),
             "into_vars should contain v_cnt"
         );
 
@@ -240,7 +232,8 @@ mod tests {
             })
             .expect("should have an assignment_statement child");
         assert_eq!(
-            assign_child.get_attribute("target").as_deref(), Some("v_cnt"),
+            assign_child.get_attribute("target").as_deref(),
+            Some("v_cnt"),
         );
 
         // Find update_statement
@@ -254,14 +247,15 @@ mod tests {
                 }
             })
             .expect("should have an update_statement child");
-        assert!(update_child.get_attribute("tables").unwrap().contains("accounts"));
+        assert!(update_child
+            .get_attribute("tables")
+            .unwrap()
+            .contains("accounts"));
     }
 
     #[test]
     fn test_assignment_statement_metadata() {
-        let result = OgsqlAdapter::parse_to_universal(
-            "DECLARE v INTEGER; BEGIN v := v + 1; END;",
-        );
+        let result = OgsqlAdapter::parse_to_universal("DECLARE v INTEGER; BEGIN v := v + 1; END;");
         assert!(result.is_ok());
         let nodes = result.unwrap();
         let block = &nodes[0];
@@ -300,7 +294,8 @@ mod tests {
             })
             .expect("should have select_statement");
         assert_eq!(
-            select_child.get_attribute("has_into").as_deref(), Some("true")
+            select_child.get_attribute("has_into").as_deref(),
+            Some("true")
         );
         assert!(select_child.get_attribute("has_lock").is_none());
     }
@@ -324,16 +319,15 @@ mod tests {
             })
             .expect("should have select_statement");
         assert_eq!(
-            select_child.get_attribute("lock_type").as_deref(), Some("Share")
+            select_child.get_attribute("lock_type").as_deref(),
+            Some("Share")
         );
     }
 
     #[test]
     fn test_unsupported_pl_statement_does_not_crash() {
         // Test that unknown PL statements get a generic wrapper, not a crash
-        let result = OgsqlAdapter::parse_to_universal(
-            "DECLARE v INTEGER; BEGIN NULL; END;",
-        );
+        let result = OgsqlAdapter::parse_to_universal("DECLARE v INTEGER; BEGIN NULL; END;");
         assert!(result.is_ok(), "NULL statement should parse ok");
     }
 }

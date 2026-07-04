@@ -306,9 +306,8 @@ impl AdvancedRuleExecutor {
         if let PatternType::All(sub_patterns) = &pattern.pattern_type {
             let mut all_findings = Vec::new();
             for sub in sub_patterns {
-                let sub_findings = self.execute_pattern_analysis(
-                    rule, sub, ast, dataflow_analysis, file_path,
-                )?;
+                let sub_findings =
+                    self.execute_pattern_analysis(rule, sub, ast, dataflow_analysis, file_path)?;
                 all_findings.extend(sub_findings);
             }
             return Ok(all_findings);
@@ -462,7 +461,10 @@ impl AdvancedRuleExecutor {
             }
         }
 
-        if inside_patterns.is_empty() && not_inside_patterns.is_empty() && negative_patterns.is_empty() {
+        if inside_patterns.is_empty()
+            && not_inside_patterns.is_empty()
+            && negative_patterns.is_empty()
+        {
             return Ok(None);
         }
 

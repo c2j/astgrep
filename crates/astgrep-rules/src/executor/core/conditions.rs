@@ -1340,7 +1340,10 @@ impl AdvancedRuleExecutor {
                     let left = expr[..pos].trim();
                     let right = expr[pos + op.len()..].trim();
                     // Extract metavariable name from lines($VAR) or lines($...VAR)
-                    if let Some(inner) = left.strip_prefix("lines(").and_then(|s| s.strip_suffix(")")) {
+                    if let Some(inner) = left
+                        .strip_prefix("lines(")
+                        .and_then(|s| s.strip_suffix(")"))
+                    {
                         let _metavar = inner.trim();
                         // `value` parameter already holds the bound text for the metavariable
                         let line_count = value.lines().count();
@@ -1356,7 +1359,10 @@ impl AdvancedRuleExecutor {
                             };
                             tracing::debug!(
                                 "lines(): {} lines vs threshold {}, op '{}', result={}",
-                                line_count, threshold, op, result
+                                line_count,
+                                threshold,
+                                op,
+                                result
                             );
                             return Ok(result);
                         }
@@ -1625,11 +1631,7 @@ mod tests_lines_function {
         let executor = AdvancedRuleExecutor::new();
         let bindings = std::collections::HashMap::new();
         let result = executor
-            .evaluate_python_expression(
-                &eighty_lines,
-                "lines($...STMTS) > 80",
-                &bindings,
-            )
+            .evaluate_python_expression(&eighty_lines, "lines($...STMTS) > 80", &bindings)
             .unwrap();
         assert!(!result, "exactly 80 lines should NOT exceed 80");
     }
