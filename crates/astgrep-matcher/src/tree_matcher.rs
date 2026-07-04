@@ -2069,8 +2069,21 @@ impl MatchCtx {
     }
 
     fn collect_attr_values(attr: &str, target: &dyn AstNode, values: &mut Vec<String>) {
-        if let Some(val) = target.get_attribute(attr) {
-            values.push(val.to_string());
+        // Only collect from node types relevant to RMW patterns.
+        // This avoids false inconsistency from unrelated UPDATE statements
+        // in the same procedure (e.g., UPDATE config_table).
+        let kind = target.node_type();
+        let collect = match attr {
+            "tables" => matches!(kind, "select_statement"),
+            "into_vars" => matches!(kind, "select_statement"),
+            "target" => matches!(kind, "assignment_expression"),
+            "target_var" => matches!(kind, "sql_expression"),
+            _ => true,
+        };
+        if collect {
+            if let Some(val) = target.get_attribute(attr) {
+                values.push(val.to_string());
+            }
         }
         for i in 0..target.child_count() {
             if let Some(child) = target.child(i) {
