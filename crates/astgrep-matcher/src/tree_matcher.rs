@@ -2068,6 +2068,20 @@ impl MatchCtx {
         true
     }
 
+    /// DML/DDL statement node types — we stop recursion at these boundaries
+    /// to avoid collecting attributes from subquery statements within UPDATE
+    /// or nested DML inside the matched block.
+    const DML_STATEMENT_KINDS: &[&str] = &[
+        "select_statement", "update_statement", "insert_statement",
+        "delete_statement", "merge_statement", "create_table_statement",
+        "create_index_statement", "create_view_statement",
+        "create_function_statement", "create_procedure_statement",
+    ];
+
+    fn is_dml_statement_kind(kind: &str) -> bool {
+        Self::DML_STATEMENT_KINDS.contains(&kind)
+    }
+
     fn collect_attr_values(attr: &str, target: &dyn AstNode, values: &mut Vec<String>) {
         // Only collect from node types relevant to RMW patterns.
         // This avoids false inconsistency from unrelated UPDATE statements
@@ -2085,9 +2099,14 @@ impl MatchCtx {
                 values.push(val.to_string());
             }
         }
-        for i in 0..target.child_count() {
-            if let Some(child) = target.child(i) {
-                Self::collect_attr_values(attr, child, values);
+        // Stop recursion at nested DML statement boundaries — do not collect
+        // attributes from subquery or nested-statement children (e.g., the
+        // SELECT inside `UPDATE ... SET ... = (SELECT ... FROM staging)`).
+        if !Self::is_dml_statement_kind(kind) {
+            for i in 0..target.child_count() {
+                if let Some(child) = target.child(i) {
+                    Self::collect_attr_values(attr, child, values);
+                }
             }
         }
     }
