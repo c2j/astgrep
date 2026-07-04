@@ -1,6 +1,6 @@
 [package]
 name = "astgrep-dataflow"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 description = "Data flow and taint analysis for astgrep"
 
