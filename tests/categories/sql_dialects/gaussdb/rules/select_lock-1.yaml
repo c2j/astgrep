@@ -1,6 +1,6 @@
 rules:
   - id: plsql-read-modify-write
-    name: "RMW pattern detection via TreeMatcher"
+    name: "GaussDB SELECT FOR UPDATE -> := -> UPDATE 变量统一检测"
     languages: [sql]
     dialects: [gaussdb, opengauss]
     patterns:

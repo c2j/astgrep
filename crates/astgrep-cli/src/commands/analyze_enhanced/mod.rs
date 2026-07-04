@@ -11,7 +11,7 @@ use anyhow::Result;
 use astgrep_core::Language;
 use std::path::PathBuf;
 use std::time::Instant;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::output::analysis::{AnalysisStatistics, Finding};
 use crate::EnhancedAnalysisConfig;
@@ -53,7 +53,7 @@ pub async fn run_enhanced(
     let mut analysis_stats = AnalysisStatistics::new();
 
     for file_path in target_files {
-        info!("Analyzing file: {:?}", file_path);
+        debug!("Analyzing file: {:?}", file_path);
         analyze_file_simple(&file_path, &config, &mut all_findings, &mut analysis_stats)?;
     }
 
@@ -278,7 +278,7 @@ fn analyze_with_rule_engine(
             match constants_result {
                 Ok(constants) => {
                     if !constants.is_empty() {
-                        tracing::info!("Constant propagation found {} constants", constants.len());
+                        tracing::debug!("Constant propagation found {} constants", constants.len());
                         // Set constants in the engine's executor
                         engine
                             .configure_executor()
@@ -315,14 +315,14 @@ fn analyze_with_rule_engine(
             Language::Sql => "Sql",
             _ => "Other",
         };
-        tracing::info!("enhanced: language for preprocessing check = {}", lang_name);
+        tracing::debug!("enhanced: language for preprocessing check = {}", lang_name);
     }
     if matches!(language, Language::Java | Language::Xml) {
         use astgrep_parser::LanguageParserRegistry;
         let registry2 = LanguageParserRegistry::new();
         if let Some(sql_parser) = registry2.get_parser(Language::Sql) {
             // Collect eligible SQL rules with preprocessing metadata
-            tracing::info!(
+            tracing::debug!(
                 "embedded-sql: total loaded rules = {}",
                 engine.rules().len()
             );
@@ -356,7 +356,7 @@ fn analyze_with_rule_engine(
                 })
                 .cloned()
                 .collect();
-            tracing::info!(
+            tracing::debug!(
                 "embedded-sql: eligible SQL rules after filter = {}",
                 sql_rules.len()
             );
@@ -364,7 +364,7 @@ fn analyze_with_rule_engine(
             if !sql_rules.is_empty() {
                 // Extract embedded SQL snippets
                 let snippets = extract_embedded_sql_snippets(&source_code, language);
-                tracing::info!(
+                tracing::debug!(
                     "embedded-sql: {} eligible SQL rules; {} snippets extracted",
                     sql_rules.len(),
                     snippets.len()

@@ -2080,20 +2080,6 @@ impl MatchCtx {
         true
     }
 
-    /// DML/DDL statement node types — we stop recursion at these boundaries
-    /// to avoid collecting attributes from subquery statements within UPDATE
-    /// or nested DML inside the matched block.
-    const DML_STATEMENT_KINDS: &[&str] = &[
-        "select_statement", "update_statement", "insert_statement",
-        "delete_statement", "merge_statement", "create_table_statement",
-        "create_index_statement", "create_view_statement",
-        "create_function_statement", "create_procedure_statement",
-    ];
-
-    fn is_dml_statement_kind(kind: &str) -> bool {
-        Self::DML_STATEMENT_KINDS.contains(&kind)
-    }
-
     fn collect_attr_values(attr: &str, target: &dyn AstNode, values: &mut Vec<String>) {
         if let Some(val) = target.get_attribute(attr) {
             values.push(val.to_string());

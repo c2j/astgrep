@@ -19,22 +19,31 @@ impl OutputFormatter for TextFormatter {
         output.push_str("=== astgrep Analysis Results ===\n\n");
 
         if findings.is_empty() {
-            output.push_str("✅ No issues found!\n\n");
+            output.push_str("No issues found.\n\n");
         } else {
             output.push_str(&format!("Found {} issue(s):\n\n", findings.len()));
 
+            let cwd = std::env::current_dir().unwrap_or_default();
+
             for (i, finding) in findings.iter().enumerate() {
+                let file = finding.location.file.display().to_string();
+                let short_path = file
+                    .strip_prefix(cwd.to_string_lossy().as_ref())
+                    .unwrap_or(&file)
+                    .trim_start_matches('/');
+                let rule_label = if finding.message != finding.rule_id {
+                    format!("{} ({})", finding.message, finding.rule_id)
+                } else {
+                    finding.rule_id.clone()
+                };
+
                 output.push_str(&format!(
-                    "{}. {} ({})",
+                    "{}. {}  {}:{}:{}\n",
                     i + 1,
-                    finding.message,
-                    finding.rule_id
-                ));
-                output.push_str(&format!(
-                    "   File: {}:{}:{}\n",
-                    finding.location.file.display(),
+                    rule_label,
+                    short_path,
                     finding.location.start_line,
-                    finding.location.start_column
+                    finding.location.start_column,
                 ));
                 output.push_str(&format!(
                     "   Severity: {:?}, Confidence: {:?}\n",
@@ -52,8 +61,10 @@ impl OutputFormatter for TextFormatter {
         output.push_str(&format!("Files analyzed: {}\n", stats.files_analyzed));
         output.push_str(&format!("Rules executed: {}\n", stats.rules_executed));
         output.push_str(&format!("Analysis time: {:?}\n", total_time));
-        output.push_str(&format!("Parse errors: {}\n", stats.parse_errors));
-        output.push_str(&format!("Analysis errors: {}\n", stats.analysis_errors));
+        if stats.parse_errors > 0 || stats.analysis_errors > 0 {
+            output.push_str(&format!("Parse errors: {}\n", stats.parse_errors));
+            output.push_str(&format!("Analysis errors: {}\n", stats.analysis_errors));
+        }
 
         Ok(output)
     }
