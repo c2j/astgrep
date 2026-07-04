@@ -1,6 +1,6 @@
 //! Plain text output formatter
 
-use crate::output::analysis::{AnalysisStatistics, Finding, OutputFormatter};
+use crate::output::analysis::{get_source_line, AnalysisStatistics, Finding, OutputFormatter};
 use anyhow::Result;
 use std::time::Duration;
 
@@ -49,6 +49,18 @@ impl OutputFormatter for TextFormatter {
                     "   Severity: {:?}, Confidence: {:?}\n",
                     finding.severity, finding.confidence
                 ));
+
+                // Show source line with position marker
+                if let Some(src_line) =
+                    get_source_line(&finding.location.file, finding.location.start_line)
+                {
+                    output.push_str(&format!("   {} | {}\n", finding.location.start_line, src_line));
+                    // Caret underline pointing to the match column
+                    let indent = format!("   {} | ", finding.location.start_line);
+                    let padding = " ".repeat(finding.location.start_column.saturating_sub(1));
+                    output.push_str(&format!("{}{}^\n", indent, padding));
+                }
+
                 if let Some(ref fix) = finding.fix {
                     output.push_str(&format!("   Fix: {}\n", fix));
                 }
