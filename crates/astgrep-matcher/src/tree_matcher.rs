@@ -1831,6 +1831,12 @@ impl MatchCtx {
                 if !self.constraints.is_empty() && !self.enforce_constraints_in_subtree(target) {
                     self.restore(snap); return false;
                 }
+                // For metavar names that appear with the same bind_attr on
+                // multiple nodes in the pattern, verify all occurrences in
+                // the target subtree have the same value.
+                if !Self::verify_metavar_consistency(pattern_children, target) {
+                    self.restore(snap); return false;
+                }
                 return true;
             }
         }
@@ -2035,6 +2041,43 @@ impl MatchCtx {
         }
     }
 
+
+    /// For each unique (bind_attr) in the metavar list, verify all target
+    /// subtree nodes with that attribute have the same value (cross-node
+    /// metavar consistency).
+    fn verify_metavar_consistency(
+        metavars: &[PatternTree],
+        target: &dyn AstNode,
+    ) -> bool {
+        use std::collections::HashSet;
+        let mut attrs_checked: HashSet<&str> = HashSet::new();
+        for mv in metavars {
+            if let PatternTree::Metavar { bind_attr: Some(ref attr), .. } = mv {
+                if attrs_checked.insert(attr.as_str()) {
+                    let mut values: Vec<String> = Vec::new();
+                    Self::collect_attr_values(attr, target, &mut values);
+                    if values.len() > 1 {
+                        let first = &values[0];
+                        if values.iter().any(|v| v != first) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    fn collect_attr_values(attr: &str, target: &dyn AstNode, values: &mut Vec<String>) {
+        if let Some(val) = target.get_attribute(attr) {
+            values.push(val.to_string());
+        }
+        for i in 0..target.child_count() {
+            if let Some(child) = target.child(i) {
+                Self::collect_attr_values(attr, child, values);
+            }
+        }
+    }
 
     fn enforce_constraints_in_subtree(&self, target: &dyn AstNode) -> bool {
         for (key, expected) in &self.constraints {
