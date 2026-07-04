@@ -85,13 +85,28 @@ impl OgsqlAdapter {
     pub(super) fn convert_statement(
         stmt: &ogsql_parser::ast::Statement,
     ) -> Result<UniversalNode, OgsqlAdapterError> {
-        match stmt {
-            // DML: dispatched to dml.rs (Spanned<T> auto-derefs to T)
-            ogsql_parser::ast::Statement::Select(ref s) => dml::convert_select(s),
-            ogsql_parser::ast::Statement::Insert(ref s) => dml::convert_insert(s),
-            ogsql_parser::ast::Statement::Update(ref s) => dml::convert_update(s),
-            ogsql_parser::ast::Statement::Delete(ref s) => dml::convert_delete(s),
-            ogsql_parser::ast::Statement::Merge(ref s) => dml::convert_merge(s),
+        let result = match stmt {
+            // DML: dispatched to dml.rs
+            ogsql_parser::ast::Statement::Select(ref s) => {
+                let span = s.span.clone();
+                dml::convert_select(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::Insert(ref s) => {
+                let span = s.span.clone();
+                dml::convert_insert(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::Update(ref s) => {
+                let span = s.span.clone();
+                dml::convert_update(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::Delete(ref s) => {
+                let span = s.span.clone();
+                dml::convert_delete(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::Merge(ref s) => {
+                let span = s.span.clone();
+                dml::convert_merge(s).map(|node| apply_span(node, span))
+            }
             // Multi-table insert not yet supported
             ogsql_parser::ast::Statement::InsertAll(_) => {
                 Err(OgsqlAdapterError::UnsupportedStatement {
@@ -105,30 +120,68 @@ impl OgsqlAdapter {
             }
 
             // ── DDL (Phase 2.3) ──
-            ogsql_parser::ast::Statement::CreateTable(ref s) => ddl::convert_create_table(s),
-            ogsql_parser::ast::Statement::CreateIndex(ref s) => ddl::convert_create_index(s),
+            ogsql_parser::ast::Statement::CreateTable(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_table(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::CreateIndex(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_index(s).map(|node| apply_span(node, span))
+            }
             ogsql_parser::ast::Statement::CreateGlobalIndex(ref s) => {
-                ddl::convert_create_global_index(s)
+                let span = s.span.clone();
+                ddl::convert_create_global_index(s).map(|node| apply_span(node, span))
             }
-            ogsql_parser::ast::Statement::CreateView(ref s) => ddl::convert_create_view(s),
-            ogsql_parser::ast::Statement::CreateFunction(ref s) => ddl::convert_create_function(s),
+            ogsql_parser::ast::Statement::CreateView(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_view(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::CreateFunction(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_function(s).map(|node| apply_span(node, span))
+            }
             ogsql_parser::ast::Statement::CreateProcedure(ref s) => {
-                ddl::convert_create_procedure(s)
+                let span = s.span.clone();
+                ddl::convert_create_procedure(s).map(|node| apply_span(node, span))
             }
-            ogsql_parser::ast::Statement::CreatePackage(ref s) => ddl::convert_create_package(s),
-            ogsql_parser::ast::Statement::Drop(ref s) => ddl::convert_drop(s),
-            ogsql_parser::ast::Statement::AlterTable(ref s) => ddl::convert_alter_table(s),
+            ogsql_parser::ast::Statement::CreatePackage(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_package(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::Drop(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_drop(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::AlterTable(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_alter_table(s).map(|node| apply_span(node, span))
+            }
 
             // GaussDB-specific features (Phase 2.4)
-            ogsql_parser::ast::Statement::PredictBy(ref s) => features::convert_predict_by(s),
-            ogsql_parser::ast::Statement::TimeCapsule(ref s) => features::convert_timecapsule(s),
-            ogsql_parser::ast::Statement::Shrink(ref s) => features::convert_shrink(s),
+            ogsql_parser::ast::Statement::PredictBy(ref s) => {
+                let span = s.span.clone();
+                features::convert_predict_by(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::TimeCapsule(ref s) => {
+                let span = s.span.clone();
+                features::convert_timecapsule(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::Shrink(ref s) => {
+                let span = s.span.clone();
+                features::convert_shrink(s).map(|node| apply_span(node, span))
+            }
 
             // PL/pgSQL blocks (Phase 2.5)
-            ogsql_parser::ast::Statement::AnonyBlock(ref s) => pl::convert_anony_block(s),
-            ogsql_parser::ast::Statement::Do(ref s) => pl::convert_do_block(s),
+            ogsql_parser::ast::Statement::AnonyBlock(ref s) => {
+                let span = s.span.clone();
+                pl::convert_anony_block(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::Do(ref s) => {
+                let span = s.span.clone();
+                pl::convert_do_block(s).map(|node| apply_span(node, span))
+            }
 
-            // Still unsupported (TCL, utility statements, remaining DDL for Phase 2.4)
+            // Still unsupported
             other => {
                 let variant = match other {
                     ogsql_parser::ast::Statement::Replace(_) => "Replace",
@@ -146,7 +199,21 @@ impl OgsqlAdapter {
                 };
                 Err(OgsqlAdapterError::UnsupportedStatement { variant })
             }
-        }
+        };
+        result
+    }
+}
+
+/// Apply ogsql-parser source span to a UniversalNode so match results
+/// report correct line/column numbers instead of default (1,1).
+fn apply_span(
+    node: UniversalNode,
+    span: Option<ogsql_parser::ast::SourceSpan>,
+) -> UniversalNode {
+    if let Some(s) = span {
+        node.with_location(s.start.line, s.start.column, s.end.line, s.end.column)
+    } else {
+        node
     }
 }
 
