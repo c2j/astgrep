@@ -1157,7 +1157,10 @@ impl MatchCtx {
                     .iter()
                     .map(|(k, v)| (k.clone(), MatchBinding::new(v.clone())))
                     .collect();
-                results.push(SemgrepMatchResult::new(node.clone_node(), bindings));
+                // Use the first non-wrapper child's location so the reported
+                // line points at actual code, not the outer block/comment.
+                let display_node = Self::first_meaningful_child(node);
+                results.push(SemgrepMatchResult::new(display_node.clone_node(), bindings));
                 self.restore(snap);
             } else {
                 self.restore(snap);
@@ -1831,10 +1834,7 @@ impl MatchCtx {
                 if !self.constraints.is_empty() && !self.enforce_constraints_in_subtree(target) {
                     self.restore(snap); return false;
                 }
-                // For metavar names that appear with the same bind_attr on
-                // multiple nodes in the pattern, verify all occurrences in
-                // the target subtree have the same value.
-                if !Self::verify_metavar_consistency(pattern_children, target) {
+                if !self.verify_metavar_consistency(pattern_children, target) {
                     self.restore(snap); return false;
                 }
                 return true;
@@ -2042,23 +2042,38 @@ impl MatchCtx {
     }
 
 
-    /// For each unique (bind_attr) in the metavar list, verify all target
-    /// subtree nodes with that attribute have the same value (cross-node
-    /// metavar consistency).
+    /// For each unique (metavar_name, bind_attr) pair in the metavar list,
+    /// verify that the bound metavar value appears at least as many times in
+    /// the target subtree as the metavar occurs in the pattern. This enforces
+    /// cross-statement metavar unification without being tripped up by
+    /// unrelated DML statements (e.g., UPDATE config_table after the RMW
+    /// pattern in the same procedure).
     fn verify_metavar_consistency(
+        &self,
         metavars: &[PatternTree],
         target: &dyn AstNode,
     ) -> bool {
         use std::collections::HashSet;
-        let mut attrs_checked: HashSet<&str> = HashSet::new();
+        let mut pairs_checked: HashSet<(&str, &str)> = HashSet::new();
         for mv in metavars {
-            if let PatternTree::Metavar { bind_attr: Some(ref attr), .. } = mv {
-                if attrs_checked.insert(attr.as_str()) {
+            if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
+                let pair = (name.as_str(), attr.as_str());
+                if pairs_checked.insert(pair) {
+                    let expected_count = metavars
+                        .iter()
+                        .filter(|m| {
+                            matches!(m, PatternTree::Metavar { name: n, bind_attr: Some(a), .. }
+                                if n == name && a == attr)
+                        })
+                        .count();
+
                     let mut values: Vec<String> = Vec::new();
                     Self::collect_attr_values(attr, target, &mut values);
-                    if values.len() > 1 {
-                        let first = &values[0];
-                        if values.iter().any(|v| v != first) {
+
+                    if let Some(bound_value) = self.bindings.get(name) {
+                        let match_count =
+                            values.iter().filter(|v| *v == bound_value).count();
+                        if match_count < expected_count {
                             return false;
                         }
                     }
@@ -2068,22 +2083,38 @@ impl MatchCtx {
         true
     }
 
-    fn collect_attr_values(attr: &str, target: &dyn AstNode, values: &mut Vec<String>) {
-        // Only collect from node types relevant to RMW patterns.
-        // This avoids false inconsistency from unrelated UPDATE statements
-        // in the same procedure (e.g., UPDATE config_table).
-        let kind = target.node_type();
-        let collect = match attr {
-            "tables" => matches!(kind, "select_statement"),
-            "into_vars" => matches!(kind, "select_statement"),
-            "target" => matches!(kind, "assignment_expression"),
-            "target_var" => matches!(kind, "sql_expression"),
-            _ => true,
-        };
-        if collect {
-            if let Some(val) = target.get_attribute(attr) {
-                values.push(val.to_string());
+    /// Return the first non-wrapper child of `node`, falling back to `node`
+    /// if it has no meaningful children. This makes the reported location
+    /// point at the first actual statement inside a block.
+    fn first_meaningful_child(node: &dyn AstNode) -> &dyn AstNode {
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                let kind = child.get_attribute("ts_kind").unwrap_or(child.node_type());
+                if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
+                    continue;
+                }
+                if let Some(t) = child.text() {
+                    if t.trim().is_empty() {
+                        continue;
+                    }
+                }
+                let skip = ["DECLARE", "BEGIN", "END", "keyword_begin", "keyword_end"];
+                if !skip.contains(&kind) {
+                    // If child has default location but parent doesn't, keep
+                    // using the parent (which carries ogSql span from Spanned<T>).
+                    if child.location() == Some((1, 1, 1, 1)) && node.location() != Some((1, 1, 1, 1)) {
+                        return node;
+                    }
+                    return child;
+                }
             }
+        }
+        node
+    }
+
+    fn collect_attr_values(attr: &str, target: &dyn AstNode, values: &mut Vec<String>) {
+        if let Some(val) = target.get_attribute(attr) {
+            values.push(val.to_string());
         }
         for i in 0..target.child_count() {
             if let Some(child) = target.child(i) {
