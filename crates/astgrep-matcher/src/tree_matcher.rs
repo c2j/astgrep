@@ -2054,7 +2054,6 @@ impl MatchCtx {
         let mut pairs_checked: HashSet<(&str, &str)> = HashSet::new();
         for mv in metavars {
             if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
-                eprintln!("DEBUG verify: checking name={} attr={}", name, attr);
                 let pair = (name.as_str(), attr.as_str());
                 if pairs_checked.insert(pair) {
                     let expected_count = metavars
