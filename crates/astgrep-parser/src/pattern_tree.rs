@@ -281,9 +281,10 @@ impl PatternTreeParser {
         let mut metavar_children = Vec::new();
         Self::collect_ogsql_metavars(&nodes[0], meta_map, &mut metavar_children);
 
-        // Also collect literal attribute constraints (non-placeholder) for enforcement.
+        // Collect literal attribute constraints (non-placeholder) for enforcement.
         let mut constraints: Vec<(String, String)> = Vec::new();
         Self::collect_ogsql_attr_constraints(&nodes[0], meta_map, &mut constraints);
+        constraints.retain(|(k, _)| k != "pl_block_type");
 
         if metavar_children.is_empty() && constraints.is_empty() {
             return Ok(Self::universal_to_pattern_tree(&nodes[0], meta_map));
