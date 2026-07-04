@@ -64,7 +64,17 @@ impl SqlDialectParser for GaussDBDialect {
         source: &str,
         _file_path: &Path,
     ) -> Result<Box<dyn AstNode>, DialectParseError> {
-        let nodes = OgsqlAdapter::parse_to_universal(source).map_err(|e| {
+        let nodes = OgsqlAdapter::parse_to_universal(source).or_else(|e| {
+            // If direct parsing fails and the source contains PL/pgSQL syntax
+            // (:= assignment), retry with DO block wrapping so ogsql-parser
+            // can handle the procedural statements.
+            if source.contains(":=") {
+                let wrapped = format!("DO $$ BEGIN {} END $$;", source);
+                OgsqlAdapter::parse_to_universal(&wrapped)
+            } else {
+                Err(e)
+            }
+        }).map_err(|e| {
             DialectParseError::ParseFailed {
                 dialect: SqlDialect::GaussDB,
                 reason: e.to_string(),
