@@ -11,6 +11,12 @@ rules:
           SELECT $COL INTO $VAR FROM $TABLE WHERE $COND FOR UPDATE;
           $VAR := $VAR + 1;
           UPDATE $TABLE SET $COL = $VAR WHERE $COND;
+      # ============ 2 列 ============
+      # 第 1 列被修改
+      - pattern: |
+          SELECT $COL1, $COL2 INTO $VAR1, $VAR2 FROM $TABLE WHERE $COND FOR UPDATE;
+          $VAR1 := $VAR1 + 1;
+          UPDATE $TABLE SET $COL1 = $VAR1 WHERE $COND;
     message: "SELECT INTO var FOR UPDATE -> var := var + expr -> UPDATE SET var，GaussDB限制自治事务获取序列号"
     severity: INFO
     metadata:

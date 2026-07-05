@@ -230,7 +230,7 @@ fn convert_package_item(
             let mut nodes = Vec::new();
             if let Some(ref block) = proc.block {
                 let mut block_node =
-                    pl::convert_pl_block(block, NodeType::BlockStatement)?
+                    pl::convert_pl_block(block, NodeType::BlockStatement, None)?
                         .with_metadata(
                             "package_procedure_name".into(),
                             proc.name.join("."),
@@ -276,7 +276,7 @@ fn convert_package_item(
             let mut nodes = Vec::new();
             if let Some(ref block) = func.block {
                 let mut block_node =
-                    pl::convert_pl_block(block, NodeType::BlockStatement)?
+                    pl::convert_pl_block(block, NodeType::BlockStatement, None)?
                         .with_metadata(
                             "package_function_name".into(),
                             func.name.join("."),

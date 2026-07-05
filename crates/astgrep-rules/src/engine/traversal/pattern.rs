@@ -316,12 +316,15 @@ impl RuleExecutionEngine {
 
         // Execute using advanced executor
         let file_path = std::path::Path::new(&context.file_path);
+        let enable_cp = !matches!(context.sql_dialect,
+            Some(astgrep_core::SqlDialect::GaussDB) | Some(astgrep_core::SqlDialect::OpenGauss)
+        );
         let result = advanced_executor.execute_comprehensive_analysis(
             &[single_pattern_rule],
             _ast,
             context.language,
             Some(file_path),
-            true, // enable constant propagation
+            enable_cp,
             context.sql_dialect,
         )?;
 
