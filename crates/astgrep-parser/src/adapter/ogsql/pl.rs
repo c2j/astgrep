@@ -4,7 +4,7 @@
 //! individual PL/pgSQL statements (assignment, flow control, etc.) into
 //! structured UniversalNode trees for static analysis.
 
-use super::OgsqlAdapterError;
+use super::{apply_span, OgsqlAdapterError};
 use astgrep_ast::{AstBuilder, NodeType, UniversalNode};
 
 use ogsql_parser::ast::plpgsql::*;
@@ -13,15 +13,17 @@ use ogsql_parser::ast::plpgsql::*;
 
 pub fn convert_anony_block(
     anony: &ogsql_parser::ast::AnonyBlockStatement,
+    parent_span: Option<&ogsql_parser::ast::SourceSpan>,
 ) -> Result<UniversalNode, OgsqlAdapterError> {
-    convert_pl_block(&anony.block, NodeType::BlockStatement)
+    convert_pl_block(&anony.block, NodeType::BlockStatement, parent_span)
 }
 
 pub fn convert_do_block(
     do_stmt: &ogsql_parser::ast::DoStatement,
+    parent_span: Option<&ogsql_parser::ast::SourceSpan>,
 ) -> Result<UniversalNode, OgsqlAdapterError> {
     if let Some(ref block) = do_stmt.block {
-        let mut node = convert_pl_block(block, NodeType::BlockStatement)?;
+        let mut node = convert_pl_block(block, NodeType::BlockStatement, parent_span)?;
         if let Some(ref lang) = do_stmt.language {
             node = node.with_metadata("pl_language".into(), lang.clone());
         }
@@ -38,6 +40,7 @@ pub fn convert_do_block(
 pub(super) fn convert_pl_block(
     block: &PlBlock,
     node_type: NodeType,
+    parent_span: Option<&ogsql_parser::ast::SourceSpan>,
 ) -> Result<UniversalNode, OgsqlAdapterError> {
     let mut node = UniversalNode::new(node_type);
 
@@ -47,12 +50,12 @@ pub(super) fn convert_pl_block(
 
     // DECLARE section
     for decl in &block.declarations {
-        node = node.add_child(convert_pl_declaration(decl));
+        node = node.add_child(convert_pl_declaration(decl, parent_span));
     }
 
     // BEGIN...END body
     for stmt in &block.body {
-        node = node.add_child(convert_pl_statement(stmt)?);
+        node = node.add_child(convert_pl_statement(stmt, parent_span)?);
     }
 
     Ok(node)
@@ -62,15 +65,16 @@ pub(super) fn convert_pl_block(
 
 fn convert_pl_statement(
     stmt: &PlStatement,
+    parent_span: Option<&ogsql_parser::ast::SourceSpan>,
 ) -> Result<UniversalNode, OgsqlAdapterError> {
     match stmt {
         PlStatement::Assignment { target, expression } => {
             let target_str = extract_variable_name(target);
-            let mut node = UniversalNode::new(NodeType::AssignmentExpression)
+            let node = UniversalNode::new(NodeType::AssignmentExpression)
                 .with_metadata("target".into(), target_str.clone())
-                .with_metadata("operator".into(), ":=".into());
-            node = node.add_child(super::expr::convert_expr(expression));
-            Ok(node)
+                .with_metadata("operator".into(), ":=".into())
+                .add_child(super::expr::convert_expr(expression));
+            Ok(apply_span(node, parent_span.cloned()))
         }
 
         PlStatement::SqlStatement { statement, .. } => {
@@ -78,14 +82,27 @@ fn convert_pl_statement(
             super::OgsqlAdapter::convert_statement(statement)
         }
 
-        PlStatement::Perform { query, .. } => {
-            Ok(AstBuilder::sql_expression("perform_statement")
-                .with_metadata("query".into(), query.clone()))
+        PlStatement::Perform { query, span, .. } => {
+            let effective_span = span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("perform_statement")
+                    .with_metadata("query".into(), query.clone()),
+                effective_span,
+            ))
         }
 
-        PlStatement::Execute(stmt) => {
-            Ok(AstBuilder::sql_expression("execute_statement")
-                .with_metadata("immediate".into(), stmt.immediate.to_string()))
+        PlStatement::Execute(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("execute_statement")
+                    .with_metadata("immediate".into(), inner.immediate.to_string()),
+                span,
+            ))
         }
 
         PlStatement::Return { expression } => {
@@ -93,28 +110,165 @@ fn convert_pl_statement(
             if let Some(expr) = expression {
                 node = node.add_child(super::expr::convert_expr(expr));
             }
-            Ok(node)
+            Ok(apply_span(node, parent_span.cloned()))
         }
 
-        PlStatement::If(_) => Ok(AstBuilder::sql_expression("if_statement")),
-        PlStatement::Loop(_) => Ok(AstBuilder::sql_expression("loop_statement")),
-        PlStatement::While(_) => Ok(AstBuilder::sql_expression("while_statement")),
-        PlStatement::For(_) => Ok(AstBuilder::sql_expression("for_statement")),
-        PlStatement::Case(_) => Ok(AstBuilder::sql_expression("case_statement")),
-        PlStatement::Raise(_) => Ok(AstBuilder::sql_expression("raise_statement")),
-        PlStatement::Null => Ok(AstBuilder::sql_expression("null_statement")),
+        PlStatement::Block(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            let node =
+                convert_pl_block(&inner, NodeType::BlockStatement, span.as_ref())?;
+            Ok(apply_span(node, span))
+        }
 
-        PlStatement::Block(inner) => convert_pl_block(&inner, NodeType::BlockStatement),
+        PlStatement::If(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(AstBuilder::sql_expression("if_statement"), span))
+        }
+        PlStatement::Case(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("case_statement"),
+                span,
+            ))
+        }
+        PlStatement::Loop(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("loop_statement"),
+                span,
+            ))
+        }
+        PlStatement::While(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("while_statement"),
+                span,
+            ))
+        }
+        PlStatement::For(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("for_statement"),
+                span,
+            ))
+        }
+        PlStatement::ForEach(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("foreach_statement"),
+                span,
+            ))
+        }
+        PlStatement::ReturnQuery(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("return_query_statement"),
+                span,
+            ))
+        }
+        PlStatement::Raise(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("raise_statement"),
+                span,
+            ))
+        }
+        PlStatement::Open(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("open_statement"),
+                span,
+            ))
+        }
+        PlStatement::Fetch(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("fetch_statement"),
+                span,
+            ))
+        }
+        PlStatement::GetDiagnostics(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("get_diagnostics_statement"),
+                span,
+            ))
+        }
+        PlStatement::ProcedureCall(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("procedure_call_statement"),
+                span,
+            ))
+        }
+        PlStatement::ForAll(inner) => {
+            let span = inner
+                .span
+                .clone()
+                .or_else(|| parent_span.cloned());
+            Ok(apply_span(
+                AstBuilder::sql_expression("forall_statement"),
+                span,
+            ))
+        }
+        PlStatement::Null => Ok(apply_span(
+            AstBuilder::sql_expression("null_statement"),
+            parent_span.cloned(),
+        )),
 
-        // Remaining statement types get a generic wrapper
-        _ => Ok(AstBuilder::sql_expression("pl_statement")),
+        _ => Ok(apply_span(
+            AstBuilder::sql_expression("pl_statement"),
+            parent_span.cloned(),
+        )),
     }
 }
 
 // ── Declaration conversion ──
 
-fn convert_pl_declaration(decl: &PlDeclaration) -> UniversalNode {
-    match decl {
+fn convert_pl_declaration(
+    decl: &PlDeclaration,
+    parent_span: Option<&ogsql_parser::ast::SourceSpan>,
+) -> UniversalNode {
+    let base = match decl {
         PlDeclaration::Variable(v) => {
             UniversalNode::new(NodeType::VariableDeclaration)
                 .with_metadata("name".into(), v.name.clone())
@@ -134,7 +288,8 @@ fn convert_pl_declaration(decl: &PlDeclaration) -> UniversalNode {
                 .with_metadata("name".into(), name.clone())
         }
         _ => AstBuilder::sql_expression("PL_DECL"),
-    }
+    };
+    apply_span(base, parent_span.cloned())
 }
 
 // ── Helpers ──

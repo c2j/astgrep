@@ -2100,9 +2100,15 @@ impl MatchCtx {
                 }
                 let skip = ["DECLARE", "BEGIN", "END", "keyword_begin", "keyword_end"];
                 if !skip.contains(&kind) {
-                    // If child has default location but parent doesn't, keep
+                    // If child has default/missing location but parent doesn't, keep
                     // using the parent (which carries ogSql span from Spanned<T>).
-                    if child.location() == Some((1, 1, 1, 1)) && node.location() != Some((1, 1, 1, 1)) {
+                    let child_loc = child.location();
+                    let parent_loc = node.location();
+                    let child_is_default =
+                        child_loc.map_or(true, |(sl, sc, _, _)| (sl, sc) == (1, 1));
+                    let parent_is_valid =
+                        parent_loc.map_or(false, |(sl, sc, _, _)| (sl, sc) != (1, 1));
+                    if child_is_default && parent_is_valid {
                         return node;
                     }
                     return child;

@@ -149,7 +149,10 @@ pub fn apply_enhanced_pattern_matching(
                 // Extract precise location from the matched AST node
                 let (sl, sc, el, ec) = match match_result.node.location() {
                     Some((sl, sc, el, ec)) => (sl, sc, el, ec),
-                    None => (1, 1, 1, 1),
+                    None => match ast.location {
+                        Some((rsl, rsc, rel, rec)) => (rsl, rsc, rel, rec),
+                        None => (1, 1, 1, 1),
+                    },
                 };
                 let finding = Finding {
                     rule_id: rule.id.clone(),
