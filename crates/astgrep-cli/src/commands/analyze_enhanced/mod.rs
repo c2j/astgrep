@@ -450,9 +450,11 @@ fn analyze_with_rule_engine(
                         ctx_sql.sql_dialect = config.sql_dialect;
 
                         for rule in &sql_rules {
-                            if let Ok(Some(result)) =
-                                engine.as_mut().unwrap().execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql)
-                            {
+                            if let Ok(Some(result)) = engine.as_mut().unwrap().execute_rule(
+                                &rule.id,
+                                ast_sql.as_ref(),
+                                &ctx_sql,
+                            ) {
                                 if result.is_success() {
                                     tracing::debug!("embedded-sql: rule '{}' produced {} findings on snippet #{}", rule.id, result.findings.len(), idx + 1);
                                     for f in result.findings {

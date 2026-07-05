@@ -752,7 +752,10 @@ impl AstNode for UniversalNode {
     }
 
     fn all_attributes(&self) -> Vec<(String, String)> {
-        self.attributes.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        self.attributes
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 
     fn identifier(&self) -> Option<&str> {

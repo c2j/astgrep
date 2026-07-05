@@ -326,7 +326,10 @@ impl RuleExecutionEngine {
             Some(t) => t,
             None => return true,
         };
-        if !first_token.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
+        if !first_token
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c == '_')
+        {
             return true;
         }
         let expected_type = format!("{}_statement", first_token.to_lowercase());
@@ -389,7 +392,7 @@ impl RuleExecutionEngine {
         };
         let child_count = container.child_count();
         if child_count < 1000 {
-                    return Ok(None);
+            return Ok(None);
         }
 
         // Extract first keyword from the first Simple sub-pattern
@@ -403,8 +406,11 @@ impl RuleExecutionEngine {
             Some(k) => k,
             None => return Ok(None),
         };
-        if !first_keyword.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
-                    return Ok(None);
+        if !first_keyword
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c == '_')
+        {
+            return Ok(None);
         }
         let expected_type = format!("{}_statement", first_keyword.to_lowercase());
 
@@ -428,7 +434,10 @@ impl RuleExecutionEngine {
             let start = i.saturating_sub(context_window);
             let end = (i + context_window + 1).min(child_count);
             let child_indices: Vec<usize> = (start..end).collect();
-            let subtree = FilteredContainer { container, child_indices: &child_indices };
+            let subtree = FilteredContainer {
+                container,
+                child_indices: &child_indices,
+            };
 
             let mut advanced = AdvancedRuleExecutor::new();
             let mut single_pattern_rule = rule.clone();
@@ -586,7 +595,8 @@ impl RuleExecutionEngine {
             if let PatternType::Simple(ref s) = sub.pattern_type {
                 let multiline_with_metavars =
                     s.contains('\n') && (s.contains('$') || s.contains("..."));
-                if multiline_with_metavars || Self::pattern_needs_ast_matching(s, context.language) {
+                if multiline_with_metavars || Self::pattern_needs_ast_matching(s, context.language)
+                {
                     can_use_text = false;
                     break;
                 }
@@ -637,9 +647,9 @@ impl RuleExecutionEngine {
             }
 
             if context.language == Language::Sql {
-                if let Some(scan_findings) = Self::linear_sequence_scan(
-                    _ast, subs, pattern, rule, context,
-                )? {
+                if let Some(scan_findings) =
+                    Self::linear_sequence_scan(_ast, subs, pattern, rule, context)?
+                {
                     return Ok(scan_findings);
                 }
             }
@@ -1272,7 +1282,9 @@ impl<'a> astgrep_core::AstNode for FilteredContainer<'a> {
         self.child_indices.len()
     }
     fn child(&self, index: usize) -> Option<&dyn astgrep_core::AstNode> {
-        self.child_indices.get(index).and_then(|&i| self.container.child(i))
+        self.child_indices
+            .get(index)
+            .and_then(|&i| self.container.child(i))
     }
     fn location(&self) -> Option<(usize, usize, usize, usize)> {
         self.container.location()

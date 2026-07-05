@@ -185,7 +185,10 @@ impl AdvancedSemgrepMatcher {
                             && self.pattern_has_fqn(pattern_str)
                         {
                             let mut text_matches = Vec::new();
-                            if self.find_matches_recursive(pattern, root, &mut text_matches, 0).is_err() {
+                            if self
+                                .find_matches_recursive(pattern, root, &mut text_matches, 0)
+                                .is_err()
+                            {
                                 tracing::debug!("text-based recursive matcher error");
                             }
                             ran_recursive = true;

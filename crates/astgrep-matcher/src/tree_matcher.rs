@@ -1557,8 +1557,16 @@ impl MatchCtx {
                     // Exclude common node-type suffixes from fuzzy matching to avoid
                     // false positives like "select_statement" matching "insert_statement"
                     // just because both contain "statement".
-                    !matches!(p, "statement" | "expression" | "declaration" | "clause" | "definition" | "parameter" | "type")
-                    && target_kind.contains(p)
+                    !matches!(
+                        p,
+                        "statement"
+                            | "expression"
+                            | "declaration"
+                            | "clause"
+                            | "definition"
+                            | "parameter"
+                            | "type"
+                    ) && target_kind.contains(p)
                 }))
             || (is_chain_kind(pattern_kind) && is_chain_kind(target_kind))
             || (pattern_kind == "arrow_function"
