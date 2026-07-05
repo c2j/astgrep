@@ -106,7 +106,10 @@ pub fn build_import_map(full_source: &str) -> HashMap<String, String> {
     // Parse import statements like "import org.foo.Foo;" or "import org.foo.*;"
     let import_pattern = Regex::new(r"import\s+([\w.]+)(?:\.\*)?;").unwrap();
 
-    for captures in import_pattern.captures_iter(full_source).filter_map(|c| c.ok()) {
+    for captures in import_pattern
+        .captures_iter(full_source)
+        .filter_map(|c| c.ok())
+    {
         if let Some(import_match) = captures.get(1) {
             let import_path = import_match.as_str();
 
@@ -177,7 +180,7 @@ pub fn extract_type_info(
     // Pattern 3: Field declarations like "private Type varName = ...;" or "private Type varName;"
     let field_pattern = format!(
         r"(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?(\w+)\s+{}\s*=[^;]*;",
-fancy_regex::escape(var_name)
+        fancy_regex::escape(var_name)
     );
     if let Ok(regex) = Regex::new(&field_pattern) {
         if let Some(captures) = regex.captures(full_source).ok().flatten() {

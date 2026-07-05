@@ -142,7 +142,7 @@ impl MockRules {
         }
 
         if let Some(cat) = category {
-            rules.retain(|rule| rule.category.as_ref().map_or(false, |c| c == cat));
+            rules.retain(|rule| rule.category.as_ref().is_some_and(|c| c == cat));
         }
 
         if let Some(en) = enabled {

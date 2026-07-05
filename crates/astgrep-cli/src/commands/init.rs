@@ -41,8 +41,7 @@ pub async fn run(output: PathBuf, template: String, force: bool) -> Result<()> {
 }
 
 fn generate_default_config() -> String {
-    format!(
-        "# astgrep Configuration File\n\
+    "# astgrep Configuration File\n\
         # This file configures the static analysis behavior\n\
         \n\
         [general]\n\
@@ -93,12 +92,11 @@ fn generate_default_config() -> String {
         \n\
         [integrations.slack]\n\
         enabled = false\n"
-    )
+        .to_string()
 }
 
 fn generate_minimal_config() -> String {
-    format!(
-        "# Minimal astgrep Configuration\n\
+    "# Minimal astgrep Configuration\n\
         \n\
         [general]\n\
         verbose = false\n\
@@ -116,12 +114,11 @@ fn generate_minimal_config() -> String {
         \n\
         [rules]\n\
         rules_directory = \"rules\"\n"
-    )
+        .to_string()
 }
 
 fn generate_comprehensive_config() -> String {
-    format!(
-        "# Comprehensive astgrep Configuration\n\
+    "# Comprehensive astgrep Configuration\n\
         \n\
         [general]\n\
         verbose = true\n\
@@ -149,12 +146,11 @@ fn generate_comprehensive_config() -> String {
         generate_html = true\n\
         generate_sarif = true\n\
         generate_baseline = true\n"
-    )
+        .to_string()
 }
 
 fn generate_security_focused_config() -> String {
-    format!(
-        "# Security-Focused astgrep Configuration\n\
+    "# Security-Focused astgrep Configuration\n\
         \n\
         [general]\n\
         verbose = true\n\
@@ -183,12 +179,11 @@ fn generate_security_focused_config() -> String {
         generate_html = true\n\
         generate_sarif = true\n\
         generate_baseline = true\n"
-    )
+        .to_string()
 }
 
 fn generate_performance_focused_config() -> String {
-    format!(
-        "# Performance-Focused astgrep Configuration\n\
+    "# Performance-Focused astgrep Configuration\n\
         \n\
         [general]\n\
         verbose = false\n\
@@ -217,7 +212,7 @@ fn generate_performance_focused_config() -> String {
         generate_html = false\n\
         generate_sarif = true\n\
         generate_baseline = false\n"
-    )
+        .to_string()
 }
 
 #[cfg(test)]

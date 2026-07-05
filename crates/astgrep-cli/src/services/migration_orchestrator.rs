@@ -374,11 +374,11 @@ impl MigrationOrchestrator {
                             })?;
                     }
                 }
-                OperationType::CreateDirectory => {
+                OperationType::CreateDirectory
                     // Remove directory if empty
                     if operation.target_path.exists()
                         && operation.target_path.read_dir()?.next().is_none()
-                    {
+                    => {
                         tokio::fs::remove_dir(&operation.target_path)
                             .await
                             .with_context(|| {
@@ -388,7 +388,6 @@ impl MigrationOrchestrator {
                                 )
                             })?;
                     }
-                }
                 _ => {} // No rollback needed for copy operations
             }
 

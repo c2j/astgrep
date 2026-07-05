@@ -265,7 +265,7 @@ impl ScriptValidator {
                     }
                 }
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         if summary.skipped_scripts > 0 {
@@ -288,7 +288,7 @@ impl ScriptValidator {
                     }
                 }
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         report
@@ -357,10 +357,7 @@ async fn validate_script_dependencies(
 
     for (dep_name, which_result) in dependency_checks {
         if asset.content.contains(dep_name)
-            || asset
-                .shebang
-                .as_ref()
-                .map_or(false, |s| s.contains(dep_name))
+            || asset.shebang.as_ref().is_some_and(|s| s.contains(dep_name))
         {
             match which_result {
                 Ok(path) => {

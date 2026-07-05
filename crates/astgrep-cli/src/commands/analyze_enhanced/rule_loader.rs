@@ -53,7 +53,7 @@ fn load_rules_from_directory_recursive(
                 }
             } else if path
                 .extension()
-                .map_or(false, |ext| ext == "yaml" || ext == "yml")
+                .is_some_and(|ext| ext == "yaml" || ext == "yml")
             {
                 if let Ok(file_rules) = load_rules_from_file(&path, target_language) {
                     rules.extend(file_rules);
@@ -147,7 +147,7 @@ fn parse_single_rule(
             langs
                 .iter()
                 .filter_map(|l| l.as_str())
-                .filter_map(|l| Language::parse_name(l))
+                .filter_map(Language::parse_name)
                 .collect()
         })
         .unwrap_or_else(|| vec![target_language]);

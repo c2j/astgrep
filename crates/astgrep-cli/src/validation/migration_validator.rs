@@ -462,7 +462,7 @@ impl MigrationValidator {
         }
 
         // Run custom validators
-        for (_name, validator) in &self.custom_validators {
+        for validator in self.custom_validators.values() {
             if let Ok(check_result) = validator.validate(operation).await {
                 custom_checks.push(check_result);
             }

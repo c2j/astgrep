@@ -178,7 +178,7 @@ impl ConstantPropagator {
                     if child.node_type() == "variable_declaration"
                         || Self::ts_kind(child) == "variable_declarator"
                     {
-                        let is_final = node.text().map(|t| t.contains("final")).unwrap_or(false);
+                        let _is_final = node.text().map(|t| t.contains("final")).unwrap_or(false);
 
                         // Track fields with constant initializers (final or not)
                         // For non-final fields, they may still be constant at compile time
@@ -233,7 +233,7 @@ impl ConstantPropagator {
                             }
 
                             // Use extract_constant_from_expression for the initializer
-                            if let Some(name) = &var_name {
+                            if let Some(_name) = &var_name {
                                 init_value =
                                     extract_constant_from_expression(child, &self.constants);
                             }
@@ -447,25 +447,20 @@ impl ConstantPropagator {
             None
         };
 
-        match (&var_name, &const_value) {
-            (Some(name), Some(value)) => {
-                // Check if this variable was already assigned
-                if self.constants.contains_key(name) {
-                    // Variable is being reassigned - mark as non-constant
-                    self.mark_reassigned(name.clone());
-                } else if context == VisitContext::Constructor
-                    || context == VisitContext::StaticBlock
-                {
-                    // Only record as constant in constructor or static block contexts
-                    self.constants.insert(name.clone(), value.clone());
+        if let (Some(name), Some(value)) = (&var_name, &const_value) {
+            // Check if this variable was already assigned
+            if self.constants.contains_key(name) {
+                // Variable is being reassigned - mark as non-constant
+                self.mark_reassigned(name.clone());
+            } else if context == VisitContext::Constructor || context == VisitContext::StaticBlock {
+                // Only record as constant in constructor or static block contexts
+                self.constants.insert(name.clone(), value.clone());
 
-                    // Track field initialization in constructors
-                    if context == VisitContext::Constructor {
-                        *self.fields_in_constructors.entry(name.clone()).or_insert(0) += 1;
-                    }
+                // Track field initialization in constructors
+                if context == VisitContext::Constructor {
+                    *self.fields_in_constructors.entry(name.clone()).or_insert(0) += 1;
                 }
             }
-            _ => {}
         }
 
         Ok(())

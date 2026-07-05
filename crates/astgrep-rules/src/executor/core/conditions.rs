@@ -289,8 +289,9 @@ impl AdvancedRuleExecutor {
                                         part_matched = false;
                                         break;
                                     }
-                                } else if pattern_str.starts_with("__REGEX__:") {
-                                    let regex_str = &pattern_str[10..];
+                                } else if let Some(regex_str) =
+                                    pattern_str.strip_prefix("__REGEX__:")
+                                {
                                     if let Ok(re) = regex::Regex::new(regex_str) {
                                         if !re.is_match(part) {
                                             part_matched = false;
@@ -421,15 +422,15 @@ impl AdvancedRuleExecutor {
                     } else {
                         let mut combined_bindings = match_result.bindings.clone();
                         for pattern_str in &metavar_pattern.patterns {
-                            if pattern_str.starts_with("__NOT__:") {
-                                let neg_pattern = &pattern_str[8..];
+                            if let Some(neg_pattern) = pattern_str.strip_prefix("__NOT__:") {
                                 let matches =
                                     self.pattern_text_matches_value(neg_pattern, bound_value);
                                 if matches {
                                     return Ok(false);
                                 }
-                            } else if pattern_str.starts_with("__NOT_REGEX__:") {
-                                let regex_str = &pattern_str[14..];
+                            } else if let Some(regex_str) =
+                                pattern_str.strip_prefix("__NOT_REGEX__:")
+                            {
                                 if let Ok(re) = regex::Regex::new(regex_str) {
                                     let re_match_value =
                                         Self::strip_value_quotes(bound_value.as_ref());
@@ -437,8 +438,7 @@ impl AdvancedRuleExecutor {
                                         return Ok(false);
                                     }
                                 }
-                            } else if pattern_str.starts_with("__REGEX__:") {
-                                let regex_str = &pattern_str[10..];
+                            } else if let Some(regex_str) = pattern_str.strip_prefix("__REGEX__:") {
                                 if let Ok(re) = regex::Regex::new(regex_str) {
                                     let re_match_value =
                                         Self::strip_value_quotes(bound_value.as_ref());
@@ -737,9 +737,7 @@ impl AdvancedRuleExecutor {
         } else if resolved_value == name_pattern {
             Ok(true)
         } else if name_pattern.ends_with(&format!(".{}", value)) {
-            Ok(import_map
-                .get(value)
-                .map_or(false, |fqn| fqn == name_pattern))
+            Ok(import_map.get(value).is_some_and(|fqn| fqn == name_pattern))
         } else if resolved_value.ends_with(&format!(".{}", name_pattern)) {
             Ok(true)
         } else {
@@ -975,7 +973,7 @@ impl AdvancedRuleExecutor {
                 if len_expr.trim() == "$VAR" {
                     // Extract the comparison from the full expression
                     // This is very simplified - a real implementation would parse the full expression
-                    return Ok(value.len() > 0);
+                    return Ok(!value.is_empty());
                 }
             }
         }
@@ -1340,7 +1338,10 @@ impl AdvancedRuleExecutor {
                     let left = expr[..pos].trim();
                     let right = expr[pos + op.len()..].trim();
                     // Extract metavariable name from lines($VAR) or lines($...VAR)
-                    if let Some(inner) = left.strip_prefix("lines(").and_then(|s| s.strip_suffix(")")) {
+                    if let Some(inner) = left
+                        .strip_prefix("lines(")
+                        .and_then(|s| s.strip_suffix(")"))
+                    {
                         let _metavar = inner.trim();
                         // `value` parameter already holds the bound text for the metavariable
                         let line_count = value.lines().count();
@@ -1356,7 +1357,10 @@ impl AdvancedRuleExecutor {
                             };
                             tracing::debug!(
                                 "lines(): {} lines vs threshold {}, op '{}', result={}",
-                                line_count, threshold, op, result
+                                line_count,
+                                threshold,
+                                op,
+                                result
                             );
                             return Ok(result);
                         }
@@ -1625,11 +1629,7 @@ mod tests_lines_function {
         let executor = AdvancedRuleExecutor::new();
         let bindings = std::collections::HashMap::new();
         let result = executor
-            .evaluate_python_expression(
-                &eighty_lines,
-                "lines($...STMTS) > 80",
-                &bindings,
-            )
+            .evaluate_python_expression(&eighty_lines, "lines($...STMTS) > 80", &bindings)
             .unwrap();
         assert!(!result, "exactly 80 lines should NOT exceed 80");
     }

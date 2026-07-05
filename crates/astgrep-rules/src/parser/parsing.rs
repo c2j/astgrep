@@ -110,24 +110,24 @@ impl RuleParser {
 
                 // Parse taint options from the options field
                 if let Some(options_obj) = rule_obj
-                    .get(&Value::String("options".to_string()))
+                    .get(Value::String("options".to_string()))
                     .and_then(|v| v.as_mapping())
                 {
                     if let Some(val) =
-                        options_obj.get(&Value::String("taint_assume_safe_booleans".to_string()))
+                        options_obj.get(Value::String("taint_assume_safe_booleans".to_string()))
                     {
                         if let Some(b) = val.as_bool() {
                             dataflow.taint_assume_safe_booleans = Some(b);
                         }
                     }
                     if let Some(val) =
-                        options_obj.get(&Value::String("taint_assume_safe_numbers".to_string()))
+                        options_obj.get(Value::String("taint_assume_safe_numbers".to_string()))
                     {
                         if let Some(b) = val.as_bool() {
                             dataflow.taint_assume_safe_numbers = Some(b);
                         }
                     }
-                    if let Some(val) = options_obj.get(&Value::String(
+                    if let Some(val) = options_obj.get(Value::String(
                         "taint_only_propagate_through_assignments".to_string(),
                     )) {
                         if let Some(b) = val.as_bool() {
@@ -135,14 +135,14 @@ impl RuleParser {
                         }
                     }
                     if let Some(val) =
-                        options_obj.get(&Value::String("taint_assume_safe_indexes".to_string()))
+                        options_obj.get(Value::String("taint_assume_safe_indexes".to_string()))
                     {
                         if let Some(b) = val.as_bool() {
                             dataflow.taint_assume_safe_indexes = Some(b);
                         }
                     }
                     if let Some(val) =
-                        options_obj.get(&Value::String("taint_assume_safe_functions".to_string()))
+                        options_obj.get(Value::String("taint_assume_safe_functions".to_string()))
                     {
                         if let Some(b) = val.as_bool() {
                             dataflow.taint_assume_safe_functions = Some(b);
@@ -194,7 +194,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         _index: usize,
     ) -> Result<Option<HashMap<String, String>>> {
-        let options_value = obj.get(&Value::String("options".to_string()));
+        let options_value = obj.get(Value::String("options".to_string()));
         if options_value.is_none() {
             return Ok(None);
         }
@@ -205,7 +205,7 @@ impl RuleParser {
         let mut options = HashMap::new();
 
         // Parse sql_statement_boundary option
-        if let Some(val) = options_obj.get(&Value::String("sql_statement_boundary".to_string())) {
+        if let Some(val) = options_obj.get(Value::String("sql_statement_boundary".to_string())) {
             // Accept boolean or string "on"/"off" and stringify to "true"/"false"
             let str_val = if let Some(b) = val.as_bool() {
                 b.to_string()
@@ -224,7 +224,7 @@ impl RuleParser {
         }
 
         // Parse symbolic_propagation option
-        if let Some(val) = options_obj.get(&Value::String("symbolic_propagation".to_string())) {
+        if let Some(val) = options_obj.get(Value::String("symbolic_propagation".to_string())) {
             let str_val = if let Some(b) = val.as_bool() {
                 b.to_string()
             } else if let Some(s) = val.as_str() {
@@ -240,7 +240,7 @@ impl RuleParser {
         }
 
         // Parse constant_propagation option
-        if let Some(val) = options_obj.get(&Value::String("constant_propagation".to_string())) {
+        if let Some(val) = options_obj.get(Value::String("constant_propagation".to_string())) {
             let str_val = if let Some(b) = val.as_bool() {
                 b.to_string()
             } else if let Some(s) = val.as_str() {
@@ -256,7 +256,7 @@ impl RuleParser {
         }
 
         // Parse taint_assume_safe_booleans option
-        if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_booleans".to_string()))
+        if let Some(val) = options_obj.get(Value::String("taint_assume_safe_booleans".to_string()))
         {
             let str_val = if let Some(b) = val.as_bool() {
                 b.to_string()
@@ -273,8 +273,7 @@ impl RuleParser {
         }
 
         // Parse taint_assume_safe_numbers option
-        if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_numbers".to_string()))
-        {
+        if let Some(val) = options_obj.get(Value::String("taint_assume_safe_numbers".to_string())) {
             let str_val = if let Some(b) = val.as_bool() {
                 b.to_string()
             } else if let Some(s) = val.as_str() {
@@ -290,7 +289,7 @@ impl RuleParser {
         }
 
         // Parse taint_only_propagate_through_assignments option
-        if let Some(val) = options_obj.get(&Value::String(
+        if let Some(val) = options_obj.get(Value::String(
             "taint_only_propagate_through_assignments".to_string(),
         )) {
             let str_val = if let Some(b) = val.as_bool() {
@@ -311,8 +310,7 @@ impl RuleParser {
         }
 
         // Parse taint_assume_safe_indexes option
-        if let Some(val) = options_obj.get(&Value::String("taint_assume_safe_indexes".to_string()))
-        {
+        if let Some(val) = options_obj.get(Value::String("taint_assume_safe_indexes".to_string())) {
             let str_val = if let Some(b) = val.as_bool() {
                 b.to_string()
             } else if let Some(s) = val.as_str() {
@@ -337,7 +335,7 @@ impl RuleParser {
         field: &str,
         index: usize,
     ) -> Result<String> {
-        obj.get(&Value::String(field.to_string()))
+        obj.get(Value::String(field.to_string()))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .ok_or_else(|| {
@@ -350,14 +348,14 @@ impl RuleParser {
 
     /// Get an optional string field
     fn get_optional_string_field(&self, obj: &serde_yaml::Mapping, field: &str) -> Option<String> {
-        obj.get(&Value::String(field.to_string()))
+        obj.get(Value::String(field.to_string()))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
     }
 
     /// Get an optional boolean field
     fn get_optional_bool_field(&self, obj: &serde_yaml::Mapping, field: &str) -> Option<bool> {
-        obj.get(&Value::String(field.to_string()))
+        obj.get(Value::String(field.to_string()))
             .and_then(|v| v.as_bool())
     }
 
@@ -396,7 +394,7 @@ impl RuleParser {
     /// Parse languages field
     fn parse_languages(&self, obj: &serde_yaml::Mapping, index: usize) -> Result<Vec<Language>> {
         let languages_value = obj
-            .get(&Value::String("languages".to_string()))
+            .get(Value::String("languages".to_string()))
             .ok_or_else(|| {
                 AnalysisError::parse_error(format!("Rule {} missing 'languages' field", index))
             })?;
@@ -435,18 +433,18 @@ impl RuleParser {
         index: usize,
     ) -> Result<Vec<Pattern>> {
         // Check for 'patterns' field first
-        if let Some(patterns_value) = obj.get(&Value::String("patterns".to_string())) {
+        if let Some(patterns_value) = obj.get(Value::String("patterns".to_string())) {
             return self.parse_patterns_array(patterns_value, index);
         }
 
         // Check for single 'pattern' field
-        if let Some(pattern_value) = obj.get(&Value::String("pattern".to_string())) {
+        if let Some(pattern_value) = obj.get(Value::String("pattern".to_string())) {
             let pattern = self.parse_single_pattern(pattern_value, index, 0)?;
             return Ok(vec![pattern]);
         }
 
         // Check for 'match' field (semgrep shorthand for a single pattern)
-        if let Some(match_value) = obj.get(&Value::String("match".to_string())) {
+        if let Some(match_value) = obj.get(Value::String("match".to_string())) {
             if let Some(match_str) = match_value.as_str() {
                 let pattern = Pattern::simple(match_str.to_string());
                 return Ok(vec![pattern]);
@@ -457,18 +455,18 @@ impl RuleParser {
         }
 
         // Check for 'pattern-either' field
-        if let Some(pattern_either_value) = obj.get(&Value::String("pattern-either".to_string())) {
+        if let Some(pattern_either_value) = obj.get(Value::String("pattern-either".to_string())) {
             return self.parse_pattern_either(pattern_either_value, index);
         }
 
         // Check for 'pattern-inside' field
-        if let Some(pattern_inside_value) = obj.get(&Value::String("pattern-inside".to_string())) {
+        if let Some(pattern_inside_value) = obj.get(Value::String("pattern-inside".to_string())) {
             let pattern = self.parse_single_pattern(pattern_inside_value, index, 0)?;
             return Ok(vec![pattern]);
         }
 
         // Check for 'pattern-regex' field (regex match at top level)
-        if let Some(pattern_regex_value) = obj.get(&Value::String("pattern-regex".to_string())) {
+        if let Some(pattern_regex_value) = obj.get(Value::String("pattern-regex".to_string())) {
             if let Some(regex_str) = pattern_regex_value.as_str() {
                 let pattern = Pattern::regex(regex_str.to_string());
                 return Ok(vec![pattern]);
@@ -509,9 +507,9 @@ impl RuleParser {
         for (pattern_index, pattern_value) in patterns_array.iter().enumerate() {
             // Check if this is a focus-metavariable (not a pattern, but a modifier)
             if let Some(mapping) = pattern_value.as_mapping() {
-                if mapping.contains_key(&Value::String("focus-metavariable".to_string())) {
+                if mapping.contains_key(Value::String("focus-metavariable".to_string())) {
                     if let Some(focus_value) =
-                        mapping.get(&Value::String("focus-metavariable".to_string()))
+                        mapping.get(Value::String("focus-metavariable".to_string()))
                     {
                         if let Some(focus_str) = focus_value.as_str() {
                             focus_vars.push(focus_str.to_string());
@@ -529,9 +527,9 @@ impl RuleParser {
 
             // Check if this is a metavariable-comparison (not a pattern, but a condition)
             if let Some(mapping) = pattern_value.as_mapping() {
-                if mapping.contains_key(&Value::String("metavariable-comparison".to_string())) {
+                if mapping.contains_key(Value::String("metavariable-comparison".to_string())) {
                     if let Some(metavar_comp_value) =
-                        mapping.get(&Value::String("metavariable-comparison".to_string()))
+                        mapping.get(Value::String("metavariable-comparison".to_string()))
                     {
                         let metavar_comp = self.parse_metavariable_comparison(
                             metavar_comp_value,
@@ -540,16 +538,16 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableComparison(metavar_comp));
                     }
-                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                    if !mapping.contains_key(Value::String("pattern".to_string())) {
                         continue;
                     }
                 }
 
                 // Check if this is a semgrep-internal-metavariable-name (not a pattern, but a condition)
-                if mapping.contains_key(&Value::String(
+                if mapping.contains_key(Value::String(
                     "semgrep-internal-metavariable-name".to_string(),
                 )) {
-                    if let Some(metavar_name_value) = mapping.get(&Value::String(
+                    if let Some(metavar_name_value) = mapping.get(Value::String(
                         "semgrep-internal-metavariable-name".to_string(),
                     )) {
                         let metavar_name = self.parse_internal_metavariable_name(
@@ -559,29 +557,29 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableName(metavar_name));
                     }
-                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                    if !mapping.contains_key(Value::String("pattern".to_string())) {
                         continue;
                     }
                 }
 
                 // Check if this is a metavariable-type (not a pattern, but a condition)
-                if mapping.contains_key(&Value::String("metavariable-type".to_string())) {
+                if mapping.contains_key(Value::String("metavariable-type".to_string())) {
                     if let Some(metavar_type_value) =
-                        mapping.get(&Value::String("metavariable-type".to_string()))
+                        mapping.get(Value::String("metavariable-type".to_string()))
                     {
                         let metavar_type =
                             self.parse_metavariable_type(metavar_type_value, index, pattern_index)?;
                         conditions.push(Condition::MetavariableType(metavar_type));
                     }
-                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                    if !mapping.contains_key(Value::String("pattern".to_string())) {
                         continue;
                     }
                 }
 
                 // Check if this is a metavariable-regex (not a pattern, but a condition)
-                if mapping.contains_key(&Value::String("metavariable-regex".to_string())) {
+                if mapping.contains_key(Value::String("metavariable-regex".to_string())) {
                     if let Some(metavar_regex_value) =
-                        mapping.get(&Value::String("metavariable-regex".to_string()))
+                        mapping.get(Value::String("metavariable-regex".to_string()))
                     {
                         let metavar_regex = self.parse_metavariable_regex(
                             metavar_regex_value,
@@ -590,15 +588,15 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableRegex(metavar_regex));
                     }
-                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                    if !mapping.contains_key(Value::String("pattern".to_string())) {
                         continue;
                     }
                 }
 
                 // Check if this is a metavariable-pattern (not a pattern, but a condition)
-                if mapping.contains_key(&Value::String("metavariable-pattern".to_string())) {
+                if mapping.contains_key(Value::String("metavariable-pattern".to_string())) {
                     if let Some(metavar_pattern_value) =
-                        mapping.get(&Value::String("metavariable-pattern".to_string()))
+                        mapping.get(Value::String("metavariable-pattern".to_string()))
                     {
                         let (metavar_pattern, nested) = self.parse_metavariable_pattern(
                             metavar_pattern_value,
@@ -608,15 +606,15 @@ impl RuleParser {
                         conditions.push(Condition::MetavariablePattern(metavar_pattern));
                         conditions.extend(nested);
                     }
-                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                    if !mapping.contains_key(Value::String("pattern".to_string())) {
                         continue;
                     }
                 }
 
                 // Check if this is a metavariable-analysis (not a pattern, but a condition)
-                if mapping.contains_key(&Value::String("metavariable-analysis".to_string())) {
+                if mapping.contains_key(Value::String("metavariable-analysis".to_string())) {
                     if let Some(metavar_analysis_value) =
-                        mapping.get(&Value::String("metavariable-analysis".to_string()))
+                        mapping.get(Value::String("metavariable-analysis".to_string()))
                     {
                         let metavar_analysis = self.parse_metavariable_analysis(
                             metavar_analysis_value,
@@ -625,7 +623,7 @@ impl RuleParser {
                         )?;
                         conditions.push(Condition::MetavariableAnalysis(metavar_analysis));
                     }
-                    if !mapping.contains_key(&Value::String("pattern".to_string())) {
+                    if !mapping.contains_key(Value::String("pattern".to_string())) {
                         continue;
                     }
                 }
@@ -789,11 +787,11 @@ impl RuleParser {
         {
             Pattern::inside(Pattern::simple(pattern_inside))
         } else if let Some(pattern_inside_value) =
-            pattern_obj.get(&Value::String("pattern-inside".to_string()))
+            pattern_obj.get(Value::String("pattern-inside".to_string()))
         {
             if let Some(pattern_inside_obj) = pattern_inside_value.as_mapping() {
                 if let Some(patterns_value) =
-                    pattern_inside_obj.get(&Value::String("patterns".to_string()))
+                    pattern_inside_obj.get(Value::String("patterns".to_string()))
                 {
                     let patterns = self.parse_patterns_array(patterns_value, rule_index)?;
                     if patterns.len() == 1 {
@@ -818,11 +816,11 @@ impl RuleParser {
         {
             Pattern::not_inside(Pattern::simple(pattern_not_inside))
         } else if let Some(pattern_not_inside_value) =
-            pattern_obj.get(&Value::String("pattern-not-inside".to_string()))
+            pattern_obj.get(Value::String("pattern-not-inside".to_string()))
         {
             if let Some(pattern_not_inside_obj) = pattern_not_inside_value.as_mapping() {
                 if let Some(patterns_value) =
-                    pattern_not_inside_obj.get(&Value::String("patterns".to_string()))
+                    pattern_not_inside_obj.get(Value::String("patterns".to_string()))
                 {
                     let patterns = self.parse_patterns_array(patterns_value, rule_index)?;
                     if patterns.len() == 1 {
@@ -854,7 +852,7 @@ impl RuleParser {
         {
             Pattern::not_regex(pattern_not_regex)
         } else if let Some(pattern_either_value) =
-            pattern_obj.get(&Value::String("pattern-either".to_string()))
+            pattern_obj.get(Value::String("pattern-either".to_string()))
         {
             // Handle nested pattern-either
             let either_patterns = self.parse_pattern_either(pattern_either_value, rule_index)?;
@@ -864,7 +862,7 @@ impl RuleParser {
                 Pattern::either(either_patterns)
             }
         } else if let Some(pattern_all_value) =
-            pattern_obj.get(&Value::String("pattern-all".to_string()))
+            pattern_obj.get(Value::String("pattern-all".to_string()))
         {
             // Handle pattern-all
             let all_patterns = self.parse_pattern_all(pattern_all_value, rule_index)?;
@@ -874,7 +872,7 @@ impl RuleParser {
                 Pattern::all(all_patterns)
             }
         } else if let Some(pattern_any_value) =
-            pattern_obj.get(&Value::String("pattern-any".to_string()))
+            pattern_obj.get(Value::String("pattern-any".to_string()))
         {
             // Handle pattern-any
             let any_patterns = self.parse_pattern_any(pattern_any_value, rule_index)?;
@@ -883,7 +881,7 @@ impl RuleParser {
             } else {
                 Pattern::any(any_patterns)
             }
-        } else if let Some(patterns_value) = pattern_obj.get(&Value::String("patterns".to_string()))
+        } else if let Some(patterns_value) = pattern_obj.get(Value::String("patterns".to_string()))
         {
             // Handle nested patterns (AND logic)
             let patterns = self.parse_patterns_array(patterns_value, rule_index)?;
@@ -893,7 +891,7 @@ impl RuleParser {
                 Pattern::all(patterns)
             }
         } else if let Some(metavar_value) =
-            pattern_obj.get(&Value::String("metavariable-pattern".to_string()))
+            pattern_obj.get(Value::String("metavariable-pattern".to_string()))
         {
             let mut pattern = Pattern::simple("...".to_string());
             let (metavar_pattern, nested) =
@@ -910,7 +908,7 @@ impl RuleParser {
 
         // Parse optional metavariable pattern
         if let Some(metavar_value) =
-            pattern_obj.get(&Value::String("metavariable-pattern".to_string()))
+            pattern_obj.get(Value::String("metavariable-pattern".to_string()))
         {
             let (metavar_pattern, nested) =
                 self.parse_metavariable_pattern(metavar_value, rule_index, pattern_index)?;
@@ -920,7 +918,7 @@ impl RuleParser {
 
         // Parse optional metavariable regex
         if let Some(metavar_regex_value) =
-            pattern_obj.get(&Value::String("metavariable-regex".to_string()))
+            pattern_obj.get(Value::String("metavariable-regex".to_string()))
         {
             let metavar_regex =
                 self.parse_metavariable_regex(metavar_regex_value, rule_index, pattern_index)?;
@@ -931,7 +929,7 @@ impl RuleParser {
 
         // Parse optional metavariable-name
         if let Some(metavar_name_value) =
-            pattern_obj.get(&Value::String("metavariable-name".to_string()))
+            pattern_obj.get(Value::String("metavariable-name".to_string()))
         {
             let metavar_name =
                 self.parse_metavariable_name(metavar_name_value, rule_index, pattern_index)?;
@@ -942,7 +940,7 @@ impl RuleParser {
 
         // Parse optional metavariable-analysis
         if let Some(metavar_analysis_value) =
-            pattern_obj.get(&Value::String("metavariable-analysis".to_string()))
+            pattern_obj.get(Value::String("metavariable-analysis".to_string()))
         {
             let metavar_analysis = self.parse_metavariable_analysis(
                 metavar_analysis_value,
@@ -961,7 +959,7 @@ impl RuleParser {
 
         // Parse optional focus-metavariable (single or array)
         if let Some(focus_metavar_value) =
-            pattern_obj.get(&Value::String("focus-metavariable".to_string()))
+            pattern_obj.get(Value::String("focus-metavariable".to_string()))
         {
             if let Some(focus_str) = focus_metavar_value.as_str() {
                 // Single focus metavariable
@@ -1003,7 +1001,7 @@ impl RuleParser {
         let mut nested_conditions: Vec<Condition> = Vec::new();
         let mut is_either = false;
 
-        if let Some(patterns_value) = metavar_obj.get(&Value::String("patterns".to_string())) {
+        if let Some(patterns_value) = metavar_obj.get(Value::String("patterns".to_string())) {
             let patterns_array = patterns_value.as_sequence().ok_or_else(|| {
                 AnalysisError::parse_error(format!(
                     "Rule {} pattern {} metavariable_pattern 'patterns' must be an array",
@@ -1014,21 +1012,21 @@ impl RuleParser {
             for pv in patterns_array {
                 if let Some(obj) = pv.as_mapping() {
                     if let Some(pattern_not_value) =
-                        obj.get(&Value::String("pattern-not".to_string()))
+                        obj.get(Value::String("pattern-not".to_string()))
                     {
                         if let Some(pattern_str) = pattern_not_value.as_str() {
                             patterns.push(format!("__NOT__:{}", pattern_str));
                             continue;
                         }
                     }
-                    if let Some(pv2) = obj.get(&Value::String("pattern".to_string())) {
+                    if let Some(pv2) = obj.get(Value::String("pattern".to_string())) {
                         if let Some(pattern_str) = pv2.as_str() {
                             patterns.push(pattern_str.to_string());
                             continue;
                         }
                     }
                     if let Some(nested_mv) =
-                        obj.get(&Value::String("metavariable-pattern".to_string()))
+                        obj.get(Value::String("metavariable-pattern".to_string()))
                     {
                         let (nested_pattern, deeper_nested) =
                             self.parse_metavariable_pattern(nested_mv, rule_index, pattern_index)?;
@@ -1037,7 +1035,7 @@ impl RuleParser {
                         continue;
                     }
                     if let Some(nested_regex) =
-                        obj.get(&Value::String("metavariable-regex".to_string()))
+                        obj.get(Value::String("metavariable-regex".to_string()))
                     {
                         let metavar_regex =
                             self.parse_metavariable_regex(nested_regex, rule_index, pattern_index)?;
@@ -1045,15 +1043,14 @@ impl RuleParser {
                         continue;
                     }
                     if let Some(pattern_not_regex) =
-                        obj.get(&Value::String("pattern-not-regex".to_string()))
+                        obj.get(Value::String("pattern-not-regex".to_string()))
                     {
                         if let Some(regex_str) = pattern_not_regex.as_str() {
                             patterns.push(format!("__NOT_REGEX__:{}", regex_str));
                             continue;
                         }
                     }
-                    if let Some(pattern_regex) =
-                        obj.get(&Value::String("pattern-regex".to_string()))
+                    if let Some(pattern_regex) = obj.get(Value::String("pattern-regex".to_string()))
                     {
                         if let Some(regex_str) = pattern_regex.as_str() {
                             patterns.push(format!("__REGEX__:{}", regex_str));
@@ -1069,7 +1066,7 @@ impl RuleParser {
                 })?;
                 patterns.push(pattern_str.to_string());
             }
-        } else if let Some(pattern_value) = metavar_obj.get(&Value::String("pattern".to_string())) {
+        } else if let Some(pattern_value) = metavar_obj.get(Value::String("pattern".to_string())) {
             let pattern_str = pattern_value.as_str().ok_or_else(|| {
                 AnalysisError::parse_error(format!(
                     "Rule {} pattern {} metavariable_pattern 'pattern' must be a string",
@@ -1078,7 +1075,7 @@ impl RuleParser {
             })?;
             patterns.push(pattern_str.to_string());
         } else if let Some(pattern_either_value) =
-            metavar_obj.get(&Value::String("pattern-either".to_string()))
+            metavar_obj.get(Value::String("pattern-either".to_string()))
         {
             let either_array = pattern_either_value.as_sequence().ok_or_else(|| {
                 AnalysisError::parse_error(format!(
@@ -1089,7 +1086,7 @@ impl RuleParser {
 
             for pattern_obj in either_array {
                 if let Some(obj) = pattern_obj.as_mapping() {
-                    if let Some(pattern_value) = obj.get(&Value::String("pattern".to_string())) {
+                    if let Some(pattern_value) = obj.get(Value::String("pattern".to_string())) {
                         if let Some(pattern_str) = pattern_value.as_str() {
                             patterns.push(pattern_str.to_string());
                         }
@@ -1120,7 +1117,7 @@ impl RuleParser {
             metavar_pattern.name_constraint = Some(name_constraint);
         }
 
-        if let Some(analysis_value) = metavar_obj.get(&Value::String("analysis".to_string())) {
+        if let Some(analysis_value) = metavar_obj.get(Value::String("analysis".to_string())) {
             let analysis =
                 self.parse_metavariable_analysis_config(analysis_value, rule_index, pattern_index)?;
             metavar_pattern.analysis = Some(analysis);
@@ -1230,19 +1227,19 @@ impl RuleParser {
         };
 
         // Parse entropy analysis
-        if let Some(entropy_value) = analysis_obj.get(&Value::String("entropy".to_string())) {
+        if let Some(entropy_value) = analysis_obj.get(Value::String("entropy".to_string())) {
             analysis.entropy =
                 Some(self.parse_entropy_analysis(entropy_value, rule_index, pattern_index)?);
         }
 
         // Parse type analysis
-        if let Some(type_value) = analysis_obj.get(&Value::String("type".to_string())) {
+        if let Some(type_value) = analysis_obj.get(Value::String("type".to_string())) {
             analysis.type_analysis =
                 Some(self.parse_type_analysis(type_value, rule_index, pattern_index)?);
         }
 
         // Parse complexity analysis
-        if let Some(complexity_value) = analysis_obj.get(&Value::String("complexity".to_string())) {
+        if let Some(complexity_value) = analysis_obj.get(Value::String("complexity".to_string())) {
             analysis.complexity = Some(self.parse_complexity_analysis(
                 complexity_value,
                 rule_index,
@@ -1268,12 +1265,12 @@ impl RuleParser {
         })?;
 
         let min_entropy = entropy_obj
-            .get(&Value::String("min".to_string()))
+            .get(Value::String("min".to_string()))
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
 
         let max_entropy = entropy_obj
-            .get(&Value::String("max".to_string()))
+            .get(Value::String("max".to_string()))
             .and_then(|v| v.as_f64());
 
         let charset = self.get_optional_string_field(entropy_obj, "charset");
@@ -1302,7 +1299,7 @@ impl RuleParser {
         let expected_types = self.parse_string_array(type_obj, "expected")?;
         let forbidden_types = self.parse_string_array(type_obj, "forbidden")?;
         let nullable = type_obj
-            .get(&Value::String("nullable".to_string()))
+            .get(Value::String("nullable".to_string()))
             .and_then(|v| v.as_bool());
 
         Ok(TypeAnalysis {
@@ -1327,17 +1324,17 @@ impl RuleParser {
         })?;
 
         let max_cyclomatic = complexity_obj
-            .get(&Value::String("max_cyclomatic".to_string()))
+            .get(Value::String("max_cyclomatic".to_string()))
             .and_then(|v| v.as_u64())
             .map(|v| v as u32);
 
         let max_nesting_depth = complexity_obj
-            .get(&Value::String("max_nesting_depth".to_string()))
+            .get(Value::String("max_nesting_depth".to_string()))
             .and_then(|v| v.as_u64())
             .map(|v| v as u32);
 
         let max_lines = complexity_obj
-            .get(&Value::String("max_lines".to_string()))
+            .get(Value::String("max_lines".to_string()))
             .and_then(|v| v.as_u64())
             .map(|v| v as u32);
 
@@ -1354,7 +1351,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         _index: usize,
     ) -> Result<Option<DataFlowSpec>> {
-        let dataflow_value = obj.get(&Value::String("dataflow".to_string()));
+        let dataflow_value = obj.get(Value::String("dataflow".to_string()));
 
         if dataflow_value.is_none() {
             return Ok(None);
@@ -1376,14 +1373,14 @@ impl RuleParser {
             dataflow.must_flow = must_flow;
         }
 
-        if let Some(max_depth_value) = dataflow_obj.get(&Value::String("max_depth".to_string())) {
+        if let Some(max_depth_value) = dataflow_obj.get(Value::String("max_depth".to_string())) {
             if let Some(max_depth) = max_depth_value.as_u64() {
                 dataflow.max_depth = Some(max_depth as usize);
             }
         }
 
         if let Some(taint_assume_safe_booleans_value) =
-            dataflow_obj.get(&Value::String("taint_assume_safe_booleans".to_string()))
+            dataflow_obj.get(Value::String("taint_assume_safe_booleans".to_string()))
         {
             if let Some(b) = taint_assume_safe_booleans_value.as_bool() {
                 dataflow.taint_assume_safe_booleans = Some(b);
@@ -1391,7 +1388,7 @@ impl RuleParser {
         }
 
         if let Some(taint_assume_safe_numbers_value) =
-            dataflow_obj.get(&Value::String("taint_assume_safe_numbers".to_string()))
+            dataflow_obj.get(Value::String("taint_assume_safe_numbers".to_string()))
         {
             if let Some(b) = taint_assume_safe_numbers_value.as_bool() {
                 dataflow.taint_assume_safe_numbers = Some(b);
@@ -1399,7 +1396,7 @@ impl RuleParser {
         }
 
         if let Some(taint_only_propagate_through_assignments_value) = dataflow_obj.get(
-            &Value::String("taint_only_propagate_through_assignments".to_string()),
+            Value::String("taint_only_propagate_through_assignments".to_string()),
         ) {
             if let Some(b) = taint_only_propagate_through_assignments_value.as_bool() {
                 dataflow.taint_only_propagate_through_assignments = Some(b);
@@ -1407,7 +1404,7 @@ impl RuleParser {
         }
 
         if let Some(taint_assume_safe_indexes_value) =
-            dataflow_obj.get(&Value::String("taint_assume_safe_indexes".to_string()))
+            dataflow_obj.get(Value::String("taint_assume_safe_indexes".to_string()))
         {
             if let Some(b) = taint_assume_safe_indexes_value.as_bool() {
                 dataflow.taint_assume_safe_indexes = Some(b);
@@ -1420,7 +1417,7 @@ impl RuleParser {
     /// Parse string array field
     fn parse_string_array(&self, obj: &serde_yaml::Mapping, field: &str) -> Result<Vec<String>> {
         let array_value = obj
-            .get(&Value::String(field.to_string()))
+            .get(Value::String(field.to_string()))
             .ok_or_else(|| AnalysisError::parse_error(format!("Missing '{}' field", field)))?;
 
         let array = array_value
@@ -1472,7 +1469,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         _index: usize,
     ) -> Result<Option<FixRegex>> {
-        let fix_regex_value = obj.get(&Value::String("fix-regex".to_string()));
+        let fix_regex_value = obj.get(Value::String("fix-regex".to_string()));
 
         if fix_regex_value.is_none() {
             return Ok(None);
@@ -1490,7 +1487,7 @@ impl RuleParser {
 
     /// Parse paths field
     fn parse_paths(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<Option<PathsFilter>> {
-        let paths_value = obj.get(&Value::String("paths".to_string()));
+        let paths_value = obj.get(Value::String("paths".to_string()));
 
         if paths_value.is_none() {
             return Ok(None);
@@ -1515,7 +1512,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         _index: usize,
     ) -> Result<Option<Vec<SqlDialect>>> {
-        let dialects_value = match obj.get(&Value::String("dialects".to_string())) {
+        let dialects_value = match obj.get(Value::String("dialects".to_string())) {
             Some(v) => v,
             None => return Ok(None),
         };
@@ -1540,7 +1537,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         field: &str,
     ) -> Result<Vec<String>> {
-        let array_value = obj.get(&Value::String(field.to_string()));
+        let array_value = obj.get(Value::String(field.to_string()));
 
         if array_value.is_none() {
             return Ok(Vec::new());
@@ -1568,7 +1565,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         _index: usize,
     ) -> Result<HashMap<String, Value>> {
-        let metadata_value = obj.get(&Value::String("metadata".to_string()));
+        let metadata_value = obj.get(Value::String("metadata".to_string()));
 
         if metadata_value.is_none() {
             return Ok(HashMap::new());
@@ -1592,7 +1589,7 @@ impl RuleParser {
 
     /// Parse mode field (search or taint)
     fn parse_mode(&self, obj: &serde_yaml::Mapping, _index: usize) -> Result<RuleMode> {
-        let mode_value = obj.get(&Value::String("mode".to_string()));
+        let mode_value = obj.get(Value::String("mode".to_string()));
 
         if let Some(value) = mode_value {
             if let Some(mode_str) = value.as_str() {
@@ -1615,7 +1612,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         index: usize,
     ) -> Result<Vec<SourcePattern>> {
-        let sources_value = obj.get(&Value::String("pattern-sources".to_string()));
+        let sources_value = obj.get(Value::String("pattern-sources".to_string()));
 
         if sources_value.is_none() {
             return Ok(Vec::new());
@@ -1658,7 +1655,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         index: usize,
     ) -> Result<Vec<SinkPattern>> {
-        let sinks_value = obj.get(&Value::String("pattern-sinks".to_string()));
+        let sinks_value = obj.get(Value::String("pattern-sinks".to_string()));
 
         if sinks_value.is_none() {
             return Ok(Vec::new());
@@ -1701,7 +1698,7 @@ impl RuleParser {
         obj: &serde_yaml::Mapping,
         _index: usize,
     ) -> Result<Vec<String>> {
-        let sanitizers_value = obj.get(&Value::String("pattern-sanitizers".to_string()));
+        let sanitizers_value = obj.get(Value::String("pattern-sanitizers".to_string()));
 
         if sanitizers_value.is_none() {
             return Ok(Vec::new());
@@ -1730,7 +1727,7 @@ impl RuleParser {
     ) -> Result<Vec<PropagatorPattern>> {
         use crate::types::PropagatorPattern;
 
-        let propagators_value = obj.get(&Value::String("pattern-propagators".to_string()));
+        let propagators_value = obj.get(Value::String("pattern-propagators".to_string()));
 
         if propagators_value.is_none() {
             return Ok(Vec::new());
@@ -1745,7 +1742,7 @@ impl RuleParser {
             if let Some(mapping) = propagator.as_mapping() {
                 // Extract pattern (for propagators, preserve original metavariables but remove type qualifiers)
                 let pattern =
-                    if let Some(pattern_val) = mapping.get(&Value::String("pattern".to_string())) {
+                    if let Some(pattern_val) = mapping.get(Value::String("pattern".to_string())) {
                         if let Some(s) = pattern_val.as_str() {
                             // For propagators, don't simplify metavariables - keep $X, $Y, etc.
                             // But do remove type qualifiers like "(Type $VAR)." -> "$VAR."
@@ -1754,14 +1751,14 @@ impl RuleParser {
                             continue;
                         }
                     } else if let Some(patterns_val) =
-                        mapping.get(&Value::String("patterns".to_string()))
+                        mapping.get(Value::String("patterns".to_string()))
                     {
                         // Handle patterns array
                         if let Some(arr) = patterns_val.as_sequence() {
                             if let Some(first) = arr.first() {
                                 if let Some(mapping) = first.as_mapping() {
                                     if let Some(pattern) =
-                                        mapping.get(&Value::String("pattern".to_string()))
+                                        mapping.get(Value::String("pattern".to_string()))
                                     {
                                         if let Some(s) = pattern.as_str() {
                                             Pattern::simple(self.simplify_type_qualifiers(s))
@@ -1786,13 +1783,13 @@ impl RuleParser {
 
                 // Extract from and to fields
                 let from = mapping
-                    .get(&Value::String("from".to_string()))
+                    .get(Value::String("from".to_string()))
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
 
                 let to = mapping
-                    .get(&Value::String("to".to_string()))
+                    .get(Value::String("to".to_string()))
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
@@ -1840,7 +1837,7 @@ impl RuleParser {
         // If it's an object, try to extract pattern
         if let Some(mapping) = value.as_mapping() {
             // Try "pattern" field first
-            if let Some(pattern) = mapping.get(&Value::String("pattern".to_string())) {
+            if let Some(pattern) = mapping.get(Value::String("pattern".to_string())) {
                 if let Some(s) = pattern.as_str() {
                     // Simplify the pattern by removing complex Semgrep syntax
                     return Some(self.simplify_semgrep_pattern(s));
@@ -1848,8 +1845,7 @@ impl RuleParser {
             }
 
             // Try "pattern-either" field
-            if let Some(pattern_either) = mapping.get(&Value::String("pattern-either".to_string()))
-            {
+            if let Some(pattern_either) = mapping.get(Value::String("pattern-either".to_string())) {
                 if let Some(arr) = pattern_either.as_sequence() {
                     let patterns: Vec<String> = arr
                         .iter()
@@ -1862,17 +1858,17 @@ impl RuleParser {
             }
 
             // Try "patterns" field (array of patterns) - extract just the pattern part
-            if let Some(patterns) = mapping.get(&Value::String("patterns".to_string())) {
+            if let Some(patterns) = mapping.get(Value::String("patterns".to_string())) {
                 if let Some(arr) = patterns.as_sequence() {
                     // For patterns array, look for the actual pattern (not pattern-inside)
                     for item in arr.iter() {
                         if let Some(item_map) = item.as_mapping() {
                             // Skip pattern-inside and other context patterns
-                            if item_map.contains_key(&Value::String("pattern-inside".to_string())) {
+                            if item_map.contains_key(Value::String("pattern-inside".to_string())) {
                                 continue;
                             }
                             if item_map
-                                .contains_key(&Value::String("metavariable-regex".to_string()))
+                                .contains_key(Value::String("metavariable-regex".to_string()))
                             {
                                 continue;
                             }
@@ -1886,8 +1882,7 @@ impl RuleParser {
             }
 
             // Try "pattern-inside" field - simplify it
-            if let Some(pattern_inside) = mapping.get(&Value::String("pattern-inside".to_string()))
-            {
+            if let Some(pattern_inside) = mapping.get(Value::String("pattern-inside".to_string())) {
                 if let Some(s) = pattern_inside.as_str() {
                     // Extract just the variable part from complex pattern-inside
                     let simplified = self.simplify_semgrep_pattern(s);
@@ -1913,15 +1908,14 @@ impl RuleParser {
         // If it's an object, try to extract pattern
         if let Some(mapping) = value.as_mapping() {
             // Try "pattern-inside" field - return as-is without simplification but remove type qualifiers
-            if let Some(pattern_inside) = mapping.get(&Value::String("pattern-inside".to_string()))
-            {
+            if let Some(pattern_inside) = mapping.get(Value::String("pattern-inside".to_string())) {
                 if let Some(s) = pattern_inside.as_str() {
                     return Some(self.simplify_type_qualifiers(s));
                 }
             }
 
             // Try "pattern" field - return as-is without simplification but remove type qualifiers
-            if let Some(pattern) = mapping.get(&Value::String("pattern".to_string())) {
+            if let Some(pattern) = mapping.get(Value::String("pattern".to_string())) {
                 if let Some(s) = pattern.as_str() {
                     return Some(self.simplify_type_qualifiers(s));
                 }
@@ -1965,7 +1959,7 @@ impl RuleParser {
         if let Some(mapping) = value.as_mapping() {
             // Extract pattern and focus-metavariables - check for "patterns" array (Semgrep format)
             let (pattern_str, focus_metavariables) = if let Some(patterns_value) =
-                mapping.get(&Value::String("patterns".to_string()))
+                mapping.get(Value::String("patterns".to_string()))
             {
                 // Semgrep uses "patterns" array where:
                 // - Elements with "pattern" field define the pattern to match
@@ -1987,14 +1981,14 @@ impl RuleParser {
                 for pattern_elem in patterns_array {
                     if let Some(elem_map) = pattern_elem.as_mapping() {
                         // Look for pattern field
-                        if let Some(p_val) = elem_map.get(&Value::String("pattern".to_string())) {
+                        if let Some(p_val) = elem_map.get(Value::String("pattern".to_string())) {
                             if let Some(p_str) = p_val.as_str() {
                                 pattern_str = Some(p_str.to_string());
                             }
                         }
                         // Look for focus-metavariable field
                         if let Some(f_val) =
-                            elem_map.get(&Value::String("focus-metavariable".to_string()))
+                            elem_map.get(Value::String("focus-metavariable".to_string()))
                         {
                             if let Some(f_str) = f_val.as_str() {
                                 focus_vars.push(f_str.to_string());
@@ -2010,7 +2004,7 @@ impl RuleParser {
                     AnalysisError::parse_error("No pattern found in 'patterns' array".to_string())
                 })?;
                 (pattern_str, focus_vars)
-            } else if let Some(pattern_value) = mapping.get(&Value::String("pattern".to_string())) {
+            } else if let Some(pattern_value) = mapping.get(Value::String("pattern".to_string())) {
                 // Standard "pattern" field
                 let pattern_str = pattern_value
                     .as_str()
@@ -2023,7 +2017,7 @@ impl RuleParser {
 
                 // Check for focus-metavariable at this level (alternate format)
                 let focus_metavariables = mapping
-                    .get(&Value::String("focus-metavariable".to_string()))
+                    .get(Value::String("focus-metavariable".to_string()))
                     .and_then(|v| v.as_str())
                     .map(|s| vec![s.to_string()])
                     .unwrap_or_default();
@@ -2037,18 +2031,18 @@ impl RuleParser {
 
             // Check if fallback flag is set (optional)
             let is_fallback = mapping
-                .get(&Value::String("is_fallback".to_string()))
+                .get(Value::String("is_fallback".to_string()))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
             // Extract label and requires fields for label-based taint tracking
             let label = mapping
-                .get(&Value::String("label".to_string()))
+                .get(Value::String("label".to_string()))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
             let requires = mapping
-                .get(&Value::String("requires".to_string()))
+                .get(Value::String("requires".to_string()))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
@@ -2082,8 +2076,7 @@ impl RuleParser {
         // If it's an object, parse fields
         if let Some(mapping) = value.as_mapping() {
             // Check for top-level pattern-either
-            if let Some(pattern_either) = mapping.get(&Value::String("pattern-either".to_string()))
-            {
+            if let Some(pattern_either) = mapping.get(Value::String("pattern-either".to_string())) {
                 if let Some(arr) = pattern_either.as_sequence() {
                     let either_patterns: Vec<Pattern> = arr
                         .iter()
@@ -2111,7 +2104,7 @@ impl RuleParser {
 
             // Check for "patterns" array (Semgrep format with focus-metavariable)
             let (pattern, focus_metavariables) = if let Some(patterns_value) =
-                mapping.get(&Value::String("patterns".to_string()))
+                mapping.get(Value::String("patterns".to_string()))
             {
                 let patterns_array = patterns_value.as_sequence().ok_or_else(|| {
                     AnalysisError::parse_error("'patterns' must be an array".to_string())
@@ -2131,7 +2124,7 @@ impl RuleParser {
                     if let Some(elem_map) = pattern_elem.as_mapping() {
                         // Look for focus-metavariable field
                         if let Some(f_val) =
-                            elem_map.get(&Value::String("focus-metavariable".to_string()))
+                            elem_map.get(Value::String("focus-metavariable".to_string()))
                         {
                             if let Some(f_str) = f_val.as_str() {
                                 focus_vars.push(f_str.to_string());
@@ -2140,7 +2133,7 @@ impl RuleParser {
                         // Look for pattern-either field - create Either pattern
                         if pattern.is_none() {
                             if let Some(pattern_either) =
-                                elem_map.get(&Value::String("pattern-either".to_string()))
+                                elem_map.get(Value::String("pattern-either".to_string()))
                             {
                                 if let Some(arr) = pattern_either.as_sequence() {
                                     let either_patterns: Vec<Pattern> = arr
@@ -2180,7 +2173,7 @@ impl RuleParser {
                     )
                 })?;
                 (pattern, focus_vars)
-            } else if let Some(pattern_value) = mapping.get(&Value::String("pattern".to_string())) {
+            } else if let Some(pattern_value) = mapping.get(Value::String("pattern".to_string())) {
                 // Standard "pattern" field
                 let pattern_str = pattern_value
                     .as_str()
@@ -2193,7 +2186,7 @@ impl RuleParser {
 
                 // Check for focus-metavariable at this level (alternate format)
                 let focus_metavariables = mapping
-                    .get(&Value::String("focus-metavariable".to_string()))
+                    .get(Value::String("focus-metavariable".to_string()))
                     .and_then(|v| v.as_str())
                     .map(|s| vec![s.to_string()])
                     .unwrap_or_default();
@@ -2207,17 +2200,17 @@ impl RuleParser {
 
             // Check if fallback flag is set (optional)
             let is_fallback = mapping
-                .get(&Value::String("is_fallback".to_string()))
+                .get(Value::String("is_fallback".to_string()))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
             // Check if exact flag is set (optional; default = true = exact match)
             let exact = mapping
-                .get(&Value::String("exact".to_string()))
+                .get(Value::String("exact".to_string()))
                 .and_then(|v| v.as_bool());
 
             let requires = mapping
-                .get(&Value::String("requires".to_string()))
+                .get(Value::String("requires".to_string()))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
@@ -2245,19 +2238,19 @@ impl RuleParser {
         // Then try as a nested patterns array
         if let Some(mapping) = value.as_mapping() {
             if let Some(patterns_array) = mapping
-                .get(&Value::String("patterns".to_string()))
+                .get(Value::String("patterns".to_string()))
                 .and_then(|v| v.as_sequence())
             {
                 // Look for the actual pattern within the nested patterns array
                 for item in patterns_array {
                     if let Some(item_map) = item.as_mapping() {
                         // Skip pattern-not - we only want the actual pattern
-                        if item_map.contains_key(&Value::String("pattern-not".to_string())) {
+                        if item_map.contains_key(Value::String("pattern-not".to_string())) {
                             continue;
                         }
                         // Found the actual pattern
                         if let Some(pattern_val) =
-                            item_map.get(&Value::String("pattern".to_string()))
+                            item_map.get(Value::String("pattern".to_string()))
                         {
                             if let Some(pattern_str) = pattern_val.as_str() {
                                 return Some(Pattern::simple(pattern_str.to_string()));
@@ -2265,7 +2258,7 @@ impl RuleParser {
                         }
                         // Also try pattern-inside as the pattern source
                         if let Some(pattern_inside_val) =
-                            item_map.get(&Value::String("pattern-inside".to_string()))
+                            item_map.get(Value::String("pattern-inside".to_string()))
                         {
                             if let Some(pattern_str) = pattern_inside_val.as_str() {
                                 return Some(Pattern::simple(pattern_str.to_string()));
@@ -2281,7 +2274,7 @@ impl RuleParser {
 
             // Also try pattern-inside at the current level
             if let Some(pattern_inside_val) =
-                mapping.get(&Value::String("pattern-inside".to_string()))
+                mapping.get(Value::String("pattern-inside".to_string()))
             {
                 if let Some(pattern_str) = pattern_inside_val.as_str() {
                     return Some(Pattern::simple(pattern_str.to_string()));

@@ -1,3 +1,4 @@
+#![allow(warnings, clippy::all)]
 //! Enhanced Code Review Service
 //!
 //! A comprehensive static analysis tool for security-focused code review

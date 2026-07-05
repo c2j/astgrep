@@ -153,7 +153,7 @@ fn is_pattern_chain_node(tree: &PatternTree) -> bool {
 /// Flatten a target AST node chain into a flat list of elements.
 ///
 /// For `o.foo().m().bar()` returns `[identifier("o"), prop("foo"), prop("m"), prop("bar")]`.
-fn flatten_node_chain<'a>(node: &'a dyn AstNode) -> Vec<&'a dyn AstNode> {
+fn flatten_node_chain(node: &dyn AstNode) -> Vec<&dyn AstNode> {
     let kind = node.get_attribute("ts_kind").unwrap_or(node.node_type());
     if is_chain_kind(kind) {
         let mut result = Vec::new();
@@ -211,7 +211,7 @@ fn flatten_pattern_chain(kind: &str, children: &[PatternTree]) -> Vec<PatternTre
             kind: kind.to_string(),
             children: children.to_vec(),
             text: None,
-        constraints: Vec::new(),
+            constraints: Vec::new(),
         }];
     }
 
@@ -435,7 +435,7 @@ fn flatten_pattern_operand(
         PatternTree::Node {
             kind,
             children,
-            text,
+            text: _,
             ..
         } => {
             if is_binary_expression_kind(kind) {
@@ -501,7 +501,7 @@ fn numeric_literals_equivalent(pat: &str, tgt: &str) -> bool {
             u64::from_str_radix(oct, 8).ok().map(|v| v as f64)
         } else if s.starts_with("0")
             && s.len() > 1
-            && s.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+            && s.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
         {
             u64::from_str_radix(&s, 8).ok().map(|v| v as f64)
         } else {
@@ -590,8 +590,9 @@ fn unwrap_single_child_wrapper(pattern: &PatternTree) -> Option<&PatternTree> {
     if let PatternTree::Node {
         kind,
         children,
-        text, ..
-            } = pattern
+        text,
+        ..
+    } = pattern
     {
         if text.is_none() && WRAPPER_NODE_KINDS.contains(&kind.as_str()) && children.len() == 1 {
             return Some(&children[0]);
@@ -815,7 +816,10 @@ impl TreeMatcher {
         let mut ctx = MatchCtx::new();
         ctx.build_import_map(root);
         // Pass literal constraints from ogsql pattern to enforcement
-        if let PatternTree::Node { ref constraints, .. } = &tree {
+        if let PatternTree::Node {
+            ref constraints, ..
+        } = &tree
+        {
             ctx.constraints = constraints.clone();
         }
         ctx.find_recursive(&tree, root, &mut results, None);
@@ -960,12 +964,12 @@ impl MatchCtx {
                             && node
                                 .child(i + 1)
                                 .and_then(|n| n.text())
-                                .map_or(false, |t| t.trim() == ".");
+                                .is_some_and(|t| t.trim() == ".");
                         let next2_is_star = i + 2 < node.child_count()
                             && node
                                 .child(i + 2)
                                 .and_then(|n| n.text())
-                                .map_or(false, |t| t.trim() == "*");
+                                .is_some_and(|t| t.trim() == "*");
                         let is_wildcard = text.ends_with(".*") || (next_is_dot && next2_is_star);
                         if is_wildcard {
                             let prefix = if text.ends_with(".*") {
@@ -1114,7 +1118,7 @@ impl MatchCtx {
         // Track control flow nesting depth to prevent constant propagation
         // from assignments inside conditional branches to outside.
         let node_kind = node.get_attribute("ts_kind").unwrap_or(node.node_type());
-        let was_control_flow = Self::is_control_flow_kind(&node_kind);
+        let was_control_flow = Self::is_control_flow_kind(node_kind);
         if was_control_flow {
             self.control_flow_depth += 1;
         }
@@ -1252,7 +1256,7 @@ impl MatchCtx {
                         let entry = self
                             .must_candidates
                             .entry(depth)
-                            .or_insert_with(HashMap::new)
+                            .or_default()
                             .entry(name.clone())
                             .or_insert_with(|| (value.clone(), 0u32));
                         entry.1 += 1;
@@ -1275,7 +1279,7 @@ impl MatchCtx {
                                 || (value.starts_with('\'') && value.ends_with('\''))
                             {
                                 self.constants.insert(name, value);
-                            } else if let Ok(_) = value.parse::<i64>() {
+                            } else if value.parse::<i64>().is_ok() {
                                 self.constants.insert(name, value);
                             } else if value == "true" || value == "false" || value == "null" {
                                 self.constants.insert(name, value);
@@ -1320,7 +1324,7 @@ impl MatchCtx {
                     {
                         self.constants.entry(name).or_insert(value);
                     // Propagate integer literals
-                    } else if let Ok(_) = value.parse::<i64>() {
+                    } else if value.parse::<i64>().is_ok() {
                         self.constants.entry(name).or_insert(value);
                     // Propagate boolean literals
                     } else if value == "true" || value == "false" || value == "null" {
@@ -1378,9 +1382,9 @@ impl MatchCtx {
                     if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
                         return false;
                     }
-                    return target.text().map_or(false, |t| !t.trim().is_empty());
+                    return target.text().is_some_and(|t| !t.trim().is_empty());
                 }
-                if let Some(ref attr) = bind_attr {
+                if let Some(_attr) = bind_attr {
                     return self.bind_metavar_in_subtree(pattern, target);
                 }
                 if let Some(text) = target.text() {
@@ -1560,11 +1564,12 @@ impl MatchCtx {
             || (pattern_kind == "interface_declaration"
                 && matches!(target_kind, "annotation_type_declaration"));
 
-        if !kind_match && pattern_kind == "parenthesized_expression" && pattern_children.len() == 1
+        if !kind_match
+            && pattern_kind == "parenthesized_expression"
+            && pattern_children.len() == 1
+            && matches!(pattern_children[0], PatternTree::TypedMetavar { .. })
         {
-            if matches!(pattern_children[0], PatternTree::TypedMetavar { .. }) {
-                return self.match_tree(&pattern_children[0], target);
-            }
+            return self.match_tree(&pattern_children[0], target);
         }
 
         // Phase D: import resolution — when pattern has a qualified name
@@ -1577,7 +1582,7 @@ impl MatchCtx {
             && (matches!(
                 target_kind,
                 "identifier" | "type_identifier" | "property_identifier"
-            ) || QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()))
+            ) || QUALIFIED_NAME_KINDS.contains(&target_kind))
         {
             if let Some(ref pattern_qn) = Self::qualified_name_from_children(pattern_children) {
                 // Case 1: Simple target identifier — check named import + wildcard
@@ -1610,7 +1615,7 @@ impl MatchCtx {
                         }
                     }
                 // Case 2: Target is also a qualified name — wildcard prefix stripping
-                } else if QUALIFIED_NAME_KINDS.contains(&target_kind.as_ref()) {
+                } else if QUALIFIED_NAME_KINDS.contains(&target_kind) {
                     if let Some(target_text) = target.text() {
                         let target_qn = target_text.trim();
                         let mut sorted_wc: Vec<&String> = self.wildcard_imports.iter().collect();
@@ -1724,7 +1729,7 @@ impl MatchCtx {
             if is_pure_ellipsis_pattern(pattern_children) {
                 if let (Some(pd), Some(td)) = (
                     collection_delimiter(pattern_kind),
-                    collection_delimiter(&target_kind),
+                    collection_delimiter(target_kind),
                 ) {
                     if pd == td {
                         kind_match = true;
@@ -1749,16 +1754,21 @@ impl MatchCtx {
                 }
                 continue;
             }
-            if target.get_attribute(key).as_deref() != Some(expected.as_str()) {
+            if target.get_attribute(key) != Some(expected.as_str()) {
                 return false;
             }
         }
 
         // For ogsql statement patterns, kind + constraints are sufficient for
         // structural block matching. Metavar binding is handled at block scope.
-        if matches!(pattern_kind.as_ref(),
-            "select_statement" | "update_statement" | "assignment_expression"
-            | "delete_statement" | "insert_statement" | "merge_statement"
+        if matches!(
+            pattern_kind,
+            "select_statement"
+                | "update_statement"
+                | "assignment_expression"
+                | "delete_statement"
+                | "insert_statement"
+                | "merge_statement"
         ) {
             return true;
         }
@@ -1766,21 +1776,28 @@ impl MatchCtx {
         // Process _ogsql_bind nodes: filter them out for positional matching.
         // Binding happens post-match in the has_ellipsis branch below.
         let all_children = pattern_children;
-        let has_bind = all_children.iter().any(|c| {
-            matches!(c, PatternTree::Node { kind, .. } if kind == "_ogsql_bind")
-        });
+        let has_bind = all_children
+            .iter()
+            .any(|c| matches!(c, PatternTree::Node { kind, .. } if kind == "_ogsql_bind"));
         let filtered: std::borrow::Cow<[PatternTree]>;
         let pattern_children: &[PatternTree] = if has_bind {
             filtered = std::borrow::Cow::Owned(
-                all_children.iter()
+                all_children
+                    .iter()
                     .filter(|c| {
                         !matches!(c, PatternTree::Node { kind, .. } if kind == "_ogsql_bind")
-                        && !matches!(c, PatternTree::Metavar { bind_attr: Some(_), .. })
+                            && !matches!(
+                                c,
+                                PatternTree::Metavar {
+                                    bind_attr: Some(_),
+                                    ..
+                                }
+                            )
                     })
                     .cloned()
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>(),
             );
-            &*filtered
+            &filtered
         } else {
             pattern_children
         };
@@ -1830,7 +1847,7 @@ impl MatchCtx {
         let target_kind_str = target
             .get_attribute("ts_kind")
             .unwrap_or(target.node_type());
-        if is_chain_kind(pattern_kind) && is_chain_kind(&target_kind_str) {
+        if is_chain_kind(pattern_kind) && is_chain_kind(target_kind_str) {
             let has_chain_child_with_ellipsis = pattern_children
                 .iter()
                 .any(|c| is_pattern_chain_node(c) && pattern_contains_ellipsis(c));
@@ -1838,8 +1855,8 @@ impl MatchCtx {
                 kind: pattern_kind.to_string(),
                 children: pattern_children.to_vec(),
                 text: None,
-            constraints: Vec::new(),
-        });
+                constraints: Vec::new(),
+            });
             if has_chain_child_with_ellipsis || (has_any_ellipsis && is_chain_kind(pattern_kind)) {
                 let flat_pattern = flatten_pattern_chain(pattern_kind, pattern_children);
                 let flat_target = flatten_node_chain(target);
@@ -1887,37 +1904,47 @@ impl MatchCtx {
             let snap = self.snapshot();
             for mv in pattern_children {
                 if !self.bind_metavar_in_subtree(mv, target) {
-                    self.restore(snap); return false;
+                    self.restore(snap);
+                    return false;
                 }
             }
             if !self.verify_metavar_consistency(pattern_children, target) {
-                self.restore(snap); return false;
+                self.restore(snap);
+                return false;
             }
             return true;
         }
 
         // Wildcard kind "_" with metavar children — bind each in target subtree.
-        if pattern_kind == "_" && !pattern_children.is_empty() {
-            if pattern_children.iter().all(|c| matches!(c, PatternTree::Metavar { .. })) {
-                let snap = self.snapshot();
-                for mv in pattern_children {
-                    if !self.bind_metavar_in_subtree(mv, target) { self.restore(snap); return false; }
+        if pattern_kind == "_"
+            && !pattern_children.is_empty()
+            && pattern_children
+                .iter()
+                .all(|c| matches!(c, PatternTree::Metavar { .. }))
+        {
+            let snap = self.snapshot();
+            for mv in pattern_children {
+                if !self.bind_metavar_in_subtree(mv, target) {
+                    self.restore(snap);
+                    return false;
                 }
-                if !self.constraints.is_empty() && !self.enforce_constraints_in_subtree(target) {
-                    self.restore(snap); return false;
-                }
-                if !self.verify_metavar_consistency(pattern_children, target) {
-                    self.restore(snap); return false;
-                }
-                return true;
             }
+            if !self.constraints.is_empty() && !self.enforce_constraints_in_subtree(target) {
+                self.restore(snap);
+                return false;
+            }
+            if !self.verify_metavar_consistency(pattern_children, target) {
+                self.restore(snap);
+                return false;
+            }
+            return true;
         }
 
         // Phase D: Unordered object/set matching.
         // When matching object-like or set-like nodes, allow pattern children
         // to match target children in any order.
-        let needs_unordered = is_object_like_kind(&target_kind_str)
-            || is_unordered_set_kind(&target_kind_str)
+        let needs_unordered = is_object_like_kind(target_kind_str)
+            || is_unordered_set_kind(target_kind_str)
             || is_unordered_set_kind(pattern_kind);
         if needs_unordered && pattern_children.len() <= target_children.len() {
             let snap = self.snapshot();
@@ -2037,7 +2064,12 @@ impl MatchCtx {
             // After structural match succeeds, bind ogsql metavars + verify
             if result && has_bind {
                 for child in all_children.iter() {
-                    if let PatternTree::Node { kind, children: mv_kids, .. } = child {
+                    if let PatternTree::Node {
+                        kind,
+                        children: mv_kids,
+                        ..
+                    } = child
+                    {
                         if kind == "_ogsql_bind" {
                             if !self.bind_metavars_with_backtrack(mv_kids, target) {
                                 return false;
@@ -2058,10 +2090,10 @@ impl MatchCtx {
                 .iter()
                 .filter(|p| !is_optional_collection(p))
                 .collect();
-            if filtered.len() == target_children.len() {
-                if self.match_children_exact_ref(&filtered, &target_children) {
-                    return true;
-                }
+            if filtered.len() == target_children.len()
+                && self.match_children_exact_ref(&filtered, &target_children)
+            {
+                return true;
             }
             // Retry: skip import-resolved qualified-name + following identifier.
             // Also skip the matched target identifier so remaining pairs align.
@@ -2086,7 +2118,7 @@ impl MatchCtx {
                                     if let Some(tt) = t.text() {
                                         let tt = tt.trim();
                                         let resolved =
-                                            self.resolve_import(tt).map_or(false, |imp| {
+                                            self.resolve_import(tt).is_some_and(|imp| {
                                                 let prefix = format!("{}.", fqn);
                                                 imp == fqn.as_str() || imp.starts_with(&prefix)
                                             }) || self.wildcard_imports.iter().any(|wc| {
@@ -2118,10 +2150,10 @@ impl MatchCtx {
                 .filter(|(i, _)| !matched_target_indices.contains(i))
                 .map(|(_, t)| *t)
                 .collect();
-            if skipped_pats.len() == remaining_targets.len() {
-                if self.match_children_exact_ref(&skipped_pats, &remaining_targets) {
-                    return true;
-                }
+            if skipped_pats.len() == remaining_targets.len()
+                && self.match_children_exact_ref(&skipped_pats, &remaining_targets)
+            {
+                return true;
             }
             self.match_children_with_ellipsis(pattern_children, &target_children)
         } else {
@@ -2129,22 +2161,21 @@ impl MatchCtx {
         }
     }
 
-
     /// For each unique (metavar_name, bind_attr) pair in the metavar list,
     /// verify that the bound metavar value appears at least as many times in
     /// the target subtree as the metavar occurs in the pattern. This enforces
     /// cross-statement metavar unification without being tripped up by
     /// unrelated DML statements (e.g., UPDATE config_table after the RMW
     /// pattern in the same procedure).
-    fn verify_metavar_consistency(
-        &self,
-        metavars: &[PatternTree],
-        target: &dyn AstNode,
-    ) -> bool {
+    fn verify_metavar_consistency(&self, metavars: &[PatternTree], target: &dyn AstNode) -> bool {
         use std::collections::HashSet;
         let mut pairs_checked: HashSet<(&str, &str)> = HashSet::new();
         for mv in metavars {
-            if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
+            if let PatternTree::Metavar {
+                name,
+                bind_attr: Some(ref attr),
+            } = mv
+            {
                 let pair = (name.as_str(), attr.as_str());
                 if pairs_checked.insert(pair) {
                     let expected_count = metavars
@@ -2159,8 +2190,7 @@ impl MatchCtx {
                     Self::collect_attr_values(attr, target, &mut values);
 
                     if let Some(bound_value) = self.bindings.get(name) {
-                        let match_count =
-                            values.iter().filter(|v| *v == bound_value).count();
+                        let match_count = values.iter().filter(|v| *v == bound_value).count();
                         if match_count < expected_count {
                             return false;
                         }
@@ -2228,31 +2258,43 @@ impl MatchCtx {
 
     fn enforce_constraints_in_subtree(&self, target: &dyn AstNode) -> bool {
         for (key, expected) in &self.constraints {
-            if !Self::find_constraint(key, expected, target) { return false; }
+            if !Self::find_constraint(key, expected, target) {
+                return false;
+            }
         }
         true
     }
 
     fn find_constraint(key: &str, expected: &str, target: &dyn AstNode) -> bool {
         if let Some(val) = target.get_attribute(key) {
-            if val == expected { return true; }
+            if val == expected {
+                return true;
+            }
         }
         for i in 0..target.child_count() {
             if let Some(child) = target.child(i) {
-                if Self::find_constraint(key, expected, child) { return true; }
+                if Self::find_constraint(key, expected, child) {
+                    return true;
+                }
             }
         }
         false
     }
 
     fn bind_metavar_in_subtree(&mut self, mv: &PatternTree, target: &dyn AstNode) -> bool {
-        if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
+        if let PatternTree::Metavar {
+            name,
+            bind_attr: Some(ref attr),
+        } = mv
+        {
             let mut candidates: Vec<String> = Vec::new();
             Self::collect_attr_values(attr, target, &mut candidates);
             if let Some(existing) = self.bindings.get(name) {
                 return candidates.iter().any(|c| c == existing);
             }
-            if candidates.is_empty() { return false; }
+            if candidates.is_empty() {
+                return false;
+            }
             return self.try_bind(name, &candidates[0]);
         }
         false
@@ -2268,7 +2310,11 @@ impl MatchCtx {
         // Collect candidate values for each metavar
         let mut all_candidates: Vec<(&str, &str, Vec<String>)> = Vec::new();
         for mv in metavars {
-            if let PatternTree::Metavar { name, bind_attr: Some(attr) } = mv {
+            if let PatternTree::Metavar {
+                name,
+                bind_attr: Some(attr),
+            } = mv
+            {
                 let mut cands = Vec::new();
                 Self::collect_attr_values(attr, target, &mut cands);
                 // Deduplicate
@@ -2281,7 +2327,8 @@ impl MatchCtx {
         // consistent across all its attribute bindings.
         let unique_names: Vec<&str> = {
             let mut seen = std::collections::HashSet::new();
-            all_candidates.iter()
+            all_candidates
+                .iter()
                 .filter_map(|(n, _, _)| if seen.insert(*n) { Some(*n) } else { None })
                 .collect()
         };
@@ -2290,15 +2337,22 @@ impl MatchCtx {
         for name in &unique_names {
             let mut sets: Vec<&Vec<String>> = Vec::new();
             for (n, _, cands) in &all_candidates {
-                if n == name { sets.push(cands); }
+                if n == name {
+                    sets.push(cands);
+                }
             }
-            let intersection: Vec<&String> = sets.iter()
+            let intersection: Vec<&String> = sets
+                .iter()
                 .skip(1)
                 .fold(sets[0].iter().collect::<Vec<_>>(), |acc, set| {
                     acc.into_iter().filter(|v| set.contains(v)).collect()
                 });
-            if intersection.is_empty() { return false; }
-            if !self.try_bind(name, intersection[0]) { return false; }
+            if intersection.is_empty() {
+                return false;
+            }
+            if !self.try_bind(name, intersection[0]) {
+                return false;
+            }
         }
         // Different metavar names sharing the same bind_attr must bind to
         // different values (e.g. VAR1≠VAR2 from target_var in 2-column SELECT).
@@ -2306,7 +2360,9 @@ impl MatchCtx {
         for (name, attr, _) in &all_candidates {
             if let Some(val) = self.bindings.get(*name) {
                 if let Some(prev) = used.get(attr) {
-                    if prev == val { return false; }
+                    if prev == val {
+                        return false;
+                    }
                 } else {
                     used.insert(attr, val.clone());
                 }
@@ -2345,13 +2401,13 @@ impl MatchCtx {
                 _ => None,
             };
             let tgt_kind = tgt.get_attribute("ts_kind").unwrap_or(tgt.node_type());
-            let pat_is_block = pat_kind.map_or(false, |k| TRANSPARENT_BLOCK_KINDS.contains(&k));
+            let pat_is_block = pat_kind.is_some_and(|k| TRANSPARENT_BLOCK_KINDS.contains(&k));
             let tgt_is_block = TRANSPARENT_BLOCK_KINDS.contains(&tgt_kind);
 
             if pat_is_block != tgt_is_block {
                 let matched = if tgt_is_block {
                     let inner = get_single_block_child(*tgt);
-                    inner.map_or(false, |inner| self.match_tree(pat, inner))
+                    inner.is_some_and(|inner| self.match_tree(pat, inner))
                 } else if pat_is_block {
                     if let PatternTree::Node { children, .. } = pat {
                         children.len() == 1 && self.match_tree(&children[0], *tgt)
@@ -2439,13 +2495,13 @@ impl MatchCtx {
                 _ => None,
             };
             let tgt_kind = tgt.get_attribute("ts_kind").unwrap_or(tgt.node_type());
-            let pat_is_block = pat_kind.map_or(false, |k| TRANSPARENT_BLOCK_KINDS.contains(&k));
+            let pat_is_block = pat_kind.is_some_and(|k| TRANSPARENT_BLOCK_KINDS.contains(&k));
             let tgt_is_block = TRANSPARENT_BLOCK_KINDS.contains(&tgt_kind);
 
             if pat_is_block != tgt_is_block {
                 let matched = if tgt_is_block {
                     let inner = get_single_block_child(*tgt);
-                    inner.map_or(false, |inner| self.match_tree(pat, inner))
+                    inner.is_some_and(|inner| self.match_tree(pat, inner))
                 } else if pat_is_block {
                     if let PatternTree::Node { children, .. } = pat {
                         children.len() == 1 && self.match_tree(&children[0], *tgt)
@@ -2505,10 +2561,10 @@ impl MatchCtx {
                         .collect::<Vec<_>>()
                         .join(", ");
                     let snap = self.snapshot();
-                    if combined.is_empty() || self.try_bind(name, &combined) {
-                        if self.match_children_with_ellipsis(rest, &targets[skip..]) {
-                            return true;
-                        }
+                    if (combined.is_empty() || self.try_bind(name, &combined))
+                        && self.match_children_with_ellipsis(rest, &targets[skip..])
+                    {
+                        return true;
                     }
                     self.restore(snap);
                 }
@@ -2576,10 +2632,10 @@ impl MatchCtx {
                 for skip in 0..=targets.len() {
                     let combined = join_operand_texts(&targets[..skip], operator);
                     let snap = self.snapshot();
-                    if combined.is_empty() || self.try_bind(name, &combined) {
-                        if self.match_associative_operands(rest, &targets[skip..], operator) {
-                            return true;
-                        }
+                    if (combined.is_empty() || self.try_bind(name, &combined))
+                        && self.match_associative_operands(rest, &targets[skip..], operator)
+                    {
+                        return true;
                     }
                     self.restore(snap);
                 }
@@ -2591,10 +2647,10 @@ impl MatchCtx {
                 for consume in 1..=targets.len() {
                     let combined = join_operand_texts(&targets[..consume], operator);
                     let snap = self.snapshot();
-                    if self.try_bind(name, &combined) {
-                        if self.match_associative_operands(rest, &targets[consume..], operator) {
-                            return true;
-                        }
+                    if self.try_bind(name, &combined)
+                        && self.match_associative_operands(rest, &targets[consume..], operator)
+                    {
+                        return true;
                     }
                     self.restore(snap);
                 }
@@ -2606,10 +2662,10 @@ impl MatchCtx {
                 for consume in 1..=targets.len() {
                     let combined = join_operand_texts(&targets[..consume], operator);
                     let snap = self.snapshot();
-                    if self.try_bind(name, &combined) {
-                        if self.match_associative_operands(rest, &targets[consume..], operator) {
-                            return true;
-                        }
+                    if self.try_bind(name, &combined)
+                        && self.match_associative_operands(rest, &targets[consume..], operator)
+                    {
+                        return true;
                     }
                     self.restore(snap);
                 }
@@ -2642,10 +2698,10 @@ impl MatchCtx {
                 } else {
                     // Associative but not commutative: match in order
                     let snap = self.snapshot();
-                    if self.match_tree(first, targets[0]) {
-                        if self.match_associative_operands(rest, &targets[1..], operator) {
-                            return true;
-                        }
+                    if self.match_tree(first, targets[0])
+                        && self.match_associative_operands(rest, &targets[1..], operator)
+                    {
+                        return true;
                     }
                     self.restore(snap);
                     false
@@ -2880,7 +2936,7 @@ mod tests {
                 },
             ],
             text: None,
-        constraints: Vec::new(),
+            constraints: Vec::new(),
         };
 
         // Target: foo(x, y, z, bar) — simulated as a node with children

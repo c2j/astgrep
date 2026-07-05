@@ -109,7 +109,7 @@ pub fn apply_simple_metavariable_pattern(
                     let finding = Finding {
                         rule_id: rule.id.clone(),
                         message: rule.message.clone(),
-                        severity: rule.severity.clone(),
+                        severity: rule.severity,
                         confidence: Confidence::High,
                         location: Location {
                             file: file_path.clone(),
@@ -157,7 +157,7 @@ pub fn apply_simple_metavariable_pattern(
                         let finding = Finding {
                             rule_id: rule.id.clone(),
                             message: rule.message.clone(),
-                            severity: rule.severity.clone(),
+                            severity: rule.severity,
                             confidence: Confidence::Medium,
                             location: Location {
                                 file: file_path.clone(),
@@ -209,7 +209,7 @@ pub fn apply_simple_metavariable_pattern(
                     let finding = Finding {
                         rule_id: rule.id.clone(),
                         message: rule.message.clone(),
-                        severity: rule.severity.clone(),
+                        severity: rule.severity,
                         confidence: Confidence::High,
                         location: Location {
                             file: file_path.clone(),
@@ -251,7 +251,7 @@ pub fn apply_simple_metavariable_pattern(
                     let finding = Finding {
                         rule_id: rule.id.clone(),
                         message: rule.message.clone(),
-                        severity: rule.severity.clone(),
+                        severity: rule.severity,
                         confidence: Confidence::Low, // Lower confidence for heuristic matching
                         location: Location {
                             file: file_path.clone(),

@@ -236,9 +236,7 @@ impl PerformanceProfiler {
 
         let start_time = {
             let mut active = self.active_operations.lock().unwrap();
-            active
-                .remove(&operation.id)
-                .unwrap_or_else(|| Instant::now())
+            active.remove(&operation.id).unwrap_or_else(Instant::now)
         };
 
         let duration = start_time.elapsed();
@@ -291,7 +289,7 @@ impl PerformanceProfiler {
             return;
         }
 
-        let elapsed = self.start_time.unwrap_or_else(|| Instant::now()).elapsed();
+        let elapsed = self.start_time.unwrap_or_else(Instant::now).elapsed();
         let memory_usage = self.get_current_memory_usage();
         let ops = self.metrics.lock().unwrap().operations_completed;
         let bytes = self.metrics.lock().unwrap().bytes_transferred;

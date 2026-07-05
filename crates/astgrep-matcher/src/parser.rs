@@ -176,7 +176,7 @@ impl PatternParser {
                         tokens.push(Token::Literal("@".to_string()));
                         continue;
                     }
-                    if chars.peek().map_or(false, |c| c.is_ascii_uppercase()) {
+                    if chars.peek().is_some_and(|c| c.is_ascii_uppercase()) {
                         let mut name = String::from("@");
                         while let Some(&next_ch) = chars.peek() {
                             if next_ch.is_alphanumeric() || next_ch == '_' {
@@ -503,7 +503,7 @@ impl PatternParser {
             {
                 // Only treat as typed metavar if type_name looks like a type identifier
                 // (starts with uppercase or is a known primitive type)
-                let is_type = type_name.chars().next().map_or(false, |c| c.is_uppercase())
+                let is_type = type_name.chars().next().is_some_and(|c| c.is_uppercase())
                     || matches!(
                         type_name.as_str(),
                         "int"
@@ -684,15 +684,22 @@ mod tests_multiline_tokenize {
         let parser = PatternParser::new();
         // A multiline pattern should parse without error
         let result = parser.parse("foo\nbar");
-        assert!(result.is_ok(), "multiline pattern should parse: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "multiline pattern should parse: {:?}",
+            result
+        );
         let pattern = result.unwrap();
         assert_eq!(
             format!("{:?}", pattern),
-            format!("{:?}", ParsedPattern::Sequence(vec![
-                ParsedPattern::Literal("foo".to_string()),
-                ParsedPattern::Literal("\n".to_string()),
-                ParsedPattern::Literal("bar".to_string()),
-            ]))
+            format!(
+                "{:?}",
+                ParsedPattern::Sequence(vec![
+                    ParsedPattern::Literal("foo".to_string()),
+                    ParsedPattern::Literal("\n".to_string()),
+                    ParsedPattern::Literal("bar".to_string()),
+                ])
+            )
         );
     }
 }

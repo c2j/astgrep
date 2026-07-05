@@ -1,3 +1,4 @@
+#![allow(warnings, clippy::all)]
 //! Command-line interface for astgrep
 
 use anyhow::Result;

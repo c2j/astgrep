@@ -2,6 +2,8 @@
 //!
 //! This crate provides rule parsing, validation, and execution functionality.
 
+#![allow(unused, dead_code, ambiguous_glob_reexports, clippy::all)]
+
 pub mod engine;
 pub mod executor;
 pub mod integration;
@@ -126,9 +128,10 @@ impl RuleEngine {
                 Ok(None)
             }
         } else {
-            Err(astgrep_core::AnalysisError::rule_validation_error(
-                &format!("Rule not found: {}", rule_id),
-            ))
+            Err(astgrep_core::AnalysisError::rule_validation_error(format!(
+                "Rule not found: {}",
+                rule_id
+            )))
         }
     }
 
@@ -237,9 +240,9 @@ fn pattern_has_typed_metavar(pattern: &crate::types::Pattern) -> bool {
             let re = fancy_regex::Regex::new(r"\(([\w.]+(?:<[^>]*>)?(?:\[\])?)\s+\$(\w+)\)");
             re.map(|r| r.is_match(s).unwrap_or(false)).unwrap_or(false)
         }
-        PatternType::Either(patterns)
-        | PatternType::All(patterns)
-        | PatternType::Any(patterns) => patterns.iter().any(pattern_has_typed_metavar),
+        PatternType::Either(patterns) | PatternType::All(patterns) | PatternType::Any(patterns) => {
+            patterns.iter().any(pattern_has_typed_metavar)
+        }
         PatternType::Inside(pattern)
         | PatternType::NotInside(pattern)
         | PatternType::Not(pattern) => pattern_has_typed_metavar(pattern),

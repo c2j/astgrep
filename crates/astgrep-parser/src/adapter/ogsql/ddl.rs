@@ -175,7 +175,7 @@ pub fn convert_create_procedure(
         n = n.with_metadata("or_replace".into(), "true".into());
     }
     // Add PL/pgSQL block body as child for TreeMatcher matching
-if let Some(ref block) = stmt.block {
+    if let Some(ref block) = stmt.block {
         use crate::adapter::ogsql::pl;
         n = n.add_child(pl::convert_pl_block(block, NodeType::BlockStatement, None)?);
     }
@@ -229,20 +229,16 @@ fn convert_package_item(
         PackageItem::Procedure(proc) => {
             let mut nodes = Vec::new();
             if let Some(ref block) = proc.block {
-                let mut block_node =
-                    pl::convert_pl_block(block, NodeType::BlockStatement, None)?
-                        .with_metadata(
-                            "package_procedure_name".into(),
-                            proc.name.join("."),
-                        )
-                        .with_metadata(
-                            "package_procedure_params".into(),
-                            proc.parameters
-                                .iter()
-                                .map(|p| format!("{} {}", p.name, p.data_type))
-                                .collect::<Vec<_>>()
-                                .join("; "),
-                        );
+                let mut block_node = pl::convert_pl_block(block, NodeType::BlockStatement, None)?
+                    .with_metadata("package_procedure_name".into(), proc.name.join("."))
+                    .with_metadata(
+                        "package_procedure_params".into(),
+                        proc.parameters
+                            .iter()
+                            .map(|p| format!("{} {}", p.name, p.data_type))
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    );
                 // Set location from ogsql parser line info (if available)
                 if proc.start_line > 0 {
                     let loc = (proc.start_line, 1, proc.end_line.max(proc.start_line), 1);
@@ -255,7 +251,9 @@ fn convert_package_item(
                 }
                 // Filter out variable declarations so the target statements (SELECT,
                 // assignment, UPDATE) appear as consecutive siblings starting at index 0.
-                block_node.children.retain(|c| c.node_type() != "variable_declaration");
+                block_node
+                    .children
+                    .retain(|c| c.node_type() != "variable_declaration");
                 nodes.push(block_node);
             } else {
                 let meta = AstBuilder::sql_expression("PACKAGE_PROCEDURE")
@@ -275,20 +273,16 @@ fn convert_package_item(
         PackageItem::Function(func) => {
             let mut nodes = Vec::new();
             if let Some(ref block) = func.block {
-                let mut block_node =
-                    pl::convert_pl_block(block, NodeType::BlockStatement, None)?
-                        .with_metadata(
-                            "package_function_name".into(),
-                            func.name.join("."),
-                        )
-                        .with_metadata(
-                            "package_function_params".into(),
-                            func.parameters
-                                .iter()
-                                .map(|p| format!("{} {}", p.name, p.data_type))
-                                .collect::<Vec<_>>()
-                                .join("; "),
-                        );
+                let mut block_node = pl::convert_pl_block(block, NodeType::BlockStatement, None)?
+                    .with_metadata("package_function_name".into(), func.name.join("."))
+                    .with_metadata(
+                        "package_function_params".into(),
+                        func.parameters
+                            .iter()
+                            .map(|p| format!("{} {}", p.name, p.data_type))
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    );
                 if let Some(ref rt) = func.return_type {
                     block_node = block_node.with_metadata("return_type".into(), rt.clone());
                 }
@@ -315,16 +309,15 @@ fn convert_package_item(
         PackageItem::Type(_) => Ok(vec![AstBuilder::sql_expression("PACKAGE_TYPE")]),
         PackageItem::Cursor(c) => Ok(vec![AstBuilder::sql_expression("PACKAGE_CURSOR")
             .with_metadata("name".into(), c.name.clone())]),
-        PackageItem::Raw(text) => Ok(vec![
-            AstBuilder::sql_expression("PACKAGE_RAW").with_metadata(
+        PackageItem::Raw(text) => Ok(vec![AstBuilder::sql_expression("PACKAGE_RAW")
+            .with_metadata(
                 "text".into(),
                 if text.len() > 80 {
                     format!("{}...", &text[..80])
                 } else {
                     text.clone()
                 },
-            ),
-        ]),
+            )]),
     }
 }
 
@@ -692,26 +685,25 @@ mod tests {
     }
     #[test]
     fn test_create_package_body_with_procedure() {
-        let n = p(
-            "CREATE OR REPLACE PACKAGE BODY my_pkg AS \
+        let n = p("CREATE OR REPLACE PACKAGE BODY my_pkg AS \
              PROCEDURE do_update IS v_cnt INTEGER; \
              BEGIN \
                SELECT cnt INTO v_cnt FROM t WHERE id = 1 FOR UPDATE; \
                v_cnt := v_cnt + 1; \
                UPDATE t SET cnt = v_cnt WHERE id = 1; \
              END do_update; \
-             END my_pkg;",
-        );
-        assert_eq!(
-            Some(&"my_pkg".to_string()),
-            n.get_attribute("package_name")
-        );
+             END my_pkg;");
+        assert_eq!(Some(&"my_pkg".to_string()), n.get_attribute("package_name"));
         assert_eq!(Some(&"true".to_string()), n.get_attribute("is_body"));
         assert_eq!(Some(&"true".to_string()), n.get_attribute("or_replace"));
         assert_eq!(1, n.children.len(), "expected 1 child (BlockStatement)");
         let block = &n.children[0];
         assert_eq!("block_statement", block.node_type());
-        assert_eq!(3, block.children.len(), "expected 3 body statements after filtering declarations");
+        assert_eq!(
+            3,
+            block.children.len(),
+            "expected 3 body statements after filtering declarations"
+        );
     }
     #[test]
     fn test_alter_table_constraint() {

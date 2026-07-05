@@ -75,7 +75,7 @@ impl RuleExecutionEngine {
         &self,
         pattern: &str,
         source: &str,
-        language: astgrep_core::Language,
+        _language: astgrep_core::Language,
         sql_stmt_boundary: bool,
     ) -> Vec<(usize, usize)> {
         use regex::Regex;

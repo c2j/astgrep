@@ -59,7 +59,7 @@ impl OutputFormatter for MarkdownFormatter {
                     md.push_str(&format!("- **Fix:** {}\n", fix));
                 }
 
-                md.push_str("\n");
+                md.push('\n');
             }
         }
 

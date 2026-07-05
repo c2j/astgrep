@@ -196,15 +196,13 @@ impl ProgressTracker {
             }
         });
 
-        let tracker = Self {
+        Self {
             config,
             progress,
             event_sender,
             progress_bar: None,
             operation_times,
-        };
-
-        tracker
+        }
     }
 
     /// Initialize migration progress tracking

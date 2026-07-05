@@ -19,6 +19,12 @@ pub struct VariableDependencyGraph {
     pub propagators: Vec<crate::types::PropagatorPattern>,
 }
 
+impl Default for VariableDependencyGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VariableDependencyGraph {
     pub fn new() -> Self {
         Self {
@@ -54,7 +60,7 @@ impl VariableDependencyGraph {
     /// Record that an object's field is tainted by a source
     pub fn record_field_taint(&mut self, object: &str, field: &str, source: &str) {
         let key = format!("{}.{}", object, field);
-        let sources = self.field_taints.entry(key).or_insert_with(Vec::new);
+        let sources = self.field_taints.entry(key).or_default();
         if !sources.contains(&source.to_string()) {
             sources.push(source.to_string());
         }
@@ -133,10 +139,8 @@ impl VariableDependencyGraph {
         }
 
         // Check field-level taint for getter calls (e.g., e.getX())
-        if var.contains(".get") && var.ends_with("()") {
-            if self.is_getter_tainted(var, source_vars) {
-                return true;
-            }
+        if var.contains(".get") && var.ends_with("()") && self.is_getter_tainted(var, source_vars) {
+            return true;
         }
 
         // Check method calls on variables (e.g., sqlBuilder.toString())
@@ -453,9 +457,7 @@ impl VariableDependencyGraph {
                     // Extract $X (the collection/object before .forEach)
                     if let Some(for_each_pos) = line.find(".forEach") {
                         let before_for_each = &line[..for_each_pos];
-                        let parts: Vec<&str> = before_for_each
-                            .split(|c: char| c == '(' || c == ',' || c == ' ')
-                            .collect();
+                        let parts: Vec<&str> = before_for_each.split(['(', ',', ' ']).collect();
                         if let Some(collection) = parts.last() {
                             let collection = collection.trim();
 
@@ -463,9 +465,8 @@ impl VariableDependencyGraph {
                             if let Some(open_paren) = line[for_each_pos..].find('(') {
                                 let after_open = &line[for_each_pos + open_paren + 1..];
                                 // Look for pattern: (param) or param
-                                let param_candidates: Vec<&str> = after_open
-                                    .split(|c: char| c == '(' || c == ')' || c == ',' || c == '-')
-                                    .collect();
+                                let param_candidates: Vec<&str> =
+                                    after_open.split(['(', ')', ',', '-']).collect();
                                 for candidate in param_candidates {
                                     let candidate = candidate.trim();
                                     // Valid parameter: non-empty, starts with letter, not a keyword
@@ -507,11 +508,7 @@ impl VariableDependencyGraph {
                 // Handle both literal patterns (obj.setX) and metavariable patterns (obj.$SETTER)
                 let setter_pattern_opt = if let Some(set_pos) = pattern_text.find(".set") {
                     let after_set = &pattern_text[set_pos + 1..]; // Skip the dot, keep "set..."
-                    if let Some(paren_pos) = after_set.find('(') {
-                        Some(&after_set[..paren_pos]) // e.g., "setX"
-                    } else {
-                        None
-                    }
+                    after_set.find('(').map(|paren_pos| &after_set[..paren_pos])
                 } else if pattern_text.contains("$SETTER") {
                     // Pattern uses $SETTER metavariable, treat it as a wildcard setter pattern
                     Some("$SETTER")
@@ -535,9 +532,8 @@ impl VariableDependencyGraph {
                                 if actual_setter.starts_with("set") {
                                     // Extract object name (before .set)
                                     let before_setter = &line[..line_set_pos];
-                                    let obj_parts: Vec<&str> = before_setter
-                                        .split(|c: char| c == ' ' || c == '(' || c == '.')
-                                        .collect();
+                                    let obj_parts: Vec<&str> =
+                                        before_setter.split([' ', '(', '.']).collect();
                                     if let Some(obj_name) = obj_parts.last() {
                                         let obj_name = obj_name.trim();
 
@@ -572,9 +568,8 @@ impl VariableDependencyGraph {
                     if let Some(append_pos) = line.find(".append(") {
                         let before_append = &line[..append_pos];
                         // Extract builder name
-                        let builder_parts: Vec<&str> = before_append
-                            .split(|c: char| c == ' ' || c == '(' || c == '.' || c == ',')
-                            .collect();
+                        let builder_parts: Vec<&str> =
+                            before_append.split([' ', '(', '.', ',']).collect();
                         if let Some(builder_name) = builder_parts.last() {
                             let builder_name = builder_name.trim();
 
@@ -699,9 +694,7 @@ impl VariableDependencyGraph {
                 // Extract the identifier before the prefix in line
                 if let Some(prefix_pos) = line.find(prefix) {
                     let before_prefix = &line[..prefix_pos].trim();
-                    let parts: Vec<&str> = before_prefix
-                        .split(|c: char| c == '(' || c == ',' || c == ' ' || c == '.')
-                        .collect();
+                    let parts: Vec<&str> = before_prefix.split(['(', ',', ' ', '.']).collect();
                     if let Some(identifier) = parts.last() {
                         let identifier = identifier.trim();
                         if !identifier.is_empty() {
@@ -713,9 +706,7 @@ impl VariableDependencyGraph {
         }
 
         // Try to extract any identifier that could match
-        let parts: Vec<&str> = line
-            .split(|c: char| c == '(' || c == ',' || c == ' ')
-            .collect();
+        let parts: Vec<&str> = line.split(['(', ',', ' ']).collect();
         for part in parts {
             let part = part.trim().trim_end_matches('.').trim_end_matches(')');
             if !part.is_empty()
@@ -770,9 +761,7 @@ impl VariableDependencyGraph {
                     if args.trim().is_empty() || !args.contains(',') {
                         // Extract object name
                         let before_get = &line[..actual_pos];
-                        let parts: Vec<&str> = before_get
-                            .split(|c: char| c == '(' || c == ',' || c == ' ')
-                            .collect();
+                        let parts: Vec<&str> = before_get.split(['(', ',', ' ']).collect();
                         if let Some(obj_name) = parts.last() {
                             let obj_name = obj_name.trim();
                             if !obj_name.is_empty() && !obj_name.contains('"') {

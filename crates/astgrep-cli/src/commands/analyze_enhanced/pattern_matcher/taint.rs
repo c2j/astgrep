@@ -31,7 +31,7 @@ pub fn apply_simple_taint_analysis(
                 let finding = Finding {
                     rule_id: rule.id.clone(),
                     message: rule.message.clone(),
-                    severity: rule.severity.clone(),
+                    severity: rule.severity,
                     confidence: Confidence::High,
                     location: Location {
                         file: file_path.clone(),
@@ -206,7 +206,7 @@ pub fn apply_simple_taint_analysis(
             let finding = Finding {
                 rule_id: rule.id.clone(),
                 message: rule.message.clone(),
-                severity: rule.severity.clone(),
+                severity: rule.severity,
                 confidence: Confidence::Medium,
                 location: Location {
                     file: file_path.clone(),

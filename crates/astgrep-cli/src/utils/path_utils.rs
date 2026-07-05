@@ -24,6 +24,12 @@ pub enum Platform {
     Unknown,
 }
 
+impl Default for PathHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PathHandler {
     pub fn new() -> Self {
         let current_platform = detect_platform();
@@ -85,7 +91,7 @@ impl PathHandler {
         let separator = std::path::MAIN_SEPARATOR.to_string();
 
         // Replace both forward and backward slashes with platform separator
-        let normalized = path_str.replace('/', &separator).replace('\\', &separator);
+        let normalized = path_str.replace(['/', '\\'], &separator);
 
         PathBuf::from(normalized)
     }
@@ -162,7 +168,7 @@ impl PathHandler {
                     && path_str
                         .chars()
                         .nth(0)
-                        .map_or(false, |c| c.is_ascii_alphabetic())
+                        .is_some_and(|c| c.is_ascii_alphabetic())
                 {
                     continue;
                 }

@@ -55,7 +55,7 @@ async fn clone_repository(repo_url: &str, directory: &PathBuf) -> Result<()> {
     use std::process::Command;
 
     let output = Command::new("git")
-        .args(&["clone", repo_url, &directory.to_string_lossy()])
+        .args(["clone", repo_url, &directory.to_string_lossy()])
         .output()?;
 
     if !output.status.success() {
@@ -72,7 +72,7 @@ async fn update_existing_repository(directory: &PathBuf) -> Result<()> {
 
     // Check if there are local changes
     let status_output = Command::new("git")
-        .args(&["status", "--porcelain"])
+        .args(["status", "--porcelain"])
         .current_dir(directory)
         .output()?;
 
@@ -81,7 +81,7 @@ async fn update_existing_repository(directory: &PathBuf) -> Result<()> {
 
         // Stash local changes
         let stash_output = Command::new("git")
-            .args(&["stash", "push", "-m", "astgrep auto-stash before update"])
+            .args(["stash", "push", "-m", "astgrep auto-stash before update"])
             .current_dir(directory)
             .output()?;
 
@@ -95,7 +95,7 @@ async fn update_existing_repository(directory: &PathBuf) -> Result<()> {
 
     // Pull latest changes
     let pull_output = Command::new("git")
-        .args(&["pull", "origin", "main"])
+        .args(["pull", "origin", "main"])
         .current_dir(directory)
         .output()?;
 
@@ -104,7 +104,7 @@ async fn update_existing_repository(directory: &PathBuf) -> Result<()> {
 
         // Try with master branch if main fails
         let pull_master_output = Command::new("git")
-            .args(&["pull", "origin", "master"])
+            .args(["pull", "origin", "master"])
             .current_dir(directory)
             .output()?;
 
@@ -218,7 +218,7 @@ impl ValidationResult {
 pub fn check_git_availability() -> Result<()> {
     use std::process::Command;
 
-    let output = Command::new("git").args(&["--version"]).output();
+    let output = Command::new("git").args(["--version"]).output();
 
     match output {
         Ok(output) if output.status.success() => {
@@ -243,7 +243,7 @@ pub async fn get_repository_info(directory: &PathBuf) -> Result<RepositoryInfo> 
 
     // Get remote URL
     let remote_output = Command::new("git")
-        .args(&["remote", "get-url", "origin"])
+        .args(["remote", "get-url", "origin"])
         .current_dir(directory)
         .output()?;
 
@@ -257,7 +257,7 @@ pub async fn get_repository_info(directory: &PathBuf) -> Result<RepositoryInfo> 
 
     // Get current branch
     let branch_output = Command::new("git")
-        .args(&["branch", "--show-current"])
+        .args(["branch", "--show-current"])
         .current_dir(directory)
         .output()?;
 
@@ -271,7 +271,7 @@ pub async fn get_repository_info(directory: &PathBuf) -> Result<RepositoryInfo> 
 
     // Get last commit
     let commit_output = Command::new("git")
-        .args(&["log", "-1", "--format=%H %s"])
+        .args(["log", "-1", "--format=%H %s"])
         .current_dir(directory)
         .output()?;
 
@@ -285,7 +285,7 @@ pub async fn get_repository_info(directory: &PathBuf) -> Result<RepositoryInfo> 
 
     // Check for local changes
     let status_output = Command::new("git")
-        .args(&["status", "--porcelain"])
+        .args(["status", "--porcelain"])
         .current_dir(directory)
         .output()?;
 

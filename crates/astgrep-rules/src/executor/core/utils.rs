@@ -124,9 +124,7 @@ impl AdvancedRuleExecutor {
             if parts.len() >= 2 {
                 let param_name = parts[1].trim();
                 // Remove trailing comma, closing paren, or other punctuation if present
-                let param_name = param_name
-                    .trim_end_matches(|c: char| c == ',' || c == ')' || c == '{')
-                    .to_string();
+                let param_name = param_name.trim_end_matches([',', ')', '{']).to_string();
 
                 eprintln!("[DEBUG] Extracted param name: '{}'", param_name);
 
@@ -193,7 +191,7 @@ impl AdvancedRuleExecutor {
         // Recursively search children
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                if let Some(found) = self.find_node_by_type_and_text(&*child, node_type, text) {
+                if let Some(found) = self.find_node_by_type_and_text(child, node_type, text) {
                     return Some(found);
                 }
             }
@@ -231,7 +229,7 @@ impl AdvancedRuleExecutor {
 
                 // Look for pattern: "var = <node_text>" or "Type var = <node_text>"
                 // Find where the node text appears in the line
-                if let Some(node_pos) = line_text.find(&node_text) {
+                if let Some(node_pos) = line_text.find(node_text) {
                     let before_node = &line_text[..node_pos];
                     let after_node = &line_text[node_pos + node_text.len()..];
                     eprintln!("[DEBUG] Text before node: '{}'", before_node);
@@ -498,9 +496,7 @@ impl AdvancedRuleExecutor {
                         if let Some(last_part) = parts.last() {
                             let var_name = last_part.trim().to_string();
                             // Remove any trailing characters
-                            let var_name = var_name
-                                .trim_end_matches(|c: char| c == ';' || c == ' ')
-                                .to_string();
+                            let var_name = var_name.trim_end_matches([';', ' ']).to_string();
 
                             if !var_name.is_empty()
                                 && !var_name.contains("(")
@@ -522,20 +518,22 @@ impl AdvancedRuleExecutor {
                     // This might be a static block, the assignment could be in this or next lines
                     // For simplicity, check if the matched expression is in a line with assignment
                     for (i, line) in source_text.lines().enumerate() {
-                        if i >= start_line.saturating_sub(3) && i <= start_line + 1 {
-                            if line.contains(matched_text) && line.contains('=') {
-                                if let Some(eq_pos) = line.find('=') {
-                                    let before_eq = &line[..eq_pos].trim();
-                                    let parts: Vec<&str> = before_eq.split_whitespace().collect();
-                                    if let Some(last_part) = parts.last() {
-                                        let var_name = last_part.trim().to_string();
-                                        if !var_name.is_empty() && !var_name.contains("(") {
-                                            eprintln!(
+                        if i >= start_line.saturating_sub(3)
+                            && i <= start_line + 1
+                            && line.contains(matched_text)
+                            && line.contains('=')
+                        {
+                            if let Some(eq_pos) = line.find('=') {
+                                let before_eq = &line[..eq_pos].trim();
+                                let parts: Vec<&str> = before_eq.split_whitespace().collect();
+                                if let Some(last_part) = parts.last() {
+                                    let var_name = last_part.trim().to_string();
+                                    if !var_name.is_empty() && !var_name.contains("(") {
+                                        eprintln!(
                                                 "[DEBUG] Extracted static block assignment target: '{}'",
                                                 var_name
                                             );
-                                            return Some(var_name);
-                                        }
+                                        return Some(var_name);
                                     }
                                 }
                             }
@@ -899,12 +897,11 @@ impl AdvancedRuleExecutor {
         ];
 
         // Check if word appears at the start
-        if text.starts_with(word) {
-            if text.len() == word.len()
-                || delimiters.contains(&text.chars().nth(word.len()).unwrap_or(' '))
-            {
-                return true;
-            }
+        if text.starts_with(word)
+            && (text.len() == word.len()
+                || delimiters.contains(&text.chars().nth(word.len()).unwrap_or(' ')))
+        {
+            return true;
         }
 
         // Check if word appears in the middle or end

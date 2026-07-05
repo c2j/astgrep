@@ -478,7 +478,7 @@ impl TestCaseMigrator {
         let language = self
             .config
             .language_mapping
-            .detect_language(&file_path.to_path_buf(), content.as_deref());
+            .detect_language(file_path, content.as_deref());
 
         // Check if it's a test case based on filename patterns
         if let Some(filename) = file_path.file_stem().and_then(|s| s.to_str()) {
@@ -787,14 +787,14 @@ impl TestCaseMigrator {
         for (language, count) in &result.language_distribution {
             report.push_str(&format!("- **{}**: {} test cases\n", language, count));
         }
-        report.push_str("\n");
+        report.push('\n');
 
         // Test type distribution
         report.push_str("## Test Type Distribution\n\n");
         for (test_type, count) in &result.type_distribution {
             report.push_str(&format!("- **{}**: {} test cases\n", test_type, count));
         }
-        report.push_str("\n");
+        report.push('\n');
 
         // Warnings
         if !result.warnings.is_empty() {
@@ -802,7 +802,7 @@ impl TestCaseMigrator {
             for warning in &result.warnings {
                 report.push_str(&format!("- {}\n", warning));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         // Failed migrations

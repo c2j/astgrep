@@ -4,8 +4,8 @@
 //! that mirrors the target language's AST, enabling proper structural matching
 //! instead of text-token matching.
 
-use astgrep_core::{Language, Result};
 use astgrep_ast::UniversalNode;
+use astgrep_core::{Language, Result};
 use std::collections::HashMap;
 use tree_sitter::{Node, Parser, Tree};
 
@@ -128,7 +128,7 @@ fn is_trivial_node(node: &Node) -> bool {
         || node.is_extra()
         || (node.child_count() == 0
             && kind.len() <= 2
-            && !kind.chars().next().map_or(false, |c| c.is_alphanumeric())
+            && !kind.chars().next().is_some_and(|c| c.is_alphanumeric())
             && !BINARY_OPERATORS.contains(&kind))
 }
 
@@ -207,9 +207,8 @@ impl PatternTreeParser {
 
         // Route to ogsql-parser for patterns with metadata binding (@) or
         // PL/pgSQL syntax (:= assignment, multi-statement with ;).
-        let needs_ogsql = trimmed.contains('@')
-            || trimmed.contains(":=")
-            || trimmed.matches(';').count() > 1;
+        let needs_ogsql =
+            trimmed.contains('@') || trimmed.contains(":=") || trimmed.matches(';').count() > 1;
         if matches!(language, Language::Sql) && needs_ogsql {
             return self.parse_ogsql(&preprocessed, &meta_map);
         }
@@ -237,22 +236,18 @@ impl PatternTreeParser {
         let trimmed = preprocessed.trim();
         if let Some(kind) = meta_map.get(trimmed) {
             return Ok(match kind {
-                PlaceholderKind::Metavar { name, bind_attr } => {
-                    PatternTree::Metavar {
-                        name: name.clone(),
-                        bind_attr: bind_attr.clone(),
-                    }
-                }
+                PlaceholderKind::Metavar { name, bind_attr } => PatternTree::Metavar {
+                    name: name.clone(),
+                    bind_attr: bind_attr.clone(),
+                },
                 PlaceholderKind::Ellipsis => PatternTree::Ellipsis,
                 PlaceholderKind::EllipsisMetavar(name) => {
                     PatternTree::EllipsisMetavar { name: name.clone() }
                 }
-                PlaceholderKind::TypedMetavar { name, type_name } => {
-                    PatternTree::TypedMetavar {
-                        name: name.clone(),
-                        type_name: type_name.clone(),
-                    }
-                }
+                PlaceholderKind::TypedMetavar { name, type_name } => PatternTree::TypedMetavar {
+                    name: name.clone(),
+                    type_name: type_name.clone(),
+                },
             });
         }
 
@@ -261,7 +256,9 @@ impl PatternTreeParser {
 
         // If direct parsing fails (multi-statement PL/pgSQL patterns with ...),
         // wrap in a DO block and retry so ogsql-parser handles PL/pgSQL syntax.
-        let nodes = if nodes.is_empty() && (preprocessed.contains(":=") || preprocessed.matches(';').count() > 1) {
+        let nodes = if nodes.is_empty()
+            && (preprocessed.contains(":=") || preprocessed.matches(';').count() > 1)
+        {
             let wrapped = format!("DO $$ BEGIN {} END $$;", preprocessed);
             crate::adapter::ogsql::OgsqlAdapter::parse_to_universal(&wrapped)
                 .unwrap_or_else(|_| Vec::new())
@@ -285,8 +282,7 @@ impl PatternTreeParser {
         let root_kind = root.node_type.to_string();
         // For DO-wrapped patterns, convert_do_block produces a block_statement
         // directly with the body statements as children.
-        let has_block_body = (root_kind == "block_statement"
-            || root_kind == "do_statement")
+        let has_block_body = (root_kind == "block_statement" || root_kind == "do_statement")
             && root.children.len() > 1;
 
         if has_block_body {
@@ -295,14 +291,20 @@ impl PatternTreeParser {
             let mut seen = std::collections::HashSet::new();
             Self::collect_ogsql_metavars(root, meta_map, &mut mv_kids, &mut seen);
             let mut tree = Self::universal_to_pattern_tree(root, meta_map);
-            if let PatternTree::Node { ref mut children, .. } = tree {
+            if let PatternTree::Node {
+                ref mut children, ..
+            } = tree
+            {
                 if !mv_kids.is_empty() {
-                    children.insert(0, PatternTree::Node {
-                        kind: "_ogsql_bind".to_string(),
-                        children: mv_kids,
-                        text: None,
-                        constraints: Vec::new(),
-                    });
+                    children.insert(
+                        0,
+                        PatternTree::Node {
+                            kind: "_ogsql_bind".to_string(),
+                            children: mv_kids,
+                            text: None,
+                            constraints: Vec::new(),
+                        },
+                    );
                 }
                 children.insert(0, PatternTree::Ellipsis);
                 children.push(PatternTree::Ellipsis);
@@ -314,12 +316,7 @@ impl PatternTreeParser {
         let mut metavar_children = Vec::new();
         let mut seen_pairs: std::collections::HashSet<(String, String)> =
             std::collections::HashSet::new();
-        Self::collect_ogsql_metavars(
-            &nodes[0],
-            meta_map,
-            &mut metavar_children,
-            &mut seen_pairs,
-        );
+        Self::collect_ogsql_metavars(&nodes[0], meta_map, &mut metavar_children, &mut seen_pairs);
 
         let mut constraints: Vec<(String, String)> = Vec::new();
         Self::collect_ogsql_attr_constraints(&nodes[0], meta_map, &mut constraints);
@@ -356,28 +353,26 @@ impl PatternTreeParser {
         // Check node's text
         if let Some(ref text) = node.text {
             let trimmed = text.trim().to_string();
-            if let Some(kind) = meta_map.get(&trimmed) {
-                if let PlaceholderKind::Metavar { name, bind_attr } = kind {
-                    let inferred = if bind_attr.is_none() {
-                        let mut found = None;
-                        for (k, v) in &node.attributes {
-                            if v.as_str() == trimmed.as_str() {
-                                found = Some(k.clone());
-                                break;
-                            }
+            if let Some(PlaceholderKind::Metavar { name, bind_attr }) = meta_map.get(&trimmed) {
+                let inferred = if bind_attr.is_none() {
+                    let mut found = None;
+                    for (k, v) in &node.attributes {
+                        if v.as_str() == trimmed.as_str() {
+                            found = Some(k.clone());
+                            break;
                         }
-                        found
-                    } else {
-                        None
-                    };
-                    let final_attr = bind_attr.clone().or(inferred);
-                    if let Some(attr) = final_attr {
-                        if seen_pairs.insert((name.clone(), attr.clone())) {
-                            out.push(PatternTree::Metavar {
-                                name: name.clone(),
-                                bind_attr: Some(attr),
-                            });
-                        }
+                    }
+                    found
+                } else {
+                    None
+                };
+                let final_attr = bind_attr.clone().or(inferred);
+                if let Some(attr) = final_attr {
+                    if seen_pairs.insert((name.clone(), attr.clone())) {
+                        out.push(PatternTree::Metavar {
+                            name: name.clone(),
+                            bind_attr: Some(attr),
+                        });
                     }
                 }
             }
@@ -407,11 +402,21 @@ impl PatternTreeParser {
         out: &mut Vec<(String, String)>,
     ) {
         for (key, value) in &node.attributes {
-            if meta_map.contains_key(value) { continue; }
-            if key == "has_order_by" || key == "has_limit" || key == "has_returning"
-                || key == "set_operation" || key == "distinct" || key == "has_group_by"
-                || key == "has_having" || key == "has_cte" || key == "plan_hints"
-            { continue; }
+            if meta_map.contains_key(value) {
+                continue;
+            }
+            if key == "has_order_by"
+                || key == "has_limit"
+                || key == "has_returning"
+                || key == "set_operation"
+                || key == "distinct"
+                || key == "has_group_by"
+                || key == "has_having"
+                || key == "has_cte"
+                || key == "plan_hints"
+            {
+                continue;
+            }
             out.push((key.clone(), value.clone()));
         }
         for child in &node.children {
@@ -476,19 +481,33 @@ impl PatternTreeParser {
         // Collect per-node literal attribute constraints (non-placeholder attrs).
         let mut node_constraints: Vec<(String, String)> = Vec::new();
         for (key, value) in &node.attributes {
-            if meta_map.contains_key(value) { continue; }
-            if value.contains("__mg_") { continue; }
-            if key == "has_order_by" || key == "has_limit" || key == "has_returning"
-                || key == "set_operation" || key == "distinct" || key == "has_group_by"
-                || key == "has_having" || key == "has_cte" || key == "plan_hints"
+            if meta_map.contains_key(value) {
+                continue;
+            }
+            if value.contains("__mg_") {
+                continue;
+            }
+            if key == "has_order_by"
+                || key == "has_limit"
+                || key == "has_returning"
+                || key == "set_operation"
+                || key == "distinct"
+                || key == "has_group_by"
+                || key == "has_having"
+                || key == "has_cte"
+                || key == "plan_hints"
                 || key == "pl_block_type"
-            { continue; }
+            {
+                continue;
+            }
             node_constraints.push((key.clone(), value.clone()));
         }
         // Count INTO_TARGET children to distinguish 1-col from N-col SELECTs
-        let into_target_count = node.children.iter()
+        let into_target_count = node
+            .children
+            .iter()
             .filter(|c| c.node_type.to_string() == "sql_expression")
-            .filter(|c| c.attributes.get("target_var").is_some())
+            .filter(|c| c.attributes.contains_key("target_var"))
             .count();
         if into_target_count > 0 {
             node_constraints.push(("into_target_count".into(), into_target_count.to_string()));
@@ -510,7 +529,12 @@ impl PatternTreeParser {
         node: &UniversalNode,
         meta_map: &HashMap<String, PlaceholderKind>,
     ) -> PatternTree {
-        if let PatternTree::Metavar { ref name, ref bind_attr, .. } = &result {
+        if let PatternTree::Metavar {
+            ref name,
+            ref bind_attr,
+            ..
+        } = &result
+        {
             if bind_attr.is_none() {
                 for (key, value) in &node.attributes {
                     if let Some(PlaceholderKind::Metavar { name: pn, .. }) = meta_map.get(value) {
@@ -529,7 +553,7 @@ impl PatternTreeParser {
 
     fn parse_with_tree_sitter(&mut self, source: &str, language: Language) -> Result<Tree> {
         let parser = self.parsers.get_mut(&language).ok_or_else(|| {
-            astgrep_core::AnalysisError::parse_error(&format!(
+            astgrep_core::AnalysisError::parse_error(format!(
                 "No tree-sitter parser for {:?}",
                 language
             ))
@@ -547,13 +571,14 @@ impl PatternTreeParser {
             return Ok(tree);
         }
 
-        Err(astgrep_core::AnalysisError::parse_error(&format!(
+        Err(astgrep_core::AnalysisError::parse_error(format!(
             "Failed to parse pattern with tree-sitter: {:?}",
             source
         )))
     }
 
     /// Wrap a pattern in minimal valid context for the language.
+    #[allow(dead_code)]
     fn wrap_in_context(&self, pattern: &str, language: Language) -> String {
         Self::wrap_in_context_static(pattern, language)
     }
@@ -569,9 +594,8 @@ impl PatternTreeParser {
                     || trimmed.starts_with("enum")
                     || trimmed.starts_with("record")
                     || trimmed.starts_with("@interface")
+                    || Self::looks_like_java_method_decl(pattern)
                 {
-                    format!("class __Wrap__ {{ {} }}", pattern)
-                } else if Self::looks_like_java_method_decl(pattern) {
                     format!("class __Wrap__ {{ {} }}", pattern)
                 } else {
                     format!("class __Wrap__ {{ void m() {{ {} }} }}", pattern)
@@ -738,7 +762,10 @@ impl PatternTreeParser {
         // Check if this entire node text is a metavar placeholder
         if let Some(kind) = meta_map.get(text) {
             return match kind {
-                PlaceholderKind::Metavar { name, .. } => PatternTree::Metavar { name: name.clone(), bind_attr: None },
+                PlaceholderKind::Metavar { name, .. } => PatternTree::Metavar {
+                    name: name.clone(),
+                    bind_attr: None,
+                },
                 PlaceholderKind::Ellipsis => PatternTree::Ellipsis,
                 PlaceholderKind::EllipsisMetavar(name) => {
                     PatternTree::EllipsisMetavar { name: name.clone() }
@@ -783,7 +810,10 @@ impl PatternTreeParser {
         {
             if let Some(kind) = meta_map.get(text) {
                 return match kind {
-                    PlaceholderKind::Metavar { name, .. } => PatternTree::Metavar { name: name.clone(), bind_attr: None },
+                    PlaceholderKind::Metavar { name, .. } => PatternTree::Metavar {
+                        name: name.clone(),
+                        bind_attr: None,
+                    },
                     PlaceholderKind::Ellipsis => PatternTree::Ellipsis,
                     PlaceholderKind::EllipsisMetavar(name) => {
                         PatternTree::EllipsisMetavar { name: name.clone() }
@@ -808,9 +838,10 @@ impl PatternTreeParser {
             if let Some(inner) = unquoted {
                 if let Some(kind) = meta_map.get(inner) {
                     return match kind {
-                        PlaceholderKind::Metavar { name, bind_attr } => {
-                            PatternTree::Metavar { name: name.clone(), bind_attr: bind_attr.clone() }
-                        }
+                        PlaceholderKind::Metavar { name, bind_attr } => PatternTree::Metavar {
+                            name: name.clone(),
+                            bind_attr: bind_attr.clone(),
+                        },
                         PlaceholderKind::Ellipsis => PatternTree::Ellipsis,
                         PlaceholderKind::EllipsisMetavar(name) => {
                             PatternTree::EllipsisMetavar { name: name.clone() }
@@ -854,10 +885,16 @@ impl Default for PatternTreeParser {
 /// What kind of placeholder a preprocessed token represents.
 #[derive(Debug, Clone, PartialEq)]
 enum PlaceholderKind {
-    Metavar { name: String, bind_attr: Option<String> },
+    Metavar {
+        name: String,
+        bind_attr: Option<String>,
+    },
     Ellipsis,
     EllipsisMetavar(String),
-    TypedMetavar { name: String, type_name: String },
+    TypedMetavar {
+        name: String,
+        type_name: String,
+    },
 }
 
 /// Preprocess a semgrep pattern by replacing metavariables and ellipsis
@@ -928,7 +965,13 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                             // (TYPE $NAME) → TypedMetavar
                             let placeholder_type: String = type_name
                                 .chars()
-                                .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+                                .map(|c| {
+                                    if c.is_ascii_alphanumeric() || c == '_' {
+                                        c
+                                    } else {
+                                        '_'
+                                    }
+                                })
                                 .collect();
                             let placeholder = format!(
                                 "{}{}{}_t_{}{}",
@@ -960,7 +1003,9 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                 // Collect the name after $...
                 let mut name = String::new();
                 let mut j = i + 4;
-            while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '_' || chars[j] == '@') {
+                while j < chars.len()
+                    && (chars[j].is_alphanumeric() || chars[j] == '_' || chars[j] == '@')
+                {
                     name.push(chars[j]);
                     j += 1;
                 }
@@ -976,7 +1021,9 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
             // Regular metavariable: $NAME
             let mut name = String::new();
             let mut j = i + 1;
-            while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '_' || chars[j] == '@') {
+            while j < chars.len()
+                && (chars[j].is_alphanumeric() || chars[j] == '_' || chars[j] == '@')
+            {
                 name.push(chars[j]);
                 j += 1;
             }
@@ -998,7 +1045,13 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                         let type_name: String = chars[type_start..k].iter().collect();
                         let placeholder_type: String = type_name
                             .chars()
-                            .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+                            .map(|c| {
+                                if c.is_ascii_alphanumeric() || c == '_' {
+                                    c
+                                } else {
+                                    '_'
+                                }
+                            })
                             .collect();
                         let placeholder = format!(
                             "{}{}{}_t_{}{}",
@@ -1027,7 +1080,10 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                 let placeholder = format!("{}{}{}", MG_PREFIX, bind_name, MG_SUFFIX);
                 meta_map.insert(
                     placeholder.clone(),
-                    PlaceholderKind::Metavar { name: bind_name.clone(), bind_attr: bind_attr.clone() },
+                    PlaceholderKind::Metavar {
+                        name: bind_name.clone(),
+                        bind_attr: bind_attr.clone(),
+                    },
                 );
                 result.push_str(&placeholder);
                 i = j;
@@ -1065,11 +1121,7 @@ fn preprocess_pattern(pattern: &str) -> (String, HashMap<String, PlaceholderKind
                     }
                 }
                 '{' => brace_depth += 1,
-                '}' => {
-                    if brace_depth > 0 {
-                        brace_depth -= 1
-                    }
-                }
+                '}' if brace_depth > 0 => brace_depth -= 1,
                 _ => {}
             }
             result.push(chars[i]);
@@ -1097,7 +1149,9 @@ mod tests {
         assert!(result.contains("__mg_QUERY__"));
         assert!(result.contains(".execute("));
         assert_eq!(map.len(), 2);
-        assert!(matches!(map.get("__mg_X__"), Some(PlaceholderKind::Metavar { name, bind_attr: None }) if name == "X"));
+        assert!(
+            matches!(map.get("__mg_X__"), Some(PlaceholderKind::Metavar { name, bind_attr: None }) if name == "X")
+        );
         assert!(
             matches!(map.get("__mg_QUERY__"), Some(PlaceholderKind::Metavar { name, bind_attr: None }) if name == "QUERY")
         );
@@ -1291,7 +1345,10 @@ mod tests {
     #[test]
     fn test_bash_fragment_gets_wrapped() {
         let result = PatternTreeParser::wrap_in_context_static("echo hello", Language::Bash);
-        assert!(result.contains("__wrap__()"), "fragment should be wrapped in function");
+        assert!(
+            result.contains("__wrap__()"),
+            "fragment should be wrapped in function"
+        );
         assert!(result.contains("echo hello"));
     }
 
@@ -1300,7 +1357,10 @@ mod tests {
         let pattern = "#!/bin/bash\necho hello";
         let result = PatternTreeParser::wrap_in_context_static(pattern, Language::Bash);
         // Should NOT double-wrap
-        assert_eq!(result, pattern, "shebang pattern should pass through unchanged");
+        assert_eq!(
+            result, pattern,
+            "shebang pattern should pass through unchanged"
+        );
     }
 
     #[test]
@@ -1308,7 +1368,10 @@ mod tests {
         let mut parser = PatternTreeParser::new().unwrap();
         let tree = parser.parse("echo hello", Language::Bash).unwrap();
         // Should parse successfully
-        assert!(tree.has_wildcards() == false, "simple command should have no wildcards");
+        assert!(
+            tree.has_wildcards() == false,
+            "simple command should have no wildcards"
+        );
     }
 
     #[test]
@@ -1316,6 +1379,9 @@ mod tests {
         let mut parser = PatternTreeParser::new().unwrap();
         let tree = parser.parse("echo $X", Language::Bash).unwrap();
         // Should parse with metavariable
-        assert!(tree.has_wildcards(), "pattern with $X should have wildcards");
+        assert!(
+            tree.has_wildcards(),
+            "pattern with $X should have wildcards"
+        );
     }
 }

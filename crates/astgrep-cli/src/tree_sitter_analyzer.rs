@@ -43,7 +43,7 @@ impl TreeSitterAnalyzer {
                     let finding = Finding {
                         rule_id: rule_id.to_string(),
                         message: message.to_string(),
-                        severity: severity.clone(),
+                        severity: *severity,
                         confidence: Confidence::High, // Tree-sitter gives us high confidence
                         location: Location {
                             file: file_path.clone(),

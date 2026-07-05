@@ -143,7 +143,7 @@ impl AdvancedRuleExecutor {
         let flow_goes_through_array_index = |source: &TaintMatch, sink: &TaintMatch| -> bool {
             if let Some(ref source_var) = source.var_name {
                 if let Some(sink_text) = sink.node.text() {
-                    if let Some(sink_var) = extract_sink_arg(&sink_text) {
+                    if let Some(sink_var) = extract_sink_arg(sink_text) {
                         let lines: Vec<&str> = source_text.lines().collect();
                         if let Some((sl, _, _, _)) = sink.node.location() {
                             if sl > 0 && sl <= lines.len() {
@@ -153,8 +153,8 @@ impl AdvancedRuleExecutor {
                                         || line.starts_with(&format!("{}=", sink_var))
                                     {
                                         let rhs = line
-                                            .splitn(2, '=')
-                                            .nth(1)
+                                            .split_once('=')
+                                            .map(|x| x.1)
                                             .unwrap_or("")
                                             .trim()
                                             .trim_end_matches(';');
@@ -212,7 +212,7 @@ impl AdvancedRuleExecutor {
                     let sink_text = sink.node.text().unwrap_or_default();
                     if let Some(ref source_var) = source.var_name {
                         if assume_safe_booleans
-                            && self.is_variable_in_safe_boolean_context(source_var, &sink_text)
+                            && self.is_variable_in_safe_boolean_context(source_var, sink_text)
                         {
                             eprintln!(
                                 "[DEBUG] Filtering env flow: '{}' in safe boolean context",
@@ -221,7 +221,7 @@ impl AdvancedRuleExecutor {
                             return false;
                         }
                         if assume_safe_numbers
-                            && self.is_variable_in_safe_number_context(source_var, &sink_text)
+                            && self.is_variable_in_safe_number_context(source_var, sink_text)
                         {
                             eprintln!(
                                 "[DEBUG] Filtering env flow: '{}' in safe number context",
@@ -237,7 +237,7 @@ impl AdvancedRuleExecutor {
             // Merge: take union of both, dedup by sink location
             // Heuristic flows go first (already filtered for safe contexts)
             // Env flows are added if their sink location isn't already covered
-            let env_count = filtered_env.len();
+            let _env_count = filtered_env.len();
             let mut merged: Vec<(TaintMatch, TaintMatch)> = heuristic_flows;
             let mut added_from_env = 0;
             for flow in filtered_env {
@@ -652,7 +652,7 @@ impl AdvancedRuleExecutor {
             for pattern_str in &simple_patterns {
                 eprintln!("[DEBUG] find_taint_sinks: trying pattern '{}'", pattern_str);
                 let matches = self.find_sink_matches_for_pattern(
-                    &pattern_str,
+                    pattern_str,
                     ast,
                     source_text,
                     &sink_pattern.focus_metavariables,
@@ -1161,7 +1161,7 @@ impl AdvancedRuleExecutor {
                             let found = env
                                 .tainted_vars()
                                 .iter()
-                                .find(|tv| contains_var_reference(&sink_text, tv))
+                                .find(|tv| contains_var_reference(sink_text, tv))
                                 .cloned();
                             (found.is_some(), found.unwrap_or_default())
                         };
@@ -1366,7 +1366,7 @@ impl AdvancedRuleExecutor {
                         // Also check if the sink is accessing a numeric field
                         if taint_assume_safe_numbers {
                             if let Some(sink_field) =
-                                self.extract_field_from_sink(&sink.node.text().unwrap_or_default())
+                                self.extract_field_from_sink(sink.node.text().unwrap_or_default())
                             {
                                 if self.is_numeric_field(&sink_field, source_text) {
                                     eprintln!("[DEBUG] Skipping dataflow: sink field '{}' is numeric (taint_assume_safe_numbers)", sink_field);
@@ -1446,7 +1446,7 @@ impl AdvancedRuleExecutor {
                     // Find corresponding source and sink matches
                     for source in sources {
                         for sink in sinks {
-                            if self.is_flow_matching(&flow, source, sink) {
+                            if self.is_flow_matching(flow, source, sink) {
                                 flows.push((source.clone(), sink.clone()));
                             }
                         }
@@ -1473,7 +1473,7 @@ impl AdvancedRuleExecutor {
 
         // When taint_assume_safe_booleans is true, check if the variable is used in safe boolean contexts
         if taint_assume_safe_booleans
-            && self.is_variable_in_safe_boolean_context(var_name, &sink_text)
+            && self.is_variable_in_safe_boolean_context(var_name, sink_text)
         {
             eprintln!(
                 "[DEBUG] Variable '{}' in safe boolean context, not flowing",
@@ -1483,8 +1483,7 @@ impl AdvancedRuleExecutor {
         }
 
         // When taint_assume_safe_numbers is true, check if the variable is used in safe numeric contexts
-        if taint_assume_safe_numbers
-            && self.is_variable_in_safe_number_context(var_name, &sink_text)
+        if taint_assume_safe_numbers && self.is_variable_in_safe_number_context(var_name, sink_text)
         {
             eprintln!(
                 "[DEBUG] Variable '{}' in safe number context, not flowing",
@@ -1496,7 +1495,7 @@ impl AdvancedRuleExecutor {
         // When taint_assume_safe_numbers is true, also check if the sink is accessing a numeric field
         // This handles cases like "sink(this.y)" where "y" is an "int" field
         if taint_assume_safe_numbers {
-            if let Some(sink_field) = self.extract_field_from_sink(&sink_text) {
+            if let Some(sink_field) = self.extract_field_from_sink(sink_text) {
                 if self.is_numeric_field(&sink_field, source_text) {
                     eprintln!("[DEBUG] Sink field '{}' is numeric, not flowing (taint_assume_safe_numbers)", sink_field);
                     return false;
@@ -1505,14 +1504,14 @@ impl AdvancedRuleExecutor {
         }
 
         // When taint_only_propagate_through_assignments is true, check if there's a direct assignment chain
-        if taint_only_propagate_through_assignments {
-            if !self.is_direct_assignment_chain(var_name, &sink_text) {
-                eprintln!(
-                    "[DEBUG] Variable '{}' not flowing through direct assignment chain",
-                    var_name
-                );
-                return false;
-            }
+        if taint_only_propagate_through_assignments
+            && !self.is_direct_assignment_chain(var_name, sink_text)
+        {
+            eprintln!(
+                "[DEBUG] Variable '{}' not flowing through direct assignment chain",
+                var_name
+            );
+            return false;
         }
 
         // Check if source variable directly appears in sink node
@@ -1528,11 +1527,11 @@ impl AdvancedRuleExecutor {
         }
 
         // Case 2: var_name is "this.x", sink contains "x"
-        if var_name.starts_with("this.") {
-            let field_name = &var_name[5..]; // Remove "this." prefix
-                                             // Check if the field name appears as a standalone variable in the sink
-                                             // We need to be careful to match whole words only
-            if self.contains_whole_word(&sink_text, field_name) {
+        if let Some(field_name) = var_name.strip_prefix("this.") {
+            // Remove "this." prefix
+            // Check if the field name appears as a standalone variable in the sink
+            // We need to be careful to match whole words only
+            if self.contains_whole_word(sink_text, field_name) {
                 return true;
             }
         }
@@ -1703,7 +1702,7 @@ impl AdvancedRuleExecutor {
 
         // Check if the variable is used in a String.format or similar complex expression
         // These are NOT direct assignments
-        if sink_text.contains(&format!("String.format(",)) && sink_text.contains(var_name) {
+        if sink_text.contains(&"String.format(".to_string()) && sink_text.contains(var_name) {
             // If the variable is inside String.format, it's not a direct assignment
             return false;
         }
@@ -1781,7 +1780,7 @@ impl AdvancedRuleExecutor {
         } else {
             // Fallback: compare by description text
             if let Some(source_text) = source.node.text() {
-                flow.source.description.contains(&source_text)
+                flow.source.description.contains(source_text)
                     || source_text.contains(&flow.source.description)
             } else {
                 false
@@ -1795,7 +1794,7 @@ impl AdvancedRuleExecutor {
             } else {
                 // Fallback: compare by description text
                 if let Some(sink_text) = sink.node.text() {
-                    flow.sink.description.contains(&sink_text)
+                    flow.sink.description.contains(sink_text)
                         || sink_text.contains(&flow.sink.description)
                 } else {
                     false
@@ -1914,23 +1913,21 @@ impl AdvancedRuleExecutor {
                             let param_words: Vec<&str> = param.split_whitespace().collect();
                             if let Some(last_word) = param_words.last() {
                                 if *last_word == var_name {
-                                    let start_check = if i > 3 { i - 3 } else { 0 };
+                                    let start_check = i.saturating_sub(3);
                                     for j in start_check..=i {
                                         let check_line = lines[j];
-                                        if check_line.contains("@RequestParam")
+                                        if (check_line.contains("@RequestParam")
                                             || check_line.contains("@PathVariable")
                                             || check_line.contains("@RequestBody")
                                             || check_line.contains("@RequestHeader")
-                                            || check_line.contains("@CookieValue")
-                                        {
-                                            if j == i
+                                            || check_line.contains("@CookieValue"))
+                                            && (j == i
                                                 || (j < i
                                                     && lines[j + 1..=i]
                                                         .join(" ")
-                                                        .contains(var_name))
-                                            {
-                                                return true;
-                                            }
+                                                        .contains(var_name)))
+                                        {
+                                            return true;
                                         }
                                     }
                                 }

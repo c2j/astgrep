@@ -68,9 +68,9 @@ impl OutputFormatter for SemgrepFormatter {
                 let file_path = finding.location.file.to_string_lossy().to_string();
                 findings_by_file_and_rule
                     .entry(file_path)
-                    .or_insert_with(std::collections::HashMap::new)
+                    .or_default()
                     .entry(finding.rule_id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(finding);
             }
 

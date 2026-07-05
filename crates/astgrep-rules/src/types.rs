@@ -13,17 +13,13 @@ use std::collections::HashMap;
 /// Rule execution mode
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum RuleMode {
     /// Standard pattern matching mode
+    #[default]
     Search,
     /// Taint analysis mode (Semgrep compatible)
     Taint,
-}
-
-impl Default for RuleMode {
-    fn default() -> Self {
-        RuleMode::Search
-    }
 }
 
 /// A complete rule definition
@@ -137,28 +133,26 @@ impl Rule {
 
     /// Get metadata value as string (for backward compatibility)
     pub fn get_metadata_string(&self, key: &str) -> Option<String> {
-        self.metadata.get(key).and_then(|v| {
+        self.metadata.get(key).map(|v| {
             match v {
-                Value::String(s) => Some(s.clone()),
+                Value::String(s) => s.clone(),
                 Value::Sequence(arr) => {
                     // Convert array to comma-separated string
-                    Some(
-                        arr.iter()
-                            .filter_map(|item| item.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", "),
-                    )
+                    arr.iter()
+                        .filter_map(|item| item.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 }
                 Value::Mapping(map) => {
                     // Convert mapping to a simple representation
-                    Some(format!("{:?}", map))
+                    format!("{:?}", map)
                 }
-                Value::Number(n) => Some(n.to_string()),
-                Value::Bool(b) => Some(b.to_string()),
-                Value::Null => Some("null".to_string()),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => "null".to_string(),
                 Value::Tagged(tagged) => {
                     // For tagged values, convert the inner value
-                    Some(format!("{:?}", tagged.value))
+                    format!("{:?}", tagged.value)
                 }
             }
         })

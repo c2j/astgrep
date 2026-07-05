@@ -5,7 +5,7 @@
 //! termination. The resulting `DataFlowGraph` can be consumed by the
 //! existing taint/source/sink/CP passes without changes.
 
-use crate::graph::{DataFlowEdge, DataFlowGraph, DataFlowNode, EdgeType, NodeId};
+use crate::graph::{DataFlowGraph, DataFlowNode, EdgeType, NodeId};
 use astgrep_core::AstNode;
 use astgrep_core::Result;
 
@@ -157,7 +157,7 @@ impl CfgBuilder {
     // ------------------------------------------------------------------
 
     fn handle_if(&mut self, node: &dyn AstNode, node_id: NodeId) -> Result<NodeId> {
-        let mut condition_idx: Option<usize> = None;
+        let mut _condition_idx: Option<usize> = None;
         let mut consequence_idx: Option<usize> = None;
         let mut alternative_idx: Option<usize> = None;
 
@@ -168,7 +168,7 @@ impl CfgBuilder {
             if ckind.contains("condition") || ckind == "parenthesized_expression" {
                 let cid = self.add_node(child);
                 self.add_cf_edge(node_id, cid);
-                condition_idx = Some(i);
+                _condition_idx = Some(i);
             } else if ckind.contains("else") {
                 alternative_idx = Some(i);
             } else if consequence_idx.is_none() {
@@ -397,6 +397,7 @@ impl CfgBuilder {
 
     /// Maps a child NodeId back to its index in the parent's child list.
     /// This is a heuristic – we compare node text/location.
+    #[allow(dead_code)]
     fn child_offset(&self, parent: &dyn AstNode, child_id: NodeId) -> usize {
         let child_node = self.graph.get_node(child_id);
         for i in 0..parent.child_count() {

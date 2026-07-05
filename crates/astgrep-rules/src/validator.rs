@@ -204,13 +204,11 @@ impl RuleValidator {
         for metavar in &metavars {
             // Allow single-character metavariables like $X for Semgrep compatibility
             // Only enforce uppercase-start in strict mode
-            if !metavar.chars().next().unwrap().is_uppercase() {
-                if self.strict_validation {
-                    return Err(AnalysisError::rule_validation_error(format!(
-                        "Pattern {} metavariable '{}' should start with uppercase letter",
-                        pattern_index, metavar
-                    )));
-                }
+            if !metavar.chars().next().unwrap().is_uppercase() && self.strict_validation {
+                return Err(AnalysisError::rule_validation_error(format!(
+                    "Pattern {} metavariable '{}' should start with uppercase letter",
+                    pattern_index, metavar
+                )));
             }
         }
 
@@ -541,10 +539,12 @@ impl RuleValidator {
     fn pattern_type_is_negative_only(pt: &PatternType) -> bool {
         match pt {
             PatternType::Not(_) | PatternType::NotRegex(_) | PatternType::NotInside(_) => true,
-            PatternType::All(subs) => subs.iter().all(|s| Self::pattern_type_is_negative_only(&s.pattern_type)),
-            PatternType::Either(subs) | PatternType::Any(subs) => {
-                subs.iter().all(|s| Self::pattern_type_is_negative_only(&s.pattern_type))
-            }
+            PatternType::All(subs) => subs
+                .iter()
+                .all(|s| Self::pattern_type_is_negative_only(&s.pattern_type)),
+            PatternType::Either(subs) | PatternType::Any(subs) => subs
+                .iter()
+                .all(|s| Self::pattern_type_is_negative_only(&s.pattern_type)),
             // Simple, Regex, Inside are positive
             PatternType::Simple(_) | PatternType::Regex(_) | PatternType::Inside(_) => false,
         }
@@ -558,12 +558,11 @@ impl RuleValidator {
         // Validate severity-confidence combinations
         if rule.severity == astgrep_core::Severity::Critical
             && rule.confidence == astgrep_core::Confidence::Low
+            && self.strict_validation
         {
-            if self.strict_validation {
-                return Err(AnalysisError::rule_validation_error(
-                    "Critical severity with low confidence is discouraged",
-                ));
-            }
+            return Err(AnalysisError::rule_validation_error(
+                "Critical severity with low confidence is discouraged",
+            ));
         }
 
         Ok(())
@@ -787,74 +786,98 @@ mod tests {
     #[test]
     fn test_text_rule_regex_pattern_valid() {
         let validator = RuleValidator::new();
-        let rule = create_text_rule()
-            .add_pattern(Pattern::regex("^fix.*$".to_string()));
-        assert!(validator.validate_rule(&rule).is_ok(),
-            "pattern-regex should be valid for text language");
+        let rule = create_text_rule().add_pattern(Pattern::regex("^fix.*$".to_string()));
+        assert!(
+            validator.validate_rule(&rule).is_ok(),
+            "pattern-regex should be valid for text language"
+        );
     }
 
     #[test]
     fn test_text_rule_literal_pattern_valid() {
         let validator = RuleValidator::new();
-        let rule = create_text_rule()
-            .add_pattern(Pattern::simple("literal text match".to_string()));
-        assert!(validator.validate_rule(&rule).is_ok(),
-            "literal pattern without metavariables should be valid for text language");
+        let rule =
+            create_text_rule().add_pattern(Pattern::simple("literal text match".to_string()));
+        assert!(
+            validator.validate_rule(&rule).is_ok(),
+            "literal pattern without metavariables should be valid for text language"
+        );
     }
 
     #[test]
     fn test_text_rule_metavariable_rejected() {
         let validator = RuleValidator::new();
-        let rule = create_text_rule()
-            .add_pattern(Pattern::simple("$VAR".to_string()));
+        let rule = create_text_rule().add_pattern(Pattern::simple("$VAR".to_string()));
         let result = validator.validate_rule(&rule);
-        assert!(result.is_err(), "metavariables should be rejected for text language");
+        assert!(
+            result.is_err(),
+            "metavariables should be rejected for text language"
+        );
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("metavariable"), "error should mention metavariables: {}", err);
+        assert!(
+            err.contains("metavariable"),
+            "error should mention metavariables: {}",
+            err
+        );
     }
 
     #[test]
     fn test_text_rule_ellipsis_rejected() {
         let validator = RuleValidator::new();
-        let rule = create_text_rule()
-            .add_pattern(Pattern::simple("...".to_string()));
+        let rule = create_text_rule().add_pattern(Pattern::simple("...".to_string()));
         let result = validator.validate_rule(&rule);
-        assert!(result.is_err(), "ellipsis should be rejected for text language");
+        assert!(
+            result.is_err(),
+            "ellipsis should be rejected for text language"
+        );
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("ellipsis"), "error should mention ellipsis: {}", err);
+        assert!(
+            err.contains("ellipsis"),
+            "error should mention ellipsis: {}",
+            err
+        );
     }
 
     #[test]
     fn test_text_rule_dataflow_rejected() {
         let validator = RuleValidator::new();
-        let mut rule = create_text_rule()
-            .add_pattern(Pattern::regex("test".to_string()));
+        let mut rule = create_text_rule().add_pattern(Pattern::regex("test".to_string()));
         rule.dataflow = Some(DataFlowSpec::from_strings(
             vec!["source".to_string()],
             vec!["sink".to_string()],
         ));
         let err = validator.validate_rule(&rule).unwrap_err().to_string();
-        assert!(err.to_lowercase().contains("dataflow"), "error should mention dataflow: {}", err);
+        assert!(
+            err.to_lowercase().contains("dataflow"),
+            "error should mention dataflow: {}",
+            err
+        );
     }
 
     #[test]
     fn test_text_rule_metavariable_pattern_rejected() {
         let validator = RuleValidator::new();
         let pattern = Pattern::simple("dummy".to_string());
-        let rule = create_text_rule()
-            .add_pattern(Pattern {
-                pattern_type: pattern.pattern_type,
-                metavariable_pattern: Some(MetavariablePattern::new(
-                    "$VAR".to_string(),
-                    vec!["pattern".to_string()],
-                )),
-                conditions: Vec::new(),
-                focus: None,
-            });
+        let rule = create_text_rule().add_pattern(Pattern {
+            pattern_type: pattern.pattern_type,
+            metavariable_pattern: Some(MetavariablePattern::new(
+                "$VAR".to_string(),
+                vec!["pattern".to_string()],
+            )),
+            conditions: Vec::new(),
+            focus: None,
+        });
         let result = validator.validate_rule(&rule);
-        assert!(result.is_err(), "metavariable-pattern should be rejected for text language");
+        assert!(
+            result.is_err(),
+            "metavariable-pattern should be rejected for text language"
+        );
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("metavariable-pattern"), "error should mention metavariable-pattern: {}", err);
+        assert!(
+            err.contains("metavariable-pattern"),
+            "error should mention metavariable-pattern: {}",
+            err
+        );
     }
 
     #[test]
@@ -865,15 +888,17 @@ mod tests {
             regex: "test".to_string(),
         });
         let pattern = Pattern::simple("dummy".to_string());
-        let rule = create_text_rule()
-            .add_pattern(Pattern {
-                pattern_type: pattern.pattern_type,
-                metavariable_pattern: None,
-                conditions: vec![condition],
-                focus: None,
-            });
+        let rule = create_text_rule().add_pattern(Pattern {
+            pattern_type: pattern.pattern_type,
+            metavariable_pattern: None,
+            conditions: vec![condition],
+            focus: None,
+        });
         let result = validator.validate_rule(&rule);
-        assert!(result.is_err(), "conditions should be rejected for text language");
+        assert!(
+            result.is_err(),
+            "conditions should be rejected for text language"
+        );
     }
 
     #[test]
@@ -888,8 +913,10 @@ mod tests {
             vec![Language::Java],
         )
         .add_pattern(Pattern::simple("System.out.println($MSG)".to_string()));
-        assert!(validator.validate_rule(&rule).is_ok(),
-            "metavariables should still be valid for non-text languages");
+        assert!(
+            validator.validate_rule(&rule).is_ok(),
+            "metavariables should still be valid for non-text languages"
+        );
     }
 
     // --- negative-pattern-balance tests ---
@@ -914,7 +941,11 @@ mod tests {
         let result = validator.validate_rule(&rule);
         assert!(result.is_err(), "pattern-not-only should be rejected");
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("negative"), "error should mention negative: {}", err);
+        assert!(
+            err.contains("negative"),
+            "error should mention negative: {}",
+            err
+        );
     }
 
     #[test]
@@ -950,13 +981,18 @@ mod tests {
             vec![Language::Java],
         )
         .add_pattern(Pattern {
-            pattern_type: PatternType::NotInside(Box::new(Pattern::simple("class Foo {}".to_string()))),
+            pattern_type: PatternType::NotInside(Box::new(Pattern::simple(
+                "class Foo {}".to_string(),
+            ))),
             metavariable_pattern: None,
             conditions: Vec::new(),
             focus: None,
         });
         let result = validator.validate_rule(&rule);
-        assert!(result.is_err(), "pattern-not-inside-only should be rejected");
+        assert!(
+            result.is_err(),
+            "pattern-not-inside-only should be rejected"
+        );
     }
 
     #[test]
@@ -1014,7 +1050,10 @@ mod tests {
             focus: None,
         });
         let result = validator.validate_rule(&rule);
-        assert!(result.is_err(), "all-negative pattern-all should be rejected");
+        assert!(
+            result.is_err(),
+            "all-negative pattern-all should be rejected"
+        );
     }
 
     #[test]

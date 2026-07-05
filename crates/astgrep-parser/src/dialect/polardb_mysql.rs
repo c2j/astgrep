@@ -44,6 +44,7 @@ impl SqlDialectParser for PolarDBMySQLDialect {
                     reason,
                 });
             }
+            #[allow(unreachable_patterns)]
             Err(_) => {
                 return Err(DialectParseError::ParseFailed {
                     dialect: SqlDialect::PolarDBMySQL,

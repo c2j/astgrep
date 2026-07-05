@@ -197,8 +197,7 @@ impl TaintEnv {
                         return true;
                     }
                 }
-                if tainted_field.starts_with(field) {
-                    let rest = &tainted_field[field.len()..];
+                if let Some(rest) = tainted_field.strip_prefix(field) {
                     if rest.is_empty() || rest.starts_with('.') || rest.starts_with('[') {
                         return true;
                     }
@@ -232,7 +231,7 @@ impl TaintEnv {
     }
 
     pub fn has_field_taints(&self, var: &str) -> bool {
-        self.field_taints.get(var).map_or(false, |f| !f.is_empty())
+        self.field_taints.get(var).is_some_and(|f| !f.is_empty())
     }
 
     pub fn add_label(&mut self, var: &str, label: String) {

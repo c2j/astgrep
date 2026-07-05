@@ -140,7 +140,7 @@ impl RuleExecutionEngine {
         // Also use advanced executor if pattern contains literals that might need constant propagation
         // This handles cases like "return 5;" which should match "return x;" where x = 5
         // Also handle patterns like "foo(42)" where 42 is inside parentheses
-        let has_literal = pattern_str.trim().split_whitespace().any(|tok| {
+        let has_literal = pattern_str.split_whitespace().any(|tok| {
             // Try to parse as i64 after trimming punctuation
             let cleaned = tok.trim().trim_end_matches(';').trim_end_matches(',');
             cleaned.parse::<i64>().is_ok()
@@ -316,7 +316,8 @@ impl RuleExecutionEngine {
 
         // Execute using advanced executor
         let file_path = std::path::Path::new(&context.file_path);
-        let enable_cp = !matches!(context.sql_dialect,
+        let enable_cp = !matches!(
+            context.sql_dialect,
             Some(astgrep_core::SqlDialect::GaussDB) | Some(astgrep_core::SqlDialect::OpenGauss)
         );
         let result = advanced_executor.execute_comprehensive_analysis(
@@ -375,9 +376,7 @@ impl RuleExecutionEngine {
                 }
                 Some(union.into_iter().collect())
             }
-            PatternType::Not(inner) => {
-                self.collect_spans_for_pattern(inner, source, language)
-            }
+            PatternType::Not(inner) => self.collect_spans_for_pattern(inner, source, language),
             PatternType::Regex(re) => {
                 let mut spans = Vec::new();
                 if let Ok(regex) = fancy_regex::Regex::new(re) {
@@ -399,9 +398,7 @@ impl RuleExecutionEngine {
                 }
                 Some(union.into_iter().collect())
             }
-            PatternType::NotRegex(_)
-            | PatternType::Inside(_)
-            | PatternType::NotInside(_) => None,
+            PatternType::NotRegex(_) | PatternType::Inside(_) | PatternType::NotInside(_) => None,
         }
     }
 
@@ -452,7 +449,11 @@ impl RuleExecutionEngine {
         for sub in subs {
             match &sub.pattern_type {
                 PatternType::Not(inner) => {
-                    if let Some(spans) = self.collect_spans_for_pattern(inner, &context.source_code, context.language) {
+                    if let Some(spans) = self.collect_spans_for_pattern(
+                        inner,
+                        &context.source_code,
+                        context.language,
+                    ) {
                         for span in spans {
                             negative_set.insert(span);
                         }
@@ -466,7 +467,9 @@ impl RuleExecutionEngine {
                     break;
                 }
                 _ => {
-                    if let Some(spans) = self.collect_spans_for_pattern(sub, &context.source_code, context.language) {
+                    if let Some(spans) =
+                        self.collect_spans_for_pattern(sub, &context.source_code, context.language)
+                    {
                         let set: std::collections::HashSet<(usize, usize)> =
                             spans.into_iter().collect();
                         positive_sets.push(set);
@@ -547,7 +550,10 @@ impl RuleExecutionEngine {
             for mv in &condition_metavars {
                 for (i, sub) in subs.iter().enumerate() {
                     if Self::pattern_references_metavar(sub, mv) {
-                        meta_to_pattern_indices.entry(mv.clone()).or_default().push(i);
+                        meta_to_pattern_indices
+                            .entry(mv.clone())
+                            .or_default()
+                            .push(i);
                     }
                 }
             }
@@ -562,7 +568,8 @@ impl RuleExecutionEngine {
             // metavariable must satisfy that condition
             let mut filtered = Vec::new();
             for span in &combined_spans {
-                let matched_text = &context.source_code[span.0..span.1.min(context.source_code.len())];
+                let matched_text =
+                    &context.source_code[span.0..span.1.min(context.source_code.len())];
                 let mut passes = true;
                 for condition in &pattern.conditions {
                     let meta_var = match condition {
@@ -570,7 +577,9 @@ impl RuleExecutionEngine {
                         Condition::MetavariableRegex(c) => Some(&c.metavariable),
                         _ => None,
                     };
-                    let Some(mv) = meta_var else { continue; };
+                    let Some(mv) = meta_var else {
+                        continue;
+                    };
                     // Check if this span came from a pattern that defines mv
                     if let Some(indices) = meta_to_pattern_indices.get(mv) {
                         // We don't know exactly which sub-pattern produced this span.
@@ -583,11 +592,11 @@ impl RuleExecutionEngine {
                                 false
                             }
                         });
-                        if affects_this_span {
-                            if !self.evaluate_condition_textually(condition, matched_text, subs) {
-                                passes = false;
-                                break;
-                            }
+                        if affects_this_span
+                            && !self.evaluate_condition_textually(condition, matched_text, subs)
+                        {
+                            passes = false;
+                            break;
                         }
                     }
                 }
@@ -607,8 +616,7 @@ impl RuleExecutionEngine {
             }
             let (start_line, start_col) =
                 Self::byte_index_to_line_col(&context.source_code, start_byte);
-            let (end_line, end_col) =
-                Self::byte_index_to_line_col(&context.source_code, end_byte);
+            let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
             let location = astgrep_core::Location::new(
                 std::path::PathBuf::from(&context.file_path),
                 start_line,
@@ -899,8 +907,6 @@ impl RuleExecutionEngine {
         findings: &mut Vec<astgrep_core::Finding>,
         seen: &mut std::collections::HashSet<(usize, usize)>,
     ) -> Result<()> {
-        use fancy_regex::Regex;
-
         if let Ok(re) = fancy_regex::Regex::new(regex_str) {
             for m in re.find_iter(&context.source_code).filter_map(|m| m.ok()) {
                 let start_byte = m.start();
@@ -943,7 +949,7 @@ impl RuleExecutionEngine {
     }
 
     /// Execute simple sub-pattern for Either pattern
-        fn execute_simple_subpattern(
+    fn execute_simple_subpattern(
         &self,
         pattern_str: &str,
         rule: &Rule,

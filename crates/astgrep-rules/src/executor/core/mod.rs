@@ -306,9 +306,8 @@ impl AdvancedRuleExecutor {
         if let PatternType::All(sub_patterns) = &pattern.pattern_type {
             let mut all_findings = Vec::new();
             for sub in sub_patterns {
-                let sub_findings = self.execute_pattern_analysis(
-                    rule, sub, ast, dataflow_analysis, file_path,
-                )?;
+                let sub_findings =
+                    self.execute_pattern_analysis(rule, sub, ast, dataflow_analysis, file_path)?;
                 all_findings.extend(sub_findings);
             }
             return Ok(all_findings);
@@ -331,7 +330,7 @@ impl AdvancedRuleExecutor {
             PatternType::Simple(s) => s.as_str(),
             _ => "",
         };
-        let has_ellipsis = pattern_str.contains("...");
+        let _has_ellipsis = pattern_str.contains("...");
 
         // If no matches found and symbolic propagation is enabled, try expanding variables
         let matches = if matches.is_empty() && self.symbolic_propagator.is_some() {
@@ -426,8 +425,13 @@ impl AdvancedRuleExecutor {
             }
 
             if final_conditions_passed {
-                let finding =
-                    self.create_finding_from_match(rule, pattern, &match_result, file_path, &full_source)?;
+                let finding = self.create_finding_from_match(
+                    rule,
+                    pattern,
+                    &match_result,
+                    file_path,
+                    &full_source,
+                )?;
                 findings.push(finding);
             }
         }
@@ -462,7 +466,10 @@ impl AdvancedRuleExecutor {
             }
         }
 
-        if inside_patterns.is_empty() && not_inside_patterns.is_empty() && negative_patterns.is_empty() {
+        if inside_patterns.is_empty()
+            && not_inside_patterns.is_empty()
+            && negative_patterns.is_empty()
+        {
             return Ok(None);
         }
 
@@ -731,7 +738,7 @@ impl AdvancedRuleExecutor {
                         end_line: el,
                         end_column: ec,
                     };
-                    let mut message = rule.description.clone();
+                    let message = rule.description.clone();
                     let mut metadata = HashMap::new();
                     metadata.insert(
                         "pattern".to_string(),
@@ -774,7 +781,7 @@ impl AdvancedRuleExecutor {
         _dataflow_analysis: Option<&DataFlowAnalysis>,
         _source: &str,
     ) -> Result<Vec<Finding>> {
-        let mut result = findings.to_vec();
+        let result = findings.to_vec();
 
         let _ = conditions;
 
@@ -1155,7 +1162,7 @@ impl AdvancedRuleExecutor {
         };
 
         let mut type_constraints: Vec<(String, String)> = Vec::new();
-        let mut cleaned = pattern_str.to_string();
+        let _cleaned = pattern_str.to_string();
 
         // Match typed metavar syntax: `(Type $VAR)` or `(Generic<Type> $VAR)` or `(Type[] $VAR)`
         // Also match `($META.Type $VAR)` where $META is a metavar used as the type prefix
@@ -1292,10 +1299,11 @@ impl AdvancedRuleExecutor {
             let after = &line[idx + 9..];
             if let Some(end) = Self::find_closing_paren(after) {
                 let arg = &after[..end];
-                if arg != var_value && arg.contains(var_value) {
-                    if Self::value_is_known_type(arg, expected_type, full_source) {
-                        return true;
-                    }
+                if arg != var_value
+                    && arg.contains(var_value)
+                    && Self::value_is_known_type(arg, expected_type, full_source)
+                {
+                    return true;
                 }
             }
         }
@@ -1495,7 +1503,7 @@ impl AdvancedRuleExecutor {
                     if let Some(ml) = match_line {
                         if decl_line < ml {
                             let dist = ml - decl_line;
-                            if closest_match.map_or(true, |(d, _)| dist < d) {
+                            if closest_match.is_none_or(|(d, _)| dist < d) {
                                 closest_match = Some((dist, matches));
                             }
                         }
@@ -1526,7 +1534,7 @@ impl AdvancedRuleExecutor {
         if simple_decl == simple_expected {
             return true;
         }
-        if import_map.get(simple_decl).map_or(false, |r| {
+        if import_map.get(simple_decl).is_some_and(|r| {
             r == expected_type || expected_type.ends_with(&format!(".{}", simple_decl))
         }) {
             return true;

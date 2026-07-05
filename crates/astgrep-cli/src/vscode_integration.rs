@@ -174,7 +174,7 @@ impl VsCodeExtension {
     pub fn add_diagnostic(&mut self, diagnostic: VsCodeDiagnostic) {
         self.diagnostics
             .entry(diagnostic.file.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(diagnostic);
     }
 
@@ -245,8 +245,7 @@ impl VsCodeExtension {
         }
 
         if pattern.contains('*') {
-            if pattern.starts_with("**/") {
-                let suffix = &pattern[3..];
+            if let Some(suffix) = pattern.strip_prefix("**/") {
                 return self.matches_pattern(file, suffix);
             }
 
@@ -259,8 +258,7 @@ impl VsCodeExtension {
                 return file.ends_with(pattern);
             }
 
-            if pattern.ends_with("/**") {
-                let prefix = &pattern[..pattern.len() - 3];
+            if let Some(prefix) = pattern.strip_suffix("/**") {
                 return file.starts_with(prefix);
             }
 

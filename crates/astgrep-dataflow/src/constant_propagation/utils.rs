@@ -210,15 +210,9 @@ pub fn extract_constant_from_expression(
                 None
             }
         }
-        "string_literal" | "literal_string" => {
-            if let Some(text) = node.text() {
-                Some(ConstantValue::String(
-                    text.trim_matches(|c| c == '"' || c == '\'').to_string(),
-                ))
-            } else {
-                None
-            }
-        }
+        "string_literal" | "literal_string" => node.text().map(|text| {
+            ConstantValue::String(text.trim_matches(|c| c == '"' || c == '\'').to_string())
+        }),
         "true" | "false" => {
             // Boolean literal
             node.text().map(|t| t == "true").map(ConstantValue::Boolean)

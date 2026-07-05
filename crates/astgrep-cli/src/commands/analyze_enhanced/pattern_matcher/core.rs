@@ -102,7 +102,7 @@ pub fn apply_metavariable_pattern(
     }
 
     // Fallback to simple pattern matching if tree-sitter fails
-    return apply_simple_metavariable_pattern(rule, pattern, file_path, source_code);
+    apply_simple_metavariable_pattern(rule, pattern, file_path, source_code)
 }
 
 /// Apply enhanced pattern matching using our new AdvancedSemgrepMatcher
@@ -132,7 +132,7 @@ pub fn apply_enhanced_pattern_matching(
     let enhanced_rule = &rules[0];
 
     // Create tree-sitter parser and parse the source code
-    let mut ts_parser = TreeSitterParser::new()?;
+    let ts_parser = TreeSitterParser::new()?;
     if let Some(tree) = ts_parser.parse(source_code, language)? {
         let ast = ts_parser.tree_to_universal_ast(&tree, source_code)?;
 
@@ -157,7 +157,7 @@ pub fn apply_enhanced_pattern_matching(
                 let finding = Finding {
                     rule_id: rule.id.clone(),
                     message: rule.message.clone(),
-                    severity: rule.severity.clone(),
+                    severity: rule.severity,
                     confidence: Confidence::High,
                     location: Location {
                         file: file_path.clone(),
@@ -252,7 +252,7 @@ pub fn apply_tree_sitter_pattern_matching(
 
     info!("Creating TreeSitterParser for language: {:?}", language);
     let mut findings = Vec::new();
-    let mut parser = TreeSitterParser::new()?;
+    let parser = TreeSitterParser::new()?;
 
     info!("Parsing source code with tree-sitter...");
     // Parse the source code with tree-sitter
@@ -310,7 +310,7 @@ pub fn apply_tree_sitter_pattern_matching(
             let finding = Finding {
                 rule_id: rule.id.clone(),
                 message,
-                severity: rule.severity.clone(),
+                severity: rule.severity,
                 confidence: Confidence::High,
                 location: Location {
                     file: file_path.clone(),

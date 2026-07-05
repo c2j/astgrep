@@ -360,7 +360,7 @@ impl ScriptClassifier {
             supporting_evidence: best_evidence.clone(),
             alternative_types: Vec::new(),
             metadata: ClassificationMetadata {
-                keywords_found: best_evidence.iter().cloned().collect(),
+                keywords_found: best_evidence.to_vec(),
                 file_patterns_matched: Vec::new(),
                 shebang_detected: None,
                 dependencies_found: Vec::new(),
@@ -517,8 +517,8 @@ impl ScriptClassifier {
                 max_bytes,
             } => {
                 let file_size = asset.get_file_size().unwrap_or(0);
-                let min_ok = min_bytes.map_or(true, |min| file_size >= min);
-                let max_ok = max_bytes.map_or(true, |max| file_size <= max);
+                let min_ok = min_bytes.is_none_or(|min| file_size >= min);
+                let max_ok = max_bytes.is_none_or(|max| file_size <= max);
                 Ok(min_ok && max_ok)
             }
             ClassificationCondition::CustomCondition { .. } => {

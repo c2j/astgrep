@@ -136,7 +136,7 @@ pub fn apply_rule_to_source(
                         let finding = Finding {
                             rule_id: rule.id.clone(),
                             message: rule.message.clone(),
-                            severity: rule.severity.clone(),
+                            severity: rule.severity,
                             confidence: Confidence::Medium,
                             location: Location {
                                 file: file_path.clone(),

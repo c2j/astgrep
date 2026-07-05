@@ -55,9 +55,7 @@ pub async fn run_enhanced(
         let pb = ProgressBar::new(total as u64);
         pb.set_style(
             ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}",
-                )
+                .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
                 .expect("Invalid progress bar template")
                 .progress_chars("#>-"),
         );
@@ -81,9 +79,7 @@ pub async fn run_enhanced(
                 let msg = e.to_string();
                 // Dialect/parser failures: skip this file, continue with others.
                 // IO errors and rule-loading failures still abort the whole run.
-                if msg.starts_with("parse failed for dialect")
-                    || msg.contains("parse failed")
-                {
+                if msg.starts_with("parse failed for dialect") || msg.contains("parse failed") {
                     warn!("Skipping {}: {}", file_path.display(), msg);
                     analysis_stats.parse_errors += 1;
                 } else {
@@ -304,7 +300,7 @@ fn analyze_with_rule_engine(
             let mut propagator = ConstantPropagator::new();
 
             // Try to use tree-sitter for better AST
-            let constants_result = if let Ok(mut ts_parser) = TreeSitterParser::new() {
+            let constants_result = if let Ok(ts_parser) = TreeSitterParser::new() {
                 if let Ok(Some(tree)) = ts_parser.parse(source_code, language) {
                     if let Ok(ts_ast) = ts_parser.tree_to_universal_ast(&tree, source_code) {
                         propagator.analyze_ast(&ts_ast)
@@ -406,7 +402,7 @@ fn analyze_with_rule_engine(
 
             if !sql_rules.is_empty() {
                 // Extract embedded SQL snippets
-                let snippets = extract_embedded_sql_snippets(&source_code, language);
+                let snippets = extract_embedded_sql_snippets(source_code, language);
                 tracing::debug!(
                     "embedded-sql: {} eligible SQL rules; {} snippets extracted",
                     sql_rules.len(),
@@ -517,7 +513,7 @@ fn load_rules_into_engine_from_paths(
 
     fn is_yaml(path: &std::path::Path) -> bool {
         path.extension()
-            .map_or(false, |ext| ext == "yaml" || ext == "yml")
+            .is_some_and(|ext| ext == "yaml" || ext == "yml")
     }
 
     fn load_from_dir(
@@ -715,7 +711,7 @@ fn try_tree_sitter_ast(
     language: Language,
 ) -> Option<Box<dyn astgrep_core::AstNode>> {
     use astgrep_parser::tree_sitter_parser::TreeSitterParser;
-    let mut ts_parser = TreeSitterParser::new().ok()?;
+    let ts_parser = TreeSitterParser::new().ok()?;
     let tree = ts_parser.parse(source_code, language).ok()??;
     let ts_ast = ts_parser.tree_to_universal_ast(&tree, source_code).ok()?;
     Some(Box::new(ts_ast))

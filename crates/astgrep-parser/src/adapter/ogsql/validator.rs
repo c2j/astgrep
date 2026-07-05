@@ -27,7 +27,7 @@ pub fn validate_gaussdb_sql(sql: &str) -> Vec<GaussDBValidationFinding> {
 
     merge_errors
         .into_iter()
-        .filter_map(|err| {
+        .map(|err| {
             let (rule_id, msg) = match err.kind {
                 MergeSemanticErrorKind::DeleteNotSupported => (
                     "GAUSSDB-MERGE-001",
@@ -42,12 +42,12 @@ pub fn validate_gaussdb_sql(sql: &str) -> Vec<GaussDBValidationFinding> {
                 Some(d) => format!("{}: {}", msg, d),
                 None => msg.to_string(),
             };
-            Some(GaussDBValidationFinding {
+            GaussDBValidationFinding {
                 rule_id,
                 message,
                 line: err.location.line,
                 column: err.location.column,
-            })
+            }
         })
         .collect()
 }

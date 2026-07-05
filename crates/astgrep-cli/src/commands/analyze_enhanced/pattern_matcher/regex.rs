@@ -54,7 +54,7 @@ pub fn apply_regex_pattern(
                     let finding = Finding {
                         rule_id: rule.id.clone(),
                         message,
-                        severity: rule.severity.clone(),
+                        severity: rule.severity,
                         location: Location {
                             file: file_path.clone(),
                             start_line: line_num + 1,

@@ -22,11 +22,11 @@ pub fn apply_rule_with_not_inside(
     let mut not_regex_patterns = Vec::new();
 
     for pattern in &rule.patterns {
-        if pattern.starts_with("NOT_INSIDE:") {
-            let not_inside_pattern = &pattern[11..]; // Remove "NOT_INSIDE:" prefix
+        if let Some(not_inside_pattern) = pattern.strip_prefix("NOT_INSIDE:") {
+            // Remove "NOT_INSIDE:" prefix
             not_inside_patterns.push(not_inside_pattern);
-        } else if pattern.starts_with("NOT_REGEX:") {
-            let not_regex_pattern = &pattern[10..]; // Remove "NOT_REGEX:" prefix
+        } else if let Some(not_regex_pattern) = pattern.strip_prefix("NOT_REGEX:") {
+            // Remove "NOT_REGEX:" prefix
             not_regex_patterns.push(not_regex_pattern);
         } else {
             main_patterns.push(pattern);
@@ -51,7 +51,7 @@ pub fn apply_rule_with_not_inside(
             // Convert to a regex pattern that matches commands with positional parameters
             let simplified_pattern = r"(rm|cat|echo|eval|cp|mv|chmod|chown)\s+.*\$[0-9@*]";
             let pattern_findings =
-                apply_regex_pattern(rule, &simplified_pattern, file_path, source_code)?;
+                apply_regex_pattern(rule, simplified_pattern, file_path, source_code)?;
             info!(
                 "Simplified pattern '{}' found {} matches",
                 simplified_pattern,

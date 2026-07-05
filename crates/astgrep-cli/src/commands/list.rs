@@ -215,7 +215,7 @@ fn generate_markdown_output(rules: &[&Rule], detailed: bool) -> String {
             output.push_str("- **Status:** Active\n");
         }
 
-        output.push_str("\n");
+        output.push('\n');
     }
 
     output
@@ -231,11 +231,11 @@ fn generate_text_output(rules: &[&Rule], detailed: bool) -> String {
         output.push_str(&format!("   Description: {}\n", rule.description));
 
         if detailed {
-            output.push_str(&format!("   Type: Rule\n"));
-            output.push_str(&format!("   Status: Active\n"));
+            output.push_str(&"   Type: Rule\n".to_string());
+            output.push_str(&"   Status: Active\n".to_string());
         }
 
-        output.push_str("\n");
+        output.push('\n');
     }
 
     output

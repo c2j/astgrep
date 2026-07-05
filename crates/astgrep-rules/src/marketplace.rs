@@ -62,7 +62,7 @@ impl MarketplaceRule {
 
     /// Add a rating to this rule
     pub fn add_rating(&mut self, rating: f32) {
-        if rating < 0.0 || rating > 5.0 {
+        if !(0.0..=5.0).contains(&rating) {
             return;
         }
 
@@ -113,14 +113,14 @@ impl RuleMarketplace {
         // Add to categories map
         self.categories
             .entry(category)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(rule_id.clone());
 
         // Add to tags map
         for tag in &rule.tags {
             self.tags
                 .entry(tag.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(rule_id.clone());
         }
     }

@@ -281,7 +281,7 @@ fn generate_text_validation_output(
         ));
     }
 
-    output.push_str(&format!("📊 Summary:\n"));
+    output.push_str(&"📊 Summary:\n".to_string());
     output.push_str(&format!("  • Files validated: {}\n", results.len()));
     output.push_str(&format!("  • Total rules: {}\n", total_rules));
     output.push_str(&format!("  • Valid rules: {}\n", valid_rules));
@@ -311,7 +311,7 @@ fn generate_text_validation_output(
         }
 
         if let Some(ref perf) = result.performance_metrics {
-            output.push_str(&format!("  ⚡ Performance:\n"));
+            output.push_str(&"  ⚡ Performance:\n".to_string());
             output.push_str(&format!("    - Load time: {}ms\n", perf.load_time_ms));
             output.push_str(&format!(
                 "    - Avg complexity: {:.2}\n",
@@ -323,7 +323,7 @@ fn generate_text_validation_output(
             ));
         }
 
-        output.push_str("\n");
+        output.push('\n');
     }
 
     Ok(output)
@@ -393,7 +393,7 @@ fn generate_markdown_validation_output(
             }
         }
 
-        output.push_str("\n");
+        output.push('\n');
     }
 
     Ok(output)

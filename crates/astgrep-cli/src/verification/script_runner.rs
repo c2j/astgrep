@@ -259,7 +259,7 @@ impl ScriptRunner {
             .collect();
 
         let results = futures::future::join_all(tasks).await;
-        Ok(results.into_iter().collect::<Result<Vec<_>>>()?)
+        results.into_iter().collect::<Result<Vec<_>>>()
     }
 
     /// Verify scripts sequentially
@@ -377,7 +377,7 @@ impl ScriptRunner {
         let start_time = Instant::now();
 
         let metadata = std::fs::metadata(script_path)?;
-        let readonly = metadata.permissions().readonly();
+        let _readonly = metadata.permissions().readonly();
 
         #[cfg(unix)]
         {
@@ -875,7 +875,7 @@ impl ScriptRunner {
                     }
                 }
 
-                report.push_str("\n");
+                report.push('\n');
             }
         }
 

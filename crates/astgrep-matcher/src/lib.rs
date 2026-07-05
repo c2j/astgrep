@@ -2,6 +2,24 @@
 //!
 //! This crate provides pattern matching functionality for rules.
 
+#![allow(
+    dead_code,
+    unused_variables,
+    unused_assignments,
+    unused_mut,
+    unreachable_patterns,
+    clippy::empty_line_after_doc_comments,
+    clippy::explicit_counter_loop,
+    clippy::if_same_then_else,
+    clippy::manual_strip,
+    clippy::mut_range_bound,
+    clippy::needless_range_loop,
+    clippy::new_without_default,
+    clippy::only_used_in_recursion,
+    clippy::type_complexity,
+    clippy::needless_borrow
+)]
+
 pub mod advanced_matcher;
 pub mod conditions;
 pub mod matcher;

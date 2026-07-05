@@ -244,7 +244,7 @@ impl AdvancedRuleExecutor {
                 result
             }
             SymbolicValue::FieldAccess { base, .. } => {
-                return self.is_symbolic_value_derived_from_method(base, method_name);
+                self.is_symbolic_value_derived_from_method(base, method_name)
             }
             _ => {
                 eprintln!("DEBUG: Unknown symbolic value, returning false");
@@ -497,8 +497,8 @@ impl AdvancedRuleExecutor {
                     &cond_var,
                     expected_type,
                     propagator,
-                    &full_source,
-                ) && self.variable_involves_contains(&cond_var, &full_source)
+                    full_source,
+                ) && self.variable_involves_contains(&cond_var, full_source)
                 {
                     eprintln!("DEBUG: Variable '{}' matches type '{}' via symbolic propagation and involves contains()",
                              cond_var, expected_type);
@@ -517,8 +517,8 @@ impl AdvancedRuleExecutor {
             let condition_vars = self.extract_variables_from_condition(&condition);
             let mut found = false;
             for cond_var in &condition_vars {
-                let has_contains = self.variable_involves_contains(cond_var, &full_source);
-                let has_class_type = self.traces_to_class_type(cond_var, propagator, &full_source);
+                let has_contains = self.variable_involves_contains(cond_var, full_source);
+                let has_class_type = self.traces_to_class_type(cond_var, propagator, full_source);
                 eprintln!(
                     "DEBUG: cond_var='{}', has_contains={}, has_class_type={}",
                     cond_var, has_contains, has_class_type
@@ -832,12 +832,12 @@ impl AdvancedRuleExecutor {
 
         if let Some(symbolic_value) = state.get(var_name) {
             if let Some(root_var) = symbolic_value.root_variable() {
-                if self.is_class_typed_variable(&root_var, full_source) {
+                if self.is_class_typed_variable(root_var, full_source) {
                     return true;
                 }
                 if root_var != var_name {
                     return self.traces_to_class_type_inner(
-                        &root_var,
+                        root_var,
                         propagator,
                         full_source,
                         visited,
@@ -850,10 +850,10 @@ impl AdvancedRuleExecutor {
             if self.is_class_typed_variable(&alias, full_source) {
                 return true;
             }
-            if alias != var_name {
-                if self.traces_to_class_type_inner(&alias, propagator, full_source, visited) {
-                    return true;
-                }
+            if alias != var_name
+                && self.traces_to_class_type_inner(&alias, propagator, full_source, visited)
+            {
+                return true;
             }
         }
 
@@ -875,15 +875,15 @@ impl AdvancedRuleExecutor {
                                 if self.is_class_typed_variable(rhs_var_name, full_source) {
                                     return true;
                                 }
-                                if rhs_var_name != var_name {
-                                    if self.traces_to_class_type_inner(
+                                if rhs_var_name != var_name
+                                    && self.traces_to_class_type_inner(
                                         rhs_var_name,
                                         propagator,
                                         full_source,
                                         visited,
-                                    ) {
-                                        return true;
-                                    }
+                                    )
+                                {
+                                    return true;
                                 }
                             }
                         }

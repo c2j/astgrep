@@ -62,7 +62,12 @@ impl BaseAdapter {
             Language::Text => (
                 "Text Adapter",
                 "Adapter for parsing plain text files",
-                vec!["txt".to_string(), "md".to_string(), "log".to_string(), "rst".to_string()],
+                vec![
+                    "txt".to_string(),
+                    "md".to_string(),
+                    "log".to_string(),
+                    "rst".to_string(),
+                ],
             ),
         };
 

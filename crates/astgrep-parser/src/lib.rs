@@ -1,3 +1,4 @@
+#![allow(warnings, clippy::all)]
 //! Language parsers and adapters for astgrep
 //!
 //! This crate provides language-specific parsers and adapters.

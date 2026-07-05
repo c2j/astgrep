@@ -97,7 +97,7 @@ fn validate_rule(rule: &serde_yaml::Value, index: usize) -> Result<()> {
     // Check required fields (note: name and description are optional and auto-generated if missing)
     let required_fields = ["id", "severity", "languages"];
     for field in &required_fields {
-        if !rule_obj.contains_key(&serde_yaml::Value::String(field.to_string())) {
+        if !rule_obj.contains_key(serde_yaml::Value::String(field.to_string())) {
             return Err(anyhow::anyhow!(
                 "Rule {} missing required field: {}",
                 index,
@@ -107,7 +107,7 @@ fn validate_rule(rule: &serde_yaml::Value, index: usize) -> Result<()> {
     }
 
     // Check for message field (required for semgrep compatibility)
-    if !rule_obj.contains_key(&serde_yaml::Value::String("message".to_string())) {
+    if !rule_obj.contains_key(serde_yaml::Value::String("message".to_string())) {
         return Err(anyhow::anyhow!(
             "Rule {} missing required field: message",
             index
@@ -150,7 +150,7 @@ fn validate_rule(rule: &serde_yaml::Value, index: usize) -> Result<()> {
     }
 
     // Check for patterns
-    if !rule_obj.contains_key(&serde_yaml::Value::String("patterns".to_string())) {
+    if !rule_obj.contains_key(serde_yaml::Value::String("patterns".to_string())) {
         warn!("Rule {} has no patterns defined", index);
     }
 
