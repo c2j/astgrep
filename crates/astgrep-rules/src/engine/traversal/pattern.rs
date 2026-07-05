@@ -307,6 +307,147 @@ impl RuleExecutionEngine {
             || (pattern_str.contains('(') && pattern_str.contains(')') && pattern_str.contains('$'))
     }
 
+    /// Quick AST-type pre-scan: check if any top-level child of `ast` matches
+    /// the first keyword from the first Simple sub-pattern. For SQL patterns
+    /// like "SELECT ...", this checks for "select_statement" children.
+    /// Returns true if a matching type exists in the AST.
+    fn quick_ast_type_exists(ast: &dyn astgrep_core::AstNode, subs: &[Pattern]) -> bool {
+        let pattern_str = match subs.first().and_then(|p| {
+            if let PatternType::Simple(ref s) = p.pattern_type {
+                Some(s.as_str())
+            } else {
+                None
+            }
+        }) {
+            Some(s) => s,
+            None => return true, // can't determine, let advanced matcher try
+        };
+        let first_token = match pattern_str.split_whitespace().next() {
+            Some(t) => t,
+            None => return true,
+        };
+        if !first_token.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
+            return true;
+        }
+        let expected_type = format!("{}_statement", first_token.to_lowercase());
+        // BFS limited to depth 2: most SQL ASTs have the statements as
+        // grandchildren of the root (root → block/program → statements).
+        // Wide trees (45K+ siblings) are handled efficiently because BFS
+        // doesn't recurse into each sibling's subtree.
+        let mut queue: std::collections::VecDeque<(&dyn astgrep_core::AstNode, usize)> =
+            std::collections::VecDeque::new();
+        queue.push_back((ast, 0));
+        while let Some((node, depth)) = queue.pop_front() {
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.node_type() == expected_type {
+                        return true;
+                    }
+                    if depth < 2 {
+                        queue.push_back((child, depth + 1));
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Phase 2: linear sequence scan for SQL multi-statement patterns.
+    /// Walks the top-level statement children and runs the advanced matcher
+    /// only on candidate sub-sequences instead of the full AST.
+    fn linear_sequence_scan(
+        ast: &dyn astgrep_core::AstNode,
+        subs: &[Pattern],
+        pattern: &Pattern,
+        rule: &Rule,
+        context: &RuleContext,
+    ) -> Result<Option<Vec<Finding>>> {
+        use crate::executor::AdvancedRuleExecutor;
+
+        // Find the statement container using BFS: look for the node
+        // at largest depth that still has many children (the statement list).
+        let container = {
+            let mut best = ast;
+            let mut best_count = ast.child_count();
+            let mut queue: std::collections::VecDeque<(&dyn astgrep_core::AstNode, usize)> =
+                std::collections::VecDeque::new();
+            queue.push_back((ast, 0));
+            while let Some((node, depth)) = queue.pop_front() {
+                if node.child_count() >= best_count {
+                    best = node;
+                    best_count = node.child_count();
+                }
+                if depth < 3 {
+                    for i in 0..node.child_count() {
+                        if let Some(child) = node.child(i) {
+                            queue.push_back((child, depth + 1));
+                        }
+                    }
+                }
+            }
+            best
+        };
+        let child_count = container.child_count();
+        if child_count < 1000 {
+                    return Ok(None);
+        }
+
+        // Extract first keyword from the first Simple sub-pattern
+        let first_keyword = match subs.first().and_then(|p| {
+            if let PatternType::Simple(ref s) = p.pattern_type {
+                s.split_whitespace().next().map(|t| t.to_string())
+            } else {
+                None
+            }
+        }) {
+            Some(k) => k,
+            None => return Ok(None),
+        };
+        if !first_keyword.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
+                    return Ok(None);
+        }
+        let expected_type = format!("{}_statement", first_keyword.to_lowercase());
+
+        // Scan children for matching start positions
+        let mut all_findings: Vec<Finding> = Vec::new();
+
+        for i in 0..child_count {
+            if let Some(child) = container.child(i) {
+                if child.node_type() != expected_type {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+
+            // Build a FilteredContainer for this specific candidate position
+            // with a local context window, and run the advanced matcher on it.
+            // Unlike a global merge, this local window preserves consecutive
+            // statement relationships needed for multi-statement pattern matching.
+            let context_window = 3;
+            let start = i.saturating_sub(context_window);
+            let end = (i + context_window + 1).min(child_count);
+            let child_indices: Vec<usize> = (start..end).collect();
+            let subtree = FilteredContainer { container, child_indices: &child_indices };
+
+            let mut advanced = AdvancedRuleExecutor::new();
+            let mut single_pattern_rule = rule.clone();
+            single_pattern_rule.patterns = vec![pattern.clone()];
+            let file_path = std::path::Path::new(&context.file_path);
+            let result = advanced.execute_comprehensive_analysis(
+                &[single_pattern_rule],
+                &subtree,
+                context.language,
+                Some(file_path),
+                true,
+                context.sql_dialect,
+            )?;
+            all_findings.extend(result.findings);
+        }
+
+        Ok(Some(all_findings))
+    }
+
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
     fn execute_advanced_pattern(
         &self,
@@ -488,6 +629,21 @@ impl RuleExecutionEngine {
         }
 
         if !can_use_text {
+            // Phase 1 fast negation: before falling to the expensive
+            // AdvancedRuleExecutor, check if the AST even contains any
+            // node types matching the pattern's first keyword.
+            if context.language == Language::Sql && !Self::quick_ast_type_exists(_ast, &subs) {
+                return Ok(Vec::new());
+            }
+
+            if context.language == Language::Sql {
+                if let Some(scan_findings) = Self::linear_sequence_scan(
+                    _ast, subs, pattern, rule, context,
+                )? {
+                    return Ok(scan_findings);
+                }
+            }
+
             debug!("Pattern has complex sub-patterns, using AdvancedRuleExecutor for All pattern");
             use crate::executor::AdvancedRuleExecutor;
             let mut advanced_executor = AdvancedRuleExecutor::new();
@@ -1096,5 +1252,47 @@ impl RuleExecutionEngine {
         }
 
         filtered_nodes
+    }
+}
+
+/// Lightweight AstNode adapter that filters a container's children
+/// to only include those matching expected statement types (plus context window).
+/// Avoids cloning the entire AST while still providing full subtree access
+/// through original UniversalNode references.
+struct FilteredContainer<'a> {
+    container: &'a dyn astgrep_core::AstNode,
+    child_indices: &'a [usize],
+}
+
+impl<'a> astgrep_core::AstNode for FilteredContainer<'a> {
+    fn node_type(&self) -> &str {
+        self.container.node_type()
+    }
+    fn child_count(&self) -> usize {
+        self.child_indices.len()
+    }
+    fn child(&self, index: usize) -> Option<&dyn astgrep_core::AstNode> {
+        self.child_indices.get(index).and_then(|&i| self.container.child(i))
+    }
+    fn location(&self) -> Option<(usize, usize, usize, usize)> {
+        self.container.location()
+    }
+    fn text(&self) -> Option<&str> {
+        self.container.text()
+    }
+    fn get_attribute(&self, key: &str) -> Option<&str> {
+        self.container.get_attribute(key)
+    }
+    fn all_attributes(&self) -> Vec<(String, String)> {
+        self.container.all_attributes()
+    }
+    fn identifier(&self) -> Option<&str> {
+        self.container.identifier()
+    }
+    fn literal_value_str(&self) -> Option<String> {
+        self.container.literal_value_str()
+    }
+    fn clone_node(&self) -> Box<dyn astgrep_core::AstNode> {
+        self.container.clone_node()
     }
 }

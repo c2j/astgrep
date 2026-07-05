@@ -1,6 +1,6 @@
 [package]
 name = "test-utils"
-version = "0.4.2"
+version = "0.4.3"
 edition = "2021"
 description = "Test utilities and mock implementations for astgrep"
 

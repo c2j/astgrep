@@ -814,7 +814,13 @@ impl TreeMatcher {
 
         let mut results = Vec::new();
         let mut ctx = MatchCtx::new();
-        ctx.build_import_map(root);
+        // Only Java has import declarations that need FQN resolution.
+        // (JavaScript also has imports, but advanced_matcher.rs only parses
+        // Java-style `import foo.Bar;` syntax. If JS import support is
+        // added there, this gate must be updated to include Language::JavaScript.)
+        if language == Language::Java {
+            ctx.build_import_map(root);
+        }
         // Pass literal constraints from ogsql pattern to enforcement
         if let PatternTree::Node {
             ref constraints, ..
@@ -822,7 +828,7 @@ impl TreeMatcher {
         {
             ctx.constraints = constraints.clone();
         }
-        ctx.find_recursive(&tree, root, &mut results, None);
+        ctx.find_recursive(&tree, root, &mut results, None, 0);
 
         deduplicate_matches(&mut results);
         results
@@ -1111,7 +1117,12 @@ impl MatchCtx {
         node: &dyn AstNode,
         results: &mut Vec<SemgrepMatchResult>,
         skip_assoc_op: Option<&str>,
+        depth: usize,
     ) {
+        const MAX_DEPTH: usize = 500;
+        if depth > MAX_DEPTH {
+            return;
+        }
         // Phase D: collect constants from this node before matching
         self.collect_constants(node);
 
@@ -1185,7 +1196,7 @@ impl MatchCtx {
 
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
-                self.find_recursive(pattern, child, results, child_skip_op.as_deref());
+                self.find_recursive(pattern, child, results, child_skip_op.as_deref(), depth + 1);
             }
         }
 
@@ -1542,7 +1553,13 @@ impl MatchCtx {
             || pattern_kind == "_"
             || (pattern_kind.contains('_')
                 && target_kind.contains('_')
-                && pattern_kind.split('_').any(|p| target_kind.contains(p)))
+                && pattern_kind.split('_').any(|p| {
+                    // Exclude common node-type suffixes from fuzzy matching to avoid
+                    // false positives like "select_statement" matching "insert_statement"
+                    // just because both contain "statement".
+                    !matches!(p, "statement" | "expression" | "declaration" | "clause" | "definition" | "parameter" | "type")
+                    && target_kind.contains(p)
+                }))
             || (is_chain_kind(pattern_kind) && is_chain_kind(target_kind))
             || (pattern_kind == "arrow_function"
                 && matches!(target_kind, "function_expression" | "function_declaration"))

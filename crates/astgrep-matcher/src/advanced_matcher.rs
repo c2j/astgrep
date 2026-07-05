@@ -32,6 +32,9 @@ pub struct AdvancedSemgrepMatcher {
     symbolic_propagator: Option<astgrep_dataflow::SymbolicPropagator>,
     tree_matcher: TreeMatcher,
     language_hint: Option<astgrep_core::Language>,
+    /// Cache: (pattern_str, parsed_pattern) to avoid re-parsing the same
+    /// pattern at every AST node during recursive matching.
+    parse_cache: Option<(String, ParsedPattern)>,
 }
 
 impl Default for AdvancedSemgrepMatcher {
@@ -89,7 +92,7 @@ impl AdvancedSemgrepMatcher {
             parser: PatternParser::new(),
             metavar_manager: MetavarManager::new(),
             debug_mode: false,
-            max_depth: None,
+            max_depth: Some(500), // guard against stack overflow on deeply nested ASTs
             constant_values: HashMap::new(),
             full_source: None,
             inside_match_cache: HashMap::new(),
@@ -98,6 +101,7 @@ impl AdvancedSemgrepMatcher {
             symbolic_propagator: None,
             tree_matcher: TreeMatcher::new(),
             language_hint: None,
+            parse_cache: None,
         }
     }
 
@@ -160,27 +164,48 @@ impl AdvancedSemgrepMatcher {
             }
         }
 
-        let mut matches = Vec::new();
-        if let Err(e) = self.find_matches_recursive(pattern, root, &mut matches, 0) {
-            tracing::debug!(error = ?e, "recursive matcher error, falling back to tree/text matchers");
-        }
+        let mut matches: Vec<SemgrepMatchResult> = Vec::new();
 
+        // For Simple patterns with a known language, try the specialized
+        // tree_matcher first — it's faster and more accurate. Only fall back
+        // to the general recursive matcher if tree_matcher produces no results
+        // or if constant propagation is needed.
+        let mut ran_recursive = false;
         if let PatternType::Simple(pattern_str) = &pattern.pattern_type {
             if let Some(lang) = self.language_hint {
                 let tree_results = self.tree_matcher.find_matches(pattern_str, lang, root);
                 let tree_found = !tree_results.is_empty();
                 if tree_found {
                     if self.constant_values.is_empty() {
-                        matches = tree_results;
-                    } else {
-                        for r in tree_results {
-                            let is_new = !matches
-                                .iter()
-                                .any(|m| m.node.location() == r.node.location());
-                            if is_new {
-                                matches.push(r);
+                        // Import resolution fallback: if the tree matcher found
+                        // results but the pattern has FQN references that need
+                        // import resolution, also run the recursive matcher and
+                        // merge its deduplicated findings.
+                        if (!self.import_map.is_empty() || !self.wildcard_imports.is_empty())
+                            && self.pattern_has_fqn(pattern_str)
+                        {
+                            let mut text_matches = Vec::new();
+                            if self.find_matches_recursive(pattern, root, &mut text_matches, 0).is_err() {
+                                tracing::debug!("text-based recursive matcher error");
                             }
+                            ran_recursive = true;
+                            let mut merged = tree_results;
+                            for r in text_matches {
+                                let is_new = !merged
+                                    .iter()
+                                    .any(|m| m.node.location() == r.node.location());
+                                if is_new {
+                                    merged.push(r);
+                                }
+                            }
+                            return Ok(merged);
                         }
+                        return Ok(tree_results);
+                    }
+                    // Constants non-empty — merge tree results, then run recursive matcher
+                    // (tree matcher doesn't handle constant propagation)
+                    for r in tree_results {
+                        matches.push(r);
                     }
                 }
                 if !self.constant_values.is_empty()
@@ -193,6 +218,7 @@ impl AdvancedSemgrepMatcher {
                     {
                         tracing::debug!(error = ?e, "text-based recursive matcher error");
                     }
+                    ran_recursive = true;
                     for r in text_matches {
                         let is_new = !matches
                             .iter()
@@ -202,6 +228,15 @@ impl AdvancedSemgrepMatcher {
                         }
                     }
                 }
+            }
+        }
+
+        // Run the general recursive matcher as fallback for patterns the
+        // tree_matcher couldn't handle (non-Simple patterns, or Simple patterns
+        // where tree_matcher returned nothing).
+        if !ran_recursive {
+            if let Err(e) = self.find_matches_recursive(pattern, root, &mut matches, 0) {
+                tracing::debug!(error = ?e, "recursive matcher error, falling back to tree/text matchers");
             }
         }
 
@@ -309,12 +344,22 @@ impl AdvancedSemgrepMatcher {
     /// Match a simple pattern string
     fn matches_simple_pattern(&mut self, pattern_str: &str, node: &dyn AstNode) -> Result<bool> {
         if let Some(inner) = Self::extract_deep_expr(pattern_str) {
+            self.parse_cache = None;
             return self.match_deep_expr_from_str(&inner, node);
         }
 
-        let parsed_pattern = self.parser.parse(pattern_str)?;
-
-        self.match_parsed_pattern(&parsed_pattern, node, 0)
+        // Cache parsed pattern to avoid re-parsing the same pattern string
+        // at every AST node during recursive matching (was O(n) parses → now O(1)).
+        let hit = self
+            .parse_cache
+            .as_ref()
+            .map_or(false, |(s, _)| s == pattern_str);
+        if !hit {
+            let parsed = self.parser.parse(pattern_str)?;
+            self.parse_cache = Some((pattern_str.to_string(), parsed));
+        }
+        let parsed = self.parse_cache.as_ref().unwrap().1.clone();
+        self.match_parsed_pattern(&parsed, node, 0)
     }
 
     fn extract_deep_expr(pattern: &str) -> Option<String> {
@@ -1284,7 +1329,9 @@ impl AdvancedSemgrepMatcher {
                 if let Some(t) = c.text() {
                     !t.trim().is_empty()
                 } else {
-                    false
+                    // Nodes without text (e.g., PL/pgSQL assignment statements)
+                    // are still valid for sequence matching; don't filter them out.
+                    true
                 }
             })
             .collect();
@@ -3996,7 +4043,7 @@ mod tests {
     fn test_advanced_matcher_new() {
         let matcher = AdvancedSemgrepMatcher::new();
         assert!(!matcher.debug_mode);
-        assert!(matcher.max_depth.is_none());
+        assert_eq!(matcher.max_depth, Some(500));
         assert!(matcher.constant_values.is_empty());
         assert!(matcher.full_source.is_none());
         assert!(matcher.symbolic_propagator.is_none());
@@ -4006,7 +4053,7 @@ mod tests {
     fn test_advanced_matcher_default() {
         let matcher: AdvancedSemgrepMatcher = Default::default();
         assert!(!matcher.debug_mode);
-        assert!(matcher.max_depth.is_none());
+        assert_eq!(matcher.max_depth, Some(500));
     }
 
     #[test]

@@ -68,6 +68,32 @@ pub trait AstNode: Send + Sync {
         None // Default implementation
     }
 
+    /// Get all attributes as key-value pairs.
+    /// Used for deep cloning that preserves node metadata.
+    fn all_attributes(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
+    /// Get identifier name, if this node is an identifier-like node.
+    fn identifier(&self) -> Option<&str> {
+        None
+    }
+
+    /// Get literal value as string, if this node is a literal.
+    fn literal_value_str(&self) -> Option<String> {
+        None
+    }
+
+    /// Get binary operator as string, if this node is a binary expression.
+    fn binary_operator_str(&self) -> Option<&str> {
+        None
+    }
+
+    /// Get unary operator as string, if this node is a unary expression.
+    fn unary_operator_str(&self) -> Option<&str> {
+        None
+    }
+
     /// Clone this node as a boxed trait object
     fn clone_node(&self) -> Box<dyn AstNode>;
 }

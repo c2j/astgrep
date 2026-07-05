@@ -249,8 +249,9 @@ fn analyze_with_rule_engine(
     use astgrep_rules::{RuleContext, RuleEngine};
     use std::path::Path;
 
-    let mut engine = RuleEngine::new();
-    let rules_count = load_rules_into_engine_from_paths(&config.rule_files, &mut engine)?;
+    let mut engine = Some(RuleEngine::new());
+    let rules_count =
+        load_rules_into_engine_from_paths(&config.rule_files, engine.as_mut().unwrap())?;
     if rules_count == 0 {
         return Ok((Vec::new(), 0));
     }
@@ -313,6 +314,8 @@ fn analyze_with_rule_engine(
                     if !constants.is_empty() {
                         tracing::debug!("Constant propagation found {} constants", constants.len());
                         engine
+                            .as_mut()
+                            .unwrap()
                             .configure_executor()
                             .set_constant_values(constants.clone());
                         constants
@@ -329,7 +332,24 @@ fn analyze_with_rule_engine(
             std::collections::HashMap::new()
         };
 
-        all_findings_core = engine.analyze(ast.as_ref(), &context)?;
+        // Spawn analysis in a larger-stack thread for SQL dialects to prevent
+        // stack overflow on large files. The recursive tree matchers have large
+        // stack frames from HashMap cloning (snapshot()), and deeply nested SQL
+        // expressions can exhaust the default 8MB stack.
+        // For non-SQL languages, keep the default stack and inline call so that
+        // the Java/XML embedded-SQL path below can reuse the engine.
+        all_findings_core = if language == Language::Sql {
+            let mut engine = engine.take().expect("engine already consumed");
+            const STACK_SIZE: usize = 256 * 1024 * 1024; // 256 MB
+            std::thread::Builder::new()
+                .stack_size(STACK_SIZE)
+                .spawn(move || engine.analyze(ast.as_ref(), &context))
+                .expect("failed to spawn SQL analysis thread")
+                .join()
+                .expect("SQL analysis thread panicked")?
+        } else {
+            engine.as_mut().unwrap().analyze(ast.as_ref(), &context)?
+        };
     } else {
         tracing::warn!("No parser registered for {:?}; skipping direct analysis but will attempt preprocess path if configured", language);
     }
@@ -354,11 +374,14 @@ fn analyze_with_rule_engine(
         let registry2 = LanguageParserRegistry::new();
         if let Some(sql_parser) = registry2.get_parser(Language::Sql) {
             // Collect eligible SQL rules with preprocessing metadata
+            // SAFETY: engine is Some here because we only take() it for Language::Sql,
+            // and this block only runs for Java/Xml.
+            let engine_ref = engine.as_ref().unwrap();
             tracing::debug!(
                 "embedded-sql: total loaded rules = {}",
-                engine.rules().len()
+                engine_ref.rules().len()
             );
-            let sql_rules: Vec<_> = engine
+            let sql_rules: Vec<_> = engine_ref
                 .rules()
                 .iter()
                 .inspect(|r| {
@@ -428,7 +451,7 @@ fn analyze_with_rule_engine(
 
                         for rule in &sql_rules {
                             if let Ok(Some(result)) =
-                                engine.execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql)
+                                engine.as_mut().unwrap().execute_rule(&rule.id, ast_sql.as_ref(), &ctx_sql)
                             {
                                 if result.is_success() {
                                     tracing::debug!("embedded-sql: rule '{}' produced {} findings on snippet #{}", rule.id, result.findings.len(), idx + 1);
