@@ -353,10 +353,7 @@ impl AdvancedSemgrepMatcher {
 
         // Cache parsed pattern to avoid re-parsing the same pattern string
         // at every AST node during recursive matching (was O(n) parses → now O(1)).
-        let hit = self
-            .parse_cache
-            .as_ref()
-            .map_or(false, |(s, _)| s == pattern_str);
+        let hit = self.parse_cache.as_ref().is_some_and(|(s, _)| s == pattern_str);
         if !hit {
             let parsed = self.parser.parse(pattern_str)?;
             self.parse_cache = Some((pattern_str.to_string(), parsed));
