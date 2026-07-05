@@ -751,6 +751,66 @@ impl AstNode for UniversalNode {
         self.attributes.get(key).map(|s| s.as_str())
     }
 
+    fn all_attributes(&self) -> Vec<(String, String)> {
+        self.attributes.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
+
+    fn identifier(&self) -> Option<&str> {
+        self.identifier_name.as_deref()
+    }
+
+    fn literal_value_str(&self) -> Option<String> {
+        self.literal_value.as_ref().map(|lv| lv.to_string())
+    }
+
+    fn binary_operator_str(&self) -> Option<&str> {
+        self.binary_operator.as_ref().map(|op| match op {
+            BinaryOperator::Add => "+",
+            BinaryOperator::Subtract => "-",
+            BinaryOperator::Multiply => "*",
+            BinaryOperator::Divide => "/",
+            BinaryOperator::Modulo => "%",
+            BinaryOperator::Power => "**",
+            BinaryOperator::Equal => "=",
+            BinaryOperator::NotEqual => "!=",
+            BinaryOperator::LessThan => "<",
+            BinaryOperator::LessThanOrEqual => "<=",
+            BinaryOperator::GreaterThan => ">",
+            BinaryOperator::GreaterThanOrEqual => ">=",
+            BinaryOperator::And => "&&",
+            BinaryOperator::Or => "||",
+            BinaryOperator::BitwiseAnd => "&",
+            BinaryOperator::BitwiseOr => "|",
+            BinaryOperator::BitwiseXor => "^",
+            BinaryOperator::LeftShift => "<<",
+            BinaryOperator::RightShift => ">>",
+            BinaryOperator::Assign => "=",
+            BinaryOperator::AddAssign => "+=",
+            BinaryOperator::SubtractAssign => "-=",
+            BinaryOperator::MultiplyAssign => "*=",
+            BinaryOperator::DivideAssign => "/=",
+            BinaryOperator::In => "in",
+            BinaryOperator::InstanceOf => "instanceof",
+            BinaryOperator::Typeof => "typeof",
+        })
+    }
+
+    fn unary_operator_str(&self) -> Option<&str> {
+        self.unary_operator.as_ref().map(|op| match op {
+            UnaryOperator::Plus => "+",
+            UnaryOperator::Minus => "-",
+            UnaryOperator::Not => "!",
+            UnaryOperator::BitwiseNot => "~",
+            UnaryOperator::Typeof => "typeof",
+            UnaryOperator::Void => "void",
+            UnaryOperator::Delete => "delete",
+            UnaryOperator::PreIncrement => "++",
+            UnaryOperator::PostIncrement => "++",
+            UnaryOperator::PreDecrement => "--",
+            UnaryOperator::PostDecrement => "--",
+        })
+    }
+
     fn clone_node(&self) -> Box<dyn AstNode> {
         Box::new(self.clone())
     }

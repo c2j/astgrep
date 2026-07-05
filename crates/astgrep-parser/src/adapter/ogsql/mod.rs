@@ -223,11 +223,14 @@ fn apply_span(
 }
 
 fn propagate_location(node: &mut UniversalNode, loc: (usize, usize, usize, usize)) {
-    for child in node.children.iter_mut() {
-        if child.location.is_none() {
-            child.location = Some(loc);
+    // Depth-first traversal using explicit stack to avoid recursion overflow
+    // on deeply nested ASTs.
+    let mut stack: Vec<&mut UniversalNode> = node.children.iter_mut().collect();
+    while let Some(current) = stack.pop() {
+        if current.location.is_none() {
+            current.location = Some(loc);
         }
-        propagate_location(child, loc);
+        stack.extend(current.children.iter_mut());
     }
 }
 
