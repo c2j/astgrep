@@ -186,7 +186,7 @@ impl AdvancedSemgrepMatcher {
                 if !self.constant_values.is_empty()
                     || (!tree_found
                         && (!self.import_map.is_empty() || !self.wildcard_imports.is_empty())
-                        && self.pattern_has_fqn(&pattern_str))
+                        && self.pattern_has_fqn(pattern_str))
                 {
                     let mut text_matches = Vec::new();
                     if let Err(e) = self.find_matches_recursive(pattern, root, &mut text_matches, 0) {
@@ -211,10 +211,7 @@ impl AdvancedSemgrepMatcher {
         if let Some(full) = self.import_map.get(short_name) {
             return Some(full.clone());
         }
-        for wc in &self.wildcard_imports {
-            return Some(format!("{}.{}", wc, short_name));
-        }
-        None
+        self.wildcard_imports.first().map(|wc| format!("{}.{}", wc, short_name))
     }
 
     fn pattern_has_fqn(&self, pattern_str: &str) -> bool {
