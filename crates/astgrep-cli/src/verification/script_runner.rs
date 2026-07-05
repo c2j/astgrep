@@ -377,11 +377,11 @@ impl ScriptRunner {
         let start_time = Instant::now();
 
         let metadata = std::fs::metadata(script_path)?;
-        let _readonly = metadata.permissions().readonly();
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
+            let readonly = metadata.permissions().readonly();
             let mode = metadata.permissions().mode();
             let is_executable = mode & 0o111 != 0;
 
@@ -399,6 +399,7 @@ impl ScriptRunner {
 
         #[cfg(not(unix))]
         {
+            let readonly = false; // Windows: readonly concept not applicable
             Ok(VerificationCheck {
                 check_type: VerificationCheckType::FilePermissions,
                 description: "Script file is accessible".to_string(),
