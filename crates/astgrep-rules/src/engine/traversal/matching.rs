@@ -103,7 +103,7 @@ pub(crate) fn find_pattern_spans_in_source(
 
     let mut spans = Vec::new();
 
-    // Strip outer quotes if present (pattern may be wrapped in "" or '')
+    // Strip outer quotes if present
     let inner_pattern = if pattern.len() >= 2 {
         let chars: Vec<char> = pattern.chars().collect();
         if chars[0] == '"' && chars[chars.len() - 1] == '"' {
@@ -121,10 +121,8 @@ pub(crate) fn find_pattern_spans_in_source(
         && inner_pattern.ends_with('/')
         && inner_pattern.len() > 4
     {
-        // Semgrep =~/regex/ syntax: match regex against string content
         inner_pattern[3..inner_pattern.len() - 1].to_string()
     } else if looks_like_raw_regex(inner_pattern) {
-        // Pattern is already a regex — pass through without escaping
         inner_pattern.to_string()
     } else {
         semgrep_pattern_to_regex(inner_pattern)

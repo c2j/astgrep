@@ -144,8 +144,10 @@ pub enum Commands {
         #[arg(long, value_name = "DIALECT")]
         dialect: Option<String>,
 
-        /// Enable constant propagation analysis (default: true)
-        #[arg(long = "constant-propagation", default_value = "true")]
+        /// Enable constant propagation analysis (default: false).
+        /// Only effective for Standard SQL; dialect SQL (GaussDB/OpenGauss etc.)
+        /// can't benefit from tree-sitter-based propagation.
+        #[arg(long = "constant-propagation")]
         constant_propagation: bool,
     },
 
