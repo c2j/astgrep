@@ -9,6 +9,7 @@
 
 use anyhow::Result;
 use astgrep_core::Language;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::path::PathBuf;
 use std::time::Instant;
 use tracing::{debug, info, warn};
@@ -48,13 +49,55 @@ pub async fn run_enhanced(
         return Ok(());
     }
 
+    let total = target_files.len();
+    let show_progress = total > 10;
+    let pb = if show_progress {
+        let pb = ProgressBar::new(total as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}",
+                )
+                .expect("Invalid progress bar template")
+                .progress_chars("#>-"),
+        );
+        Some(pb)
+    } else {
+        None
+    };
+
     // Run simplified analysis
     let mut all_findings = Vec::new();
     let mut analysis_stats = AnalysisStatistics::new();
 
     for file_path in target_files {
         debug!("Analyzing file: {:?}", file_path);
-        analyze_file_simple(&file_path, &config, &mut all_findings, &mut analysis_stats)?;
+        if let Some(ref bar) = pb {
+            bar.set_message(file_path.display().to_string());
+        }
+        match analyze_file_simple(&file_path, &config, &mut all_findings, &mut analysis_stats) {
+            Ok(()) => {}
+            Err(e) => {
+                let msg = e.to_string();
+                // Dialect/parser failures: skip this file, continue with others.
+                // IO errors and rule-loading failures still abort the whole run.
+                if msg.starts_with("parse failed for dialect")
+                    || msg.contains("parse failed")
+                {
+                    warn!("Skipping {}: {}", file_path.display(), msg);
+                    analysis_stats.parse_errors += 1;
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+        if let Some(ref bar) = pb {
+            bar.inc(1);
+        }
+    }
+
+    if let Some(ref bar) = pb {
+        bar.finish_with_message("File analysis complete");
     }
 
     // Apply filters
