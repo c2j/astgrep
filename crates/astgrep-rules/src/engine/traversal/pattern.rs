@@ -170,7 +170,7 @@ impl RuleExecutionEngine {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
-        if Self::pattern_needs_ast_matching(pattern_str) {
+        if Self::pattern_needs_ast_matching(pattern_str, context.language) {
             return self.execute_advanced_pattern(pattern, rule, context, _ast);
         }
 
@@ -268,7 +268,15 @@ impl RuleExecutionEngine {
         Ok(text_findings)
     }
 
-    fn pattern_needs_ast_matching(pattern_str: &str) -> bool {
+    fn pattern_needs_ast_matching(pattern_str: &str, language: astgrep_core::Language) -> bool {
+        // SQL: `;\n` is normal formatting, NOT a multi-statement signal (unlike Java/C/JS).
+        // Without this exemption, every multiline SQL pattern is forced through the
+        // heavyweight AdvancedRuleExecutor path instead of the O(n) text matcher.
+        let sql_semicolon_newline = if language == astgrep_core::Language::Sql {
+            false
+        } else {
+            pattern_str.contains(';') && pattern_str.contains('\n')
+        };
         pattern_str.contains('{')
             || pattern_str.contains("class ")
             || pattern_str.contains("function ")
@@ -290,7 +298,7 @@ impl RuleExecutionEngine {
             || pattern_str.contains("protected ")
             || pattern_str.contains("return ")
             || pattern_str.contains("throw ")
-            || (pattern_str.contains(';') && pattern_str.contains('\n'))
+            || sql_semicolon_newline
             || pattern_str.starts_with("var ")
             || pattern_str.starts_with("let ")
             || pattern_str.starts_with("const ")
@@ -310,11 +318,9 @@ impl RuleExecutionEngine {
         use crate::executor::AdvancedRuleExecutor;
         let mut advanced_executor = AdvancedRuleExecutor::new();
 
-        // Create a rule with just this pattern
         let mut single_pattern_rule = rule.clone();
         single_pattern_rule.patterns = vec![pattern.clone()];
 
-        // Execute using advanced executor
         let file_path = std::path::Path::new(&context.file_path);
         let enable_cp = !matches!(
             context.sql_dialect,
@@ -433,14 +439,14 @@ impl RuleExecutionEngine {
         // skip text matching entirely and delegate to AdvancedRuleExecutor.
         // The text matcher converts $VAR to flat regex which produces false positives
         // on structural patterns like "$TYPE $METHOD(...) { $...BODY }".
+        // Multiline patterns with metavariables produce catastrophic regex backtracking
+        // when combined with (?s) + broad metavar patterns, especially on large files.
         for sub in subs {
             if let PatternType::Simple(ref s) = sub.pattern_type {
-                if Self::pattern_needs_ast_matching(s) {
+                let multiline_with_metavars =
+                    s.contains('\n') && (s.contains('$') || s.contains("..."));
+                if multiline_with_metavars || Self::pattern_needs_ast_matching(s, context.language) {
                     can_use_text = false;
-                    debug!(
-                        "All pattern sub-pattern '{}' needs AST matching, delegating to AdvancedRuleExecutor",
-                        s
-                    );
                     break;
                 }
             }

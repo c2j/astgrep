@@ -249,21 +249,17 @@ fn analyze_with_rule_engine(
     use astgrep_rules::{RuleContext, RuleEngine};
     use std::path::Path;
 
-    // 1) Load rules into the shared engine
     let mut engine = RuleEngine::new();
     let rules_count = load_rules_into_engine_from_paths(&config.rule_files, &mut engine)?;
     if rules_count == 0 {
         return Ok((Vec::new(), 0));
     }
 
-    // 2) Build AST once per file (if a parser exists). If not (e.g., Xml not yet wired), still allow preprocess path.
     let registry = LanguageParserRegistry::new();
     let parser_opt = registry.get_parser(language);
     let mut all_findings_core: Vec<astgrep_core::Finding> = Vec::new();
 
     if let Some(parser) = parser_opt {
-        // For non-Standard SQL dialects (GaussDB/OpenGauss/etc.), route through
-        // the dialect dispatcher (ogsql-parser) instead of the default tree-sitter path.
         let ast = if language == Language::Sql {
             match config.sql_dialect {
                 Some(dialect) if dialect != astgrep_core::SqlDialect::Standard => {
@@ -279,27 +275,25 @@ fn analyze_with_rule_engine(
             parser.parse(source_code, Path::new(file_path))?
         };
 
-        // 3) Execute rules with unified context
         let mut context = RuleContext::new(
             file_path.to_string_lossy().to_string(),
             language,
             source_code.to_string(),
         );
-        // Pass CLI level sql_statement_boundary (if provided) into context; per-rule YAML can override in engine
         if let Some(flag) = config.sql_statement_boundary {
             context = context.add_data("sql_statement_boundary".to_string(), flag.to_string());
         }
         context.sql_dialect = config.sql_dialect;
 
-        // Perform constant propagation analysis if enabled
-        // Use tree-sitter parser for better AST quality if available
-        let _constant_values = if config.enable_constant_propagation {
+        // Constant propagation: only for Standard SQL (tree-sitter can't parse dialect SQL)
+        let is_standard_sql = config
+            .sql_dialect
+            .map_or(true, |d| d == astgrep_core::SqlDialect::Standard);
+        let _constant_values = if config.enable_constant_propagation && is_standard_sql {
             use astgrep_dataflow::ConstantPropagator;
             use astgrep_parser::tree_sitter_parser::TreeSitterParser;
 
             let mut propagator = ConstantPropagator::new();
-
-            // Try to use tree-sitter for better AST
             let constants_result = if let Ok(ts_parser) = TreeSitterParser::new() {
                 if let Ok(Some(tree)) = ts_parser.parse(source_code, language) {
                     if let Ok(ts_ast) = ts_parser.tree_to_universal_ast(&tree, source_code) {
@@ -318,7 +312,6 @@ fn analyze_with_rule_engine(
                 Ok(constants) => {
                     if !constants.is_empty() {
                         tracing::debug!("Constant propagation found {} constants", constants.len());
-                        // Set constants in the engine's executor
                         engine
                             .configure_executor()
                             .set_constant_values(constants.clone());
