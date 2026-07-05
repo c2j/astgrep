@@ -148,6 +148,10 @@ impl OgsqlAdapter {
                 let span = s.span.clone();
                 ddl::convert_create_package(s).map(|node| apply_span(node, span))
             }
+            ogsql_parser::ast::Statement::CreatePackageBody(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_package_body(s).map(|node| apply_span(node, span))
+            }
             ogsql_parser::ast::Statement::Drop(ref s) => {
                 let span = s.span.clone();
                 ddl::convert_drop(s).map(|node| apply_span(node, span))
@@ -192,7 +196,6 @@ impl OgsqlAdapter {
                         "CreateMaterializedView"
                     }
                     ogsql_parser::ast::Statement::CreateSequence(_) => "CreateSequence",
-                    ogsql_parser::ast::Statement::CreatePackageBody(_) => "CreatePackageBody",
                     ogsql_parser::ast::Statement::CreateTrigger(_) => "CreateTrigger",
                     ogsql_parser::ast::Statement::Truncate(_) => "Truncate",
                     ogsql_parser::ast::Statement::Copy(_) => "Copy",
@@ -208,14 +211,25 @@ impl OgsqlAdapter {
 
 /// Apply ogsql-parser source span to a UniversalNode so match results
 /// report correct line/column numbers instead of default (1,1).
+/// Propagates the span to all descendants that don't have their own location.
 fn apply_span(
-    node: UniversalNode,
+    mut node: UniversalNode,
     span: Option<ogsql_parser::ast::SourceSpan>,
 ) -> UniversalNode {
     if let Some(s) = span {
-        node.with_location(s.start.line, s.start.column, s.end.line, s.end.column)
-    } else {
-        node
+        let loc = (s.start.line, s.start.column, s.end.line, s.end.column);
+        node = node.with_location(loc.0, loc.1, loc.2, loc.3);
+        propagate_location(&mut node, loc);
+    }
+    node
+}
+
+fn propagate_location(node: &mut UniversalNode, loc: (usize, usize, usize, usize)) {
+    for child in node.children.iter_mut() {
+        if child.location.is_none() {
+            child.location = Some(loc);
+        }
+        propagate_location(child, loc);
     }
 }
 

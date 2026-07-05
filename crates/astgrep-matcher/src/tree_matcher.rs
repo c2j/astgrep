@@ -1372,13 +1372,16 @@ impl MatchCtx {
         match pattern {
             PatternTree::Ellipsis => true,
 
-            PatternTree::Metavar { name, .. } => {
+            PatternTree::Metavar { name, bind_attr } => {
                 if name == "_" {
                     let kind = target.node_type();
                     if kind == "comment" || kind == "line_comment" || kind == "block_comment" {
                         return false;
                     }
                     return target.text().map_or(false, |t| !t.trim().is_empty());
+                }
+                if let Some(ref attr) = bind_attr {
+                    return self.bind_metavar_in_subtree(pattern, target);
                 }
                 if let Some(text) = target.text() {
                     let trimmed = text.trim();
@@ -1436,8 +1439,9 @@ impl MatchCtx {
             PatternTree::Node {
                 kind,
                 children,
-                text, ..
-            } => self.match_node(kind, children, text, target),
+                text,
+                constraints,
+            } => self.match_node(kind, children, text, constraints, target),
         }
     }
 
@@ -1446,6 +1450,7 @@ impl MatchCtx {
         pattern_kind: &str,
         pattern_children: &[PatternTree],
         pattern_text: &Option<String>,
+        pattern_constraints: &[(String, String)],
         target: &dyn AstNode,
     ) -> bool {
         if let Some(ref pt) = pattern_text {
@@ -1517,8 +1522,11 @@ impl MatchCtx {
                 if pattern_children.is_empty() {
                     return false;
                 }
+            } else if pattern_children.is_empty() {
+                // Pattern has text, target has no text, no children to fall back
+                return false;
             }
-            return false;
+            // Fall through to structural matching when text mismatch but children exist
         }
 
         // Phase 2: Text-less pattern — must match structurally via children.
@@ -1729,6 +1737,54 @@ impl MatchCtx {
             }
         }
 
+        // Per-node constraint check
+        for (key, expected) in pattern_constraints {
+            if key == "into_target_count" {
+                let count = (0..target.child_count())
+                    .filter_map(|i| target.child(i))
+                    .filter(|c| c.get_attribute("target_var").is_some())
+                    .count();
+                if count.to_string() != *expected.as_str() {
+                    return false;
+                }
+                continue;
+            }
+            if target.get_attribute(key).as_deref() != Some(expected.as_str()) {
+                return false;
+            }
+        }
+
+        // For ogsql statement patterns, kind + constraints are sufficient for
+        // structural block matching. Metavar binding is handled at block scope.
+        if matches!(pattern_kind.as_ref(),
+            "select_statement" | "update_statement" | "assignment_expression"
+            | "delete_statement" | "insert_statement" | "merge_statement"
+        ) {
+            return true;
+        }
+
+        // Process _ogsql_bind nodes: filter them out for positional matching.
+        // Binding happens post-match in the has_ellipsis branch below.
+        let all_children = pattern_children;
+        let has_bind = all_children.iter().any(|c| {
+            matches!(c, PatternTree::Node { kind, .. } if kind == "_ogsql_bind")
+        });
+        let filtered: std::borrow::Cow<[PatternTree]>;
+        let pattern_children: &[PatternTree] = if has_bind {
+            filtered = std::borrow::Cow::Owned(
+                all_children.iter()
+                    .filter(|c| {
+                        !matches!(c, PatternTree::Node { kind, .. } if kind == "_ogsql_bind")
+                        && !matches!(c, PatternTree::Metavar { bind_attr: Some(_), .. })
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            );
+            &*filtered
+        } else {
+            pattern_children
+        };
+
         let target_children: Vec<&dyn AstNode> = (0..target.child_count())
             .filter_map(|i| target.child(i))
             .filter(|c| {
@@ -1757,7 +1813,8 @@ impl MatchCtx {
                         && t != "."
                         && t != "="
                 } else {
-                    false
+                    // No text — keep the child (e.g. ogsql structural nodes)
+                    true
                 }
             })
             .collect();
@@ -1822,6 +1879,21 @@ impl MatchCtx {
                     self.restore(snap);
                 }
             }
+        }
+
+        // ogsql metavar binding node: bind each metavar child via subtree search
+        // and verify cross-statement consistency, then continue matching siblings.
+        if pattern_kind == "_ogsql_bind" && !pattern_children.is_empty() {
+            let snap = self.snapshot();
+            for mv in pattern_children {
+                if !self.bind_metavar_in_subtree(mv, target) {
+                    self.restore(snap); return false;
+                }
+            }
+            if !self.verify_metavar_consistency(pattern_children, target) {
+                self.restore(snap); return false;
+            }
+            return true;
         }
 
         // Wildcard kind "_" with metavar children — bind each in target subtree.
@@ -1961,7 +2033,23 @@ impl MatchCtx {
         });
 
         if has_ellipsis {
-            self.match_children_with_ellipsis(pattern_children, &target_children)
+            let result = self.match_children_with_ellipsis(pattern_children, &target_children);
+            // After structural match succeeds, bind ogsql metavars + verify
+            if result && has_bind {
+                for child in all_children.iter() {
+                    if let PatternTree::Node { kind, children: mv_kids, .. } = child {
+                        if kind == "_ogsql_bind" {
+                            if !self.bind_metavars_with_backtrack(mv_kids, target) {
+                                return false;
+                            }
+                            if !self.verify_metavar_consistency(mv_kids, target) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            result
         } else if pattern_children.len() != target_children.len() {
             // Length mismatch with optional collections: filter out optional
             // collection children (e.g., argument_list([...]) that can match
@@ -2087,6 +2175,19 @@ impl MatchCtx {
     /// if it has no meaningful children. This makes the reported location
     /// point at the first actual statement inside a block.
     fn first_meaningful_child(node: &dyn AstNode) -> &dyn AstNode {
+        // First pass: prefer children with constraint attributes (e.g. has_lock=true)
+        // that indicate they were part of the actual match, not just any block child.
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if child.get_attribute("has_lock").is_some() {
+                    let child_loc = child.location();
+                    if child_loc.is_some() && child_loc != Some((1, 1, 1, 1)) {
+                        return child;
+                    }
+                }
+            }
+        }
+        // Second pass: first non-comment, non-keyword child with usable location
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
                 let kind = child.get_attribute("ts_kind").unwrap_or(child.node_type());
@@ -2100,15 +2201,11 @@ impl MatchCtx {
                 }
                 let skip = ["DECLARE", "BEGIN", "END", "keyword_begin", "keyword_end"];
                 if !skip.contains(&kind) {
-                    // If child has default/missing location but parent doesn't, keep
-                    // using the parent (which carries ogSql span from Spanned<T>).
                     let child_loc = child.location();
                     let parent_loc = node.location();
-                    let child_is_default =
-                        child_loc.map_or(true, |(sl, sc, _, _)| (sl, sc) == (1, 1));
-                    let parent_is_valid =
-                        parent_loc.map_or(false, |(sl, sc, _, _)| (sl, sc) != (1, 1));
-                    if child_is_default && parent_is_valid {
+                    let child_bad = child_loc.is_none() || child_loc == Some((1, 1, 1, 1));
+                    let parent_good = parent_loc.is_some() && parent_loc != Some((1, 1, 1, 1));
+                    if child_bad && parent_good {
                         return node;
                     }
                     return child;
@@ -2150,18 +2247,72 @@ impl MatchCtx {
 
     fn bind_metavar_in_subtree(&mut self, mv: &PatternTree, target: &dyn AstNode) -> bool {
         if let PatternTree::Metavar { name, bind_attr: Some(ref attr) } = mv {
-            if let Some(val) = target.get_attribute(attr) {
-                return self.try_bind(name, val);
+            let mut candidates: Vec<String> = Vec::new();
+            Self::collect_attr_values(attr, target, &mut candidates);
+            if let Some(existing) = self.bindings.get(name) {
+                return candidates.iter().any(|c| c == existing);
+            }
+            if candidates.is_empty() { return false; }
+            return self.try_bind(name, &candidates[0]);
+        }
+        false
+    }
+
+    /// Bind all metavars in the list, trying different candidate values
+    /// when initial binding causes consistency failures.
+    fn bind_metavars_with_backtrack(
+        &mut self,
+        metavars: &[PatternTree],
+        target: &dyn AstNode,
+    ) -> bool {
+        // Collect candidate values for each metavar
+        let mut all_candidates: Vec<(&str, &str, Vec<String>)> = Vec::new();
+        for mv in metavars {
+            if let PatternTree::Metavar { name, bind_attr: Some(attr) } = mv {
+                let mut cands = Vec::new();
+                Self::collect_attr_values(attr, target, &mut cands);
+                // Deduplicate
+                cands.sort();
+                cands.dedup();
+                all_candidates.push((name, attr, cands));
             }
         }
-        for i in 0..target.child_count() {
-            if let Some(child) = target.child(i) {
-                if self.bind_metavar_in_subtree(mv, child) {
-                    return true;
+        // Try binding: for each unique metavar name, pick a value that is
+        // consistent across all its attribute bindings.
+        let unique_names: Vec<&str> = {
+            let mut seen = std::collections::HashSet::new();
+            all_candidates.iter()
+                .filter_map(|(n, _, _)| if seen.insert(*n) { Some(*n) } else { None })
+                .collect()
+        };
+        // For each unique name, find the intersection of candidate values
+        // across all its attributes. If non-empty, bind to the first.
+        for name in &unique_names {
+            let mut sets: Vec<&Vec<String>> = Vec::new();
+            for (n, _, cands) in &all_candidates {
+                if n == name { sets.push(cands); }
+            }
+            let intersection: Vec<&String> = sets.iter()
+                .skip(1)
+                .fold(sets[0].iter().collect::<Vec<_>>(), |acc, set| {
+                    acc.into_iter().filter(|v| set.contains(v)).collect()
+                });
+            if intersection.is_empty() { return false; }
+            if !self.try_bind(name, intersection[0]) { return false; }
+        }
+        // Different metavar names sharing the same bind_attr must bind to
+        // different values (e.g. VAR1≠VAR2 from target_var in 2-column SELECT).
+        let mut used: std::collections::HashMap<&str, String> = std::collections::HashMap::new();
+        for (name, attr, _) in &all_candidates {
+            if let Some(val) = self.bindings.get(*name) {
+                if let Some(prev) = used.get(attr) {
+                    if prev == val { return false; }
+                } else {
+                    used.insert(attr, val.clone());
                 }
             }
         }
-        false
+        true
     }
 }
 
@@ -2366,8 +2517,6 @@ impl MatchCtx {
 
             _ => {
                 if targets.is_empty() {
-                    // Optional collections (e.g., argument_list([Ellipsis])) can
-                    // match zero target children — skip and continue with rest.
                     if is_optional_collection(first) {
                         return self.match_children_with_ellipsis(rest, targets);
                     }
@@ -2378,13 +2527,11 @@ impl MatchCtx {
                     return self.match_children_with_ellipsis(rest, &targets[1..]);
                 }
                 self.restore(snap);
-                // Deep expression matching: try to find pattern inside target
                 let snap2 = self.snapshot();
                 if self.deep_match_in_node(first, targets[0]) {
                     return self.match_children_with_ellipsis(rest, &targets[1..]);
                 }
                 self.restore(snap2);
-                // Skip non-matching target children
                 self.match_children_with_ellipsis(patterns, &targets[1..])
             }
         }

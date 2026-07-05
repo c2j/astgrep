@@ -275,13 +275,52 @@ impl PatternTreeParser {
             ));
         }
 
-        // Convert first statement's UniversalNode to PatternTree.
-        // Collect all metadata-bound metavars into a flat wildcard pattern
-        // so each metavar can independently match against the right target node.
-        let mut metavar_children = Vec::new();
-        Self::collect_ogsql_metavars(&nodes[0], meta_map, &mut metavar_children);
+        // Detect whether ogsql produced a block with multiple body statements
+        // (DO-wrapped multi-statement pattern like SELECT...; assignment; UPDATE).
+        // For these, produce a structural PatternTree with Ellipsis wrappers so
+        // match_children_with_ellipsis can find the consecutive sibling sequence
+        // within the target block. For single-statement patterns, keep the
+        // wildcard path (kind="_") as fallback.
+        let root = &nodes[0];
+        let root_kind = root.node_type.to_string();
+        // For DO-wrapped patterns, convert_do_block produces a block_statement
+        // directly with the body statements as children.
+        let has_block_body = (root_kind == "block_statement"
+            || root_kind == "do_statement")
+            && root.children.len() > 1;
 
-        // Collect literal attribute constraints (non-placeholder) for enforcement.
+        if has_block_body {
+            // Multi-statement: structural tree with metavar binding.
+            let mut mv_kids = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+            Self::collect_ogsql_metavars(root, meta_map, &mut mv_kids, &mut seen);
+            let mut tree = Self::universal_to_pattern_tree(root, meta_map);
+            if let PatternTree::Node { ref mut children, .. } = tree {
+                if !mv_kids.is_empty() {
+                    children.insert(0, PatternTree::Node {
+                        kind: "_ogsql_bind".to_string(),
+                        children: mv_kids,
+                        text: None,
+                        constraints: Vec::new(),
+                    });
+                }
+                children.insert(0, PatternTree::Ellipsis);
+                children.push(PatternTree::Ellipsis);
+            }
+            return Ok(tree);
+        }
+
+        // Single-statement fallback: flat wildcard (existing behavior).
+        let mut metavar_children = Vec::new();
+        let mut seen_pairs: std::collections::HashSet<(String, String)> =
+            std::collections::HashSet::new();
+        Self::collect_ogsql_metavars(
+            &nodes[0],
+            meta_map,
+            &mut metavar_children,
+            &mut seen_pairs,
+        );
+
         let mut constraints: Vec<(String, String)> = Vec::new();
         Self::collect_ogsql_attr_constraints(&nodes[0], meta_map, &mut constraints);
         constraints.retain(|(k, _)| k != "pl_block_type");
@@ -290,9 +329,6 @@ impl PatternTreeParser {
             return Ok(Self::universal_to_pattern_tree(&nodes[0], meta_map));
         }
 
-        // Use kind "_" (matches any node) with metavar children.
-        // find_recursive tries this against every target node, binding each metavar
-        // when its bind_attr matches the target's attributes.
         Ok(PatternTree::Node {
             kind: "_".to_string(),
             children: metavar_children,
@@ -303,12 +339,20 @@ impl PatternTreeParser {
 
     /// Walk the UniversalNode tree and collect all metadata-bound metavar
     /// placeholders into a flat list of PatternTree children.
+    /// Walk the UniversalNode tree and collect all metadata-bound metavar
+    /// placeholders into a flat list of PatternTree children.
+    ///
+    /// `seen_pairs` is shared across all recursive calls so duplicate
+    /// (name, attribute) entries from DO-wrapper node duplication are
+    /// deduplicated globally rather than per-node. This prevents inflated
+    /// expected_count in verify_metavar_consistency() when the target tree
+    /// doesn't have the same DO-wrapper duplication.
     fn collect_ogsql_metavars(
         node: &UniversalNode,
         meta_map: &HashMap<String, PlaceholderKind>,
         out: &mut Vec<PatternTree>,
+        seen_pairs: &mut std::collections::HashSet<(String, String)>,
     ) {
-        let mut node_added: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
         // Check node's text
         if let Some(ref text) = node.text {
             let trimmed = text.trim().to_string();
@@ -328,7 +372,7 @@ impl PatternTreeParser {
                     };
                     let final_attr = bind_attr.clone().or(inferred);
                     if let Some(attr) = final_attr {
-                        if node_added.insert((name.clone(), attr.clone())) {
+                        if seen_pairs.insert((name.clone(), attr.clone())) {
                             out.push(PatternTree::Metavar {
                                 name: name.clone(),
                                 bind_attr: Some(attr),
@@ -338,15 +382,10 @@ impl PatternTreeParser {
                 }
             }
         }
-        // Check node's metadata attributes — push one entry per unique
-        // (name, bind_attr) on this node. Same-node dedup prevents
-        // text-path + metadata-path from producing duplicates for the
-        // same attribute, while allowing different nodes with the same
-        // (name, bind_attr) to each contribute an entry (enabling
-        // cross-statement metavar occurrence counting).
+        // Check node's metadata attributes
         for (key, value) in &node.attributes {
             if let Some(PlaceholderKind::Metavar { name, .. }) = meta_map.get(value) {
-                if node_added.insert((name.clone(), key.clone())) {
+                if seen_pairs.insert((name.clone(), key.clone())) {
                     out.push(PatternTree::Metavar {
                         name: name.clone(),
                         bind_attr: Some(key.clone()),
@@ -356,7 +395,7 @@ impl PatternTreeParser {
         }
         // Recurse into children
         for child in &node.children {
-            Self::collect_ogsql_metavars(child, meta_map, out);
+            Self::collect_ogsql_metavars(child, meta_map, out, seen_pairs);
         }
     }
 
@@ -382,6 +421,10 @@ impl PatternTreeParser {
 
     /// Convert a UniversalNode (from ogsql-parser) to PatternTree.
     /// Resolves placeholders back to metavariables/ellipsis using meta_map.
+    ///
+    /// Unlike the old approach, attribute-bound metavars do NOT short-circuit
+    /// the node — they are collected as extra children while the node's kind,
+    /// structural children, and literal attribute constraints are preserved.
     fn universal_to_pattern_tree(
         node: &UniversalNode,
         meta_map: &HashMap<String, PlaceholderKind>,
@@ -392,9 +435,6 @@ impl PatternTreeParser {
             if let Some(kind) = meta_map.get(&trimmed) {
                 let result = match kind {
                     PlaceholderKind::Metavar { name, bind_attr } => {
-                        // If bind_attr is None, try to infer it from the node's attributes.
-                        // E.g., $VAR inside select_statement → check attributes for __mg_VAR__
-                        // → if into_vars="__mg_VAR__", bind to "into_vars".
                         let inferred = if bind_attr.is_none() {
                             let mut found = None;
                             for (k, v) in &node.attributes {
@@ -423,31 +463,35 @@ impl PatternTreeParser {
                         }
                     }
                 };
-                // Also check metadata for additional bind_attr overrides
                 return Self::try_metadata_bind(result, node, meta_map);
             }
         }
 
-        // Check metadata attributes for placeholder values.
-        // Override bind_attr with the actual metadata key on the target node.
-        for (key, value) in &node.attributes {
-            if let Some(kind) = meta_map.get(value) {
-                return match kind {
-                    PlaceholderKind::Metavar { name, .. } => {
-                        PatternTree::Metavar {
-                            name: name.clone(),
-                            bind_attr: Some(key.clone()),
-                        }
-                    }
-                    _ => PatternTree::Ellipsis,
-                };
-            }
-        }
-
-        // Build children from the UniversalNode's children
+        // Build structural children from the UniversalNode's children
         let mut children: Vec<PatternTree> = Vec::new();
         for child in &node.children {
             children.push(Self::universal_to_pattern_tree(child, meta_map));
+        }
+
+        // Collect per-node literal attribute constraints (non-placeholder attrs).
+        let mut node_constraints: Vec<(String, String)> = Vec::new();
+        for (key, value) in &node.attributes {
+            if meta_map.contains_key(value) { continue; }
+            if value.contains("__mg_") { continue; }
+            if key == "has_order_by" || key == "has_limit" || key == "has_returning"
+                || key == "set_operation" || key == "distinct" || key == "has_group_by"
+                || key == "has_having" || key == "has_cte" || key == "plan_hints"
+                || key == "pl_block_type"
+            { continue; }
+            node_constraints.push((key.clone(), value.clone()));
+        }
+        // Count INTO_TARGET children to distinguish 1-col from N-col SELECTs
+        let into_target_count = node.children.iter()
+            .filter(|c| c.node_type.to_string() == "sql_expression")
+            .filter(|c| c.attributes.get("target_var").is_some())
+            .count();
+        if into_target_count > 0 {
+            node_constraints.push(("into_target_count".into(), into_target_count.to_string()));
         }
 
         let kind_str = node.node_type.to_string();
@@ -455,7 +499,7 @@ impl PatternTreeParser {
             kind: kind_str,
             children,
             text: node.text.clone(),
-            constraints: Vec::new(),
+            constraints: node_constraints,
         }
     }
 
