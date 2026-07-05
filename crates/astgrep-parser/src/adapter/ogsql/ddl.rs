@@ -3,6 +3,9 @@
 
 use super::OgsqlAdapterError;
 use astgrep_ast::{AstBuilder, NodeType, UniversalNode};
+use astgrep_core::AstNode;
+
+use super::pl;
 
 pub fn convert_create_table(
     stmt: &ogsql_parser::CreateTableStatement,
@@ -185,7 +188,9 @@ pub fn convert_create_package(
     let mut n = AstBuilder::create_package_statement()
         .with_metadata("package_name".into(), stmt.name.join("."));
     for item in &stmt.items {
-        n = n.add_child(convert_package_item(item));
+        for child in convert_package_item(item)? {
+            n = n.add_child(child);
+        }
     }
     if stmt.replace {
         n = n.with_metadata("or_replace".into(), "true".into());
@@ -193,47 +198,133 @@ pub fn convert_create_package(
     Ok(n)
 }
 
-fn convert_package_item(item: &ogsql_parser::ast::PackageItem) -> UniversalNode {
+pub fn convert_create_package_body(
+    stmt: &ogsql_parser::ast::CreatePackageBodyStatement,
+) -> Result<UniversalNode, OgsqlAdapterError> {
+    let mut n = AstBuilder::create_package_statement()
+        .with_metadata("package_name".into(), stmt.name.join("."))
+        .with_metadata("is_body".into(), "true".into());
+    for item in &stmt.items {
+        for child in convert_package_item(item)? {
+            n = n.add_child(child);
+        }
+    }
+    if stmt.replace {
+        n = n.with_metadata("or_replace".into(), "true".into());
+    }
+    Ok(n)
+}
+
+/// Convert a package item, returning one or more UniversalNode children.
+///
+/// For procedures/functions with a body block, returns both a metadata node
+/// (PACKAGE_PROCEDURE / PACKAGE_FUNCTION) and the BlockStatement as a sibling
+/// so the pattern matcher can traverse into the body statements at the same
+/// depth as standalone CREATE PROCEDURE (CREATE_PROCEDURE → BlockStatement).
+fn convert_package_item(
+    item: &ogsql_parser::ast::PackageItem,
+) -> Result<Vec<UniversalNode>, OgsqlAdapterError> {
     use ogsql_parser::ast::PackageItem;
     match item {
-        PackageItem::Procedure(proc) => AstBuilder::sql_expression("PACKAGE_PROCEDURE")
-            .with_metadata("name".into(), proc.name.join("."))
-            .with_metadata(
-                "parameters".into(),
-                proc.parameters
-                    .iter()
-                    .map(|p| format!("{} {}", p.name, p.data_type))
-                    .collect::<Vec<_>>()
-                    .join("; "),
-            ),
-        PackageItem::Function(func) => {
-            let mut n = AstBuilder::sql_expression("PACKAGE_FUNCTION")
-                .with_metadata("name".into(), func.name.join("."))
-                .with_metadata(
-                    "parameters".into(),
-                    func.parameters
-                        .iter()
-                        .map(|p| format!("{} {}", p.name, p.data_type))
-                        .collect::<Vec<_>>()
-                        .join("; "),
-                );
-            if let Some(ref rt) = func.return_type {
-                n = n.with_metadata("return_type".into(), rt.clone());
-            }
-            n
-        }
-        PackageItem::Variable(_) => AstBuilder::sql_expression("PACKAGE_VARIABLE"),
-        PackageItem::Type(_) => AstBuilder::sql_expression("PACKAGE_TYPE"),
-        PackageItem::Cursor(c) => AstBuilder::sql_expression("PACKAGE_CURSOR")
-            .with_metadata("name".into(), c.name.clone()),
-        PackageItem::Raw(text) => AstBuilder::sql_expression("PACKAGE_RAW").with_metadata(
-            "text".into(),
-            if text.len() > 80 {
-                format!("{}...", &text[..80])
+        PackageItem::Procedure(proc) => {
+            let mut nodes = Vec::new();
+            if let Some(ref block) = proc.block {
+                let mut block_node =
+                    pl::convert_pl_block(block, NodeType::BlockStatement)?
+                        .with_metadata(
+                            "package_procedure_name".into(),
+                            proc.name.join("."),
+                        )
+                        .with_metadata(
+                            "package_procedure_params".into(),
+                            proc.parameters
+                                .iter()
+                                .map(|p| format!("{} {}", p.name, p.data_type))
+                                .collect::<Vec<_>>()
+                                .join("; "),
+                        );
+                // Set location from ogsql parser line info (if available)
+                if proc.start_line > 0 {
+                    let loc = (proc.start_line, 1, proc.end_line.max(proc.start_line), 1);
+                    block_node.location = Some(loc);
+                    for child in block_node.children.iter_mut() {
+                        if child.location.is_none() {
+                            child.location = Some(loc);
+                        }
+                    }
+                }
+                // Filter out variable declarations so the target statements (SELECT,
+                // assignment, UPDATE) appear as consecutive siblings starting at index 0.
+                block_node.children.retain(|c| c.node_type() != "variable_declaration");
+                nodes.push(block_node);
             } else {
-                text.clone()
-            },
-        ),
+                let meta = AstBuilder::sql_expression("PACKAGE_PROCEDURE")
+                    .with_metadata("name".into(), proc.name.join("."))
+                    .with_metadata(
+                        "parameters".into(),
+                        proc.parameters
+                            .iter()
+                            .map(|p| format!("{} {}", p.name, p.data_type))
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    );
+                nodes.push(meta);
+            }
+            Ok(nodes)
+        }
+        PackageItem::Function(func) => {
+            let mut nodes = Vec::new();
+            if let Some(ref block) = func.block {
+                let mut block_node =
+                    pl::convert_pl_block(block, NodeType::BlockStatement)?
+                        .with_metadata(
+                            "package_function_name".into(),
+                            func.name.join("."),
+                        )
+                        .with_metadata(
+                            "package_function_params".into(),
+                            func.parameters
+                                .iter()
+                                .map(|p| format!("{} {}", p.name, p.data_type))
+                                .collect::<Vec<_>>()
+                                .join("; "),
+                        );
+                if let Some(ref rt) = func.return_type {
+                    block_node = block_node.with_metadata("return_type".into(), rt.clone());
+                }
+                nodes.push(block_node);
+            } else {
+                let mut meta = AstBuilder::sql_expression("PACKAGE_FUNCTION")
+                    .with_metadata("name".into(), func.name.join("."))
+                    .with_metadata(
+                        "parameters".into(),
+                        func.parameters
+                            .iter()
+                            .map(|p| format!("{} {}", p.name, p.data_type))
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    );
+                if let Some(ref rt) = func.return_type {
+                    meta = meta.with_metadata("return_type".into(), rt.clone());
+                }
+                nodes.push(meta);
+            }
+            Ok(nodes)
+        }
+        PackageItem::Variable(_) => Ok(vec![AstBuilder::sql_expression("PACKAGE_VARIABLE")]),
+        PackageItem::Type(_) => Ok(vec![AstBuilder::sql_expression("PACKAGE_TYPE")]),
+        PackageItem::Cursor(c) => Ok(vec![AstBuilder::sql_expression("PACKAGE_CURSOR")
+            .with_metadata("name".into(), c.name.clone())]),
+        PackageItem::Raw(text) => Ok(vec![
+            AstBuilder::sql_expression("PACKAGE_RAW").with_metadata(
+                "text".into(),
+                if text.len() > 80 {
+                    format!("{}...", &text[..80])
+                } else {
+                    text.clone()
+                },
+            ),
+        ]),
     }
 }
 
@@ -439,6 +530,9 @@ mod tests {
             ogsql_parser::Statement::CreateFunction(s) => convert_create_function(s).unwrap(),
             ogsql_parser::Statement::CreateProcedure(s) => convert_create_procedure(s).unwrap(),
             ogsql_parser::Statement::CreatePackage(s) => convert_create_package(s).unwrap(),
+            ogsql_parser::Statement::CreatePackageBody(s) => {
+                convert_create_package_body(s).unwrap()
+            }
             ogsql_parser::Statement::Drop(s) => convert_drop(s).unwrap(),
             ogsql_parser::Statement::AlterTable(s) => convert_alter_table(s).unwrap(),
             _ => panic!("unexpected: {:?}", stmt),
@@ -595,6 +689,29 @@ mod tests {
             .get_attribute("actions")
             .unwrap()
             .contains("RENAME COLUMN old TO new"));
+    }
+    #[test]
+    fn test_create_package_body_with_procedure() {
+        let n = p(
+            "CREATE OR REPLACE PACKAGE BODY my_pkg AS \
+             PROCEDURE do_update IS v_cnt INTEGER; \
+             BEGIN \
+               SELECT cnt INTO v_cnt FROM t WHERE id = 1 FOR UPDATE; \
+               v_cnt := v_cnt + 1; \
+               UPDATE t SET cnt = v_cnt WHERE id = 1; \
+             END do_update; \
+             END my_pkg;",
+        );
+        assert_eq!(
+            Some(&"my_pkg".to_string()),
+            n.get_attribute("package_name")
+        );
+        assert_eq!(Some(&"true".to_string()), n.get_attribute("is_body"));
+        assert_eq!(Some(&"true".to_string()), n.get_attribute("or_replace"));
+        assert_eq!(1, n.children.len(), "expected 1 child (BlockStatement)");
+        let block = &n.children[0];
+        assert_eq!("block_statement", block.node_type());
+        assert_eq!(3, block.children.len(), "expected 3 body statements after filtering declarations");
     }
     #[test]
     fn test_alter_table_constraint() {

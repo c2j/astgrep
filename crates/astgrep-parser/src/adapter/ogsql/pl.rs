@@ -77,9 +77,18 @@ fn convert_pl_statement(
             Ok(apply_span(node, parent_span.cloned()))
         }
 
-        PlStatement::SqlStatement { statement, .. } => {
-            // Recurse: convert the inner SQL statement using existing DML/DDL converters
-            super::OgsqlAdapter::convert_statement(statement)
+        PlStatement::SqlStatement { span, sql_text, statement } => {
+            let mut node = super::OgsqlAdapter::convert_statement(statement)?;
+            // Apply PL/pgSQL-level span if the inner convert_statement didn't set one
+            if node.location.is_none() {
+                if let Some(ref s) = span {
+                    node = node.with_location(s.start.line, s.start.column, s.end.line, s.end.column);
+                }
+            }
+            if !sql_text.is_empty() {
+                node.text = Some(sql_text.clone());
+            }
+            Ok(node)
         }
 
         PlStatement::Perform { query, span, .. } => {
