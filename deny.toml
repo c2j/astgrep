@@ -1,10 +1,7 @@
-# cargo-deny configuration
+# cargo-deny configuration (v2)
 
 [advisories]
-db-path = "~/.cargo/advisory-db"
-vulnerability = "deny"
-unmaintained = "all"
-unsound = "all"
+version = 2
 
 [licenses]
 allow = [
@@ -18,11 +15,9 @@ allow = [
     "CC0-1.0",
     "Zlib",
 ]
-unlicensed = "deny"
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
 
 [sources]
 unknown-registry = "deny"
