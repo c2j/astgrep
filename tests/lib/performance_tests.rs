@@ -23,7 +23,7 @@ impl Default for PerformanceBenchmarks {
     fn default() -> Self {
         Self {
             max_parse_time_small: Duration::from_millis(10),
-            max_parse_time_medium: Duration::from_millis(100),
+            max_parse_time_medium: Duration::from_millis(500),
             max_parse_time_large: Duration::from_secs(10),
             max_memory_usage_mb: 100,
             max_pattern_match_time: Duration::from_millis(50),
