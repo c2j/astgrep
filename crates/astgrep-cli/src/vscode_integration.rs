@@ -254,12 +254,12 @@ impl VsCodeExtension {
                 return file.ends_with(suffix);
             }
 
-            if pattern.starts_with(".") {
-                return file.ends_with(pattern);
-            }
-
             if let Some(prefix) = pattern.strip_suffix("/**") {
                 return file.starts_with(prefix);
+            }
+
+            if pattern.starts_with(".") {
+                return file.ends_with(pattern);
             }
 
             let parts: Vec<&str> = pattern.split('*').collect();

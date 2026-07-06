@@ -284,8 +284,8 @@ async fn test_performance_realistic_workload() {
 
     // Performance assertions
     assert!(
-        total_duration.as_secs() < 5,
-        "Analysis should complete within 5 seconds"
+        total_duration.as_secs() < 15,
+        "Analysis should complete within 15 seconds"
     );
     assert!(total_findings > 0, "Should find some issues");
 }

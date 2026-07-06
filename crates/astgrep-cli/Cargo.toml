@@ -1,6 +1,6 @@
 [package]
 name = "astgrep-cli"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2021"
 license = "MIT"
 description = "Command-line interface for astgrep static code analysis"
