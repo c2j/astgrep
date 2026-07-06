@@ -1,6 +1,6 @@
 [package]
 name = "astgrep-gui"
-version = "0.4.7"
+version = "0.4.8"
 edition = "2021"
 authors = ["Chen Jianjun <chenjj.yz@gmail.com>"]
 description = "GUI playground for astgrep static code analysis tool"

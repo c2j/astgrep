@@ -1,6 +1,6 @@
 [package]
 name = "astgrep"
-version = "0.4.7"
+version = "0.4.8"
 edition = "2021"
 authors = ["Chen Jianjun <chenjj.yz@gmail.com>"]
 description = "A multi-language static code analysis tool for security vulnerabilities and code quality"
