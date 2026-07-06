@@ -50,9 +50,8 @@ fn convert_statement(
         Statement::CreateView { .. } => Ok(AstBuilder::create_view_statement()),
         Statement::Drop { .. } => Ok(AstBuilder::drop_statement()),
         Statement::AlterTable { .. } => Ok(AstBuilder::alter_statement()),
-        _ => Err(SqlparserAdapterError::UnsupportedStatement(statement_name(
-            stmt,
-        ))),
+        other => Ok(AstBuilder::sql_expression("unsupported_statement")
+            .with_metadata("variant".into(), statement_name(other).into())),
     }
 }
 
@@ -133,11 +132,36 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_statement() {
-        let nodes = SqlparserAdapter::parse_to_universal(
-            "SELECT 1; INSERT INTO t VALUES (1); DELETE FROM t",
-        )
-        .unwrap();
+    fn test_unsupported_passthrough() {
+        // SET is unsupported → passthrough node, not error
+        let result = SqlparserAdapter::parse_to_universal("SET @x = 1");
+        assert!(
+            result.is_ok(),
+            "SET should produce passthrough node, got: {result:?}"
+        );
+        let nodes = result.unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].node_type, NodeType::SqlExpression);
+        assert_eq!(
+            nodes[0].get_attribute("expression"),
+            Some(&"unsupported_statement".to_string())
+        );
+    }
+
+    #[test]
+    fn test_mixed_supported_and_unsupported_polardb() {
+        // SELECT (supported) + SET (unsupported) + INSERT (supported)
+        let result = SqlparserAdapter::parse_to_universal(
+            "SELECT 1; SET @x = 1; INSERT INTO t VALUES (1)",
+        );
+        assert!(
+            result.is_ok(),
+            "mixed file must not short-circuit, got: {result:?}"
+        );
+        let nodes = result.unwrap();
         assert_eq!(nodes.len(), 3);
+        assert_eq!(nodes[0].node_type, NodeType::SelectStatement);
+        assert_eq!(nodes[1].node_type, NodeType::SqlExpression);
+        assert_eq!(nodes[2].node_type, NodeType::InsertStatement);
     }
 }

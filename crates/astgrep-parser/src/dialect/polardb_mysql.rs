@@ -35,13 +35,18 @@ impl SqlDialectParser for PolarDBMySQLDialect {
     ) -> Result<Box<dyn AstNode>, DialectParseError> {
         let node = match SqlparserAdapter::parse_to_universal(source) {
             Ok(nodes) => wrap_statements(nodes),
-            Err(SqlparserAdapterError::UnsupportedStatement(_)) => {
-                astgrep_ast::UniversalNode::new(astgrep_ast::NodeType::Program)
-            }
             Err(SqlparserAdapterError::Parse(reason)) => {
                 return Err(DialectParseError::ParseFailed {
                     dialect: SqlDialect::PolarDBMySQL,
                     reason,
+                });
+            }
+            Err(SqlparserAdapterError::UnsupportedStatement(variant)) => {
+                return Err(DialectParseError::ParseFailed {
+                    dialect: SqlDialect::PolarDBMySQL,
+                    reason: format!(
+                        "unexpected unsupported statement variant (passthrough expected): {variant}"
+                    ),
                 });
             }
             #[allow(unreachable_patterns)]

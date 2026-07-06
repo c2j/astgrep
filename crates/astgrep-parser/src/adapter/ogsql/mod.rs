@@ -16,7 +16,7 @@ mod features;
 mod pl;
 pub mod validator;
 
-use astgrep_ast::UniversalNode;
+use astgrep_ast::{AstBuilder, UniversalNode};
 
 /// Error type for ogsql → UniversalNode conversion.
 ///
@@ -34,7 +34,10 @@ pub enum OgsqlAdapterError {
     Parse(#[from] ogsql_parser::parser::ParserError),
 
     /// Statement variant not yet supported by the adapter.
-    /// Phase 2.2–2.4 progressively reduces these.
+    ///
+    /// No longer produced since the passthrough refactor — unknown variants
+    /// now produce `sql_expression` fallback nodes instead of errors.
+    /// Retained only for API compatibility (`#[non_exhaustive]`).
     #[error("unsupported statement variant: {variant}")]
     UnsupportedStatement {
         /// The name of the unsupported statement variant.
@@ -53,9 +56,8 @@ pub enum OgsqlAdapterError {
 
 /// Adapter converting ogsql-parser's GaussDB/openGauss SQL into UniversalNode list.
 ///
-/// Phase 2.1: only SELECT is converted; other variants return
-/// `UnsupportedStatement`.  Phase 2.2–2.4 progressively adds
-/// INSERT/UPDATE/DELETE/MERGE/CREATE/etc.
+/// Supported variants get full AST conversion; unsupported variants produce
+/// passthrough `sql_expression` nodes so multi-statement files don't fail.
 pub struct OgsqlAdapter;
 
 impl OgsqlAdapter {
@@ -63,10 +65,12 @@ impl OgsqlAdapter {
     ///
     /// # Errors
     ///
-    /// Returns `OgsqlAdapterError` when:
+    /// Returns `OgsqlAdapterError` only when:
     /// - Tokenization fails (`Tokenize`)
     /// - Parsing fails (`Parse`)
-    /// - Statement variant is not yet supported (`UnsupportedStatement`)
+    /// - Internal conversion fails (`ConversionFailed`)
+    ///
+    /// Unsupported statement variants produce passthrough nodes rather than errors.
     pub fn parse_to_universal(sql: &str) -> Result<Vec<UniversalNode>, OgsqlAdapterError> {
         let tokens = ogsql_parser::token::tokenizer::Tokenizer::new(sql).tokenize()?;
         // Parser::parse() returns Vec<Statement> directly (not a Result).
@@ -107,16 +111,23 @@ impl OgsqlAdapter {
                 let span = s.span.clone();
                 dml::convert_merge(s).map(|node| apply_span(node, span))
             }
-            // Multi-table insert not yet supported
-            ogsql_parser::ast::Statement::InsertAll(_) => {
-                Err(OgsqlAdapterError::UnsupportedStatement {
-                    variant: "InsertAll",
-                })
+            // Multi-table insert passthrough — not converted to full AST
+            // but allowed so it doesn't short-circuit multi-statement files.
+            ogsql_parser::ast::Statement::InsertAll(ref s) => {
+                let span = s.span.clone();
+                Ok(apply_span(
+                    AstBuilder::sql_expression("unsupported_statement")
+                        .with_metadata("variant".into(), "InsertAll".into()),
+                    span,
+                ))
             }
-            ogsql_parser::ast::Statement::InsertFirst(_) => {
-                Err(OgsqlAdapterError::UnsupportedStatement {
-                    variant: "InsertFirst",
-                })
+            ogsql_parser::ast::Statement::InsertFirst(ref s) => {
+                let span = s.span.clone();
+                Ok(apply_span(
+                    AstBuilder::sql_expression("unsupported_statement")
+                        .with_metadata("variant".into(), "InsertFirst".into()),
+                    span,
+                ))
             }
 
             // ── DDL (Phase 2.3) ──
@@ -193,21 +204,28 @@ impl OgsqlAdapter {
                 pl::convert_do_block(s, span.as_ref()).map(|node| apply_span(node, span))
             }
 
-            // Still unsupported
+            // Passthrough for all other variants: create a generic node so
+            // multi-statement files don't short-circuit on a single
+            // unrecognised statement.
             other => {
-                let variant = match other {
-                    ogsql_parser::ast::Statement::Replace(_) => "Replace",
-                    ogsql_parser::ast::Statement::CreateTableAs(_) => "CreateTableAs",
+                let variant_name: String = match other {
+                    ogsql_parser::ast::Statement::Replace(_) => "Replace".into(),
+                    ogsql_parser::ast::Statement::CreateTableAs(_) => "CreateTableAs".into(),
                     ogsql_parser::ast::Statement::CreateMaterializedView(_) => {
-                        "CreateMaterializedView"
+                        "CreateMaterializedView".into()
                     }
-                    ogsql_parser::ast::Statement::CreateTrigger(_) => "CreateTrigger",
-                    ogsql_parser::ast::Statement::Truncate(_) => "Truncate",
-                    ogsql_parser::ast::Statement::Copy(_) => "Copy",
-                    ogsql_parser::ast::Statement::Explain(_) => "Explain",
-                    _ => "Other",
+                    ogsql_parser::ast::Statement::CreateTrigger(_) => "CreateTrigger".into(),
+                    ogsql_parser::ast::Statement::Truncate(_) => "Truncate".into(),
+                    ogsql_parser::ast::Statement::Copy(_) => "Copy".into(),
+                    ogsql_parser::ast::Statement::Explain(_) => "Explain".into(),
+                    other_stmt => format!("{:?}", other_stmt)
+                        .split(['(', '{'])
+                        .next()
+                        .unwrap_or("Unknown")
+                        .to_string(),
                 };
-                Err(OgsqlAdapterError::UnsupportedStatement { variant })
+                Ok(AstBuilder::sql_expression("unsupported_statement")
+                    .with_metadata("variant".into(), variant_name))
             }
         };
         result
@@ -284,22 +302,26 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_sql_returns_error() {
-        // ogsql-parser is resilient: it tokenizes and parses most inputs into
-        // some statement variant.  We verify that either:
-        // - The parser actually fails (Tokenize/Parse error), OR
-        // - It parses but our adapter returns UnsupportedStatement (unknown variant)
+    fn test_invalid_sql_no_panic() {
+        // ogsql-parser is resilient: it may tokenize even garbage input
+        // into some statement variant. Now that the adapter creates
+        // passthrough nodes for unknown variants, both Ok and Err are
+        // acceptable outcomes — the test verifies no panics occur.
         let result = OgsqlAdapter::parse_to_universal("INVALID SQL %%%");
-        assert!(
-            result.is_err(),
-            "expected error for invalid SQL, got: {result:?}"
-        );
-        // Any OgsqlAdapterError is acceptable — the test verifies error handling works.
-        match result.unwrap_err() {
-            OgsqlAdapterError::Tokenize(_)
-            | OgsqlAdapterError::Parse(_)
-            | OgsqlAdapterError::UnsupportedStatement { .. }
-            | OgsqlAdapterError::ConversionFailed { .. } => {} // all acceptable
+        match result {
+            Ok(nodes) => {
+                assert!(!nodes.is_empty(), "expected at least one node");
+            }
+            Err(e) => {
+                match e {
+                    OgsqlAdapterError::Tokenize(_)
+                    | OgsqlAdapterError::Parse(_)
+                    | OgsqlAdapterError::ConversionFailed { .. } => {}
+                    OgsqlAdapterError::UnsupportedStatement { .. } => {
+                        panic!("UnsupportedStatement should no longer occur after passthrough refactor");
+                    }
+                }
+            }
         }
     }
 
@@ -334,17 +356,42 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_all_still_unsupported() {
-        // Multi-table INSERT is not yet supported
+    fn test_insert_all_passthrough() {
+        // Multi-table INSERT passthrough — no longer an error.
         let result = OgsqlAdapter::parse_to_universal(
             "INSERT ALL INTO t1 VALUES (1) INTO t2 VALUES (2) SELECT * FROM dual",
         );
-        assert!(result.is_err(), "expected error for InsertAll");
-        match result.unwrap_err() {
-            OgsqlAdapterError::UnsupportedStatement { variant } => {
-                assert_eq!(variant, "InsertAll");
-            }
-            other => panic!("expected UnsupportedStatement, got: {other:?}"),
-        }
+        assert!(result.is_ok(), "expected ok for InsertAll, got: {result:?}");
+        let nodes = result.unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].node_type(), "sql_expression");
+        assert_eq!(
+            nodes[0].get_attribute("expression"),
+            Some(&"unsupported_statement".to_string())
+        );
+        assert_eq!(
+            nodes[0].get_attribute("variant"),
+            Some(&"InsertAll".to_string())
+        );
+    }
+
+    #[test]
+    fn test_mixed_supported_and_unsupported() {
+        // SET is unsupported (VariableSet → passthrough),
+        // CREATE VIEW is supported — both should parse.
+        let sql = "SET search_path = my_schema; CREATE VIEW v AS SELECT * FROM t";
+        let result = OgsqlAdapter::parse_to_universal(sql);
+        assert!(
+            result.is_ok(),
+            "mixed file should parse ok, got: {result:?}"
+        );
+        let nodes = result.unwrap();
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(nodes[0].node_type(), "sql_expression");
+        assert_eq!(
+            nodes[0].get_attribute("expression"),
+            Some(&"unsupported_statement".to_string())
+        );
+        assert_eq!(nodes[1].node_type(), "create_view_statement");
     }
 }
