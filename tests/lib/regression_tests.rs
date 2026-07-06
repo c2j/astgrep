@@ -186,20 +186,77 @@ WHERE active = true; -- end comment
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Add real regression tests below this line as bugs are fixed.
-//
-// Example:
-//
-// #[test]
-// fn test_regression_42_sql_parser_crash_on_empty_input() {
-//     let parser_registry = LanguageParserRegistry::new();
-//     let source = "";
-//     let result = parser_registry.parse_file(&PathBuf::from("empty.sql"), source);
-//     assert!(result.is_ok(), "Parser should handle empty input without panic");
-// }
-//
-// #[test]
-// #[ignore = "Requires interprocedural dataflow (tracked in #87)"]
-// fn test_regression_87_interprocedural_taint_not_detected() {
-//     // ... test body ...
-// }
 // ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_regression_ogsql_multi_statement_no_short_circuit() {
+    use astgrep_parser::OgsqlAdapter;
+    use astgrep_core::AstNode;
+    let sql = "SET search_path = my_schema; CREATE VIEW v AS SELECT * FROM t;";
+    let nodes = OgsqlAdapter::parse_to_universal(sql)
+        .expect("mixed statement file must not short-circuit on unsupported variant");
+    assert_eq!(nodes.len(), 2, "both statements must produce nodes");
+    assert_eq!(AstNode::node_type(&nodes[0]), "sql_expression");
+    assert_eq!(AstNode::node_type(&nodes[1]), "create_view_statement");
+}
+
+#[test]
+fn test_regression_ogsql_dml_after_unsupported() {
+    use astgrep_parser::OgsqlAdapter;
+    use astgrep_core::AstNode;
+    let sql = "GRANT SELECT ON t TO u; INSERT INTO t VALUES (1); DELETE FROM t WHERE id = 1;";
+    let nodes = OgsqlAdapter::parse_to_universal(sql)
+        .expect("DML after unsupported statement must not be dropped");
+    assert_eq!(nodes.len(), 3);
+    assert_eq!(AstNode::node_type(&nodes[0]), "sql_expression");
+    assert_eq!(AstNode::node_type(&nodes[1]), "insert_statement");
+    assert_eq!(AstNode::node_type(&nodes[2]), "delete_statement");
+}
+
+#[test]
+fn test_regression_sqlparser_multi_statement_no_short_circuit() {
+    use astgrep_parser::SqlparserAdapter;
+    use astgrep_core::AstNode;
+    let sql = "SELECT 1; SET @x = 1; INSERT INTO t VALUES (1);";
+    let nodes = SqlparserAdapter::parse_to_universal(sql)
+        .expect("mixed PolarDB file must not short-circuit");
+    assert_eq!(nodes.len(), 3);
+    assert_eq!(AstNode::node_type(&nodes[0]), "select_statement");
+    assert_eq!(AstNode::node_type(&nodes[1]), "sql_expression");
+    assert_eq!(AstNode::node_type(&nodes[2]), "insert_statement");
+}
+
+#[test]
+fn test_regression_polardb_no_empty_program() {
+    use astgrep_core::{AstNode, SqlDialect};
+    use astgrep_parser::dispatch;
+    use std::path::PathBuf;
+    let sql = "SET @x = 1; SELECT * FROM users;";
+    let parser = dispatch(SqlDialect::PolarDBMySQL);
+    let ast = parser
+        .parse(sql, &PathBuf::from("test.sql"))
+        .expect("PolarDB dialect must not fail on unsupported statements");
+    let text = ast.text().unwrap_or_default();
+    assert!(!text.is_empty(), "must not return empty Program");
+    assert!(
+        text.contains("SELECT"),
+        "supported statements must be preserved, got: {text}"
+    );
+}
+
+#[test]
+fn test_regression_gaussdb_no_short_circuit_on_grant() {
+    use astgrep_core::{AstNode, SqlDialect};
+    use astgrep_parser::dispatch;
+    use std::path::PathBuf;
+    let sql = "GRANT SELECT ON t TO u; SELECT * FROM t;";
+    let parser = dispatch(SqlDialect::GaussDB);
+    let ast = parser
+        .parse(sql, &PathBuf::from("test.sql"))
+        .expect("GaussDB dialect must not fail on GRANT");
+    let text = ast.text().unwrap_or_default();
+    assert!(
+        text.contains("SELECT"),
+        "SELECT after GRANT must be preserved, got: {text}"
+    );
+}
