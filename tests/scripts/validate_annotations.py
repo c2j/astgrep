@@ -309,6 +309,21 @@ def _prepare_analysis_file(tc: TestCase) -> tuple[Path, bool]:
     return tc.file_path, False
 
 
+def _resolve_rules_path(tc: TestCase) -> str:
+    """Resolve the best --rules path for a test case.
+
+    Prefers a specific YAML file matching the concern directory name
+    (e.g. cases/select_for_update/ → rules/select_for_update.yaml),
+    which avoids loading unrelated rules that may be expensive on
+    large test files.  Falls back to the whole rules/ directory.
+    """
+    concern = tc.file_path.parent.name
+    specific = tc.rules_dir / f"{concern}.yaml"
+    if specific.is_file():
+        return str(specific)
+    return str(tc.rules_dir) + "/"
+
+
 def run_astgrep(tc: TestCase) -> int:
     """Run astgrep for *tc* and return the finding count for its rule_id."""
     analysis_file, is_temp = _prepare_analysis_file(tc)
@@ -317,7 +332,7 @@ def run_astgrep(tc: TestCase) -> int:
         cmd = list(ASTGREP_BASE_CMD) + ["analyze"]
         if tc.dialect:
             cmd += ["--dialect", tc.dialect]
-        cmd += ["--rules", str(tc.rules_dir) + "/"]
+        cmd += ["--rules", _resolve_rules_path(tc)]
         cmd.append(str(analysis_file))
 
         result = subprocess.run(
