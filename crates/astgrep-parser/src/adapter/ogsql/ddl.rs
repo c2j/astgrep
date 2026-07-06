@@ -566,7 +566,8 @@ pub fn convert_create_type(
             }
         }
         ogsql_parser::ast::TypeKind::Table { element_type } => {
-            n = n.with_metadata("type_kind".into(), "table".into())
+            n = n
+                .with_metadata("type_kind".into(), "table".into())
                 .with_metadata("element_type".into(), element_type.clone());
         }
         ogsql_parser::ast::TypeKind::Range { options } => {
