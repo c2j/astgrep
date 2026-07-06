@@ -501,6 +501,87 @@ fn append_attr(node: &mut UniversalNode, key: &str, value: &str) {
     );
 }
 
+// ── CREATE SEQUENCE ──
+
+pub fn convert_create_sequence(
+    stmt: &ogsql_parser::ast::CreateSequenceStatement,
+) -> Result<UniversalNode, OgsqlAdapterError> {
+    let mut n = AstBuilder::create_sequence_statement()
+        .with_metadata("sequence_name".into(), stmt.name.join("."));
+    if stmt.if_not_exists {
+        n = n.with_metadata("if_not_exists".into(), "true".into());
+    }
+    if let Some(ref start) = stmt.start {
+        n = n.with_metadata("start".into(), format!("{:?}", start));
+    }
+    if let Some(ref inc) = stmt.increment {
+        n = n.with_metadata("increment".into(), format!("{:?}", inc));
+    }
+    if let Some(ref max) = stmt.max_value {
+        n = n.with_metadata("max_value".into(), format!("{:?}", max));
+    }
+    if let Some(ref min) = stmt.min_value {
+        n = n.with_metadata("min_value".into(), format!("{:?}", min));
+    }
+    if let Some(ref cache) = stmt.cache {
+        n = n.with_metadata("cache".into(), format!("{:?}", cache));
+    }
+    if stmt.cycle {
+        n = n.with_metadata("cycle".into(), "true".into());
+    }
+    if let Some(ref owned) = stmt.owned_by {
+        n = n.with_metadata("owned_by".into(), owned.join("."));
+    }
+    Ok(n)
+}
+
+// ── CREATE TYPE ──
+
+pub fn convert_create_type(
+    stmt: &ogsql_parser::ast::CreateTypeStatement,
+) -> Result<UniversalNode, OgsqlAdapterError> {
+    let mut n = AstBuilder::sql_expression("CREATE TYPE")
+        .with_metadata("type_name".into(), stmt.name.join("."));
+    match &stmt.type_kind {
+        ogsql_parser::ast::TypeKind::Composite { attributes } => {
+            n = n.with_metadata("type_kind".into(), "composite".into());
+            for attr in attributes {
+                append_attr(
+                    &mut n,
+                    "attributes",
+                    &format!("{} {}", attr.name, data_type_to_string(&attr.data_type)),
+                );
+            }
+        }
+        ogsql_parser::ast::TypeKind::Enum { labels } => {
+            n = n.with_metadata("type_kind".into(), "enum".into());
+            for label in labels {
+                append_attr(&mut n, "labels", label);
+            }
+        }
+        ogsql_parser::ast::TypeKind::Base { options } => {
+            n = n.with_metadata("type_kind".into(), "base".into());
+            for (k, v) in options {
+                n = n.with_metadata(format!("option_{}", k).into(), v.clone());
+            }
+        }
+        ogsql_parser::ast::TypeKind::Table { element_type } => {
+            n = n.with_metadata("type_kind".into(), "table".into())
+                .with_metadata("element_type".into(), element_type.clone());
+        }
+        ogsql_parser::ast::TypeKind::Range { options } => {
+            n = n.with_metadata("type_kind".into(), "range".into());
+            for (k, v) in options {
+                n = n.with_metadata(format!("option_{}", k).into(), v.clone());
+            }
+        }
+        ogsql_parser::ast::TypeKind::Shell => {
+            n = n.with_metadata("type_kind".into(), "shell".into());
+        }
+    }
+    Ok(n)
+}
+
 // ---- tests ----
 #[cfg(test)]
 mod tests {

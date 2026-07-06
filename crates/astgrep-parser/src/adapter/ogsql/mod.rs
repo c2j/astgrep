@@ -160,6 +160,14 @@ impl OgsqlAdapter {
                 let span = s.span.clone();
                 ddl::convert_alter_table(s).map(|node| apply_span(node, span))
             }
+            ogsql_parser::ast::Statement::CreateSequence(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_sequence(s).map(|node| apply_span(node, span))
+            }
+            ogsql_parser::ast::Statement::CreateType(ref s) => {
+                let span = s.span.clone();
+                ddl::convert_create_type(s).map(|node| apply_span(node, span))
+            }
 
             // GaussDB-specific features (Phase 2.4)
             ogsql_parser::ast::Statement::PredictBy(ref s) => {
@@ -193,7 +201,6 @@ impl OgsqlAdapter {
                     ogsql_parser::ast::Statement::CreateMaterializedView(_) => {
                         "CreateMaterializedView"
                     }
-                    ogsql_parser::ast::Statement::CreateSequence(_) => "CreateSequence",
                     ogsql_parser::ast::Statement::CreateTrigger(_) => "CreateTrigger",
                     ogsql_parser::ast::Statement::Truncate(_) => "Truncate",
                     ogsql_parser::ast::Statement::Copy(_) => "Copy",
