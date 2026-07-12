@@ -190,8 +190,8 @@ WHERE active = true; -- end comment
 
 #[test]
 fn test_regression_ogsql_multi_statement_no_short_circuit() {
-    use astgrep_parser::OgsqlAdapter;
     use astgrep_core::AstNode;
+    use astgrep_parser::OgsqlAdapter;
     let sql = "SET search_path = my_schema; CREATE VIEW v AS SELECT * FROM t;";
     let nodes = OgsqlAdapter::parse_to_universal(sql)
         .expect("mixed statement file must not short-circuit on unsupported variant");
@@ -202,8 +202,8 @@ fn test_regression_ogsql_multi_statement_no_short_circuit() {
 
 #[test]
 fn test_regression_ogsql_dml_after_unsupported() {
-    use astgrep_parser::OgsqlAdapter;
     use astgrep_core::AstNode;
+    use astgrep_parser::OgsqlAdapter;
     let sql = "GRANT SELECT ON t TO u; INSERT INTO t VALUES (1); DELETE FROM t WHERE id = 1;";
     let nodes = OgsqlAdapter::parse_to_universal(sql)
         .expect("DML after unsupported statement must not be dropped");
@@ -215,8 +215,8 @@ fn test_regression_ogsql_dml_after_unsupported() {
 
 #[test]
 fn test_regression_sqlparser_multi_statement_no_short_circuit() {
-    use astgrep_parser::SqlparserAdapter;
     use astgrep_core::AstNode;
+    use astgrep_parser::SqlparserAdapter;
     let sql = "SELECT 1; SET @x = 1; INSERT INTO t VALUES (1);";
     let nodes = SqlparserAdapter::parse_to_universal(sql)
         .expect("mixed PolarDB file must not short-circuit");

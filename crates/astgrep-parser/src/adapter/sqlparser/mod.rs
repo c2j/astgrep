@@ -151,9 +151,8 @@ mod tests {
     #[test]
     fn test_mixed_supported_and_unsupported_polardb() {
         // SELECT (supported) + SET (unsupported) + INSERT (supported)
-        let result = SqlparserAdapter::parse_to_universal(
-            "SELECT 1; SET @x = 1; INSERT INTO t VALUES (1)",
-        );
+        let result =
+            SqlparserAdapter::parse_to_universal("SELECT 1; SET @x = 1; INSERT INTO t VALUES (1)");
         assert!(
             result.is_ok(),
             "mixed file must not short-circuit, got: {result:?}"
