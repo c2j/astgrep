@@ -31,7 +31,7 @@ tracing.workspace = true
 # M-DEP-01: pinned to tag for reproducible builds
 # v0.8.0: ObjectName is now Vec<Ident> (was Vec<String>); Ident carries quote_style
 # v0.8.4: latest patch on the 0.8 line (Vec<Ident> API unchanged)
-ogsql-parser = { git = "https://github.com/c2j/ogsql-parser", tag = "v0.8.22" }
+ogsql-parser = { git = "https://github.com/c2j/ogsql-parser", tag = "v0.8.31" }
 # sqlparser-rs (Apache DataFusion) for PolarDB-MySQL dialect (Phase 4)
 # License: Apache-2.0
 sqlparser = "0.62"
