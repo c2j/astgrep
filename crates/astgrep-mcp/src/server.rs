@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use rmcp::handler::server::tool::{Parameters, ToolRouter};
 use rmcp::model::*;
-use rmcp::{tool, tool_handler, tool_router, Error as McpError, ServerHandler, ServiceExt};
 use rmcp::transport::stdio;
+use rmcp::{tool, tool_handler, tool_router, Error as McpError, ServerHandler, ServiceExt};
 
 use crate::tools;
 
@@ -71,7 +71,9 @@ impl AstgrepServer {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    #[tool(description = "List all programming languages supported by astgrep with their file extensions")]
+    #[tool(
+        description = "List all programming languages supported by astgrep with their file extensions"
+    )]
     async fn list_languages(&self) -> Result<CallToolResult, McpError> {
         let languages = tools::query::list_supported_languages();
         let json = serde_json::to_string_pretty(&languages)

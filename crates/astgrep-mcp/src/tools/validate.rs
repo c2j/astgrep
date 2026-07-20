@@ -22,8 +22,12 @@ pub async fn handle_validate(req: ValidateRulesRequest) -> Result<Vec<Validation
     // Write rule content to a temporary YAML file.
     let tmp_dir = tempfile::TempDir::new().context("Failed to create temp directory")?;
     let tmp_file_path = tmp_dir.path().join("rule.yml");
-    std::fs::write(&tmp_file_path, &req.rule_content)
-        .with_context(|| format!("Failed to write temp rule file: {}", tmp_file_path.display()))?;
+    std::fs::write(&tmp_file_path, &req.rule_content).with_context(|| {
+        format!(
+            "Failed to write temp rule file: {}",
+            tmp_file_path.display()
+        )
+    })?;
 
     let results = validate_collect(vec![tmp_file_path], None, false).await?;
 

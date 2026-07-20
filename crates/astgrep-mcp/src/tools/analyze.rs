@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use astgrep_core::{Language, OutputFormat};
 
-use astgrep_cli::analyze_enhanced::analyze_collect;
 use astgrep_cli::analysis::Finding;
+use astgrep_cli::analyze_enhanced::analyze_collect;
 use astgrep_cli::EnhancedAnalysisConfig;
 
 /// Request parameters for the `analyze_code` tool.
@@ -90,11 +90,7 @@ pub async fn handle_analyze(
 
     // Write code to a temporary file so the analysis engine can read it.
     let tmp_dir = tempfile::TempDir::new().context("Failed to create temp directory")?;
-    let ext = lang
-        .extensions()
-        .first()
-        .copied()
-        .unwrap_or(".txt");
+    let ext = lang.extensions().first().copied().unwrap_or(".txt");
     let tmp_file_path = tmp_dir.path().join(format!("source{ext}"));
     std::fs::write(&tmp_file_path, &req.code)
         .with_context(|| format!("Failed to write temp file: {}", tmp_file_path.display()))?;

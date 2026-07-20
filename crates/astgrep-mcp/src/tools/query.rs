@@ -128,11 +128,7 @@ pub fn list_supported_languages() -> Vec<LanguageInfo> {
     all_langs
         .iter()
         .map(|lang| {
-            let extensions: Vec<String> = lang
-                .extensions()
-                .iter()
-                .map(|e| e.to_string())
-                .collect();
+            let extensions: Vec<String> = lang.extensions().iter().map(|e| e.to_string()).collect();
             LanguageInfo {
                 name: lang.as_str().to_string(),
                 extensions,
