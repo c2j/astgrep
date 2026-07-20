@@ -432,11 +432,7 @@ fn flatten_pattern_operand(
     operands: &mut Vec<PatternTree>,
 ) {
     match pattern {
-        PatternTree::Node {
-            kind,
-            children,
-            ..
-        } => {
+        PatternTree::Node { kind, children, .. } => {
             if is_binary_expression_kind(kind) {
                 // Try to flatten further
                 if let Some((op, flat)) = try_flatten_pattern_binary(kind, children) {
