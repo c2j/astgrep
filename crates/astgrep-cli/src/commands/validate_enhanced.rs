@@ -14,6 +14,68 @@ pub struct Rule {
     pub description: String,
 }
 
+/// Result of validating a single rule file, returned by `validate_collect`.
+/// Used by both CLI and MCP server entry points.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ValidationResult {
+    pub file_path: PathBuf,
+    pub is_valid: bool,
+    pub total_rules: usize,
+    pub valid_rules: usize,
+    pub invalid_rules: usize,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+/// Used by both CLI and MCP server entry points.
+///
+/// Collects rule validation results as structured data without performing
+/// any output formatting or printing. The caller is responsible for output.
+pub async fn validate_collect(
+    rule_files: Vec<PathBuf>,
+    language: Option<String>,
+    performance: bool,
+) -> Result<Vec<ValidationResult>> {
+    if rule_files.is_empty() {
+        return Err(anyhow::anyhow!("No rule files specified"));
+    }
+
+    let mut results = Vec::new();
+
+    for rule_path in &rule_files {
+        info!("Validating: {}", rule_path.display());
+
+        if rule_path.is_dir() {
+            let rule_files_in_dir = collect_rule_files_from_directory(rule_path)?;
+            for rule_file in rule_files_in_dir {
+                let file_result = validate_rule_file(&rule_file, &language, performance).await?;
+                results.push(ValidationResult {
+                    file_path: file_result.file_path,
+                    is_valid: file_result.invalid_rules == 0,
+                    total_rules: file_result.total_rules,
+                    valid_rules: file_result.valid_rules,
+                    invalid_rules: file_result.invalid_rules,
+                    errors: file_result.errors,
+                    warnings: file_result.warnings,
+                });
+            }
+        } else {
+            let file_result = validate_rule_file(rule_path, &language, performance).await?;
+            results.push(ValidationResult {
+                file_path: file_result.file_path,
+                is_valid: file_result.invalid_rules == 0,
+                total_rules: file_result.total_rules,
+                valid_rules: file_result.valid_rules,
+                invalid_rules: file_result.invalid_rules,
+                errors: file_result.errors,
+                warnings: file_result.warnings,
+            });
+        }
+    }
+
+    Ok(results)
+}
+
 /// Enhanced rule validation with detailed reporting
 pub async fn run_enhanced(
     rule_files: Vec<PathBuf>,
@@ -25,39 +87,29 @@ pub async fn run_enhanced(
 
     info!("Starting enhanced rule validation");
 
-    if rule_files.is_empty() {
-        return Err(anyhow::anyhow!("No rule files specified"));
-    }
+    let public_results = validate_collect(rule_files, language, performance).await?;
+
+    let total_time = start_time.elapsed();
 
     let mut validation_results = Vec::new();
     let mut total_rules = 0;
     let mut valid_rules = 0;
     let mut invalid_rules = 0;
 
-    for rule_path in &rule_files {
-        info!("Validating: {}", rule_path.display());
-
-        if rule_path.is_dir() {
-            // Handle directory - recursively find all rule files
-            let rule_files_in_dir = collect_rule_files_from_directory(rule_path)?;
-            for rule_file in rule_files_in_dir {
-                let file_result = validate_rule_file(&rule_file, &language, performance).await?;
-                total_rules += file_result.total_rules;
-                valid_rules += file_result.valid_rules;
-                invalid_rules += file_result.invalid_rules;
-                validation_results.push(file_result);
-            }
-        } else {
-            // Handle single file
-            let file_result = validate_rule_file(rule_path, &language, performance).await?;
-            total_rules += file_result.total_rules;
-            valid_rules += file_result.valid_rules;
-            invalid_rules += file_result.invalid_rules;
-            validation_results.push(file_result);
-        }
+    for result in &public_results {
+        total_rules += result.total_rules;
+        valid_rules += result.valid_rules;
+        invalid_rules += result.invalid_rules;
+        validation_results.push(FileValidationResult {
+            file_path: result.file_path.clone(),
+            total_rules: result.total_rules,
+            valid_rules: result.valid_rules,
+            invalid_rules: result.invalid_rules,
+            warnings: result.warnings.clone(),
+            errors: result.errors.clone(),
+            performance_metrics: None,
+        });
     }
-
-    let total_time = start_time.elapsed();
 
     // Generate output
     let output = generate_validation_output(

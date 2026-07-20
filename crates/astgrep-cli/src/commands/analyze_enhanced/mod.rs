@@ -31,22 +31,24 @@ pub use pattern_matcher::{apply_rule_to_source, get_basic_security_patterns};
 pub use rule_loader::load_rules_for_language;
 pub use types::{determine_language, glob_match, BasicPattern, EmbeddedSqlSnippet, ParsedRule};
 
-/// Run enhanced analysis with advanced features
-pub async fn run_enhanced(
-    config: EnhancedAnalysisConfig,
-    output_file: Option<PathBuf>,
-) -> Result<()> {
+/// Used by both CLI and MCP server entry points.
+///
+/// Collects analysis findings, statistics, and elapsed time without performing
+/// any output formatting or file writing. The caller is responsible for output.
+pub async fn analyze_collect(
+    config: &EnhancedAnalysisConfig,
+) -> Result<(Vec<Finding>, AnalysisStatistics, std::time::Duration)> {
     let start_time = Instant::now();
 
     info!("Starting enhanced analysis");
 
     // Collect target files
-    let target_files = collect_target_files(&config).await?;
+    let target_files = collect_target_files(config).await?;
     info!("Found {} files to analyze", target_files.len());
 
     if target_files.is_empty() {
         warn!("No files found to analyze");
-        return Ok(());
+        return Ok((Vec::new(), AnalysisStatistics::new(), start_time.elapsed()));
     }
 
     let total = target_files.len();
@@ -73,7 +75,7 @@ pub async fn run_enhanced(
         if let Some(ref bar) = pb {
             bar.set_message(file_path.display().to_string());
         }
-        match analyze_file_simple(&file_path, &config, &mut all_findings, &mut analysis_stats) {
+        match analyze_file_simple(&file_path, config, &mut all_findings, &mut analysis_stats) {
             Ok(()) => {}
             Err(e) => {
                 let msg = e.to_string();
@@ -97,7 +99,7 @@ pub async fn run_enhanced(
     }
 
     // Apply filters
-    let filtered_findings = apply_filters(&all_findings, &config);
+    let filtered_findings = apply_filters(&all_findings, config);
 
     // Apply max findings limit
     let limited_findings = if let Some(max) = config.max_findings {
@@ -106,8 +108,17 @@ pub async fn run_enhanced(
         filtered_findings
     };
 
+    Ok((limited_findings, analysis_stats, start_time.elapsed()))
+}
+
+/// Run enhanced analysis with advanced features
+pub async fn run_enhanced(
+    config: EnhancedAnalysisConfig,
+    output_file: Option<PathBuf>,
+) -> Result<()> {
+    let (limited_findings, analysis_stats, total_time) = analyze_collect(&config).await?;
+
     // Generate output
-    let total_time = start_time.elapsed();
     let output = generate_enhanced_output(
         &limited_findings,
         &analysis_stats,
