@@ -1,6 +1,6 @@
 [package]
 name = "astgrep-mcp"
-version = "0.1.0"
+version = "0.4.10"
 edition = "2021"
 license = "MIT"
 description = "MCP (Model Context Protocol) server for astgrep static analysis"
