@@ -157,7 +157,7 @@ fn collect_rule_files(rules_dir: Option<&Path>) -> Vec<PathBuf> {
         _ => return Vec::new(),
     };
     let mut files = Vec::new();
-    let _ = walkdir::WalkDir::new(dir)
+    walkdir::WalkDir::new(dir)
         .follow_links(true)
         .into_iter()
         .filter_map(|e| e.ok())

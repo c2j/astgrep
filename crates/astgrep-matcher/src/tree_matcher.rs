@@ -435,7 +435,6 @@ fn flatten_pattern_operand(
         PatternTree::Node {
             kind,
             children,
-            text: _,
             ..
         } => {
             if is_binary_expression_kind(kind) {

@@ -293,7 +293,7 @@ impl AdvancedSemgrepMatcher {
                 let mut match_bindings = self.metavar_manager.get_binding_matches();
                 // Fill in empty binding values using full_source + location
                 if let Some(ref source) = self.full_source {
-                    for (_, binding) in match_bindings.iter_mut() {
+                    for binding in match_bindings.values_mut() {
                         if binding.value.is_empty() {
                             if let Some((sl, sc, el, ec)) = binding.location {
                                 if let Some(text) =
@@ -2252,7 +2252,7 @@ impl AdvancedSemgrepMatcher {
         }
 
         let propagator = self.symbolic_propagator.as_ref().unwrap();
-        for (_var, _val) in propagator.state().variables.iter() {}
+        for _val in propagator.state().variables.values() {}
 
         let mut expanded = Vec::new();
 

@@ -11,7 +11,7 @@ async fn main() -> Result<()> {
         // Intercepted before astgrep_cli::run() to avoid circular dependency
         // between astgrep-cli and astgrep-mcp.
         let rules_dir = extract_mcp_rules_dir(&args);
-        let _ = std::env::set_var("RUST_LOG", "error");
+        std::env::set_var("RUST_LOG", "error");
         return astgrep_mcp::serve_stdio(rules_dir).await;
     }
 
