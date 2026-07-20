@@ -1,0 +1,20 @@
+[package]
+name = "astgrep-mcp"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "MCP (Model Context Protocol) server for astgrep static analysis"
+
+[dependencies]
+astgrep-core = { path = "../astgrep-core" }
+astgrep-cli = { path = "../astgrep-cli" }
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tempfile.workspace = true
+walkdir.workspace = true
