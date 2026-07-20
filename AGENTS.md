@@ -1,6 +1,6 @@
 # AGENTS.md
 
-**Updated:** 2026-05-19 | **Commit:** 935b443 | **Branch:** main
+**Updated:** 2026-07-20 | **Commit:** 1722c9b | **Branch:** main
 
 ## Overview
 
@@ -11,6 +11,8 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 ```
 .
 ├── src/main.rs              # Binary entry → delegates to astgrep_cli::run()
+│                               Also intercepts `mcp` subcommand before CLI parser
+│                               (to avoid circular dep between astgrep-cli and astgrep-mcp)
 ├── src/lib.rs               # Re-exports all workspace crates
 ├── crates/
 │   ├── astgrep-core/        # Language enum, AstNode trait, Error types, config
@@ -20,6 +22,8 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 │   ├── astgrep-dataflow/    # Taint/flow/call-graph/constant analysis       [→ AGENTS.md]
 │   ├── astgrep-rules/       # YAML rule parsing, validation, execution      [→ AGENTS.md]
 │   ├── astgrep-cli/         # CLI commands (analyze/validate/info/...) + output formats
+│   ├── astgrep-mcp/         # MCP (Model Context Protocol) stdio server for AI assistants
+│   │                           Exposes 4 tools: analyze_code / validate_rules / list_rules / list_languages
 │   ├── astgrep-web/         # Axum REST API server (handlers/{analyze,rules,auth,...})
 │   ├── astgrep-gui/         # egui desktop playground
 │   └── test-utils/          # MockAstNode, MockParser, MockRules
@@ -39,6 +43,8 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 | Taint analysis | `crates/astgrep-dataflow/src/taint.rs` → `enhanced_taint.rs` | Source→Sink flow with sanitizer support |
 | CLI commands | `crates/astgrep-cli/src/commands/*.rs` | 14 commands including migrate, validate_enhanced |
 | Output formats | `crates/astgrep-cli/src/output/analysis/{sarif,json,text,html,markdown,semgrep}.rs` | 6 output formats |
+| MCP tools | `crates/astgrep-mcp/src/tools/{analyze,validate,query}.rs` | 4 tools over stdio; calls analyze_collect / validate_collect |
+| MCP server | `crates/astgrep-mcp/src/server.rs` | AstgrepServer with rmcp 0.2 SDK, stdio transport |
 | SQL parsing | `crates/astgrep-parser/src/sql.rs` | Uses tree-sitter-sequel, NOT tree-sitter-sql |
 | SQL dialects | `crates/astgrep-parser/src/dialect/` | SqlDialect enum + dispatcher; GaussDB→ogsql-parser, PolarDB→sqlparser-rs |
 | SQL dialect adapters | `crates/astgrep-parser/src/adapter/{ogsql,sqlparser}/` | Convert parser-specific AST → UniversalNode |
@@ -62,6 +68,8 @@ cargo run -- analyze                     # Analyze current dir
 cargo run -- validate rules/*.yml        # Validate rule YAML files
 cargo run -- info --extensions           # List supported languages + extensions
 cargo run -- analyze --format sarif -o results.sarif  # SARIF output
+cargo run -- mcp                         # Start MCP server over stdio (for AI assistants)
+cargo run -- mcp --rules-dir tests/categories/rules/  # MCP server with custom rules dir
 ```
 
 ## Key Conventions
@@ -74,7 +82,9 @@ cargo run -- analyze --format sarif -o results.sarif  # SARIF output
 - **Test infrastructure**: Rule-driven categories follow self-describing pattern in `tests/CONVENTIONS.md` (`@rule`/`@expect`/`@desc` annotations + `rules/`+`cases/` layout). Validate with `python3 tests/scripts/validate_annotations.py`. Legacy semgrep-core tests in `patterns/`, `semgrep-core/` use `// MATCH:` / `// ERROR:` format — see `tests/README.md`.
 - **SQL statement boundary**: Configurable via CLI `--sql-statement-boundary` flag or YAML `options.sql_statement_boundary`
 - **Pre-commit hooks**: Run `lefthook install` after cloning. Hooks enforce fmt + clippy on commit, full test + audit on push.
-- **No CI/CD** pipeline yet — manual validation via `cargo test`
+- **Release workflow**: Tags (vX.Y.Z) must be on the `main` branch. The release workflow aborts if the tag is on a feature branch.
+- **MCP tools implement `analyze_collect` / `validate_collect`**: These are core reusable functions extracted from `astgrep-cli` commands. When adding new MCP capabilities, call them rather than duplicating CLI logic.
+- **MCP circular dependency**: `astgrep-mcp` depends on `astgrep-cli` (for `EnhancedAnalysisConfig`, `analyze_collect`, etc.). To avoid a cycle, the `mcp` subcommand is intercepted in `src/main.rs` before `astgrep_cli::run()`. The `Commands::Mcp` variant exists in the CLI enum for `--help` documentation but hits `unreachable!()` if reached.
 
 ## Error Handling
 
@@ -92,6 +102,7 @@ cargo run -- analyze --format sarif -o results.sarif  # SARIF output
 - Do NOT write tests without annotations — use `@rule`/`@expect`/`@desc` for rule-driven tests (see `tests/CONVENTIONS.md`), or `// MATCH:` / `// ERROR:` for semgrep-core legacy tests
 - Do NOT use `as any`, `unwrap()` in non-test code
 - Do NOT suppress warnings with `#[allow(...)]` without a comment explaining why
+- Do NOT add a direct dependency from `astgrep-cli` to `astgrep-mcp` — this creates a circular dep. Handle MCP routing at `src/main.rs` level.
 
 ## Notes
 
@@ -100,3 +111,5 @@ cargo run -- analyze --format sarif -o results.sarif  # SARIF output
 - `newtest/` directory contains an alternative test infrastructure alongside `tests/categories/`
 - Various stray files at root (test_*.rs, *.sh, *.py) are ad-hoc scripts, not part of the build
 - `crates/astgrep-gui` and `crates/astgrep-web` are secondary interfaces — CLI is primary
+- `crates/astgrep-mcp` is a third interface that exposes analysis via MCP protocol for AI assistants (Claude Desktop, Copilot, etc.)
+- MCP server uses `rmcp` 0.2 SDK with `#[tool]` / `#[tool_router]` macros. New tools are added as methods on `AstgrepServer`.
