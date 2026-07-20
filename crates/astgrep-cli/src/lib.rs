@@ -277,6 +277,9 @@ pub enum Commands {
         #[arg(short = 'j', long, default_value = "4")]
         threads: usize,
     },
+
+    /// Run as MCP (Model Context Protocol) stdio server for AI assistant integration
+    Mcp,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -504,6 +507,12 @@ pub async fn run() -> Result<()> {
             };
 
             crate::commands::migrate::run(migrate_command).await
+        }
+        Commands::Mcp => {
+            // Handled by the root main.rs (intercepted before run() is called).
+            // This arm prevents "non-exhaustive match" errors while avoiding
+            // a circular dependency on astgrep-mcp.
+            unreachable!("MCP subcommand should be intercepted in src/main.rs");
         }
     }
 }

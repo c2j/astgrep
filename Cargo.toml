@@ -21,6 +21,7 @@ members = [
     "crates/astgrep-web",
     "crates/astgrep-gui",
     "crates/test-utils",
+    "crates/astgrep-mcp",
 ]
 
 [dependencies]
@@ -33,6 +34,7 @@ astgrep-parser = { path = "crates/astgrep-parser" }
 astgrep-dataflow = { path = "crates/astgrep-dataflow" }
 astgrep-rules = { path = "crates/astgrep-rules" }
 astgrep-cli = { path = "crates/astgrep-cli" }
+astgrep-mcp = { path = "crates/astgrep-mcp" }
 
 # External dependencies
 anyhow.workspace = true
@@ -51,6 +53,10 @@ anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# MCP protocol
+rmcp = { version = "0.2", features = ["server", "transport-io"] }
+schemars = "1.0"
 
 # OpenSSL with vendored feature for static linking
 openssl = { version = "0.10", features = ["vendored"] }
