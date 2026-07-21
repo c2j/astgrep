@@ -33,7 +33,23 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "version=$(grep '^version = ' Cargo.toml | head -1 | cut -d'\"' -f2)" >> $GITHUB_OUTPUT
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Verify Cargo.toml version matches tag
+        if: github.ref_type == 'tag'
+        run: |
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "::warning::Cargo.toml version ($CARGO_VERSION) does not match tag version ($TAG_VERSION)"
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -80,7 +96,23 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "version=$(grep '^version = ' Cargo.toml | head -1 | cut -d'\"' -f2)" >> $GITHUB_OUTPUT
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Verify Cargo.toml version matches tag
+        if: github.ref_type == 'tag'
+        run: |
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "::warning::Cargo.toml version ($CARGO_VERSION) does not match tag version ($TAG_VERSION)"
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -132,7 +164,23 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "version=$(grep '^version = ' Cargo.toml | head -1 | cut -d'\"' -f2)" >> $GITHUB_OUTPUT
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Verify Cargo.toml version matches tag
+        if: github.ref_type == 'tag'
+        run: |
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "::warning::Cargo.toml version ($CARGO_VERSION) does not match tag version ($TAG_VERSION)"
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -186,7 +234,10 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "version=$(grep '^version = ' Cargo.toml | head -1 | cut -d'\"' -f2)" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
 
       - uses: actions/download-artifact@v4
         with:
