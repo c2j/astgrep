@@ -2187,6 +2187,12 @@ impl MatchCtx {
     /// cross-statement metavar unification without being tripped up by
     /// unrelated DML statements (e.g., UPDATE config_table after the RMW
     /// pattern in the same procedure).
+    ///
+    /// For plain metavars (bind_attr=None), verifies that the bound value
+    /// appears at least `expected_count` times in the target AST subtree's
+    /// text nodes. This uses AST-structure-based counting rather than raw
+    /// text search — only node text values are checked, not arbitrary
+    /// substrings.
     fn verify_metavar_consistency(&self, metavars: &[PatternTree], target: &dyn AstNode) -> bool {
         use std::collections::HashSet;
         let mut pairs_checked: HashSet<(&str, &str)> = HashSet::new();
@@ -2211,6 +2217,33 @@ impl MatchCtx {
 
                     if let Some(bound_value) = self.bindings.get(name) {
                         let match_count = values.iter().filter(|v| *v == bound_value).count();
+                        if match_count < expected_count {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        let mut plain_checked: HashSet<&str> = HashSet::new();
+        for mv in metavars {
+            if let PatternTree::Metavar {
+                name,
+                bind_attr: None,
+            } = mv
+            {
+                if plain_checked.insert(name.as_str()) {
+                    let expected_count = metavars
+                        .iter()
+                        .filter(|m| {
+                            matches!(m, PatternTree::Metavar { name: n, bind_attr: None, .. }
+                                if n == name)
+                        })
+                        .count();
+
+                    if let Some(bound_value) = self.bindings.get(name) {
+                        let mut texts: Vec<String> = Vec::new();
+                        Self::collect_node_texts(target, &mut texts);
+                        let match_count = texts.iter().filter(|t| t.as_str() == bound_value.as_str()).count();
                         if match_count < expected_count {
                             return false;
                         }
@@ -2276,6 +2309,20 @@ impl MatchCtx {
         }
     }
 
+    fn collect_node_texts(target: &dyn AstNode, texts: &mut Vec<String>) {
+        if let Some(text) = target.text() {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                texts.push(trimmed.to_string());
+            }
+        }
+        for i in 0..target.child_count() {
+            if let Some(child) = target.child(i) {
+                Self::collect_node_texts(child, texts);
+            }
+        }
+    }
+
     fn enforce_constraints_in_subtree(&self, target: &dyn AstNode) -> bool {
         for (key, expected) in &self.constraints {
             if !Self::find_constraint(key, expected, target) {
@@ -2337,10 +2384,17 @@ impl MatchCtx {
             {
                 let mut cands = Vec::new();
                 Self::collect_attr_values(attr, target, &mut cands);
-                // Deduplicate
                 cands.sort();
                 cands.dedup();
                 all_candidates.push((name, attr, cands));
+            } else if let PatternTree::Metavar {
+                name,
+                bind_attr: None,
+            } = mv
+            {
+                if let Some(bound) = self.bindings.get(name) {
+                    all_candidates.push((name, "", vec![bound.clone()]));
+                }
             }
         }
         // Try binding: for each unique metavar name, pick a value that is

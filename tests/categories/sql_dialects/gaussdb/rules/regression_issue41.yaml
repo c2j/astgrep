@@ -1,0 +1,88 @@
+rules:
+  - id: GAUSSDB-CLAUSE-001
+    name: "回归：SELECT_LIST 内通配 — 单列"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SELECT $...COLS FROM $T WHERE $...COND"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P2"
+
+  - id: GAUSSDB-CLAUSE-002
+    name: "回归：SELECT_LIST 内通配 — 多列"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SELECT $...COLS FROM $T"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P2"
+
+  - id: GAUSSDB-CLAUSE-003
+    name: "回归：GROUP_BY 内通配"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SELECT $...COLS FROM $T GROUP BY $...KEYS"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P2"
+
+  - id: GAUSSDB-CLAUSE-004
+    name: "回归：ORDER_BY 内通配"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SELECT $...COLS FROM $T ORDER BY $...KEYS"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P2"
+
+  - id: GAUSSDB-CLAUSE-005
+    name: "回归：HAVING + GROUP BY 组合"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SELECT $...COLS FROM $T GROUP BY $...KEYS HAVING $...COND"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P2"
+
+  - id: GAUSSDB-CLAUSE-006
+    name: "回归：HAVING 聚合条件"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SELECT COUNT(*) FROM $T GROUP BY $X HAVING COUNT(*) $OP $VAL"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P2"
+
+  - id: GAUSSDB-UNIFY-001
+    name: "回归：跨语句 TABLE 统一"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "SELECT $...C FROM $T WHERE $...COND; UPDATE $T SET $...S"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P0"
+
+  - id: GAUSSDB-CURSOR-001
+    name: "回归：游标声明匹配"
+    languages: [sql]
+    dialects: [gaussdb, opengauss]
+    patterns:
+      - pattern: "CURSOR $NAME FOR SELECT $...C FROM $T"
+    severity: INFO
+    metadata:
+      category: regression
+      issue: "41-P3"
