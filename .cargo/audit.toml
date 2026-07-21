@@ -5,4 +5,10 @@ ignore = [
     "RUSTSEC-2026-0098", # rustls-webpki (pre-existing, indirect)
     "RUSTSEC-2026-0099", # rustls-webpki (pre-existing, indirect)
     "RUSTSEC-2024-0363", # sqlx (pre-existing, indirect)
+    "RUSTSEC-2026-0186", # memmap2: unchecked pointer offset (pre-existing, indirect)
+    "RUSTSEC-2026-0189", # rmcp: DNS rebinding in Streamable HTTP (we use stdio only, not affected)
+    "RUSTSEC-2026-0204", # crossbeam-epoch: invalid pointer deref (pre-existing, indirect)
 ]
+
+[yanked]
+enabled = false

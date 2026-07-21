@@ -3,10 +3,10 @@
 [advisories]
 version = 2
 ignore = [
-    # RUSTSEC-2025-0119: number_prefix is unmaintained
-    # Transitive dependency via indicatif → astgrep-cli
-    # No safe upgrade available; low-risk crate for numeric prefix formatting
-    "RUSTSEC-2025-0119",
+    "RUSTSEC-2025-0119", # number_prefix is unmaintained (pre-existing, indirect)
+    "RUSTSEC-2026-0189", # rmcp: DNS rebinding in Streamable HTTP (we use stdio only)
+    "RUSTSEC-2024-0436", # paste is unmaintained (rmcp dep, pre-existing)
+    "RUSTSEC-2026-0204", # crossbeam-epoch: invalid pointer deref (pre-existing, indirect)
 ]
 
 [licenses]
