@@ -28,6 +28,8 @@ pub struct RuleExecutionEngine {
     pub(crate) classified_patterns: Option<(LiteralPatternMatcher, Vec<TextPattern>)>,
     /// Cache of compiled regex strings → Regex objects
     pub(crate) compiled_regexes: HashMap<String, regex::Regex>,
+    /// Line index cache: (source_ptr_hash, line_starts) for fast byte→(line,col)
+    pub(crate) line_index_cache: Option<(usize, Vec<usize>)>,
 }
 
 impl RuleExecutionEngine {
@@ -42,6 +44,7 @@ impl RuleExecutionEngine {
             pattern_matcher: PatternMatcher::new(),
             classified_patterns: None,
             compiled_regexes: HashMap::new(),
+            line_index_cache: None,
         }
     }
 
@@ -260,6 +263,35 @@ impl RuleExecutionEngine {
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, bool) {
         (self.execution_cache.len(), self.cache_enabled)
+    }
+
+    /// O(log N) byte offset → (1-based line, 1-based column).
+    /// Uses cached line index; builds it lazily on first call per source.
+    pub(crate) fn byte_to_line_col(&mut self, source: &str, byte_idx: usize) -> (usize, usize) {
+        let hash = source.as_ptr() as usize;
+        let rebuild = match &self.line_index_cache {
+            Some((h, _)) => *h != hash,
+            None => true,
+        };
+        if rebuild {
+            let line_starts: Vec<usize> = {
+                let mut v = vec![0usize];
+                for (i, b) in source.bytes().enumerate() {
+                    if b == b'\n' {
+                        v.push(i + 1);
+                    }
+                }
+                v
+            };
+            self.line_index_cache = Some((hash, line_starts));
+        }
+        let line_starts = &self.line_index_cache.as_ref().unwrap().1;
+        let line = match line_starts.binary_search(&byte_idx) {
+            Ok(i) => i + 1,
+            Err(i) => i,
+        };
+        let col = byte_idx - line_starts[line - 1] + 1;
+        (line, col)
     }
 }
 

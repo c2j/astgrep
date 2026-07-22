@@ -64,18 +64,28 @@ impl RuleExecutionEngine {
 
     /// Execute rules sequentially with batched literal pattern matching.
     /// Literal patterns (no metavariables) are matched via Aho-Corasick in a
-    /// single pass over the source. Rules with only literal patterns that had
-    /// no matches skip individual execution entirely.
+    /// single pass over the source. A line index is pre-built once to make
+    /// byte→(line,col) lookups O(log N) instead of O(N) per match.
     fn execute_rules_sequential(
         &mut self,
         rules: &[Rule],
         ast: &dyn AstNode,
         context: &RuleContext,
     ) -> Vec<RuleResult> {
-        // Pre-classify patterns once for this execution batch
         self.classify_patterns(rules);
 
-        // Run batched literal matching if there are any literal patterns
+        // Pre-build line index for O(log N) byte→(line,col) lookups.
+        // On large files this avoids quadratic scanning in byte_index_to_line_col.
+        let line_starts: Vec<usize> = {
+            let mut v = vec![0usize];
+            for (i, b) in context.source_code.bytes().enumerate() {
+                if b == b'\n' {
+                    v.push(i + 1);
+                }
+            }
+            v
+        };
+
         let literal_matches: Option<
             std::collections::HashMap<String, Vec<(usize, usize, usize)>>,
         > = if let Some((ref matcher, _)) = self.classified_patterns {
@@ -122,7 +132,7 @@ impl RuleExecutionEngine {
                     });
 
                     let mut findings =
-                        self.create_findings_from_literal_matches(rule_matches, rule, context);
+                        self.create_findings_from_literal_matches(rule_matches, rule, context, &line_starts);
 
                     if !has_non_literal {
                         results.push(RuleResult::success(
@@ -170,11 +180,13 @@ impl RuleExecutionEngine {
     }
 
     /// Create Finding objects from batched literal match results.
+    /// Uses the pre-built `line_starts` for O(log N) byte→(line,col) lookup.
     fn create_findings_from_literal_matches(
         &self,
         matches: &[(usize, usize, usize)],
         rule: &Rule,
         context: &RuleContext,
+        line_starts: &[usize],
     ) -> Vec<astgrep_core::Finding> {
         use std::collections::HashSet;
         let mut findings = Vec::new();
@@ -184,9 +196,9 @@ impl RuleExecutionEngine {
                 continue;
             }
             let (start_line, start_col) =
-                Self::byte_index_to_line_col(&context.source_code, *start_byte);
+                Self::fast_byte_to_line_col(line_starts, *start_byte);
             let (end_line, end_col) =
-                Self::byte_index_to_line_col(&context.source_code, *end_byte);
+                Self::fast_byte_to_line_col(line_starts, *end_byte);
             let location = astgrep_core::Location::new(
                 std::path::PathBuf::from(&context.file_path),
                 start_line,
@@ -216,6 +228,18 @@ impl RuleExecutionEngine {
             findings.push(finding);
         }
         findings
+    }
+
+    /// O(log N) byte offset → (1-based line, 1-based column) using pre-built
+    /// newline positions. `line_starts[0]` is always 0, and each subsequent
+    /// entry is the byte after a '\n'.
+    fn fast_byte_to_line_col(line_starts: &[usize], byte_idx: usize) -> (usize, usize) {
+        let line = match line_starts.binary_search(&byte_idx) {
+            Ok(i) => i + 1,
+            Err(i) => i,
+        };
+        let col = byte_idx - line_starts[line - 1] + 1;
+        (line, col)
     }
 
     /// Execute rules in parallel (placeholder)
