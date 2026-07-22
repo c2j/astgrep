@@ -484,4 +484,256 @@ rules:
         assert!(result.is_err());
         assert_eq!(engine.rule_count(), 0);
     }
+
+    // =========================================================================
+    // Multi-rule correctness tests — guards for multi-pattern merge optimization.
+    // Invariant: RuleEngine::analyze() with N rules produces identical per-rule
+    //            finding counts as calling execute_rule() for each rule separately.
+    // =========================================================================
+
+    /// Minimal AST node for testing text-based pattern matching.
+    /// The text matcher (execute_simple_pattern) operates on context.source_code,
+    /// not on the AST, so a stub implementation suffices for simple patterns.
+    #[derive(Clone)]
+    struct StubAst;
+
+    impl astgrep_core::AstNode for StubAst {
+        fn node_type(&self) -> &str {
+            "program"
+        }
+        fn child_count(&self) -> usize {
+            0
+        }
+        fn child(&self, _index: usize) -> Option<&dyn astgrep_core::AstNode> {
+            None
+        }
+        fn location(&self) -> Option<(usize, usize, usize, usize)> {
+            None
+        }
+        fn text(&self) -> Option<&str> {
+            None
+        }
+        fn clone_node(&self) -> Box<dyn astgrep_core::AstNode> {
+            Box::new(StubAst)
+        }
+    }
+
+    /// Core invariant: RuleEngine::analyze() with N simple rules produces the
+    /// same per-rule finding counts as summing N individual execute_rule() calls.
+    #[test]
+    fn test_analyze_multi_rule_combined_equals_individual() {
+        let source = r#"
+            SELECT * FROM users WHERE id = 1;
+            DELETE FROM logs;
+            UPDATE accounts SET x = 0 WHERE y = 1;
+        "#;
+
+        let yaml = r#"
+rules:
+  - id: select-rule
+    name: Select
+    description: Select
+    message: Select
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "SELECT"
+  - id: delete-rule
+    name: Delete
+    description: Delete
+    message: Delete
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "DELETE"
+  - id: update-rule
+    name: Update
+    description: Update
+    message: Update
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "UPDATE"
+  - id: where-rule
+    name: Where
+    description: Where
+    message: Where
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "WHERE"
+"#;
+
+        let ctx = RuleContext::new("test.sql".to_string(), Language::Sql, source.to_string())
+            .with_constant_propagation(false);
+
+        // Approach A: all rules via analyze()
+        let mut engine_a = RuleEngine::new();
+        let n = engine_a.load_rules_from_yaml(yaml).unwrap();
+        assert_eq!(n, 4);
+        let combined = engine_a.analyze(&StubAst, &ctx).unwrap();
+
+        // Count per rule in combined result
+        let combined_counts: std::collections::HashMap<&str, usize> = ["select-rule", "delete-rule", "update-rule", "where-rule"]
+            .iter()
+            .map(|&rid| {
+                let count = combined.iter().filter(|f| f.rule_id == rid).count();
+                (rid, count)
+            })
+            .collect();
+
+        // Approach B: each rule individually
+        let mut individual_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
+        for rid in ["select-rule", "delete-rule", "update-rule", "where-rule"] {
+            let mut engine_b = RuleEngine::new();
+            engine_b.load_rules_from_yaml(yaml).unwrap();
+            let result = engine_b.execute_rule(rid, &StubAst, &ctx).unwrap();
+            assert!(result.is_some(), "Rule {} should exist", rid);
+            let count = result.unwrap().finding_count();
+            individual_counts.insert(rid.to_string(), count);
+        }
+
+        // Compare
+        for (&rid, &count) in &combined_counts {
+            let expected = individual_counts[rid];
+            assert_eq!(count, expected,
+                "Rule {}: combined count {} != individual count {}",
+                rid, count, expected);
+        }
+
+        // Sanity: each rule should have matched at least once
+        for (&rid, &count) in &combined_counts {
+            assert!(count > 0, "Rule {} should have matched at least once", rid);
+        }
+    }
+
+    /// SQL dialect filtering must work correctly when multiple rules are analyzed
+    /// together: dialect-specific rules only fire for matching dialect, and
+    /// unconstrained rules fire for all.
+    #[test]
+    fn test_analyze_multi_rule_dialect_filtering() {
+        let yaml = r#"
+rules:
+  - id: any-dialect
+    name: Any Dialect
+    description: Unconstrained
+    message: Any
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "SELECT"
+  - id: gaussdb-only
+    name: GaussDB Only
+    description: GaussDB specific
+    message: GaussDB
+    severity: INFO
+    languages: [sql]
+    dialects: [gaussdb]
+    patterns:
+      - "FOR UPDATE"
+"#;
+
+        let source = "SELECT * FROM t FOR UPDATE;";
+        let ast = StubAst;
+
+        // Context with GaussDB dialect: both rules should match
+        let ctx_gaussdb = RuleContext::new(
+            "test.sql".to_string(),
+            Language::Sql,
+            source.to_string(),
+        )
+        .with_constant_propagation(false);
+        let mut ctx_gaussdb = ctx_gaussdb;
+        ctx_gaussdb.sql_dialect = Some(SqlDialect::GaussDB);
+
+        let mut engine = RuleEngine::new();
+        engine.load_rules_from_yaml(yaml).unwrap();
+        let gaussdb_results = engine.analyze(&ast, &ctx_gaussdb).unwrap();
+
+        assert_eq!(
+            gaussdb_results.iter().filter(|f| f.rule_id == "any-dialect").count(),
+            1,
+            "Unconstrained rule should match for GaussDB"
+        );
+        assert_eq!(
+            gaussdb_results.iter().filter(|f| f.rule_id == "gaussdb-only").count(),
+            1,
+            "GaussDB-specific rule should match for GaussDB"
+        );
+
+        // Context without dialect: only unconstrained rule should match
+        let ctx_none = RuleContext::new(
+            "test.sql".to_string(),
+            Language::Sql,
+            source.to_string(),
+        )
+        .with_constant_propagation(false);
+
+        let mut engine2 = RuleEngine::new();
+        engine2.load_rules_from_yaml(yaml).unwrap();
+        let none_results = engine2.analyze(&ast, &ctx_none).unwrap();
+
+        assert_eq!(
+            none_results.iter().filter(|f| f.rule_id == "any-dialect").count(),
+            1,
+            "Unconstrained rule should match without dialect"
+        );
+        assert_eq!(
+            none_results.iter().filter(|f| f.rule_id == "gaussdb-only").count(),
+            0,
+            "Dialect-specific rule should NOT match without dialect"
+        );
+    }
+
+    /// No findings from one rule should leak into another rule's results.
+    /// This guards against off-by-one or indexing bugs in merged matching.
+    #[test]
+    fn test_analyze_multi_rule_no_finding_leakage() {
+        let yaml = r#"
+rules:
+  - id: only-matches-a
+    name: Match A only
+    description: Only matches text containing AAA
+    message: AAA
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "AAA"
+  - id: only-matches-b
+    name: Match B only
+    description: Only matches text containing BBB
+    message: BBB
+    severity: INFO
+    languages: [sql]
+    patterns:
+      - "BBB"
+"#;
+
+        let source = "AAA BBB AAA";
+        let ctx = RuleContext::new("test.sql".to_string(), Language::Sql, source.to_string())
+            .with_constant_propagation(false);
+
+        let mut engine = RuleEngine::new();
+        engine.load_rules_from_yaml(yaml).unwrap();
+        let findings = engine.analyze(&StubAst, &ctx).unwrap();
+
+        let a_findings: Vec<_> = findings.iter().filter(|f| f.rule_id == "only-matches-a").collect();
+        let b_findings: Vec<_> = findings.iter().filter(|f| f.rule_id == "only-matches-b").collect();
+
+        // Rule A should match "AAA" twice, rule B should match "BBB" once
+        assert_eq!(a_findings.len(), 2, "Rule A should have 2 matches for AAA");
+        assert_eq!(b_findings.len(), 1, "Rule B should have 1 match for BBB");
+
+        // Verify no cross-contamination: each finding's rule_id matches its expected pattern
+        for f in &a_findings {
+            assert_eq!(f.rule_id, "only-matches-a",
+                "All rule A findings must have correct rule_id");
+        }
+        for f in &b_findings {
+            assert_eq!(f.rule_id, "only-matches-b",
+                "All rule B findings must have correct rule_id");
+        }
+    }
 }

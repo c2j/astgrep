@@ -13,6 +13,7 @@ astgrep-dataflow = { path = "../astgrep-dataflow" }
 serde.workspace = true
 serde_yaml.workspace = true
 anyhow.workspace = true
+aho-corasick.workspace = true
 regex.workspace = true
 fancy-regex.workspace = true
 tracing.workspace = true

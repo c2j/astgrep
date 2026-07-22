@@ -16,6 +16,7 @@ pub mod execution;
 pub mod location;
 pub mod matching;
 pub mod pattern;
+pub mod text_pattern;
 pub mod types;
 pub mod utils;
 
