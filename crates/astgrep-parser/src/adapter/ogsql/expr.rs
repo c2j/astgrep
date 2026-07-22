@@ -560,13 +560,16 @@ mod tests {
 
     #[test]
     fn test_parenthesized_expression() {
-        // Parentheses should be unwrapped
         let nodes = super::super::OgsqlAdapter::parse_to_universal("SELECT a FROM t WHERE (a = 1)")
             .unwrap();
         let select = &nodes[0];
-        // WHERE child should be a binary_expression (not parenthesized)
-        assert_eq!(select.child_count(), 1);
-        let where_child = select.child(0).unwrap();
+        assert!(select.child_count() >= 3);
+        let where_child = (0..select.child_count())
+            .find_map(|i| {
+                let c = select.child(i).unwrap();
+                if c.node_type() == "binary_expression" { Some(c) } else { None }
+            })
+            .expect("should have binary_expression child");
         assert_eq!(where_child.node_type(), "binary_expression");
     }
 }

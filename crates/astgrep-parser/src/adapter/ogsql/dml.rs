@@ -12,14 +12,34 @@ use astgrep_ast::{AstBuilder, UniversalNode};
 ///
 /// Produces a `SelectStatement` node with:
 /// - `tables` attribute: comma-separated table names from FROM/JOIN
+/// - SELECT_LIST child: select column targets
+/// - FROM_CLAUSE child: structured table ref nodes
 /// - WHERE expression as a child (if present)
+/// - GROUP_BY child (if present)
+/// - HAVING_CLAUSE child (if present)
+/// - ORDER_BY child (if present)
 /// - Metadata flags: `has_order_by`, `has_limit`, `set_operation`, `distinct`
 pub fn convert_select(
     select: &ogsql_parser::SelectStatement,
 ) -> Result<UniversalNode, OgsqlAdapterError> {
     let mut node = AstBuilder::select_statement();
 
-    // Extract tables from FROM clause
+    if !select.targets.is_empty() {
+        let mut select_list = AstBuilder::sql_expression("SELECT_LIST");
+        for target in &select.targets {
+            select_list = select_list.add_child(convert_select_target(target));
+        }
+        node = node.add_child(select_list);
+    }
+
+    if !select.from.is_empty() {
+        let mut from_node = AstBuilder::sql_expression("FROM_CLAUSE");
+        for table_ref in &select.from {
+            from_node = from_node.add_child(convert_table_ref_node(table_ref));
+        }
+        node = node.add_child(from_node);
+    }
+
     for table_ref in &select.from {
         add_table_ref(&mut node, table_ref);
     }
@@ -48,11 +68,35 @@ pub fn convert_select(
     if select.distinct {
         node = node.with_metadata("distinct".into(), "true".into());
     }
+
     if !select.group_by.is_empty() {
+        let mut group_node = AstBuilder::sql_expression("GROUP_BY");
+        for item in &select.group_by {
+            group_node = group_node.add_child(convert_group_by_item(item));
+        }
+        node = node.add_child(group_node);
         node = node.with_metadata("has_group_by".into(), "true".into());
     }
-    if select.having.is_some() {
+
+    if let Some(ref having) = select.having {
+        node = node.add_child(
+            AstBuilder::sql_expression("HAVING_CLAUSE")
+                .add_child(expr::convert_expr(having)),
+        );
         node = node.with_metadata("has_having".into(), "true".into());
+    }
+
+    if !select.order_by.is_empty() {
+        let mut order_node = AstBuilder::sql_expression("ORDER_BY");
+        for item in &select.order_by {
+            let mut sort = AstBuilder::sql_expression("SORT_ITEM")
+                .add_child(expr::convert_expr(&item.expr));
+            if let Some(asc) = item.asc {
+                sort = sort.with_metadata("asc".into(), asc.to_string());
+            }
+            order_node = order_node.add_child(sort);
+        }
+        node = node.add_child(order_node);
     }
 
     // Attach plan hints from `/*+ ... */` comments
@@ -165,12 +209,15 @@ pub fn convert_insert(
             node = node.with_metadata("source_type".into(), "VALUES".into());
             node = node.with_metadata("value_row_count".into(), row_count.to_string());
             node = node.with_metadata("value_column_count".into(), val_count.to_string());
-            // Add value expressions as children
+            let mut values_node = AstBuilder::sql_expression("VALUES_CLAUSE");
             for row in rows {
+                let mut row_node = AstBuilder::sql_expression("VALUES_ROW");
                 for val in row {
-                    node = node.add_child(expr::convert_expr(val));
+                    row_node = row_node.add_child(expr::convert_expr(val));
                 }
+                values_node = values_node.add_child(row_node);
             }
+            node = node.add_child(values_node);
         }
         ogsql_parser::ast::InsertSource::Select(select) => {
             node = node.with_metadata("source_type".into(), "SELECT".into());
@@ -236,24 +283,27 @@ pub fn convert_update(
         add_table_ref(&mut node, table_ref);
     }
 
-    // SET assignments
-    for assign in &update.assignments {
-        let value_expr = expr::convert_expr(&assign.value);
-        let col_names: Vec<String> = assign.columns.iter().map(|c| c.join(".")).collect();
-        let col_str = col_names.join(", ");
-        let mut value_with_meta = value_expr;
-        if let Some(ref vt) = value_with_meta.text.clone() {
-            if !vt.is_empty() {
-                value_with_meta
-                    .attributes
-                    .insert("target_var".into(), vt.clone());
+    if !update.assignments.is_empty() {
+        let mut set_node = AstBuilder::sql_expression("SET_CLAUSE");
+        for assign in &update.assignments {
+            let value_expr = expr::convert_expr(&assign.value);
+            let col_names: Vec<String> = assign.columns.iter().map(|c| c.join(".")).collect();
+            let col_str = col_names.join(", ");
+            let mut value_with_meta = value_expr;
+            if let Some(ref vt) = value_with_meta.text.clone() {
+                if !vt.is_empty() {
+                    value_with_meta
+                        .attributes
+                        .insert("target_var".into(), vt.clone());
+                }
             }
+            set_node = set_node.add_child(
+                AstBuilder::sql_expression("SET")
+                    .add_child(value_with_meta)
+                    .with_metadata("column".into(), col_str),
+            );
         }
-        node = node.add_child(
-            AstBuilder::sql_expression("SET")
-                .add_child(value_with_meta)
-                .with_metadata("column".into(), col_str),
-        );
+        node = node.add_child(set_node);
     }
 
     // Additional FROM tables (GaussDB-specific: UPDATE ... FROM ...)
@@ -447,6 +497,98 @@ fn append_attr(node: &mut UniversalNode, key: &str, value: &str) {
     node.attributes.insert(key.to_string(), new_val);
 }
 
+fn convert_select_target(target: &ogsql_parser::ast::SelectTarget) -> UniversalNode {
+    match target {
+        ogsql_parser::ast::SelectTarget::Expr(expr, alias) => {
+            let mut node = expr::convert_expr(expr);
+            if let Some(a) = alias {
+                node = node.with_metadata("alias".into(), a.to_string());
+            }
+            node
+        }
+        ogsql_parser::ast::SelectTarget::Star(qualifier) => {
+            let label = if let Some(q) = qualifier {
+                format!("{}.*", q)
+            } else {
+                "*".to_string()
+            };
+            AstBuilder::sql_expression("STAR").with_metadata("label".into(), label)
+        }
+    }
+}
+
+fn convert_table_ref_node(table_ref: &ogsql_parser::TableRef) -> UniversalNode {
+    use ogsql_parser::TableRef;
+    match table_ref {
+        TableRef::Table { name, alias, .. } => {
+            let mut node = AstBuilder::sql_expression("TABLE_REF")
+                .with_metadata("name".into(), name.join("."));
+            if let Some(a) = alias {
+                node = node.with_metadata("alias".into(), a.to_string());
+            }
+            node
+        }
+        TableRef::Join { left, right, join_type, .. } => {
+            let jt = match join_type {
+                ogsql_parser::ast::JoinType::Inner => "INNER",
+                ogsql_parser::ast::JoinType::Left => "LEFT",
+                ogsql_parser::ast::JoinType::Right => "RIGHT",
+                ogsql_parser::ast::JoinType::Full => "FULL",
+                ogsql_parser::ast::JoinType::Cross => "CROSS",
+            };
+            AstBuilder::sql_expression("TABLE_REF")
+                .with_metadata("join_type".into(), jt.into())
+                .add_child(convert_table_ref_node(left))
+                .add_child(convert_table_ref_node(right))
+        }
+        TableRef::Subquery { alias, .. } => {
+            let mut node = AstBuilder::sql_expression("TABLE_REF")
+                .with_metadata("kind".into(), "subquery".into());
+            if let Some(a) = alias {
+                node = node.with_metadata("alias".into(), a.to_string());
+            }
+            node
+        }
+        _ => {
+            AstBuilder::sql_expression("TABLE_REF")
+                .with_metadata("kind".into(), format!("{:?}", table_ref))
+        }
+    }
+}
+
+fn convert_group_by_item(item: &ogsql_parser::ast::GroupByItem) -> UniversalNode {
+    match item {
+        ogsql_parser::ast::GroupByItem::Expr(e) => {
+            AstBuilder::sql_expression("GROUP_KEY").add_child(expr::convert_expr(e))
+        }
+        ogsql_parser::ast::GroupByItem::GroupingSets(sets) => {
+            let mut node = AstBuilder::sql_expression("GROUPING_SETS");
+            for set in sets {
+                let mut set_node = AstBuilder::sql_expression("GROUP_SET");
+                for e in set {
+                    set_node = set_node.add_child(expr::convert_expr(e));
+                }
+                node = node.add_child(set_node);
+            }
+            node
+        }
+        ogsql_parser::ast::GroupByItem::Rollup(exprs) => {
+            let mut node = AstBuilder::sql_expression("ROLLUP");
+            for e in exprs {
+                node = node.add_child(expr::convert_expr(e));
+            }
+            node
+        }
+        ogsql_parser::ast::GroupByItem::Cube(exprs) => {
+            let mut node = AstBuilder::sql_expression("CUBE");
+            for e in exprs {
+                node = node.add_child(expr::convert_expr(e));
+            }
+            node
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -482,9 +624,10 @@ mod tests {
         let node = parse_to_node("SELECT id, name FROM users WHERE id = 1");
         assert_eq!(node.node_type(), "select_statement");
         assert_eq!(node.get_attribute("tables"), Some(&"users".to_string()));
-        // WHERE should be a child
-        assert_eq!(node.child_count(), 1);
-        assert_eq!(node.child(0).unwrap().node_type(), "binary_expression");
+        assert!(node.child_count() >= 3);
+        assert_eq!(node.child(0).unwrap().node_type(), "sql_expression");
+        assert_eq!(node.child(1).unwrap().node_type(), "sql_expression");
+        assert_eq!(node.child(2).unwrap().node_type(), "binary_expression");
     }
 
     #[test]

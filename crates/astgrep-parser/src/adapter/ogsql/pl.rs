@@ -129,42 +129,90 @@ fn convert_pl_statement(
 
         PlStatement::If(inner) => {
             let span = inner.span.clone().or_else(|| parent_span.cloned());
-            Ok(apply_span(AstBuilder::sql_expression("if_statement"), span))
+            let mut node = AstBuilder::sql_expression("if_statement");
+            node = node.add_child(super::expr::convert_expr(&inner.condition));
+            for s in &inner.then_stmts {
+                node = node.add_child(convert_pl_statement(s, span.as_ref())?);
+            }
+            for elsif in &inner.elsifs {
+                let mut e = AstBuilder::sql_expression("elsif_branch")
+                    .add_child(super::expr::convert_expr(&elsif.condition));
+                for s in &elsif.stmts {
+                    e = e.add_child(convert_pl_statement(s, span.as_ref())?);
+                }
+                node = node.add_child(e);
+            }
+            for s in &inner.else_stmts {
+                node = node.add_child(convert_pl_statement(s, span.as_ref())?);
+            }
+            Ok(apply_span(node, span))
         }
         PlStatement::Case(inner) => {
             let span = inner.span.clone().or_else(|| parent_span.cloned());
-            Ok(apply_span(
-                AstBuilder::sql_expression("case_statement"),
-                span,
-            ))
+            let mut node = AstBuilder::sql_expression("case_statement");
+            if let Some(ref expr) = inner.expression {
+                node = node.add_child(super::expr::convert_expr(expr));
+            }
+            for when in &inner.whens {
+                let mut w = AstBuilder::sql_expression("case_when")
+                    .add_child(super::expr::convert_expr(&when.condition));
+                for s in &when.stmts {
+                    w = w.add_child(convert_pl_statement(s, span.as_ref())?);
+                }
+                node = node.add_child(w);
+            }
+            for s in &inner.else_stmts {
+                node = node.add_child(convert_pl_statement(s, span.as_ref())?);
+            }
+            Ok(apply_span(node, span))
         }
         PlStatement::Loop(inner) => {
             let span = inner.span.clone().or_else(|| parent_span.cloned());
-            Ok(apply_span(
-                AstBuilder::sql_expression("loop_statement"),
-                span,
-            ))
+            let mut node = AstBuilder::sql_expression("loop_statement");
+            if let Some(ref label) = inner.label {
+                node = node.with_metadata("label".into(), label.clone());
+            }
+            for s in &inner.body {
+                node = node.add_child(convert_pl_statement(s, span.as_ref())?);
+            }
+            Ok(apply_span(node, span))
         }
         PlStatement::While(inner) => {
             let span = inner.span.clone().or_else(|| parent_span.cloned());
-            Ok(apply_span(
-                AstBuilder::sql_expression("while_statement"),
-                span,
-            ))
+            let mut node = AstBuilder::sql_expression("while_statement");
+            if let Some(ref label) = inner.label {
+                node = node.with_metadata("label".into(), label.clone());
+            }
+            node = node.add_child(super::expr::convert_expr(&inner.condition));
+            for s in &inner.body {
+                node = node.add_child(convert_pl_statement(s, span.as_ref())?);
+            }
+            Ok(apply_span(node, span))
         }
         PlStatement::For(inner) => {
             let span = inner.span.clone().or_else(|| parent_span.cloned());
-            Ok(apply_span(
-                AstBuilder::sql_expression("for_statement"),
-                span,
-            ))
+            let mut node = AstBuilder::sql_expression("for_statement");
+            if let Some(ref label) = inner.label {
+                node = node.with_metadata("label".into(), label.clone());
+            }
+            node = node.with_metadata("variable".into(), inner.variable.clone());
+            for s in &inner.body {
+                node = node.add_child(convert_pl_statement(s, span.as_ref())?);
+            }
+            Ok(apply_span(node, span))
         }
         PlStatement::ForEach(inner) => {
             let span = inner.span.clone().or_else(|| parent_span.cloned());
-            Ok(apply_span(
-                AstBuilder::sql_expression("foreach_statement"),
-                span,
-            ))
+            let mut node = AstBuilder::sql_expression("foreach_statement");
+            if let Some(ref label) = inner.label {
+                node = node.with_metadata("label".into(), label.clone());
+            }
+            node = node.with_metadata("variable".into(), inner.variable.clone());
+            node = node.add_child(super::expr::convert_expr(&inner.expression));
+            for s in &inner.body {
+                node = node.add_child(convert_pl_statement(s, span.as_ref())?);
+            }
+            Ok(apply_span(node, span))
         }
         PlStatement::ReturnQuery(inner) => {
             let span = inner.span.clone().or_else(|| parent_span.cloned());
@@ -238,7 +286,12 @@ fn convert_pl_declaration(
             .with_metadata("name".into(), v.name.clone())
             .with_metadata("data_type".into(), pl_data_type_str(&v.data_type)),
         PlDeclaration::Cursor(c) => {
-            AstBuilder::sql_expression("CURSOR").with_metadata("name".into(), c.name.clone())
+            let mut node =
+                AstBuilder::sql_expression("CURSOR").with_metadata("name".into(), c.name.clone());
+            if c.scrollable {
+                node = node.with_metadata("scrollable".into(), "true".into());
+            }
+            node
         }
         PlDeclaration::Record(r) => {
             AstBuilder::sql_expression("RECORD").with_metadata("name".into(), r.name.clone())
@@ -453,8 +506,45 @@ mod tests {
 
     #[test]
     fn test_unsupported_pl_statement_does_not_crash() {
-        // Test that unknown PL statements get a generic wrapper, not a crash
         let result = OgsqlAdapter::parse_to_universal("DECLARE v INTEGER; BEGIN NULL; END;");
         assert!(result.is_ok(), "NULL statement should parse ok");
+    }
+
+    #[test]
+    fn test_if_in_do_block() {
+        let result = OgsqlAdapter::parse_to_universal(
+            "DO $$ BEGIN IF x > 0 THEN UPDATE t SET c = 1; END IF; END $$;",
+        );
+        assert!(result.is_ok(), "IF should parse: {result:?}");
+        let nodes = result.unwrap();
+        let block = &nodes[0];
+        assert_eq!(block.node_type(), "block_statement");
+        assert!(block.child_count() >= 1, "block should have children");
+        let if_node = (0..block.child_count())
+            .find_map(|i| {
+                let c = block.child(i).unwrap();
+                if c.get_attribute("expression").as_deref() == Some("if_statement") { Some(c) } else { None }
+            })
+            .expect("should have if_statement node");
+        assert!(if_node.child_count() >= 2,
+            "IF should have condition + body, got {}", if_node.child_count());
+    }
+
+    #[test]
+    fn test_for_in_do_block() {
+        let result = OgsqlAdapter::parse_to_universal(
+            "DO $$ BEGIN FOR r IN SELECT id FROM t LOOP NULL; END LOOP; END $$;",
+        );
+        assert!(result.is_ok(), "FOR should parse: {result:?}");
+        let nodes = result.unwrap();
+        let block = &nodes[0];
+        let for_node = (0..block.child_count())
+            .find_map(|i| {
+                let c = block.child(i).unwrap();
+                if c.get_attribute("expression").as_deref() == Some("for_statement") { Some(c) } else { None }
+            })
+            .expect("should have for_statement node");
+        assert!(for_node.child_count() >= 1,
+            "FOR should have body children, got {}", for_node.child_count());
     }
 }

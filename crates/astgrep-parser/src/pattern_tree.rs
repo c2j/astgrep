@@ -206,9 +206,20 @@ impl PatternTreeParser {
         let (preprocessed, meta_map) = preprocess_pattern(trimmed);
 
         // Route to ogsql-parser for patterns with metadata binding (@) or
-        // PL/pgSQL syntax (:= assignment, multi-statement with ;).
-        let needs_ogsql =
-            trimmed.contains('@') || trimmed.contains(":=") || trimmed.matches(';').count() > 1;
+        // PL/pgSQL syntax (:= assignment, multi-statement with ;) or PL/pgSQL
+        // control flow keywords (IF/FOR/LOOP/WHILE/CASE/CURSOR).
+        let needs_ogsql = trimmed.contains('@')
+            || trimmed.contains(":=")
+            || trimmed.matches(';').count() > 1
+            || trimmed.contains("IF ")
+            || trimmed.contains("FOR ")
+            || trimmed.contains("LOOP")
+            || trimmed.contains("WHILE ")
+            || trimmed.contains("CASE ")
+            || trimmed.contains("CURSOR")
+            || trimmed.contains("END IF")
+            || trimmed.contains("END LOOP")
+            || trimmed.contains("END CASE");
         if matches!(language, Language::Sql) && needs_ogsql {
             return self.parse_ogsql(&preprocessed, &meta_map);
         }
@@ -257,7 +268,16 @@ impl PatternTreeParser {
         // If direct parsing fails (multi-statement PL/pgSQL patterns with ...),
         // wrap in a DO block and retry so ogsql-parser handles PL/pgSQL syntax.
         let nodes = if nodes.is_empty()
-            && (preprocessed.contains(":=") || preprocessed.matches(';').count() > 1)
+            && (preprocessed.contains(":=")
+                || preprocessed.matches(';').count() > 1
+                || preprocessed.contains("IF ")
+                || preprocessed.contains("FOR ")
+                || preprocessed.contains("LOOP")
+                || preprocessed.contains("WHILE ")
+                || preprocessed.contains("CASE ")
+                || preprocessed.contains("END IF")
+                || preprocessed.contains("END LOOP")
+                || preprocessed.contains("END CASE"))
         {
             let wrapped = format!("DO $$ BEGIN {} END $$;", preprocessed);
             crate::adapter::ogsql::OgsqlAdapter::parse_to_universal(&wrapped)
@@ -288,7 +308,7 @@ impl PatternTreeParser {
         if has_block_body {
             // Multi-statement: structural tree with metavar binding.
             let mut mv_kids = Vec::new();
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = std::collections::HashSet::<(String, Option<String>)>::new();
             Self::collect_ogsql_metavars(root, meta_map, &mut mv_kids, &mut seen);
             let mut tree = Self::universal_to_pattern_tree(root, meta_map);
             if let PatternTree::Node {
@@ -314,7 +334,7 @@ impl PatternTreeParser {
 
         // Single-statement fallback: flat wildcard (existing behavior).
         let mut metavar_children = Vec::new();
-        let mut seen_pairs: std::collections::HashSet<(String, String)> =
+        let mut seen_pairs: std::collections::HashSet<(String, Option<String>)> =
             std::collections::HashSet::new();
         Self::collect_ogsql_metavars(&nodes[0], meta_map, &mut metavar_children, &mut seen_pairs);
 
@@ -348,7 +368,7 @@ impl PatternTreeParser {
         node: &UniversalNode,
         meta_map: &HashMap<String, PlaceholderKind>,
         out: &mut Vec<PatternTree>,
-        seen_pairs: &mut std::collections::HashSet<(String, String)>,
+        seen_pairs: &mut std::collections::HashSet<(String, Option<String>)>,
     ) {
         // Check node's text
         if let Some(ref text) = node.text {
@@ -367,20 +387,19 @@ impl PatternTreeParser {
                     None
                 };
                 let final_attr = bind_attr.clone().or(inferred);
-                if let Some(attr) = final_attr {
-                    if seen_pairs.insert((name.clone(), attr.clone())) {
-                        out.push(PatternTree::Metavar {
-                            name: name.clone(),
-                            bind_attr: Some(attr),
-                        });
-                    }
+                let dedup_key = (name.clone(), final_attr.clone());
+                if seen_pairs.insert(dedup_key) {
+                    out.push(PatternTree::Metavar {
+                        name: name.clone(),
+                        bind_attr: final_attr,
+                    });
                 }
             }
         }
         // Check node's metadata attributes
         for (key, value) in &node.attributes {
             if let Some(PlaceholderKind::Metavar { name, .. }) = meta_map.get(value) {
-                if seen_pairs.insert((name.clone(), key.clone())) {
+                if seen_pairs.insert((name.clone(), Some(key.clone()))) {
                     out.push(PatternTree::Metavar {
                         name: name.clone(),
                         bind_attr: Some(key.clone()),
