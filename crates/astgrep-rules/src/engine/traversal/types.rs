@@ -2,6 +2,7 @@
 //!
 //! This module provides type definitions for the rule execution engine.
 
+use super::text_pattern::{LiteralPatternMatcher, TextPattern};
 use crate::types::*;
 use astgrep_core::{AstNode, Finding, Result};
 use astgrep_matcher::PatternMatcher;
@@ -23,6 +24,10 @@ pub struct RuleExecutionEngine {
     /// Constant propagation values: variable name -> constant value
     pub(crate) constant_values: HashMap<String, astgrep_dataflow::ConstantValue>,
     pub(crate) pattern_matcher: PatternMatcher,
+    /// Batched literal pattern matcher + classified patterns (set by classify_patterns)
+    pub(crate) classified_patterns: Option<(LiteralPatternMatcher, Vec<TextPattern>)>,
+    /// Cache of compiled regex strings → Regex objects
+    pub(crate) compiled_regexes: HashMap<String, regex::Regex>,
 }
 
 impl RuleExecutionEngine {
@@ -35,6 +40,8 @@ impl RuleExecutionEngine {
             execution_cache: HashMap::new(),
             constant_values: HashMap::new(),
             pattern_matcher: PatternMatcher::new(),
+            classified_patterns: None,
+            compiled_regexes: HashMap::new(),
         }
     }
 
@@ -44,6 +51,40 @@ impl RuleExecutionEngine {
         constants: HashMap<String, astgrep_dataflow::ConstantValue>,
     ) {
         self.constant_values = constants;
+    }
+
+    /// Pre-classify text patterns from a set of rules for batched matching.
+    /// Call once before executing rules to enable single-pass literal matching.
+    pub(crate) fn classify_patterns(&mut self, rules: &[Rule]) {
+        use crate::types::{PatternType, RuleMode};
+        let mut patterns: Vec<TextPattern> = Vec::new();
+        for rule in rules {
+            if rule.mode != RuleMode::Search {
+                continue;
+            }
+            for (i, p) in rule.patterns.iter().enumerate() {
+                match &p.pattern_type {
+                    PatternType::Simple(s) => {
+                        if !p.conditions.is_empty() {
+                            continue;
+                        }
+                        if let Some(tp) = TextPattern::classify(s, rule.id.clone(), i) {
+                            patterns.push(tp);
+                        }
+                    }
+                    PatternType::Regex(s) => {
+                        patterns.push(TextPattern::Regex {
+                            regex_str: s.clone(),
+                            rule_id: rule.id.clone(),
+                            pattern_index: i,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let matcher = LiteralPatternMatcher::build(&patterns);
+        self.classified_patterns = matcher.map(|m| (m, patterns));
     }
 
     /// Enable or disable parallel execution
@@ -72,7 +113,7 @@ impl RuleExecutionEngine {
     /// This handles metavariables ($VAR, $...NAME) and ellipsis (...) correctly,
     /// converting them into appropriate regex patterns for text-based matching.
     pub(crate) fn find_pattern_spans_in_source(
-        &self,
+        &mut self,
         pattern: &str,
         source: &str,
         _language: astgrep_core::Language,
@@ -82,8 +123,6 @@ impl RuleExecutionEngine {
 
         let mut spans = Vec::new();
 
-        // Use semgrep-aware regex conversion instead of plain regex::escape,
-        // so metavariables ($VAR) and wildcards (...) are matched semantically
         let regex_str = super::matching::semgrep_pattern_to_regex(pattern);
         let is_multiline = pattern.contains('\n');
         let final_regex = if is_multiline {
@@ -92,32 +131,36 @@ impl RuleExecutionEngine {
             regex_str
         };
 
-        // Try to compile as regex
-        match Regex::new(&final_regex) {
-            Ok(re) => {
-                if sql_stmt_boundary {
-                    // For SQL, split by statements and match within each
-                    for stmt in source.split(';') {
-                        for mat in re.find_iter(stmt) {
-                            spans.push((mat.start(), mat.end()));
-                        }
+        let re = match self.compiled_regexes.get(&final_regex) {
+            Some(re) => re.clone(),
+            None => match Regex::new(&final_regex) {
+                Ok(re) => {
+                    self.compiled_regexes.insert(final_regex.clone(), re.clone());
+                    re
+                }
+                Err(_) => {
+                    // If regex fails, do simple string search
+                    let mut start = 0;
+                    while let Some(pos) = source[start..].find(pattern) {
+                        let match_start = start + pos;
+                        let match_end = match_start + pattern.len();
+                        spans.push((match_start, match_end));
+                        start = match_end;
                     }
-                } else {
-                    // Normal matching
-                    for mat in re.find_iter(source) {
-                        spans.push((mat.start(), mat.end()));
-                    }
+                    return spans;
+                }
+            },
+        };
+
+        if sql_stmt_boundary {
+            for stmt in source.split(';') {
+                for mat in re.find_iter(stmt) {
+                    spans.push((mat.start(), mat.end()));
                 }
             }
-            Err(_) => {
-                // If regex fails, do simple string search
-                let mut start = 0;
-                while let Some(pos) = source[start..].find(pattern) {
-                    let match_start = start + pos;
-                    let match_end = match_start + pattern.len();
-                    spans.push((match_start, match_end));
-                    start = match_end;
-                }
+        } else {
+            for mat in re.find_iter(source) {
+                spans.push((mat.start(), mat.end()));
             }
         }
 

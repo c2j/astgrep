@@ -13,7 +13,7 @@ use tracing::debug;
 impl RuleExecutionEngine {
     /// Execute pattern matching
     pub(crate) fn execute_pattern(
-        &self,
+        &mut self,
         pattern: &Pattern,
         _ast: &dyn AstNode,
         rule: &Rule,
@@ -65,7 +65,7 @@ impl RuleExecutionEngine {
 
     /// Execute regex pattern matching
     fn execute_regex_pattern(
-        &self,
+        &mut self,
         regex_str: &str,
         rule: &Rule,
         context: &RuleContext,
@@ -123,7 +123,7 @@ impl RuleExecutionEngine {
 
     /// Execute simple pattern matching
     fn execute_simple_pattern(
-        &self,
+        &mut self,
         pattern_str: &str,
         pattern: &Pattern,
         rule: &Rule,
@@ -459,7 +459,7 @@ impl RuleExecutionEngine {
 
     /// Execute pattern using AdvancedRuleExecutor (for complex patterns)
     fn execute_advanced_pattern(
-        &self,
+        &mut self,
         pattern: &Pattern,
         rule: &Rule,
         context: &RuleContext,
@@ -492,7 +492,7 @@ impl RuleExecutionEngine {
     /// Either/Any sub-patterns. Returns None if the pattern type is too complex
     /// for text-level matching.
     fn collect_spans_for_pattern(
-        &self,
+        &mut self,
         pat: &Pattern,
         source: &str,
         language: Language,
@@ -560,7 +560,7 @@ impl RuleExecutionEngine {
 
     /// Execute pattern-all matching
     fn execute_all_pattern(
-        &self,
+        &mut self,
         pattern: &Pattern,
         subs: &[Pattern],
         rule: &Rule,
@@ -825,7 +825,7 @@ impl RuleExecutionEngine {
     /// Returns true if the condition passes or if it can't be evaluated
     /// (caller falls back to AdvancedRuleExecutor).
     fn evaluate_condition_textually(
-        &self,
+        &mut self,
         condition: &Condition,
         matched_text: &str,
         sub_patterns: &[Pattern],
@@ -1021,7 +1021,7 @@ impl RuleExecutionEngine {
 
     /// Execute pattern-either matching
     fn execute_either_pattern(
-        &self,
+        &mut self,
         _pattern: &Pattern,
         subs: &[Pattern],
         rule: &Rule,
@@ -1072,7 +1072,7 @@ impl RuleExecutionEngine {
 
     /// Execute regex sub-pattern for Either pattern
     fn execute_regex_subpattern(
-        &self,
+        &mut self,
         regex_str: &str,
         rule: &Rule,
         context: &RuleContext,
@@ -1122,7 +1122,7 @@ impl RuleExecutionEngine {
 
     /// Execute simple sub-pattern for Either pattern
     fn execute_simple_subpattern(
-        &self,
+        &mut self,
         pattern_str: &str,
         rule: &Rule,
         context: &RuleContext,
@@ -1179,7 +1179,7 @@ impl RuleExecutionEngine {
 
     /// Execute fallback matching when no simple/regex pattern available
     fn execute_fallback_matching(
-        &self,
+        &mut self,
         pattern: &Pattern,
         ast: &dyn AstNode,
         rule: &Rule,
