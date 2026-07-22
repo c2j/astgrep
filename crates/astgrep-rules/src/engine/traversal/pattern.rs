@@ -63,7 +63,10 @@ impl RuleExecutionEngine {
         self.execute_fallback_matching(pattern, _ast, rule, context)
     }
 
-    /// Execute regex pattern matching
+    /// Execute regex pattern matching.
+    /// Uses standard `regex::Regex` for simple patterns (fast DFA engine),
+    /// falling back to `fancy_regex::Regex` only when the pattern contains
+    /// backreferences, lookaround, or other features unsupported by `regex`.
     fn execute_regex_pattern(
         &mut self,
         regex_str: &str,
@@ -71,54 +74,152 @@ impl RuleExecutionEngine {
         context: &RuleContext,
         findings: &mut Vec<Finding>,
     ) -> Result<()> {
-        use fancy_regex::Regex;
-
-        match Regex::new(regex_str) {
-            Ok(re) => {
-                for m in re.find_iter(&context.source_code).filter_map(|m| m.ok()) {
-                    let (start_line, start_col) =
-                        Self::byte_index_to_line_col(&context.source_code, m.start());
-                    let (end_line, end_col) =
-                        Self::byte_index_to_line_col(&context.source_code, m.end());
-
-                    let location = Location::new(
-                        std::path::PathBuf::from(&context.file_path),
-                        start_line,
-                        start_col,
-                        end_line,
-                        end_col,
-                    );
-
-                    let matched_text =
-                        &context.source_code[m.start()..m.end().min(context.source_code.len())];
-
-                    let finding = Finding::new(
-                        rule.id.clone(),
-                        if !rule.description.is_empty() {
-                            rule.description.clone()
-                        } else {
-                            format!("Match: {}", matched_text)
-                        },
-                        rule.severity,
-                        rule.confidence,
-                        location,
-                    )
-                    .with_metadata("pattern".to_string(), regex_str.to_string());
-
-                    let finding = if let Some(ref fix) = rule.fix {
-                        finding.with_fix(fix.clone())
-                    } else {
-                        finding
-                    };
-                    findings.push(finding);
+        // Try standard regex first (fast DFA, no backtracking), with cache
+        let re = match self.compiled_regexes.get(regex_str) {
+            Some(re) => re.clone(),
+            None => match regex::Regex::new(regex_str) {
+                Ok(re) => {
+                    self.compiled_regexes.insert(regex_str.to_string(), re.clone());
+                    re
                 }
-                Ok(())
-            }
-            Err(e) => Err(astgrep_core::AnalysisError::pattern_match_error(format!(
-                "Invalid regex: {}",
-                e
-            ))),
+                Err(_) => {
+                    // Fallback to fancy_regex for advanced features (backreferences, lookaround).
+                    // For large inputs with backreferences, use a pre-filter via standard regex
+                    // to narrow the search range before running the backtracking engine.
+                    self.execute_fancy_regex_with_prefilter(regex_str, rule, context, findings)?;
+                    return Ok(());
+                }
+            },
+        };
+
+        for m in re.find_iter(&context.source_code) {
+            self.push_regex_finding(regex_str, rule, context, m.start(), m.end(), findings);
         }
+        Ok(())
+    }
+
+    fn push_regex_finding(
+        &mut self,
+        regex_str: &str,
+        rule: &Rule,
+        context: &RuleContext,
+        start: usize,
+        end: usize,
+        findings: &mut Vec<Finding>,
+    ) {
+        let (start_line, start_col) =
+            self.byte_to_line_col(&context.source_code, start);
+        let (end_line, end_col) =
+            self.byte_to_line_col(&context.source_code, end);
+        let location = Location::new(
+            std::path::PathBuf::from(&context.file_path),
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        );
+        let matched_text =
+            &context.source_code[start..end.min(context.source_code.len())];
+        let finding = Finding::new(
+            rule.id.clone(),
+            if !rule.description.is_empty() {
+                rule.description.clone()
+            } else {
+                format!("Match: {}", matched_text)
+            },
+            rule.severity,
+            rule.confidence,
+            location,
+        )
+        .with_metadata("pattern".to_string(), regex_str.to_string());
+        let finding = if let Some(ref fix) = rule.fix {
+            finding.with_fix(fix.clone())
+        } else {
+            finding
+        };
+        findings.push(finding);
+    }
+
+    /// Run fancy_regex with a standard-regex pre-filter.
+    /// Strips backreferences (\1, \2, ...) from the pattern to create a
+    /// simplified pre-filter. If the pre-filter matches a span, fancy_regex
+    /// validates that span. This avoids running the backtracking engine on
+    /// the entire input.
+    fn execute_fancy_regex_with_prefilter(
+        &mut self,
+        regex_str: &str,
+        rule: &Rule,
+        context: &RuleContext,
+        findings: &mut Vec<Finding>,
+    ) -> Result<()> {
+        // Build a simplified pre-filter by stripping backreferences
+        // and converting fancy features to standard regex where possible.
+        let prefilter_str = Self::strip_backreferences(regex_str);
+
+        // Try to compile the pre-filter with standard regex
+        let prefilter = match regex::Regex::new(&prefilter_str) {
+            Ok(re) => Some(re),
+            Err(_) => None,
+        };
+
+        use fancy_regex::Regex;
+        let fre = match Regex::new(regex_str) {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(astgrep_core::AnalysisError::pattern_match_error(format!(
+                    "Invalid regex: {}", e,
+                )));
+            }
+        };
+
+        if let Some(ref pf) = prefilter {
+            // Pre-filter: scan with standard regex, validate hits with fancy_regex.
+            // Cap pre-filter match count to bound worst-case fancy_regex runtime.
+            const MAX_PREFILTER_MATCHES: usize = 1000;
+            let mut match_count = 0usize;
+            for pm in pf.find_iter(&context.source_code) {
+                if match_count >= MAX_PREFILTER_MATCHES {
+                    tracing::warn!(
+                        "Pre-filter hit {} matches for pattern '{}' — truncating fancy_regex scan on file {}",
+                        match_count,
+                        regex_str,
+                        context.file_path
+                    );
+                    break;
+                }
+                let span = &context.source_code[pm.start()..pm.end()];
+                if let Ok(Some(_m)) = fre.find(span) {
+                    self.push_regex_finding(regex_str, rule, context, pm.start(), pm.end(), findings);
+                }
+                match_count += 1;
+            }
+        } else {
+            // No pre-filter possible — run fancy_regex on full input (slow path)
+            for m in fre.find_iter(&context.source_code).filter_map(|m| m.ok()) {
+                self.push_regex_finding(regex_str, rule, context, m.start(), m.end(), findings);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Strip backreferences (\1-\9) from a regex string, replacing them
+    /// with a non-capturing wildcard pattern `(?:\w+)` for use as a pre-filter.
+    fn strip_backreferences(regex_str: &str) -> String {
+        let mut result = String::with_capacity(regex_str.len());
+        let chars: Vec<char> = regex_str.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            if chars[i] == '\\' && i + 1 < chars.len() && chars[i + 1].is_ascii_digit() {
+                // Replace backreference \N with a wildcard matcher
+                result.push_str("(?:\\w+)");
+                i += 2;
+            } else {
+                result.push(chars[i]);
+                i += 1;
+            }
+        }
+        result
     }
 
     /// Execute simple pattern matching
@@ -203,8 +304,8 @@ impl RuleExecutionEngine {
                 continue;
             }
             let (start_line, start_col) =
-                Self::byte_index_to_line_col(&context.source_code, start_byte);
-            let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
+                self.byte_to_line_col(&context.source_code, start_byte);
+            let (end_line, end_col) = self.byte_to_line_col(&context.source_code, end_byte);
 
             let location = Location::new(
                 PathBuf::from(&context.file_path),
@@ -787,8 +888,8 @@ impl RuleExecutionEngine {
                 continue;
             }
             let (start_line, start_col) =
-                Self::byte_index_to_line_col(&context.source_code, start_byte);
-            let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
+                self.byte_to_line_col(&context.source_code, start_byte);
+            let (end_line, end_col) = self.byte_to_line_col(&context.source_code, end_byte);
             let location = astgrep_core::Location::new(
                 std::path::PathBuf::from(&context.file_path),
                 start_line,
@@ -1087,9 +1188,9 @@ impl RuleExecutionEngine {
                     continue;
                 }
                 let (start_line, start_col) =
-                    Self::byte_index_to_line_col(&context.source_code, start_byte);
+                    self.byte_to_line_col(&context.source_code, start_byte);
                 let (end_line, end_col) =
-                    Self::byte_index_to_line_col(&context.source_code, end_byte);
+                    self.byte_to_line_col(&context.source_code, end_byte);
                 let location = astgrep_core::Location::new(
                     std::path::PathBuf::from(&context.file_path),
                     start_line,
@@ -1146,8 +1247,8 @@ impl RuleExecutionEngine {
                 continue;
             }
             let (start_line, start_col) =
-                Self::byte_index_to_line_col(&context.source_code, start_byte);
-            let (end_line, end_col) = Self::byte_index_to_line_col(&context.source_code, end_byte);
+                self.byte_to_line_col(&context.source_code, start_byte);
+            let (end_line, end_col) = self.byte_to_line_col(&context.source_code, end_byte);
             let location = astgrep_core::Location::new(
                 std::path::PathBuf::from(&context.file_path),
                 start_line,

@@ -11,7 +11,7 @@ impl RuleExecutionEngine {
     /// Try to create a best-effort location for a match using node.location() first,
     /// then fallback to approximating from the pattern's literal anchors in source text.
     pub(crate) fn create_best_location_from_node_or_pattern(
-        &self,
+        &mut self,
         node: &dyn AstNode,
         pattern: &Pattern,
         context: &RuleContext,
@@ -25,8 +25,8 @@ impl RuleExecutionEngine {
             if let Some((start_byte, end_byte)) =
                 RuleExecutionEngine::approximate_span_from_pattern(&context.source_code, pat_str)
             {
-                let (sl, sc) = Self::byte_index_to_line_col(&context.source_code, start_byte);
-                let (el, ec) = Self::byte_index_to_line_col(&context.source_code, end_byte);
+                let (sl, sc) = self.byte_to_line_col(&context.source_code, start_byte);
+                let (el, ec) = self.byte_to_line_col(&context.source_code, end_byte);
                 return Location::new(PathBuf::from(&context.file_path), sl, sc, el, ec);
             }
         }
