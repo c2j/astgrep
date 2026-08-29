@@ -28,10 +28,10 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 - 把探索草稿、临时脚本、调试 `dbg!`/`println!` 留在主代码
 
 **Ask first**
-- 改人类已有测试（含断言、fixture、snapshot）
+- 改人类已有测试（含断言、fixture、golden 期望值）
 - 新增运行时依赖、`unsafe`、新的 workspace crate、新的外部服务
 - 为不可测代码做超出当前改动路径的重构
-- 接受/更新 snapshot（insta / golden file）且行为含义发生变化
+- 接受/更新 golden file 或固定 fixture 的期望值，且行为含义发生变化
 - 关闭 clippy lint、新增 `#[allow]`
 
 **Always**
@@ -61,7 +61,7 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 
 ### 遗留代码与接缝
 
-**特征测试** — 锁定现有行为，不是证明它正确。用固定 fixture 或 `insta` snapshot。更新 snapshot 必须在汇报里写清 diff 含义；默认不接受「看起来差不多」。
+**特征测试** — 锁定现有行为，不是证明它正确。本仓库**未引入 `insta`**，用固定 fixture + 显式断言，或与 golden 文件逐字比对。更新期望值必须在汇报里写清 diff 含义；默认不接受「看起来差不多」。
 
 **接缝（优先顺序，靠后的更差）**
 1. trait + 泛型或 `impl Trait`，测试用假类型
@@ -80,7 +80,7 @@ astgrep (a.k.a. "CR") — Rust workspace for multi-language static analysis. Pat
 | 文档测试 | `///` 示例 | 公共 API 必须可运行；禁止滥用 `no_run` |
 | CLI/二进制 | 项目惯用方式 | 退出码与 stdout 契约 |
 | 不变量 | `proptest`（项目已用时） | 往返解析、幂等、单调性 |
-| 特征/快照 | `insta` 或固定 fixture | 遗留输出；接受 snapshot 必须说明 |
+| 特征/golden | 固定 fixture（本仓库未引入 `insta`） | 遗留输出；更新期望值必须说明 |
 
 不要把本该测公共契约的内容塞进 `#[cfg(test)]` 去读私有字段。
 
@@ -91,7 +91,7 @@ Rust 的 Red 允许是：测试引用了尚不存在的类型/函数导致编译
 - 无必要 `unsafe`；有则必须 `SAFETY` 注释
 - 一次性 `cargo update` 整个 lockfile
 - 用 `#[allow(...)]` 静默应修复的 lint
-- 为绿而改 snapshot 却不解释行为是否应该变
+- 为绿而改 golden/期望值却不解释行为是否应该变
 
 ### 命令
 
@@ -102,21 +102,29 @@ cargo test -p astgrep-core <test_name>
 # 单 crate
 cargo test -p astgrep-core
 
-# 全量测试
-cargo test
+# 全量测试（必须带 --exclude，与 CI/lefthook 一致）
+cargo test --workspace --exclude astgrep-web --exclude astgrep-gui
 
-# 提交前门禁
+# 提交前门禁（与 lefthook.yml / .github/workflows/ci.yml 一致）
 cargo fmt --all -- --check
-cargo clippy --all-features -- -D warnings
-cargo test
+cargo clippy --workspace --exclude astgrep-web --exclude astgrep-gui -- -D warnings
+cargo test --workspace --exclude astgrep-web --exclude astgrep-gui
+cargo deny check
+cargo audit
 
 # 规则测试注解校验（规则驱动测试必须先通过注解校验）
 python3 tests/scripts/validate_annotations.py
 ```
 
+> `astgrep-web` / `astgrep-gui` 必须 `--exclude`——CI 与 `lefthook.yml` 都排除它们；用 `--all-features` 或不带 `--exclude` 会把这两个 crate 拉进来，产生 CI 上不存在的失败。
+>
+> 装好 `lefthook install` 后，pre-commit 自动跑 fmt + clippy，pre-push 自动跑 test + audit，与上面的门禁同一套命令。
+>
+> ⚠️ **`main` 目前本身就是红的**（`Build & Test` 编译失败 + `Security Audit` 报 2 个 vulnerability）。接手时先在未改动的 `main` 上跑一遍基线，把既有失败和你自己引入的失败分开；不要为了让基线变绿而改无关代码，也不要因为基线是红的就跳过门禁。
+>
 > 规则驱动测试遵循 `tests/CONVENTIONS.md` 的 `@rule`/`@expect`/`@desc` 自描述约定；semgrep-core 遗留测试用 `// MATCH:` / `// ERROR:` 格式。新测试必须带注解。`cargo fmt --all -- --check` 是最常见 CI 失败点。
 
-循环内只跑受影响 crate；提交前再 workspace。
+循环内只跑受影响 crate；提交前跑上面的完整门禁（含 `cargo deny check` 与 `cargo audit`）。
 
 ### 完成标准与汇报
 
@@ -137,7 +145,7 @@ python3 tests/scripts/validate_annotations.py
 ### 质量判断（自我检查）
 - 这条测试在实现写错时会失败吗？
 - 我是否在测行为，而不是私有实现细节？
-- 我是否用 skip、更宽断言、unwrap、snapshot 盲收换绿？
+- 我是否用 skip、更宽断言、unwrap、golden 盲收换绿？
 - 命令是否来自本文件，而不是我编的？
 
 ## Structure
